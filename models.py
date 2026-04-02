@@ -63,7 +63,7 @@ class Usuario(db.Model):
     nombre = db.Column(db.String(150), nullable=False)
     telefono_whatsapp = db.Column(db.String(30), nullable=True)
     rol_comercial = db.Column(
-        db.Enum(RolComercial, name="rol_comercial_enum", native_enum=True),
+        db.Enum(RolComercial, name="rol_comercial_enum", values_callable=lambda e: [x.value for x in e]),
         nullable=False,
         default=RolComercial.ASESOR_COMERCIAL,
     )
@@ -115,12 +115,12 @@ class Lead(db.Model):
     telefono = db.Column(db.String(30), unique=True, nullable=False)
     nombre = db.Column(db.String(200), nullable=True)
     origen = db.Column(
-        db.Enum(OrigenLead, name="origen_lead_enum", native_enum=True),
+        db.Enum(OrigenLead, name="origen_lead_enum", values_callable=lambda e: [x.value for x in e]),
         nullable=True,
     )
     marca_interes = db.Column(db.String(80), nullable=True)
     etapa_pipeline = db.Column(
-        db.Enum(EtapaPipeline, name="etapa_pipeline_enum", native_enum=True),
+        db.Enum(EtapaPipeline, name="etapa_pipeline_enum", values_callable=lambda e: [x.value for x in e]),
         nullable=False,
         default=EtapaPipeline.NUEVO_LEAD,
     )
@@ -206,7 +206,7 @@ class MensajeWhatsapp(db.Model):
     lead = db.relationship("Lead", back_populates="mensajes")
 
     direccion = db.Column(
-        db.Enum(DireccionMensaje, name="direccion_mensaje_enum", native_enum=True),
+        db.Enum(DireccionMensaje, name="direccion_mensaje_enum", values_callable=lambda e: [x.value for x in e]),
         nullable=False,
     )
     contenido = db.Column(db.Text, nullable=False)
@@ -282,7 +282,7 @@ class GastoPublicidad(db.Model):
         UUID(as_uuid=True), primary_key=True, default=_genuuid
     )
     plataforma = db.Column(
-        db.Enum(PlataformaAds, name="plataforma_ads_enum", native_enum=True),
+        db.Enum(PlataformaAds, name="plataforma_ads_enum", values_callable=lambda e: [x.value for x in e]),
         nullable=False,
     )
     marca = db.Column(db.String(80), nullable=True)  # Aromatex, Pestex, etc.
