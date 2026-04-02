@@ -25,3 +25,7 @@ Thumbs.db
 
 # Prototipo estatico (no es parte del backend)
 cerebro_avantex.html
+
+# Setup/seed scripts con credenciales
+setup_proyecto.py
+seed_users.py
