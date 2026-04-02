@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from extensions import db
 
@@ -307,4 +308,53 @@ class GastoPublicidad(db.Model):
             "monto": float(self.monto),
             "fecha": self.fecha.isoformat(),
             "notas": self.notas,
+        }
+
+
+# ──────────────────────────────────────────────
+# Tabla 6: users_crm (usuarios de la plataforma)
+# ──────────────────────────────────────────────
+class RolCRM(enum.Enum):
+    SUPER_ADMIN = "Super Admin"
+    ADMIN       = "Admin"
+    VIEWER      = "Viewer"
+
+
+class UserCRM(db.Model):
+    __tablename__ = "users_crm"
+
+    id = db.Column(
+        UUID(as_uuid=True), primary_key=True, default=_genuuid
+    )
+    nombre = db.Column(db.String(150), nullable=False)
+    correo = db.Column(db.String(200), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+    rol = db.Column(
+        db.Enum(RolCRM, name="rol_crm_enum", values_callable=lambda e: [x.value for x in e]),
+        nullable=False,
+        default=RolCRM.VIEWER,
+    )
+    activo = db.Column(db.Boolean, default=True, nullable=False)
+    foto_url = db.Column(db.String(500), nullable=True)
+    fecha_creacion = db.Column(
+        db.DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def __repr__(self):
+        return f"<UserCRM {self.nombre} | {self.rol.value}>"
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "nombre": self.nombre,
+            "correo": self.correo,
+            "rol": self.rol.value,
+            "activo": self.activo,
+            "foto_url": self.foto_url,
         }

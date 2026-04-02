@@ -166,28 +166,55 @@ CREATE INDEX idx_gastos_marca      ON gastos_publicidad (marca, fecha DESC);
 -- Vista: resumen de embudo por mes (para dashboard)
 -- ============================================================
 CREATE OR REPLACE VIEW v_embudo_mensual AS
+WITH leads_mes AS (
+    SELECT
+        DATE_TRUNC('month', l.fecha_creacion)::DATE  AS mes,
+        COUNT(*)                                      AS total_leads,
+        COUNT(*) FILTER (WHERE l.etapa_pipeline IN ('Calificando','Presentación/Cotización','Seguimiento','Cierre Ganado'))
+                                                      AS calificados,
+        COUNT(*) FILTER (WHERE l.etapa_pipeline IN ('Presentación/Cotización','Seguimiento','Cierre Ganado'))
+                                                      AS cotizados,
+        COUNT(*) FILTER (WHERE l.etapa_pipeline = 'Cierre Ganado')
+                                                      AS ganados,
+        COUNT(*) FILTER (WHERE l.etapa_pipeline = 'Cierre Perdido')
+                                                      AS perdidos,
+        COALESCE(SUM(
+            CASE WHEN l.etapa_pipeline = 'Cierre Ganado'
+                 THEN COALESCE(l.cantidad_productos * l.precio_unitario, l.valor_estimado, 0)
+                 ELSE 0
+            END
+        ), 0)                                         AS revenue_ganado,
+        COALESCE(SUM(COALESCE(l.cantidad_productos * l.precio_unitario, l.valor_estimado, 0)), 0)
+                                                      AS pipe_total
+    FROM leads l
+    GROUP BY DATE_TRUNC('month', l.fecha_creacion)
+)
 SELECT
-    DATE_TRUNC('month', l.fecha_creacion)::DATE  AS mes,
-    COUNT(*)                                      AS total_leads,
-    COUNT(*) FILTER (WHERE l.etapa_pipeline IN ('Calificando','Presentación/Cotización','Seguimiento','Cierre Ganado'))
-                                                  AS calificados,
-    COUNT(*) FILTER (WHERE l.etapa_pipeline IN ('Presentación/Cotización','Seguimiento','Cierre Ganado'))
-                                                  AS cotizados,
-    COUNT(*) FILTER (WHERE l.etapa_pipeline = 'Cierre Ganado')
-                                                  AS ganados,
-    COUNT(*) FILTER (WHERE l.etapa_pipeline = 'Cierre Perdido')
-                                                  AS perdidos,
-    COALESCE(SUM(
-        CASE WHEN l.etapa_pipeline = 'Cierre Ganado'
-             THEN COALESCE(l.cantidad_productos * l.precio_unitario, l.valor_estimado, 0)
-             ELSE 0
-        END
-    ), 0)                                         AS revenue_ganado,
-    COALESCE(SUM(COALESCE(l.cantidad_productos * l.precio_unitario, l.valor_estimado, 0)), 0)
-                                                  AS pipe_total,
+    lm.*,
     COALESCE((SELECT SUM(g.monto) FROM gastos_publicidad g
-              WHERE DATE_TRUNC('month', g.fecha) = DATE_TRUNC('month', l.fecha_creacion)), 0)
-                                                  AS gasto_ads
-FROM leads l
-GROUP BY DATE_TRUNC('month', l.fecha_creacion)
-ORDER BY mes DESC;
+              WHERE DATE_TRUNC('month', g.fecha) = lm.mes), 0) AS gasto_ads
+FROM leads_mes lm
+ORDER BY lm.mes DESC;
+
+
+-- ============================================================
+-- Tabla 6: users_crm (usuarios de la plataforma)
+-- ============================================================
+CREATE TYPE rol_crm_enum AS ENUM (
+    'Super Admin',
+    'Admin',
+    'Viewer'
+);
+
+CREATE TABLE users_crm (
+    id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nombre            VARCHAR(150)      NOT NULL,
+    correo            VARCHAR(200)      NOT NULL UNIQUE,
+    password_hash     VARCHAR(256)      NOT NULL,
+    rol               rol_crm_enum      NOT NULL DEFAULT 'Viewer',
+    activo            BOOLEAN           NOT NULL DEFAULT TRUE,
+    foto_url          VARCHAR(500),
+    fecha_creacion    TIMESTAMPTZ       NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_users_crm_correo ON users_crm (correo);

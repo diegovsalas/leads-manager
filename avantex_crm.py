@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from flask import Flask
+from datetime import timedelta
+from flask import Flask, session, redirect, url_for, request
 from extensions import db, socketio
 
 
@@ -26,6 +27,7 @@ def create_app():
         db_url = db_url.replace("postgres://", "postgresql://", 1)
     app.config["SQLALCHEMY_DATABASE_URI"] = db_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 
     # Variables de Meta/WhatsApp accesibles en toda la app
     app.config["WHATSAPP_TOKEN"]    = os.getenv("WHATSAPP_TOKEN", "")
@@ -37,15 +39,26 @@ def create_app():
     socketio.init_app(app, cors_allowed_origins="*", async_mode="eventlet")
 
     # ── Blueprints ─────────────────────────────
+    from blueprints.auth       import auth_bp
     from blueprints.webhooks   import webhooks_bp
     from blueprints.leads      import leads_bp
     from blueprints.chat       import chat_bp
     from blueprints.dashboard  import dashboard_bp
 
+    app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp,   url_prefix="/webhook")
     app.register_blueprint(leads_bp,      url_prefix="/api/leads")
     app.register_blueprint(chat_bp,       url_prefix="/api/chat")
     app.register_blueprint(dashboard_bp,  url_prefix="/api/dashboard")
+
+    # ── Proteger todas las rutas excepto login y webhooks ──
+    @app.before_request
+    def require_login():
+        allowed = ("/login", "/webhook/", "/static/")
+        if any(request.path.startswith(p) for p in allowed):
+            return
+        if not session.get("user_id"):
+            return redirect(url_for("auth.login_page"))
 
     # ── Ruta principal (vista Kanban + Chat) ───
     from flask import render_template
@@ -81,6 +94,8 @@ def create_app():
             "pipeline/index.html",
             pipeline=pipeline,
             etapas=list(EtapaPipeline),
+            user_nombre=session.get("user_nombre", ""),
+            user_rol=session.get("user_rol", ""),
         )
 
     # ── Crear tablas en primera ejecución ──────

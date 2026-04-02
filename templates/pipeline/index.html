@@ -230,6 +230,14 @@ tbody td{padding:8px 12px;font-size:14px;}
   <div class="slink" data-marca="Nexo" onclick="setFiltroMarca('Nexo',this)"><span class="slink-emoji">&#128279;</span> Nexo</div>
 
   <div class="sidebar-bottom">
+    <div style="display:flex;align-items:center;gap:8px;padding:4px 0 8px;">
+      <div style="width:24px;height:24px;border-radius:50%;background:var(--blue-bg);color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0;">{{ user_nombre[:2]|upper }}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ user_nombre }}</div>
+        <div style="font-size:11px;color:var(--text3);">{{ user_rol }}</div>
+      </div>
+      <a href="/logout" style="font-size:11px;color:var(--text3);text-decoration:none;" title="Cerrar sesion">&#9211;</a>
+    </div>
     <div class="ws-status"><div class="ws-dot" id="ws-dot"></div><span id="ws-label">Conectando...</span></div>
   </div>
 </aside>
