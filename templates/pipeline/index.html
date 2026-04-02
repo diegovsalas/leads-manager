@@ -696,6 +696,9 @@ const PRIO_COLORS={Alta:['var(--orange-bg)','var(--orange)'],Media:['var(--yello
 function fmtDate(iso){const d=new Date(iso);return d.getDate()+' '+['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][d.getMonth()];}
 function fmtDateTime(iso){const d=new Date(iso);return fmtDate(iso)+', '+d.getHours()+':'+(d.getMinutes()<10?'0':'')+d.getMinutes();}
 
+// Store prompts safely (avoids inline escaping issues)
+const _prompts={};
+
 async function loadProyecto(){
   try{
     const [avances,ideas,notas]=await Promise.all([
@@ -713,7 +716,11 @@ async function loadProyecto(){
     const ig=document.getElementById('ideas-grid');ig.innerHTML='';
     ideas.forEach(i=>{
       const pc=PRIO_COLORS[i.prioridad]||PRIO_COLORS.Media;
-      const promptBtn=i.prompt_dev?`<span style="cursor:pointer;font-size:11px;color:var(--accent);margin-left:auto;" onclick="showPrompt(\`${i.prompt_dev.replace(/`/g,"'").replace(/\\/g,"\\\\")}\`)">Ver prompt</span>`:'';
+      // Store prompt in JS object, reference by ID
+      if(i.prompt_dev)_prompts[i.id]=i.prompt_dev;
+      const promptBtn=i.prompt_dev
+        ?`<span style="cursor:pointer;font-size:11px;color:var(--accent);margin-left:auto;" onclick="showPromptById('${i.id}')">&#128196; Ver prompt</span>`
+        :`<span style="font-size:11px;color:var(--text3);margin-left:auto;">Sin prompt</span>`;
       ig.innerHTML+=`<div class="idea-card" data-id="${i.id}">
         <div class="idea-card-title">${i.titulo}</div>
         <div class="idea-card-desc">${i.descripcion||''}</div>
@@ -735,19 +742,22 @@ async function loadProyecto(){
   }catch(e){console.error('Proyecto load error:',e);}
 }
 
-function showPrompt(text){
+function showPromptById(id){
+  const text=_prompts[id];
+  if(!text){showToast('Sin prompt','Esta idea no tiene prompt generado');return;}
   document.getElementById('prompt-viewer').style.display='block';
   document.getElementById('prompt-viewer-text').textContent=text;
   document.getElementById('prompt-viewer').scrollIntoView({behavior:'smooth'});
 }
 
 async function addAvance(){
-  const inp=document.getElementById('cl-input'),desc=document.getElementById('cl-desc');
-  const titulo=inp.value.trim();if(!titulo){inp.focus();return;}
-  inp.value='';desc.value='';
+  const inp=document.getElementById('cl-input'),descInp=document.getElementById('cl-desc');
+  const titulo=inp.value.trim(),descripcion=descInp.value.trim()||null;
+  if(!titulo){inp.focus();return;}
+  inp.value='';descInp.value='';
   try{
-    await fetch('/api/proyecto/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:'avance',titulo,descripcion:desc.value.trim()||null,autor:USER_NOMBRE})});
-    loadProyecto();showToast('Avance registrado',titulo);
+    await fetch('/api/proyecto/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:'avance',titulo,descripcion,autor:USER_NOMBRE})});
+    await loadProyecto();showToast('Avance registrado',titulo);
   }catch{showToast('Error','No se pudo guardar');}
 }
 
@@ -755,13 +765,18 @@ async function addIdeaModal(){
   const titulo=prompt('Titulo de la idea:');if(!titulo)return;
   const descripcion=prompt('Descripcion:')||'';
   const prioridad=prompt('Prioridad (Alta, Media, Baja):')||'Media';
-  showToast('Generando prompt...','Gemini esta analizando la idea');
+  showToast('Generando prompt...','Gemini esta analizando la idea. Espera unos segundos...');
   try{
     const r=await fetch('/api/proyecto/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:'idea',titulo,descripcion,autor:USER_NOMBRE,prioridad})});
     const item=await r.json();
-    loadProyecto();
+    // Store prompt and reload
+    if(item.prompt_dev)_prompts[item.id]=item.prompt_dev;
+    await loadProyecto();
     showToast('Idea guardada',titulo);
-    if(item.prompt_dev){setTimeout(()=>showPrompt(item.prompt_dev),500);}
+    // Auto-show the generated prompt
+    if(item.prompt_dev){
+      setTimeout(()=>showPromptById(item.id),300);
+    }
   }catch{showToast('Error','No se pudo guardar');}
 }
 
