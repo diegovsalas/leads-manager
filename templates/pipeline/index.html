@@ -433,30 +433,28 @@ tbody td{padding:8px 12px;font-size:14px;}
       </ul>
     </div>
     <div class="section-h2">Avances</div>
-    <div class="changelog" id="changelog">
-      <div class="cl-item"><div class="cl-date">2 Abr</div><div class="cl-dot" style="background:var(--green);"></div><div class="cl-body"><div class="cl-title">Deploy en Render + Supabase</div><div class="cl-desc">App live con BD conectada. Seed de vendedores ejecutado.</div><div class="cl-author">Diego</div></div></div>
-      <div class="cl-item"><div class="cl-date">2 Abr</div><div class="cl-dot" style="background:var(--green);"></div><div class="cl-body"><div class="cl-title">UI Notion style completa</div><div class="cl-desc">Dashboard, Pipeline, Chat, Leads, Proyecto. Filtros por UN y mes.</div><div class="cl-author">Diego</div></div></div>
-      <div class="cl-item"><div class="cl-date">1 Abr</div><div class="cl-dot" style="background:var(--green);"></div><div class="cl-body"><div class="cl-title">Modelos BD + Round-Robin + Schema SQL</div><div class="cl-desc">5 tablas + funcion asignar_lead_comercial() + vista embudo.</div><div class="cl-author">Diego</div></div></div>
-      <div class="cl-item"><div class="cl-date">1 Abr</div><div class="cl-dot" style="background:var(--blue);"></div><div class="cl-body"><div class="cl-title">Estructura Flask + Blueprints</div><div class="cl-desc">webhooks, leads, chat, dashboard. Factory pattern.</div><div class="cl-author">Diego</div></div></div>
-    </div>
+    <div class="changelog" id="changelog"><div class="chat-empty-msg">Cargando avances...</div></div>
     <div style="margin-top:12px;display:flex;gap:8px;">
       <input class="note-input" id="cl-input" type="text" placeholder="Agregar avance..." onkeydown="if(event.key==='Enter')addAvance()"/>
+      <input class="note-input" id="cl-desc" type="text" placeholder="Descripcion (opcional)" style="max-width:250px;" onkeydown="if(event.key==='Enter')addAvance()"/>
       <button class="btn btn-filled" onclick="addAvance()">Agregar</button>
     </div>
     <div class="section-h2">Ideas y backlog</div>
-    <div class="ideas-grid" id="ideas-grid">
-      <div class="idea-card"><div class="idea-card-title">Bot interno WhatsApp</div><div class="idea-card-desc">Vendedores gestionan leads desde WA: "mis leads", "nota 5", "cerrar 3".</div><div class="idea-card-meta"><span class="tag" style="background:var(--orange-bg);color:var(--orange);">Alta</span><span class="idea-vote" onclick="toggleVote(this)">&#9650; 3</span></div></div>
-      <div class="idea-card"><div class="idea-card-title">Notificaciones al vendedor</div><div class="idea-card-desc">WA al vendedor asignado cuando llega un lead nuevo.</div><div class="idea-card-meta"><span class="tag" style="background:var(--orange-bg);color:var(--orange);">Alta</span><span class="idea-vote" onclick="toggleVote(this)">&#9650; 2</span></div></div>
-      <div class="idea-card"><div class="idea-card-title">Dashboard por vendedor</div><div class="idea-card-desc">Cada asesor ve solo sus leads y metricas.</div><div class="idea-card-meta"><span class="tag" style="background:var(--yellow-bg);color:var(--yellow);">Media</span><span class="idea-vote" onclick="toggleVote(this)">&#9650; 2</span></div></div>
-      <div class="idea-card"><div class="idea-card-title">Exportar PDF/Excel</div><div class="idea-card-desc">Reporte mensual con embudo, revenue, ROI.</div><div class="idea-card-meta"><span class="tag" style="background:var(--blue-bg);color:var(--blue);">Baja</span><span class="idea-vote" onclick="toggleVote(this)">&#9650; 1</span></div></div>
+    <div class="ideas-grid" id="ideas-grid"><div class="chat-empty-msg">Cargando ideas...</div></div>
+    <div class="add-idea-btn" onclick="addIdeaModal()">+ Agregar idea (Gemini genera el prompt de desarrollo)</div>
+    <!-- Prompt viewer -->
+    <div id="prompt-viewer" style="display:none;margin-top:16px;border:1px solid var(--border-light);border-radius:var(--r2);padding:16px;background:var(--bg-sidebar);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-size:14px;font-weight:600;">Prompt de desarrollo generado por Gemini</div>
+        <button class="btn" onclick="document.getElementById('prompt-viewer').style.display='none'">&times; Cerrar</button>
+      </div>
+      <pre id="prompt-viewer-text" style="font-size:13px;color:var(--text2);white-space:pre-wrap;line-height:1.6;max-height:400px;overflow-y:auto;font-family:var(--font);"></pre>
+      <button class="btn btn-blue" style="margin-top:8px;" onclick="navigator.clipboard.writeText(document.getElementById('prompt-viewer-text').textContent);showToast('Copiado','Prompt copiado al portapapeles');">Copiar prompt</button>
     </div>
-    <div class="add-idea-btn" onclick="addIdeaPrompt()">+ Agregar idea</div>
     <div class="section-h2">Notas del equipo</div>
-    <div class="collab-notes" id="collab-notes">
-      <div class="note-item"><div class="note-av" style="background:var(--blue-bg);color:var(--blue);">DI</div><div class="note-body"><div class="note-author">Diego <span class="note-time">2 Abr, 13:00</span></div><div class="note-text">App deployada en Render. BD en Supabase con 3 vendedores. Siguiente: conectar webhooks reales de Meta y WhatsApp Business.</div></div></div>
-    </div>
+    <div class="collab-notes" id="collab-notes"><div class="chat-empty-msg">Cargando notas...</div></div>
     <div class="note-input-row" style="margin-top:12px;">
-      <div class="note-av" style="background:var(--blue-bg);color:var(--blue);width:28px;height:28px;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;border-radius:50%;flex-shrink:0;">DI</div>
+      <div class="note-av" style="background:var(--blue-bg);color:var(--blue);width:28px;height:28px;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;border-radius:50%;flex-shrink:0;">{{ user_nombre[:2]|upper }}</div>
       <input class="note-input" id="note-input" type="text" placeholder="Escribe una nota..." onkeydown="if(event.key==='Enter')addNote()"/>
       <button class="btn btn-filled" onclick="addNote()">Enviar</button>
     </div>
@@ -692,17 +690,103 @@ function crearLead(){
   })}).then(r=>r.json()).then(()=>{closeModal();location.reload();}).catch(()=>showToast('Error','No se pudo crear'));
 }
 
-// Proyecto helpers
-function addAvance(){const inp=document.getElementById('cl-input'),txt=inp.value.trim();if(!txt)return;inp.value='';const d=new Date(),ds=d.getDate()+' '+['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][d.getMonth()];const cl=document.getElementById('changelog'),item=document.createElement('div');item.className='cl-item';item.innerHTML=`<div class="cl-date">${ds}</div><div class="cl-dot" style="background:var(--green);"></div><div class="cl-body"><div class="cl-title">${txt}</div><div class="cl-author">Diego</div></div>`;cl.insertBefore(item,cl.firstChild);showToast('Avance',txt);}
-function addIdeaPrompt(){const t=prompt('Titulo:');if(!t)return;const d=prompt('Descripcion:')||'';const g=document.getElementById('ideas-grid'),c=document.createElement('div');c.className='idea-card';c.innerHTML=`<div class="idea-card-title">${t}</div><div class="idea-card-desc">${d}</div><div class="idea-card-meta"><span class="tag" style="background:var(--yellow-bg);color:var(--yellow);">Media</span><span class="idea-vote" onclick="toggleVote(this)">&#9650; 0</span></div>`;g.appendChild(c);}
-function toggleVote(el){const v=el.classList.contains('voted');let n=parseInt(el.textContent.trim().split(' ')[1])||0;if(v){n--;el.classList.remove('voted');}else{n++;el.classList.add('voted');}el.innerHTML='&#9650; '+n;}
-function addNote(){const inp=document.getElementById('note-input'),txt=inp.value.trim();if(!txt)return;inp.value='';const d=new Date(),ts=d.getDate()+' '+['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][d.getMonth()]+', '+d.getHours()+':'+(d.getMinutes()<10?'0':'')+d.getMinutes();const notes=document.getElementById('collab-notes'),item=document.createElement('div');item.className='note-item';item.innerHTML=`<div class="note-av" style="background:var(--blue-bg);color:var(--blue);">DI</div><div class="note-body"><div class="note-author">Diego <span class="note-time">${ts}</span></div><div class="note-text">${txt}</div></div>`;notes.appendChild(item);item.scrollIntoView({behavior:'smooth'});}
+// Proyecto — loads from API
+const USER_NOMBRE='{{ user_nombre }}';
+const PRIO_COLORS={Alta:['var(--orange-bg)','var(--orange)'],Media:['var(--yellow-bg)','var(--yellow)'],Baja:['var(--blue-bg)','var(--blue)']};
+function fmtDate(iso){const d=new Date(iso);return d.getDate()+' '+['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][d.getMonth()];}
+function fmtDateTime(iso){const d=new Date(iso);return fmtDate(iso)+', '+d.getHours()+':'+(d.getMinutes()<10?'0':'')+d.getMinutes();}
+
+async function loadProyecto(){
+  try{
+    const [avances,ideas,notas]=await Promise.all([
+      fetch('/api/proyecto/items?tipo=avance').then(r=>r.json()),
+      fetch('/api/proyecto/items?tipo=idea').then(r=>r.json()),
+      fetch('/api/proyecto/items?tipo=nota').then(r=>r.json()),
+    ]);
+    // Avances
+    const cl=document.getElementById('changelog');cl.innerHTML='';
+    avances.forEach(a=>{
+      cl.innerHTML+=`<div class="cl-item"><div class="cl-date">${fmtDate(a.fecha_creacion)}</div><div class="cl-dot" style="background:var(--green);"></div><div class="cl-body"><div class="cl-title">${a.titulo}</div>${a.descripcion?`<div class="cl-desc">${a.descripcion}</div>`:''}<div class="cl-author">${a.autor}</div></div></div>`;
+    });
+    if(!avances.length)cl.innerHTML='<div style="color:var(--text3);font-size:13px;">Sin avances registrados</div>';
+    // Ideas
+    const ig=document.getElementById('ideas-grid');ig.innerHTML='';
+    ideas.forEach(i=>{
+      const pc=PRIO_COLORS[i.prioridad]||PRIO_COLORS.Media;
+      const promptBtn=i.prompt_dev?`<span style="cursor:pointer;font-size:11px;color:var(--accent);margin-left:auto;" onclick="showPrompt(\`${i.prompt_dev.replace(/`/g,"'").replace(/\\/g,"\\\\")}\`)">Ver prompt</span>`:'';
+      ig.innerHTML+=`<div class="idea-card" data-id="${i.id}">
+        <div class="idea-card-title">${i.titulo}</div>
+        <div class="idea-card-desc">${i.descripcion||''}</div>
+        <div class="idea-card-meta">
+          <span class="tag" style="background:${pc[0]};color:${pc[1]};">${i.prioridad||'Media'}</span>
+          <span class="idea-vote" onclick="voteIdea('${i.id}',this)">&#9650; ${i.votos}</span>
+          ${promptBtn}
+        </div>
+      </div>`;
+    });
+    if(!ideas.length)ig.innerHTML='<div style="color:var(--text3);font-size:13px;">Sin ideas registradas</div>';
+    // Notas
+    const cn=document.getElementById('collab-notes');cn.innerHTML='';
+    notas.forEach(n=>{
+      const ini=n.autor.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
+      cn.innerHTML+=`<div class="note-item"><div class="note-av" style="background:var(--blue-bg);color:var(--blue);">${ini}</div><div class="note-body"><div class="note-author">${n.autor} <span class="note-time">${fmtDateTime(n.fecha_creacion)}</span></div><div class="note-text">${n.descripcion||n.titulo}</div></div></div>`;
+    });
+    if(!notas.length)cn.innerHTML='<div style="color:var(--text3);font-size:13px;">Sin notas</div>';
+  }catch(e){console.error('Proyecto load error:',e);}
+}
+
+function showPrompt(text){
+  document.getElementById('prompt-viewer').style.display='block';
+  document.getElementById('prompt-viewer-text').textContent=text;
+  document.getElementById('prompt-viewer').scrollIntoView({behavior:'smooth'});
+}
+
+async function addAvance(){
+  const inp=document.getElementById('cl-input'),desc=document.getElementById('cl-desc');
+  const titulo=inp.value.trim();if(!titulo){inp.focus();return;}
+  inp.value='';desc.value='';
+  try{
+    await fetch('/api/proyecto/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:'avance',titulo,descripcion:desc.value.trim()||null,autor:USER_NOMBRE})});
+    loadProyecto();showToast('Avance registrado',titulo);
+  }catch{showToast('Error','No se pudo guardar');}
+}
+
+async function addIdeaModal(){
+  const titulo=prompt('Titulo de la idea:');if(!titulo)return;
+  const descripcion=prompt('Descripcion:')||'';
+  const prioridad=prompt('Prioridad (Alta, Media, Baja):')||'Media';
+  showToast('Generando prompt...','Gemini esta analizando la idea');
+  try{
+    const r=await fetch('/api/proyecto/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:'idea',titulo,descripcion,autor:USER_NOMBRE,prioridad})});
+    const item=await r.json();
+    loadProyecto();
+    showToast('Idea guardada',titulo);
+    if(item.prompt_dev){setTimeout(()=>showPrompt(item.prompt_dev),500);}
+  }catch{showToast('Error','No se pudo guardar');}
+}
+
+async function voteIdea(id,el){
+  try{
+    const r=await fetch('/api/proyecto/items/'+id+'/votar',{method:'POST'});
+    const item=await r.json();
+    el.innerHTML='&#9650; '+item.votos;
+  }catch{}
+}
+
+async function addNote(){
+  const inp=document.getElementById('note-input'),txt=inp.value.trim();if(!txt){inp.focus();return;}
+  inp.value='';
+  try{
+    await fetch('/api/proyecto/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:'nota',titulo:txt,autor:USER_NOMBRE})});
+    loadProyecto();showToast('Nota agregada',txt);
+  }catch{showToast('Error','No se pudo guardar');}
+}
 
 // Toast
 function showToast(title,msg){const c=document.getElementById('toasts'),t=document.createElement('div');t.className='toast';t.innerHTML=`<div class="toast-dot" style="background:var(--accent)"></div><div class="toast-body"><div class="toast-title">${title}</div><div class="toast-msg">${msg}</div></div><span class="toast-close" onclick="this.parentElement.remove()">&times;</span>`;c.appendChild(t);setTimeout(()=>t.remove(),4000);}
 
 // Init
-updateCounts();loadDashboard();
+updateCounts();loadDashboard();loadProyecto();
 </script>
 </body>
 </html>

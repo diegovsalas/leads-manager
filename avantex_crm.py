@@ -44,12 +44,14 @@ def create_app():
     from blueprints.leads      import leads_bp
     from blueprints.chat       import chat_bp
     from blueprints.dashboard  import dashboard_bp
+    from blueprints.proyecto   import proyecto_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp,   url_prefix="/webhook")
     app.register_blueprint(leads_bp,      url_prefix="/api/leads")
     app.register_blueprint(chat_bp,       url_prefix="/api/chat")
     app.register_blueprint(dashboard_bp,  url_prefix="/api/dashboard")
+    app.register_blueprint(proyecto_bp,   url_prefix="/api/proyecto")
 
     # ── Proteger todas las rutas excepto login y webhooks ──
     @app.before_request

@@ -314,6 +314,12 @@ class GastoPublicidad(db.Model):
 # ──────────────────────────────────────────────
 # Tabla 6: users_crm (usuarios de la plataforma)
 # ──────────────────────────────────────────────
+class TipoProyecto(enum.Enum):
+    AVANCE = "avance"
+    IDEA   = "idea"
+    NOTA   = "nota"
+
+
 class RolCRM(enum.Enum):
     SUPER_ADMIN = "Super Admin"
     ADMIN       = "Admin"
@@ -357,4 +363,43 @@ class UserCRM(db.Model):
             "rol": self.rol.value,
             "activo": self.activo,
             "foto_url": self.foto_url,
+        }
+
+
+# ──────────────────────────────────────────────
+# Tabla 7: proyecto_items (gestión colaborativa)
+# ──────────────────────────────────────────────
+class ProyectoItem(db.Model):
+    __tablename__ = "proyecto_items"
+
+    id = db.Column(
+        UUID(as_uuid=True), primary_key=True, default=_genuuid
+    )
+    tipo = db.Column(
+        db.String(20), nullable=False
+    )
+    titulo = db.Column(db.String(300), nullable=False)
+    descripcion = db.Column(db.Text, nullable=True)
+    autor = db.Column(db.String(150), nullable=False)
+    prioridad = db.Column(db.String(50), nullable=True)
+    votos = db.Column(db.Integer, nullable=False, default=0)
+    prompt_dev = db.Column(db.Text, nullable=True)
+    fecha_creacion = db.Column(
+        db.DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    def __repr__(self):
+        return f"<ProyectoItem {self.tipo} | {self.titulo[:40]}>"
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "tipo": self.tipo,
+            "titulo": self.titulo,
+            "descripcion": self.descripcion,
+            "autor": self.autor,
+            "prioridad": self.prioridad,
+            "votos": self.votos,
+            "prompt_dev": self.prompt_dev,
+            "fecha_creacion": self.fecha_creacion.isoformat(),
         }
