@@ -6,7 +6,7 @@
 <title>Leads Manager Grupo Avantex</title>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <style>
-:root{--bg:#fff;--bg-sidebar:#fbfbfa;--bg-hover:#f1f1ef;--bg-active:#f1f1ef;--bg-card:#fff;--border:#e3e2e0;--border-light:#ebebea;--text:#37352f;--text2:#787774;--text3:#b4b4b0;--accent:#2eaadc;--red:#eb5757;--red-bg:#fbe4e4;--orange:#e07c1a;--orange-bg:#faebdd;--green:#0f7b6c;--green-bg:#dbeddb;--blue:#2eaadc;--blue-bg:#d3e5ef;--purple:#9065b0;--purple-bg:#e8deee;--pink:#d44c7c;--pink-bg:#f5e0e9;--yellow:#cb912f;--yellow-bg:#fdecc8;--bg-tag:#f1f1ef;--font:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;--mono:"SFMono-Regular",Menlo,Consolas,monospace;--r:4px;--r2:6px;--shadow:0 1px 3px rgba(0,0,0,.04),0 0 0 1px var(--border);--shadow-lg:0 4px 12px rgba(0,0,0,.08),0 0 0 1px var(--border);}
+:root{--bg:#fff;--bg-sidebar:#fbfbfa;--bg-hover:#f1f1ef;--bg-active:#f1f1ef;--bg-card:#fff;--bg-input:#fff;--bg-tag:#f1f1ef;--border:#e3e2e0;--border-light:#ebebea;--text:#37352f;--text2:#787774;--text3:#b4b4b0;--accent:#2eaadc;--red:#eb5757;--red-bg:#fbe4e4;--orange:#e07c1a;--orange-bg:#faebdd;--green:#0f7b6c;--green-bg:#dbeddb;--blue:#2eaadc;--blue-bg:#d3e5ef;--purple:#9065b0;--purple-bg:#e8deee;--pink:#d44c7c;--pink-bg:#f5e0e9;--yellow:#cb912f;--yellow-bg:#fdecc8;--font:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;--mono:"SFMono-Regular",Menlo,Consolas,monospace;--r:4px;--r2:6px;--shadow:0 1px 3px rgba(0,0,0,.04),0 0 0 1px var(--border);--shadow-lg:0 4px 12px rgba(0,0,0,.08),0 0 0 1px var(--border);}
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;overflow:hidden;-webkit-font-smoothing:antialiased;}
 ::selection{background:rgba(46,170,220,.2);}
@@ -17,7 +17,6 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .shell{display:grid;grid-template-columns:240px 1fr;height:100vh;}
 .sidebar{background:var(--bg-sidebar);border-right:1px solid var(--border-light);display:flex;flex-direction:column;overflow:hidden;padding-top:12px;}
 .content{overflow:hidden;display:flex;flex-direction:column;}
-
 .sidebar-logo{padding:4px 14px 16px;display:flex;align-items:center;gap:8px;}
 .sidebar-logo-icon{width:22px;height:22px;border-radius:4px;background:var(--text);display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;font-weight:700;}
 .sidebar-logo-text{font-size:14px;font-weight:600;color:var(--text);}
@@ -25,22 +24,58 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .slink{display:flex;align-items:center;gap:8px;padding:4px 14px;border-radius:var(--r);cursor:pointer;color:var(--text2);transition:background 80ms;font-size:14px;margin:1px 4px;line-height:1.5;user-select:none;}
 .slink:hover{background:var(--bg-hover);color:var(--text);}
 .slink.active{background:var(--bg-active);color:var(--text);font-weight:500;}
+.slink[data-marca].active{background:var(--yellow-bg);color:var(--yellow);font-weight:500;}
 .slink-emoji{font-size:16px;width:22px;text-align:center;flex-shrink:0;}
 .slink-badge{margin-left:auto;font-size:12px;color:var(--text3);}
 .sidebar-divider{height:1px;background:var(--border-light);margin:8px 14px;}
 .sidebar-bottom{margin-top:auto;padding:12px;border-top:1px solid var(--border-light);}
+.ws-status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);}
+.ws-dot{width:6px;height:6px;border-radius:50%;background:var(--text3);}
+.ws-dot.live{background:var(--green);}
 
 .view{display:none;flex:1;overflow:hidden;flex-direction:column;}
 .view.active{display:flex;}
+.page-header{padding:28px 48px 0;flex-shrink:0;}
+.page-emoji{font-size:40px;margin-bottom:4px;}
+.page-title{font-size:32px;font-weight:700;color:var(--text);letter-spacing:-.5px;line-height:1.2;}
+.page-desc{font-size:14px;color:var(--text2);margin-top:4px;}
 
-.toolbar{display:flex;align-items:center;gap:6px;padding:10px 48px;border-bottom:1px solid var(--border-light);flex-shrink:0;}
+.toolbar{display:flex;align-items:center;gap:6px;padding:10px 48px;border-bottom:1px solid var(--border-light);flex-shrink:0;flex-wrap:wrap;}
 .toolbar-search{padding:4px 8px;border:none;background:transparent;font-size:14px;color:var(--text);font-family:var(--font);outline:none;flex:1;max-width:260px;}
 .toolbar-search::placeholder{color:var(--text3);}
 .btn{padding:4px 10px;border-radius:var(--r);font-size:13px;font-weight:400;cursor:pointer;border:none;transition:background 80ms;font-family:var(--font);color:var(--text2);background:transparent;display:inline-flex;align-items:center;gap:4px;}
 .btn:hover{background:var(--bg-hover);color:var(--text);}
+.btn-blue{color:var(--accent);background:var(--blue-bg);}
 .btn-filled{background:var(--text);color:#fff;font-weight:500;padding:6px 12px;}
 .btn-filled:hover{background:#2c2c2c;}
 
+/* Metrics */
+.metrics-row{display:flex;gap:12px;padding:16px 48px 0;flex-shrink:0;}
+.metric-card{flex:1;padding:14px 16px;border-radius:var(--r2);border:1px solid var(--border-light);}
+.metric-label{font-size:12px;color:var(--text2);margin-bottom:6px;}
+.metric-value{font-size:26px;font-weight:700;letter-spacing:-.5px;}
+.metric-sub{font-size:12px;color:var(--text2);margin-top:4px;}
+
+/* Filter */
+.filter-bar{display:flex;align-items:center;gap:10px;padding:12px 48px 0;flex-shrink:0;}
+.filter-select{padding:5px 10px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;color:var(--text);font-family:var(--font);background:var(--bg);cursor:pointer;outline:none;}
+.filter-select:focus{border-color:var(--accent);}
+
+/* Dash */
+.dash-grid{display:grid;grid-template-columns:1fr 340px;gap:16px;padding:16px 48px;min-height:0;}
+.dash-card{border:1px solid var(--border-light);border-radius:var(--r2);padding:16px;overflow-y:auto;}
+.dash-card-title{font-size:14px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;}
+.kpi-row{display:flex;gap:14px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-light);}
+.kpi{font-size:13px;color:var(--text2);}
+.kpi strong{font-weight:600;}
+.toggle-group{display:inline-flex;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;}
+.toggle-btn{padding:3px 10px;font-size:12px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-family:var(--font);transition:all 80ms;}
+.toggle-btn:not(:last-child){border-right:1px solid var(--border);}
+.toggle-btn.active{background:var(--text);color:#fff;}
+.gasto-item{display:flex;align-items:center;gap:10px;padding:8px;border-radius:var(--r);transition:background 80ms;}
+.gasto-item:hover{background:var(--bg-hover);}
+
+/* Kanban */
 .kanban-scroll{flex:1;overflow-x:auto;overflow-y:hidden;padding:12px 48px 20px;display:flex;gap:12px;}
 .k-col{width:260px;flex-shrink:0;display:flex;flex-direction:column;max-height:100%;}
 .k-head{padding:6px 8px 8px;display:flex;flex-direction:column;gap:2px;flex-shrink:0;}
@@ -76,8 +111,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .chat-close{background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;padding:4px 8px;border-radius:var(--r);}
 .chat-close:hover{color:var(--text);background:var(--bg-hover);}
 .chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:6px;}
-.msg-row{display:flex;}
-.msg-row.out{justify-content:flex-end;}
+.msg-row{display:flex;}.msg-row.out{justify-content:flex-end;}
 .msg-bubble{max-width:85%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.5;}
 .msg-bubble.in{background:var(--bg-hover);border-bottom-left-radius:4px;}
 .msg-bubble.out{background:var(--accent);color:#fff;border-bottom-right-radius:4px;}
@@ -114,6 +148,52 @@ tbody td{padding:8px 12px;font-size:14px;}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border-light);}
 
+/* Project page */
+.project-page{padding:32px 64px 60px;max-width:900px;overflow-y:auto;flex:1;}
+.project-page h1{font-size:40px;font-weight:700;letter-spacing:-.5px;margin-bottom:4px;outline:none;}
+.project-page .page-subtitle{font-size:16px;color:var(--text2);margin-bottom:32px;}
+.prop-table{width:100%;margin-bottom:32px;}
+.prop-table td{padding:6px 0;font-size:14px;vertical-align:top;}
+.prop-key{color:var(--text2);width:140px;font-size:13px;}
+.section-h2{font-size:22px;font-weight:700;margin:32px 0 12px;letter-spacing:-.3px;padding-top:16px;border-top:1px solid var(--border-light);}
+.editable-block{min-height:32px;padding:4px 2px;outline:none;line-height:1.7;font-size:14px;border-radius:var(--r);transition:background 80ms;}
+.editable-block:hover,.editable-block:focus{background:var(--bg-hover);}
+.editable-block:empty::before{content:attr(data-ph);color:var(--text3);}
+.team-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;}
+.team-card{border:1px solid var(--border-light);border-radius:var(--r2);padding:14px;display:flex;flex-direction:column;gap:4px;}
+.team-card-name{font-size:14px;font-weight:600;}
+.team-card-role{font-size:12px;color:var(--text2);}
+.status-dot{width:6px;height:6px;border-radius:50%;display:inline-block;}
+.changelog{display:flex;flex-direction:column;}
+.cl-item{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border-light);}
+.cl-date{width:80px;flex-shrink:0;font-size:12px;color:var(--text3);padding-top:2px;}
+.cl-dot{width:8px;height:8px;border-radius:50%;margin-top:6px;flex-shrink:0;}
+.cl-body{flex:1;min-width:0;}
+.cl-title{font-size:14px;font-weight:500;}
+.cl-desc{font-size:13px;color:var(--text2);margin-top:2px;}
+.cl-author{font-size:11px;color:var(--text3);margin-top:3px;}
+.ideas-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
+.idea-card{border:1px solid var(--border-light);border-radius:var(--r2);padding:12px;transition:border-color 80ms;}
+.idea-card:hover{border-color:var(--border);}
+.idea-card-title{font-size:14px;font-weight:500;margin-bottom:4px;}
+.idea-card-desc{font-size:13px;color:var(--text2);line-height:1.5;}
+.idea-card-meta{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:11px;color:var(--text3);}
+.idea-vote{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border:1px solid var(--border);border-radius:99px;cursor:pointer;font-size:12px;color:var(--text2);background:transparent;}
+.idea-vote:hover,.idea-vote.voted{background:var(--green-bg);border-color:var(--green);color:var(--green);}
+.add-idea-btn{border:1px dashed var(--border);border-radius:var(--r2);padding:12px;text-align:center;color:var(--text3);cursor:pointer;font-size:13px;}
+.add-idea-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--blue-bg);}
+.collab-notes{display:flex;flex-direction:column;gap:10px;margin-top:12px;}
+.note-item{display:flex;gap:10px;padding:10px;border:1px solid var(--border-light);border-radius:var(--r2);}
+.note-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0;}
+.note-body{flex:1;min-width:0;}
+.note-author{font-size:12px;font-weight:600;}
+.note-time{font-size:11px;color:var(--text3);margin-left:6px;font-weight:400;}
+.note-text{font-size:14px;margin-top:3px;line-height:1.6;}
+.note-input-row{display:flex;gap:8px;margin-top:8px;}
+.note-input{flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:var(--r2);font-size:14px;font-family:var(--font);color:var(--text);outline:none;}
+.note-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(46,170,220,.15);}
+.note-input::placeholder{color:var(--text3);}
+
 /* Toast */
 .toast-container{position:fixed;bottom:20px;right:20px;z-index:999;display:flex;flex-direction:column;gap:8px;}
 .toast{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r2);padding:10px 14px;display:flex;align-items:center;gap:10px;min-width:260px;max-width:320px;animation:toastIn .2s ease;box-shadow:var(--shadow-lg);}
@@ -123,52 +203,90 @@ tbody td{padding:8px 12px;font-size:14px;}
 .toast-msg{font-size:12px;color:var(--text2);margin-top:1px;}
 .toast-close{color:var(--text3);cursor:pointer;font-size:16px;line-height:1;}
 @keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-
-/* Websocket status */
-.ws-status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);}
-.ws-dot{width:6px;height:6px;border-radius:50%;background:var(--text3);}
-.ws-dot.live{background:var(--green);}
 </style>
 </head>
 <body>
 <div class="shell">
 
-<!-- Sidebar -->
+<!-- ===== SIDEBAR ===== -->
 <aside class="sidebar">
-  <div class="sidebar-logo">
-    <div class="sidebar-logo-icon">L</div>
-    <span class="sidebar-logo-text">Leads Manager</span>
-  </div>
-
-  <div class="sidebar-section">Pipeline</div>
-  {% for etapa in etapas %}
-  {% set grupo = pipeline[etapa.value] %}
-  <div class="slink {% if loop.first %}active{% endif %}">
-    <span class="slink-emoji">&#128203;</span>
-    {{ etapa.value }}
-    <span class="slink-badge">{{ grupo.leads|length }}</span>
-  </div>
-  {% endfor %}
+  <div class="sidebar-logo"><div class="sidebar-logo-icon">L</div><span class="sidebar-logo-text">Leads Manager</span></div>
+  <div class="slink active" onclick="showView('dashboard',this)"><span class="slink-emoji">&#128202;</span> Dashboard</div>
+  <div class="slink" onclick="showView('pipeline',this)"><span class="slink-emoji">&#128203;</span> Pipeline</div>
+  <div class="slink" onclick="showView('leads',this)"><span class="slink-emoji">&#128101;</span> Todos los leads</div>
+  <div class="slink" onclick="showView('proyecto',this)"><span class="slink-emoji">&#128221;</span> Proyecto</div>
 
   <div class="sidebar-divider"></div>
-  <div class="sidebar-section">Acciones</div>
-  <div class="slink" onclick="openModal()">
-    <span class="slink-emoji">&#10133;</span> Nuevo Lead
-  </div>
+  <div class="sidebar-section">Integraciones</div>
+  <div class="slink" onclick="showToast('Meta Ads','Webhook activo')"><span class="slink-emoji">&#128308;</span> Meta Ads <span class="slink-badge" style="color:var(--green);">&#9679; Activo</span></div>
+  <div class="slink" onclick="showToast('WhatsApp API','Conectado')"><span class="slink-emoji">&#128172;</span> WhatsApp API <span class="slink-badge" style="color:var(--green);">&#9679; Activo</span></div>
+
+  <div class="sidebar-divider"></div>
+  <div class="sidebar-section">Unidades de negocio</div>
+  <div class="slink" data-marca="Aromatex Home" onclick="setFiltroMarca('Aromatex Home',this)"><span class="slink-emoji">&#127810;</span> Aromatex Home</div>
+  <div class="slink" data-marca="Aromatex" onclick="setFiltroMarca('Aromatex',this)"><span class="slink-emoji">&#127811;</span> Aromatex</div>
+  <div class="slink" data-marca="Pestex" onclick="setFiltroMarca('Pestex',this)"><span class="slink-emoji">&#128027;</span> Pestex</div>
+  <div class="slink" data-marca="Weldex" onclick="setFiltroMarca('Weldex',this)"><span class="slink-emoji">&#128293;</span> Weldex</div>
+  <div class="slink" data-marca="Nexo" onclick="setFiltroMarca('Nexo',this)"><span class="slink-emoji">&#128279;</span> Nexo</div>
 
   <div class="sidebar-bottom">
-    <div class="ws-status">
-      <div class="ws-dot" id="ws-dot"></div>
-      <span id="ws-label">Conectando...</span>
-    </div>
+    <div class="ws-status"><div class="ws-dot" id="ws-dot"></div><span id="ws-label">Conectando...</span></div>
   </div>
 </aside>
 
-<!-- Content -->
 <main class="content">
 
-<!-- Pipeline view -->
-<div class="view active" id="view-pipeline">
+<!-- ===== DASHBOARD ===== -->
+<div class="view active" id="view-dashboard" style="overflow-y:auto;">
+  <div class="page-header"><div class="page-emoji">&#128202;</div><div class="page-title">Dashboard</div><div class="page-desc" id="dash-date"></div></div>
+  <div id="filter-banner" style="display:none;padding:8px 48px 0;">
+    <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:var(--yellow-bg);border-radius:var(--r2);font-size:13px;color:var(--yellow);">
+      <span>Filtrando por: <strong id="filter-banner-text"></strong></span>
+      <button onclick="clearFiltroMarca()" style="border:none;background:none;cursor:pointer;font-size:16px;color:var(--yellow);line-height:1;">&times;</button>
+    </div>
+  </div>
+  <div class="filter-bar">
+    <div style="margin-left:auto;display:flex;gap:6px;">
+      <button class="btn btn-filled" onclick="openModal()">+ Nuevo lead</button>
+    </div>
+  </div>
+  <div class="metrics-row">
+    <div class="metric-card"><div class="metric-label">Leads totales</div><div class="metric-value" id="m-total">0</div><div class="metric-sub" id="m-total-sub"></div></div>
+    <div class="metric-card"><div class="metric-label">Pipe activo</div><div class="metric-value" style="color:var(--orange)" id="m-pipe">$0</div><div class="metric-sub" id="m-pipe-sub"></div></div>
+    <div class="metric-card"><div class="metric-label">Cierres ganados</div><div class="metric-value" style="color:var(--green)" id="m-ganados">0</div><div class="metric-sub" id="m-revenue"></div></div>
+    <div class="metric-card"><div class="metric-label">Gasto ads</div><div class="metric-value" style="color:var(--red)" id="m-gasto">$0</div><div class="metric-sub" id="m-cpl"></div></div>
+  </div>
+  <div style="padding:16px 48px 0;">
+    <div class="dash-card">
+      <div class="dash-card-title">Valor del pipeline por etapa</div>
+      <div id="pipe-bars" style="display:flex;gap:12px;align-items:flex-end;height:160px;"></div>
+    </div>
+  </div>
+  <div class="dash-grid">
+    <div class="dash-card">
+      <div class="dash-card-title">Embudo de conversion
+        <div class="toggle-group">
+          <button class="toggle-btn active" onclick="setFunnelView('bars',this)">Barras</button>
+          <button class="toggle-btn" onclick="setFunnelView('visual',this)">Embudo</button>
+        </div>
+      </div>
+      <div id="funnel-bars"></div>
+      <div id="funnel-visual" style="display:none;"></div>
+      <div class="kpi-row">
+        <span class="kpi">CPL: <strong id="f-cpl" style="color:var(--blue);">$0</strong></span>
+        <span class="kpi">CPA: <strong id="f-cpa" style="color:var(--orange);">$0</strong></span>
+        <span class="kpi">ROI: <strong id="f-roi" style="color:var(--green);">0x</strong></span>
+      </div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-card-title">Gastos de publicidad</div>
+      <div id="gastos-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PIPELINE ===== -->
+<div class="view" id="view-pipeline">
   <div class="toolbar">
     <input class="toolbar-search" type="text" placeholder="Buscar lead..." id="search-input" oninput="filterCards(this.value)"/>
     <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
@@ -177,42 +295,29 @@ tbody td{padding:8px 12px;font-size:14px;}
       <button class="btn btn-filled" onclick="openModal()">+ Nuevo lead</button>
     </div>
   </div>
-
   <div style="display:flex;flex:1;overflow:hidden;">
     <div class="kanban-scroll" id="kanban">
       {% for etapa in etapas %}
       {% set grupo = pipeline[etapa.value] %}
-      <div class="k-col"
-           data-etapa="{{ etapa.value }}"
+      <div class="k-col" data-etapa="{{ etapa.value }}"
            ondragover="event.preventDefault();this.classList.add('drag-over')"
            ondragleave="this.classList.remove('drag-over')"
            ondrop="onDrop(event,'{{ etapa.value }}')">
         <div class="k-head">
           <div class="k-head-row">
-            <div class="k-col-title">
-              <div class="k-dot" style="background:{{ grupo.color }}"></div>
-              {{ etapa.value }}
-            </div>
+            <div class="k-col-title"><div class="k-dot" style="background:{{ grupo.color }}"></div>{{ etapa.value }}</div>
             <span class="k-count" id="kc-{{ etapa.value }}">{{ grupo.leads|length }}</span>
           </div>
           {% set ns = namespace(total=0) %}
-          {% for lead in grupo.leads %}
-            {% if lead.valor_calculado %}
-              {% set ns.total = ns.total + lead.valor_calculado|float %}
-            {% endif %}
-          {% endfor %}
+          {% for lead in grupo.leads %}{% if lead.valor_calculado %}{% set ns.total = ns.total + lead.valor_calculado|float %}{% endif %}{% endfor %}
           <div class="k-col-valor">${{ "{:,.0f}".format(ns.total) }}</div>
         </div>
         <div class="k-cards" id="kcards-{{ etapa.value }}">
           {% for lead in grupo.leads %}
-          <div class="k-card"
-               id="kcard-{{ lead.id }}"
-               data-lead-id="{{ lead.id }}"
-               data-nombre="{{ lead.nombre or 'Sin nombre' }}"
-               data-telefono="{{ lead.telefono or '' }}"
-               draggable="true"
-               ondragstart="onDragStart(event,'{{ lead.id }}')"
-               ondragend="this.classList.remove('dragging')"
+          <div class="k-card" id="kcard-{{ lead.id }}" data-lead-id="{{ lead.id }}"
+               data-nombre="{{ lead.nombre or 'Sin nombre' }}" data-telefono="{{ lead.telefono or '' }}"
+               data-marca="{{ lead.marca_interes or '' }}"
+               draggable="true" ondragstart="onDragStart(event,'{{ lead.id }}')" ondragend="this.classList.remove('dragging')"
                onclick="abrirChat('{{ lead.id }}','{{ (lead.nombre or 'Sin nombre')|e }}','{{ lead.telefono or '' }}')">
             <div class="k-card-name">{{ lead.nombre or 'Sin nombre' }}</div>
             <div class="k-card-phone">{{ lead.telefono or '' }}</div>
@@ -220,18 +325,12 @@ tbody td{padding:8px 12px;font-size:14px;}
             <div class="k-card-detail">{{ lead.cantidad_productos }} x ${{ "{:,.0f}".format(lead.precio_unitario) }}</div>
             {% endif %}
             <div class="k-card-tags">
-              {% if lead.marca_interes %}
-              <span class="tag tag-marca">{{ lead.marca_interes }}</span>
-              {% endif %}
-              {% if lead.valor_calculado %}
-              <span class="tag tag-valor">${{ "{:,.0f}".format(lead.valor_calculado) }}</span>
-              {% endif %}
+              {% if lead.marca_interes %}<span class="tag tag-marca">{{ lead.marca_interes }}</span>{% endif %}
+              {% if lead.valor_calculado %}<span class="tag tag-valor">${{ "{:,.0f}".format(lead.valor_calculado) }}</span>{% endif %}
             </div>
             <div class="k-card-foot">
               <span class="tag tag-origen">{{ lead.origen.value if lead.origen else 'Manual' }}</span>
-              {% if lead.usuario_asignado %}
-              <span class="tag tag-vendedor">{{ lead.usuario_asignado.nombre.split(' ')[0] }}</span>
-              {% endif %}
+              {% if lead.usuario_asignado %}<span class="tag tag-vendedor">{{ lead.usuario_asignado.nombre.split(' ')[0] }}</span>{% endif %}
             </div>
           </div>
           {% endfor %}
@@ -239,333 +338,345 @@ tbody td{padding:8px 12px;font-size:14px;}
       </div>
       {% endfor %}
     </div>
-
     <!-- Chat panel -->
     <div class="chat-panel" id="chat-panel">
       <div class="chat-header">
-        <div class="chat-header-info">
-          <div class="chat-av" id="chat-av"></div>
-          <div>
-            <div class="chat-header-name" id="chat-name">Lead</div>
-            <div class="chat-header-phone" id="chat-phone"></div>
-          </div>
-        </div>
+        <div class="chat-header-info"><div class="chat-av" id="chat-av"></div><div><div class="chat-header-name" id="chat-name">Lead</div><div class="chat-header-phone" id="chat-phone"></div></div></div>
         <button class="chat-close" onclick="cerrarChat()">&times;</button>
       </div>
-      <div class="chat-messages" id="chat-messages">
-        <div class="chat-empty-msg">Selecciona un lead para ver la conversacion</div>
-      </div>
+      <div class="chat-messages" id="chat-messages"><div class="chat-empty-msg">Selecciona un lead</div></div>
       <div class="chat-input-area">
-        <input class="chat-input" id="chat-input" type="text"
-               placeholder="Escribe un mensaje..."
-               onkeydown="if(event.key==='Enter')enviarMensaje()"/>
-        <button class="send-btn" onclick="enviarMensaje()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        </button>
+        <input class="chat-input" id="chat-input" type="text" placeholder="Escribe un mensaje..." onkeydown="if(event.key==='Enter')enviarMensaje()"/>
+        <button class="send-btn" onclick="enviarMensaje()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Leads table view -->
+<!-- ===== LEADS TABLE ===== -->
 <div class="view" id="view-leads">
   <div class="toolbar">
     <input class="toolbar-search" type="text" placeholder="Buscar..." oninput="filterTable(this.value)"/>
     <div style="margin-left:auto;"><button class="btn btn-filled" onclick="openModal()">+ Nuevo lead</button></div>
   </div>
   <div class="table-wrap">
-    <table>
-      <thead><tr>
-        <th>Nombre</th><th>Telefono</th><th>Unidad</th><th>Cantidad</th><th>Valor</th><th>Etapa</th><th>Vendedor</th><th>Origen</th>
-      </tr></thead>
-      <tbody id="leads-tbody">
-        {% for etapa in etapas %}
-        {% for lead in pipeline[etapa.value].leads %}
-        <tr>
-          <td class="td-name">{{ lead.nombre or 'Sin nombre' }}</td>
-          <td class="td-phone">{{ lead.telefono or '-' }}</td>
-          <td>{% if lead.marca_interes %}<span class="tag tag-marca">{{ lead.marca_interes }}</span>{% else %}-{% endif %}</td>
-          <td style="font-size:12px;color:var(--text2);">{% if lead.cantidad_productos %}{{ lead.cantidad_productos }} x ${{ "{:,.0f}".format(lead.precio_unitario) }}{% else %}-{% endif %}</td>
-          <td>{% if lead.valor_calculado %}<span style="font-weight:600;color:var(--green);">${{ "{:,.0f}".format(lead.valor_calculado) }}</span>{% else %}-{% endif %}</td>
-          <td><span class="tag" style="background:{{ pipeline[etapa.value].color }}22;color:{{ pipeline[etapa.value].color }};">{{ etapa.value }}</span></td>
-          <td style="color:var(--text2);">{{ lead.usuario_asignado.nombre if lead.usuario_asignado else '-' }}</td>
-          <td><span class="tag tag-origen">{{ lead.origen.value if lead.origen else 'Manual' }}</span></td>
-        </tr>
-        {% endfor %}
-        {% endfor %}
-      </tbody>
+    <table><thead><tr><th>Nombre</th><th>Telefono</th><th>Unidad</th><th>Cantidad</th><th>Valor</th><th>Etapa</th><th>Vendedor</th><th>Origen</th></tr></thead>
+    <tbody id="leads-tbody">
+      {% for etapa in etapas %}{% for lead in pipeline[etapa.value].leads %}
+      <tr data-marca="{{ lead.marca_interes or '' }}">
+        <td class="td-name">{{ lead.nombre or 'Sin nombre' }}</td>
+        <td class="td-phone">{{ lead.telefono or '-' }}</td>
+        <td>{% if lead.marca_interes %}<span class="tag tag-marca">{{ lead.marca_interes }}</span>{% else %}-{% endif %}</td>
+        <td style="font-size:12px;color:var(--text2);">{% if lead.cantidad_productos %}{{ lead.cantidad_productos }} x ${{ "{:,.0f}".format(lead.precio_unitario) }}{% else %}-{% endif %}</td>
+        <td>{% if lead.valor_calculado %}<span style="font-weight:600;color:var(--green);">${{ "{:,.0f}".format(lead.valor_calculado) }}</span>{% else %}-{% endif %}</td>
+        <td><span class="tag" style="background:{{ pipeline[etapa.value].color }}22;color:{{ pipeline[etapa.value].color }};">{{ etapa.value }}</span></td>
+        <td style="color:var(--text2);">{{ lead.usuario_asignado.nombre if lead.usuario_asignado else '-' }}</td>
+        <td><span class="tag tag-origen">{{ lead.origen.value if lead.origen else 'Manual' }}</span></td>
+      </tr>
+      {% endfor %}{% endfor %}
+    </tbody></table>
+  </div>
+</div>
+
+<!-- ===== PROYECTO ===== -->
+<div class="view" id="view-proyecto">
+  <div class="project-page">
+    <div style="font-size:48px;margin-bottom:4px;">&#128221;</div>
+    <h1 contenteditable="true" spellcheck="false">Leads Manager Grupo Avantex</h1>
+    <div class="page-subtitle">CRM comercial in-house — Backend Flask + Supabase + Meta/WhatsApp API</div>
+    <table class="prop-table">
+      <tr><td class="prop-key">Estado</td><td><span class="tag" style="background:var(--yellow-bg);color:var(--yellow);">En desarrollo</span></td></tr>
+      <tr><td class="prop-key">Sprint actual</td><td>Sprint 2 — Pipeline + Round-Robin</td></tr>
+      <tr><td class="prop-key">Deploy</td><td>Render (backend) + Supabase (DB)</td></tr>
+      <tr><td class="prop-key">Repositorio</td><td style="font-family:var(--mono);font-size:13px;">github.com/diegovsalas/leads-manager</td></tr>
+      <tr><td class="prop-key">Inicio</td><td>1 Abril 2026</td></tr>
     </table>
+    <div class="section-h2">Equipo</div>
+    <div class="team-grid">
+      <div class="team-card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><div style="width:32px;height:32px;border-radius:50%;background:var(--blue-bg);color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;">DI</div><div><div class="team-card-name">Diego</div><div class="team-card-role">Product Owner</div></div></div><div style="font-size:12px;color:var(--text2);margin-top:4px;">Arquitectura, BD, logica de negocio</div></div>
+      <div class="team-card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><div style="width:32px;height:32px;border-radius:50%;background:var(--purple-bg);color:var(--purple);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;">C2</div><div><div class="team-card-name">Colaborador 2</div><div class="team-card-role">Frontend / UI</div></div></div><div style="font-size:12px;color:var(--text2);margin-top:4px;">Templates, Kanban UI, SocketIO</div></div>
+      <div class="team-card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><div style="width:32px;height:32px;border-radius:50%;background:var(--orange-bg);color:var(--orange);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;">C3</div><div><div class="team-card-name">Colaborador 3</div><div class="team-card-role">Integraciones</div></div></div><div style="font-size:12px;color:var(--text2);margin-top:4px;">WhatsApp API, Meta Webhooks, Bot</div></div>
+    </div>
+    <div class="section-h2">Descripcion</div>
+    <div class="editable-block" contenteditable="true" data-ph="Escribe aqui...">
+      <p>CRM comercial para <strong>Grupo Avantex</strong> con 5 unidades: Aromatex Home, Aromatex, Pestex, Weldex y Nexo.</p>
+      <p style="margin-top:8px;"><strong>Funciones:</strong></p>
+      <ul style="margin:4px 0 0 20px;line-height:2;">
+        <li>Kanban para embudo de ventas</li><li>Round-Robin por especialidad de marca</li><li>Chat WhatsApp (Cloud API)</li>
+        <li>Ingesta desde Meta Ads</li><li>Bot interno WhatsApp</li><li>Dashboard con embudo y ROI</li><li>Cotizacion (cantidad x precio)</li>
+      </ul>
+    </div>
+    <div class="section-h2">Avances</div>
+    <div class="changelog" id="changelog">
+      <div class="cl-item"><div class="cl-date">2 Abr</div><div class="cl-dot" style="background:var(--green);"></div><div class="cl-body"><div class="cl-title">Deploy en Render + Supabase</div><div class="cl-desc">App live con BD conectada. Seed de vendedores ejecutado.</div><div class="cl-author">Diego</div></div></div>
+      <div class="cl-item"><div class="cl-date">2 Abr</div><div class="cl-dot" style="background:var(--green);"></div><div class="cl-body"><div class="cl-title">UI Notion style completa</div><div class="cl-desc">Dashboard, Pipeline, Chat, Leads, Proyecto. Filtros por UN y mes.</div><div class="cl-author">Diego</div></div></div>
+      <div class="cl-item"><div class="cl-date">1 Abr</div><div class="cl-dot" style="background:var(--green);"></div><div class="cl-body"><div class="cl-title">Modelos BD + Round-Robin + Schema SQL</div><div class="cl-desc">5 tablas + funcion asignar_lead_comercial() + vista embudo.</div><div class="cl-author">Diego</div></div></div>
+      <div class="cl-item"><div class="cl-date">1 Abr</div><div class="cl-dot" style="background:var(--blue);"></div><div class="cl-body"><div class="cl-title">Estructura Flask + Blueprints</div><div class="cl-desc">webhooks, leads, chat, dashboard. Factory pattern.</div><div class="cl-author">Diego</div></div></div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px;">
+      <input class="note-input" id="cl-input" type="text" placeholder="Agregar avance..." onkeydown="if(event.key==='Enter')addAvance()"/>
+      <button class="btn btn-filled" onclick="addAvance()">Agregar</button>
+    </div>
+    <div class="section-h2">Ideas y backlog</div>
+    <div class="ideas-grid" id="ideas-grid">
+      <div class="idea-card"><div class="idea-card-title">Bot interno WhatsApp</div><div class="idea-card-desc">Vendedores gestionan leads desde WA: "mis leads", "nota 5", "cerrar 3".</div><div class="idea-card-meta"><span class="tag" style="background:var(--orange-bg);color:var(--orange);">Alta</span><span class="idea-vote" onclick="toggleVote(this)">&#9650; 3</span></div></div>
+      <div class="idea-card"><div class="idea-card-title">Notificaciones al vendedor</div><div class="idea-card-desc">WA al vendedor asignado cuando llega un lead nuevo.</div><div class="idea-card-meta"><span class="tag" style="background:var(--orange-bg);color:var(--orange);">Alta</span><span class="idea-vote" onclick="toggleVote(this)">&#9650; 2</span></div></div>
+      <div class="idea-card"><div class="idea-card-title">Dashboard por vendedor</div><div class="idea-card-desc">Cada asesor ve solo sus leads y metricas.</div><div class="idea-card-meta"><span class="tag" style="background:var(--yellow-bg);color:var(--yellow);">Media</span><span class="idea-vote" onclick="toggleVote(this)">&#9650; 2</span></div></div>
+      <div class="idea-card"><div class="idea-card-title">Exportar PDF/Excel</div><div class="idea-card-desc">Reporte mensual con embudo, revenue, ROI.</div><div class="idea-card-meta"><span class="tag" style="background:var(--blue-bg);color:var(--blue);">Baja</span><span class="idea-vote" onclick="toggleVote(this)">&#9650; 1</span></div></div>
+    </div>
+    <div class="add-idea-btn" onclick="addIdeaPrompt()">+ Agregar idea</div>
+    <div class="section-h2">Notas del equipo</div>
+    <div class="collab-notes" id="collab-notes">
+      <div class="note-item"><div class="note-av" style="background:var(--blue-bg);color:var(--blue);">DI</div><div class="note-body"><div class="note-author">Diego <span class="note-time">2 Abr, 13:00</span></div><div class="note-text">App deployada en Render. BD en Supabase con 3 vendedores. Siguiente: conectar webhooks reales de Meta y WhatsApp Business.</div></div></div>
+    </div>
+    <div class="note-input-row" style="margin-top:12px;">
+      <div class="note-av" style="background:var(--blue-bg);color:var(--blue);width:28px;height:28px;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;border-radius:50%;flex-shrink:0;">DI</div>
+      <input class="note-input" id="note-input" type="text" placeholder="Escribe una nota..." onkeydown="if(event.key==='Enter')addNote()"/>
+      <button class="btn btn-filled" onclick="addNote()">Enviar</button>
+    </div>
   </div>
 </div>
 
 </main>
 </div>
 
-<!-- Modal -->
-<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
-  <div class="modal">
-    <div class="modal-title">Nuevo lead</div>
-    <div class="form-row">
-      <div class="form-group"><label class="form-label">Nombre</label><input class="form-input" id="f-nombre" type="text" placeholder="Juan Perez"/></div>
-      <div class="form-group"><label class="form-label">Telefono</label><input class="form-input" id="f-tel" type="text" placeholder="+52 55 ..."/></div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Unidad de negocio</label>
-        <select class="form-select" id="f-marca">
-          <option value="">Sin especificar</option>
-          <option value="Aromatex Home">Aromatex Home</option>
-          <option value="Aromatex">Aromatex</option>
-          <option value="Pestex">Pestex</option>
-          <option value="Weldex">Weldex</option>
-          <option value="Nexo">Nexo</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Origen</label>
-        <select class="form-select" id="f-origen">
-          <option value="Meta Ads">Meta Ads</option>
-          <option value="WhatsApp Organico">WhatsApp Organico</option>
-          <option value="Web">Web</option>
-          <option value="Prospeccion">Prospeccion</option>
-        </select>
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label class="form-label">Cantidad</label><input class="form-input" id="f-cantidad" type="number" placeholder="10" oninput="calcValor()"/></div>
-      <div class="form-group"><label class="form-label">Precio unitario</label><input class="form-input" id="f-precio" type="number" placeholder="1790" oninput="calcValor()"/></div>
-    </div>
-    <div class="form-group"><label class="form-label">Valor total</label><input class="form-input" id="f-valor" type="number" placeholder="Se calcula" style="font-weight:600;color:var(--green);"/></div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-filled" onclick="crearLead()">Crear lead</button>
-    </div>
-  </div>
-</div>
-
+<!-- Modals -->
+<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()"><div class="modal">
+  <div class="modal-title">Nuevo lead</div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Nombre</label><input class="form-input" id="f-nombre" type="text" placeholder="Juan Perez"/></div><div class="form-group"><label class="form-label">Telefono</label><input class="form-input" id="f-tel" type="text" placeholder="+52 55 ..."/></div></div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Unidad de negocio</label><select class="form-select" id="f-marca"><option value="">Sin especificar</option><option>Aromatex Home</option><option>Aromatex</option><option>Pestex</option><option>Weldex</option><option>Nexo</option></select></div><div class="form-group"><label class="form-label">Origen</label><select class="form-select" id="f-origen"><option value="Meta Ads">Meta Ads</option><option value="WhatsApp Organico">WhatsApp Organico</option><option value="Web">Web</option><option value="Prospeccion">Prospeccion</option></select></div></div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Cantidad</label><input class="form-input" id="f-cantidad" type="number" placeholder="10" oninput="calcValor()"/></div><div class="form-group"><label class="form-label">Precio unitario</label><input class="form-input" id="f-precio" type="number" placeholder="1790" oninput="calcValor()"/></div></div>
+  <div class="form-group"><label class="form-label">Valor total</label><input class="form-input" id="f-valor" type="number" placeholder="Se calcula" style="font-weight:600;color:var(--green);"/></div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn btn-filled" onclick="crearLead()">Crear lead</button></div>
+</div></div>
 <div class="toast-container" id="toasts"></div>
 
 <script>
-const socket = io();
-let leadActivo = null;
-let draggingId = null;
+const socket=io();
+let leadActivo=null,draggingId=null,filtroMarca='';
+const ETAPA_COLORS={'Nuevo Lead':'#2eaadc','Calificando':'#9065b0','Presentaci\u00f3n/Cotizaci\u00f3n':'#e07c1a','Seguimiento':'#8b5cf6','Cierre Ganado':'#0f7b6c','Cierre Perdido':'#eb5757'};
+function fmt$(n){return '$'+Number(n).toLocaleString('es-MX',{minimumFractionDigits:0});}
 
 // SocketIO
-socket.on('connect', () => {
-  document.getElementById('ws-dot').classList.add('live');
-  document.getElementById('ws-label').textContent = 'En vivo';
-});
-socket.on('disconnect', () => {
-  document.getElementById('ws-dot').classList.remove('live');
-  document.getElementById('ws-label').textContent = 'Desconectado';
-});
-socket.on('nuevo_lead', (lead) => {
-  agregarTarjeta(lead);
-  showToast('Nuevo lead', lead.nombre || 'Sin nombre');
-});
-socket.on('lead_movido', ({ lead_id, etapa_pipeline }) => {
-  const card = document.getElementById(`kcard-${lead_id}`);
-  const col = document.getElementById(`kcards-${etapa_pipeline}`);
-  if (card && col) { col.appendChild(card); actualizarContadores(); }
-});
-socket.on('nuevo_mensaje', ({ mensaje, lead }) => {
-  if (leadActivo && leadActivo.id === lead.id) { renderMsg(mensaje); scrollChat(); }
-});
-socket.on('mensaje_global', ({ lead_nombre, preview }) => {
-  if (!leadActivo) showToast('WhatsApp', `${lead_nombre}: ${preview}`);
-});
+socket.on('connect',()=>{document.getElementById('ws-dot').classList.add('live');document.getElementById('ws-label').textContent='En vivo';});
+socket.on('disconnect',()=>{document.getElementById('ws-dot').classList.remove('live');document.getElementById('ws-label').textContent='Desconectado';});
+socket.on('nuevo_lead',l=>{showToast('Nuevo lead',l.nombre||'');setTimeout(()=>location.reload(),1000);});
+socket.on('lead_movido',({lead_id,etapa_pipeline})=>{const c=document.getElementById('kcard-'+lead_id),col=document.getElementById('kcards-'+etapa_pipeline);if(c&&col){col.appendChild(c);updateCounts();}});
+socket.on('nuevo_mensaje',({mensaje})=>{if(leadActivo&&leadActivo.id==mensaje.lead_id){renderMsg(mensaje);scrollChat();}});
+socket.on('mensaje_global',({lead_nombre,preview})=>{showToast('WhatsApp',lead_nombre+': '+preview);});
 
 // Views
-document.querySelectorAll('[data-view]').forEach(b => {
-  b.addEventListener('click', () => {
-    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    document.getElementById('view-' + b.dataset.view)?.classList.add('active');
+function showView(name,el){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+name)?.classList.add('active');
+  if(el){document.querySelectorAll('.sidebar .slink:not([data-marca])').forEach(s=>s.classList.remove('active'));el.classList.add('active');}
+}
+
+// UN filter
+function setFiltroMarca(marca,el){
+  if(filtroMarca===marca){clearFiltroMarca();return;}
+  filtroMarca=marca;
+  document.querySelectorAll('.slink[data-marca]').forEach(s=>s.classList.remove('active'));
+  if(el)el.classList.add('active');
+  document.getElementById('filter-banner').style.display='block';
+  document.getElementById('filter-banner-text').textContent=marca;
+  applyFilter();
+}
+function clearFiltroMarca(){
+  filtroMarca='';
+  document.querySelectorAll('.slink[data-marca]').forEach(s=>s.classList.remove('active'));
+  document.getElementById('filter-banner').style.display='none';
+  applyFilter();
+}
+function applyFilter(){
+  // Filter kanban cards
+  document.querySelectorAll('.k-card').forEach(c=>{
+    c.style.display=(!filtroMarca||c.dataset.marca===filtroMarca)?'':'none';
   });
-});
+  // Filter table rows
+  document.querySelectorAll('#leads-tbody tr').forEach(r=>{
+    r.style.display=(!filtroMarca||r.dataset.marca===filtroMarca)?'':'none';
+  });
+  updateCounts();
+  loadDashboard();
+}
 
 // Drag & Drop
-function onDragStart(e, id) {
-  draggingId = id;
-  e.target.classList.add('dragging');
-  e.dataTransfer.effectAllowed = 'move';
+function onDragStart(e,id){draggingId=id;e.target.classList.add('dragging');e.dataTransfer.effectAllowed='move';}
+function onDrop(e,etapa){
+  e.preventDefault();e.currentTarget.classList.remove('drag-over');if(!draggingId)return;
+  const col=document.getElementById('kcards-'+etapa),card=document.getElementById('kcard-'+draggingId);
+  if(col&&card){col.appendChild(card);updateCounts();}
+  fetch('/api/leads/'+draggingId+'/mover',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({etapa_pipeline:etapa})}).catch(console.error);
+  draggingId=null;
 }
-function onDrop(e, etapa) {
-  e.preventDefault();
-  e.currentTarget.classList.remove('drag-over');
-  if (!draggingId) return;
-  const col = document.getElementById(`kcards-${etapa}`);
-  const card = document.getElementById(`kcard-${draggingId}`);
-  if (col && card) { col.appendChild(card); actualizarContadores(); }
-  fetch(`/api/leads/${draggingId}/mover`, {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ etapa_pipeline: etapa }),
-  }).catch(console.error);
-  draggingId = null;
+function updateCounts(){
+  let total=0;
+  document.querySelectorAll('.k-col').forEach(col=>{
+    const etapa=col.dataset.etapa;
+    const visible=[...col.querySelectorAll('.k-card')].filter(c=>c.style.display!=='none');
+    document.getElementById('kc-'+etapa).textContent=visible.length;
+  });
+  document.querySelectorAll('.k-card').forEach(c=>{if(c.style.display!=='none'){const v=c.querySelector('.tag-valor');if(v)total+=parseFloat(v.textContent.replace(/[$,]/g,''))||0;}});
+  document.getElementById('pipe-total').textContent=fmt$(total);
+}
+function filterCards(q){const ql=q.toLowerCase();document.querySelectorAll('.k-card').forEach(c=>{const n=(c.dataset.nombre||'').toLowerCase(),p=(c.dataset.telefono||'').toLowerCase();c.style.display=(n.includes(ql)||p.includes(ql))?'':'none';});}
+
+// Dashboard (from API)
+async function loadDashboard(){
+  document.getElementById('dash-date').textContent=new Date().toLocaleDateString('es-MX',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  try{
+    const [embudo,pipeVals,gastosData]=await Promise.all([
+      fetch('/api/dashboard/embudo').then(r=>r.json()),
+      fetch('/api/dashboard/pipeline-valores').then(r=>r.json()),
+      fetch('/api/dashboard/gastos').then(r=>r.json()),
+    ]);
+    // Metrics
+    document.getElementById('m-total').textContent=embudo.leads_totales;
+    document.getElementById('m-total-sub').textContent='';
+    document.getElementById('m-pipe').textContent=fmt$(embudo.pipe_total);
+    document.getElementById('m-pipe-sub').textContent='';
+    document.getElementById('m-ganados').textContent=embudo.ganados;
+    document.getElementById('m-revenue').textContent=fmt$(embudo.revenue_ganado)+' revenue';
+    document.getElementById('m-gasto').textContent=fmt$(embudo.gasto_ads);
+    document.getElementById('m-cpl').textContent='CPL: '+fmt$(embudo.costo_por_lead);
+    document.getElementById('f-cpl').textContent=fmt$(embudo.costo_por_lead);
+    document.getElementById('f-cpa').textContent=fmt$(embudo.costo_por_cierre);
+    document.getElementById('f-roi').textContent=embudo.roi+'x';
+
+    // Pipe bars
+    const pb=document.getElementById('pipe-bars');pb.innerHTML='';
+    const etapas=['Nuevo Lead','Calificando','Presentaci\u00f3n/Cotizaci\u00f3n','Seguimiento','Cierre Ganado','Cierre Perdido'];
+    const maxV=Math.max(...etapas.map(e=>(pipeVals[e]||{}).valor||0),1);
+    etapas.forEach(e=>{
+      const d=pipeVals[e]||{cantidad:0,valor:0};
+      const h=Math.max((d.valor/maxV)*130,d.cantidad>0?16:4);
+      const color=ETAPA_COLORS[e]||'#787774';
+      pb.innerHTML+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+        <div style="font-size:12px;font-weight:600;">${fmt$(d.valor)}</div>
+        <div style="font-size:11px;color:var(--text2);">${d.cantidad}</div>
+        <div style="width:100%;height:${h}px;background:${color};border-radius:4px 4px 0 0;opacity:.7;"></div>
+        <div style="font-size:11px;color:var(--text3);text-align:center;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e}</div>
+      </div>`;
+    });
+
+    // Funnel bars
+    const steps=[
+      {label:'Leads',count:embudo.leads_totales,color:'#2eaadc',bg:'#d3e5ef'},
+      {label:'Calificados',count:embudo.calificados,color:'#9065b0',bg:'#e8deee'},
+      {label:'Cotizados',count:embudo.cotizados,color:'#e07c1a',bg:'#faebdd'},
+      {label:'Ganados',count:embudo.ganados,color:'#0f7b6c',bg:'#dbeddb'},
+      {label:'Perdidos',count:embudo.perdidos,color:'#eb5757',bg:'#fbe4e4'},
+    ];
+    const fb=document.getElementById('funnel-bars');fb.innerHTML='';
+    const total=embudo.leads_totales||1;
+    steps.forEach((s,i)=>{
+      const w=Math.max((s.count/total)*100,15);
+      const conv=i>0&&steps[i-1].count>0?Math.round((s.count/steps[i-1].count)*100)+'%':'';
+      fb.innerHTML+=`<div style="display:flex;align-items:center;gap:12px;padding:5px 0;">
+        <div style="width:${w}%;min-width:80px;background:${s.bg};border-left:3px solid ${s.color};padding:8px 12px;border-radius:0 6px 6px 0;">
+          <div style="font-size:18px;font-weight:700;color:${s.color};">${s.count}</div>
+          <div style="font-size:12px;color:var(--text2);">${s.label}</div>
+        </div>
+        ${conv?`<span style="font-size:12px;color:var(--text3);">${conv}</span>`:''}
+      </div>`;
+    });
+
+    // Visual funnel SVG
+    const fv=document.getElementById('funnel-visual');
+    const svgW=440,svgH=300,padR=150;
+    const activeSteps=steps.filter(s=>s.count>0);
+    if(activeSteps.length>0){
+      const rowH=svgH/activeSteps.length;
+      let svg='';
+      activeSteps.forEach((s,i)=>{
+        const pct=s.count/total;
+        const nextPct=i<activeSteps.length-1?activeSteps[i+1].count/total:pct*0.5;
+        const w1=Math.max(pct*(svgW-padR),30),w2=Math.max(nextPct*(svgW-padR),20);
+        const cx=(svgW-padR)/2,y1=i*rowH,y2=y1+rowH;
+        svg+=`<polygon points="${cx-w1/2},${y1} ${cx+w1/2},${y1} ${cx+w2/2},${y2} ${cx-w2/2},${y2}" fill="${s.color}" opacity="0.7"/>`;
+        svg+=`<text x="${svgW-padR+10}" y="${y1+rowH/2-6}" fill="${s.color}" font-size="14" font-weight="700">${s.count}</text>`;
+        svg+=`<text x="${svgW-padR+10}" y="${y1+rowH/2+10}" fill="#787774" font-size="11">${s.label}</text>`;
+      });
+      fv.innerHTML=`<svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${svgW}px;">${svg}</svg>`;
+    }
+
+    // Gastos
+    const gl=document.getElementById('gastos-list');gl.innerHTML='';
+    gastosData.forEach(g=>{
+      gl.innerHTML+=`<div class="gasto-item">
+        <div style="width:28px;height:28px;border-radius:4px;background:var(--bg-hover);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">${g.plataforma[0]}</div>
+        <div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${g.campana||g.plataforma}</div><div style="font-size:12px;color:var(--text2);">${g.marca||'General'}</div></div>
+        <div style="font-size:14px;font-weight:600;color:var(--red);white-space:nowrap;">${fmt$(g.monto)}</div>
+      </div>`;
+    });
+  }catch(e){console.error('Dashboard error:',e);}
 }
 
-function actualizarContadores() {
-  let total = 0;
-  document.querySelectorAll('.k-col').forEach(col => {
-    const etapa = col.dataset.etapa;
-    const count = col.querySelectorAll('.k-card').length;
-    const badge = document.getElementById(`kc-${etapa}`);
-    if (badge) badge.textContent = count;
-  });
-  document.querySelectorAll('.tag-valor').forEach(t => {
-    total += parseFloat(t.textContent.replace(/[$,]/g, '')) || 0;
-  });
-  document.getElementById('pipe-total').textContent = '$' + total.toLocaleString('es-MX');
-}
-
-function filterCards(q) {
-  const query = q.toLowerCase();
-  document.querySelectorAll('.k-card').forEach(c => {
-    const n = (c.dataset.nombre || '').toLowerCase();
-    const p = (c.dataset.telefono || '').toLowerCase();
-    c.style.display = (n.includes(query) || p.includes(query)) ? '' : 'none';
-  });
-}
-
-function agregarTarjeta(lead) {
-  const etapa = lead.etapa_pipeline || 'Nuevo Lead';
-  const col = document.getElementById(`kcards-${etapa}`);
-  if (!col) return;
-  const card = document.createElement('div');
-  card.className = 'k-card'; card.id = `kcard-${lead.id}`;
-  card.draggable = true; card.dataset.leadId = lead.id;
-  card.dataset.nombre = lead.nombre || 'Sin nombre';
-  card.dataset.telefono = lead.telefono || '';
-  card.setAttribute('ondragstart', `onDragStart(event,'${lead.id}')`);
-  card.setAttribute('ondragend', "this.classList.remove('dragging')");
-  card.setAttribute('onclick', `abrirChat('${lead.id}','${(lead.nombre||'').replace(/'/g,"\\'")}','${lead.telefono||''}')`);
-  const marca = lead.marca_interes ? `<span class="tag tag-marca">${lead.marca_interes}</span>` : '';
-  const valor = lead.valor_estimado ? `<span class="tag tag-valor">$${Number(lead.valor_estimado).toLocaleString('es-MX')}</span>` : '';
-  const cant = lead.cantidad_productos && lead.precio_unitario ? `<div class="k-card-detail">${lead.cantidad_productos} x $${Number(lead.precio_unitario).toLocaleString('es-MX')}</div>` : '';
-  const vendedor = lead.usuario_asignado ? `<span class="tag tag-vendedor">${lead.usuario_asignado.nombre.split(' ')[0]}</span>` : '';
-  card.innerHTML = `
-    <div class="k-card-name">${lead.nombre || 'Sin nombre'}</div>
-    <div class="k-card-phone">${lead.telefono || ''}</div>
-    ${cant}
-    <div class="k-card-tags">${marca}${valor}</div>
-    <div class="k-card-foot">
-      <span class="tag tag-origen">${lead.origen || 'Manual'}</span>
-      ${vendedor}
-    </div>`;
-  col.insertBefore(card, col.firstChild);
-  actualizarContadores();
+function setFunnelView(mode,btn){
+  document.querySelectorAll('.toggle-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('funnel-bars').style.display=mode==='bars'?'block':'none';
+  document.getElementById('funnel-visual').style.display=mode==='visual'?'block':'none';
 }
 
 // Chat
-async function abrirChat(id, nombre, telefono) {
-  if (leadActivo) socket.emit('salir_sala', { lead_id: leadActivo.id });
-  leadActivo = { id, nombre, telefono };
-  socket.emit('unirse_sala', { lead_id: id });
-  const panel = document.getElementById('chat-panel');
-  panel.classList.add('open');
-  const ini = nombre.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
-  document.getElementById('chat-av').textContent = ini;
-  document.getElementById('chat-name').textContent = nombre;
-  document.getElementById('chat-phone').textContent = telefono || '';
-  const container = document.getElementById('chat-messages');
-  container.innerHTML = '<div class="chat-empty-msg">Cargando...</div>';
-  try {
-    const resp = await fetch(`/api/chat/${id}/mensajes`);
-    const msgs = await resp.json();
-    container.innerHTML = '';
-    if (msgs.length === 0) { container.innerHTML = '<div class="chat-empty-msg">Sin mensajes</div>'; }
-    else { msgs.forEach(renderMsg); }
-    scrollChat();
-  } catch { container.innerHTML = '<div class="chat-empty-msg" style="color:var(--red);">Error</div>'; }
+async function abrirChat(id,nombre,tel){
+  if(leadActivo)socket.emit('salir_sala',{lead_id:leadActivo.id});
+  leadActivo={id,nombre,telefono:tel};
+  socket.emit('unirse_sala',{lead_id:id});
+  document.getElementById('chat-panel').classList.add('open');
+  const ini=nombre.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
+  document.getElementById('chat-av').textContent=ini;
+  document.getElementById('chat-name').textContent=nombre;
+  document.getElementById('chat-phone').textContent=tel||'';
+  const c=document.getElementById('chat-messages');c.innerHTML='<div class="chat-empty-msg">Cargando...</div>';
+  try{const r=await fetch('/api/chat/'+id+'/mensajes');const msgs=await r.json();c.innerHTML='';if(msgs.length===0)c.innerHTML='<div class="chat-empty-msg">Sin mensajes</div>';else msgs.forEach(renderMsg);scrollChat();}catch{c.innerHTML='<div class="chat-empty-msg" style="color:var(--red);">Error</div>';}
 }
-function cerrarChat() {
-  if (leadActivo) socket.emit('salir_sala', { lead_id: leadActivo.id });
-  leadActivo = null;
-  document.getElementById('chat-panel').classList.remove('open');
+function cerrarChat(){if(leadActivo)socket.emit('salir_sala',{lead_id:leadActivo.id});leadActivo=null;document.getElementById('chat-panel').classList.remove('open');}
+function renderMsg(msg){
+  const c=document.getElementById('chat-messages'),isIn=msg.direccion==='Entrante',isBot=msg.direccion==='Saliente_Bot';
+  const row=document.createElement('div');row.className='msg-row '+(isIn?'':'out');
+  const b=document.createElement('div');b.className='msg-bubble '+(isIn?'in':isBot?'bot':'out');b.textContent=msg.contenido;
+  const t=document.createElement('div');t.className='msg-time';t.textContent=msg.timestamp?new Date(msg.timestamp).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}):'';
+  b.appendChild(t);row.appendChild(b);c.appendChild(row);
 }
-function renderMsg(msg) {
-  const c = document.getElementById('chat-messages');
-  const isIn = msg.direccion === 'Entrante';
-  const isBot = msg.direccion === 'Saliente_Bot';
-  const row = document.createElement('div');
-  row.className = `msg-row ${isIn ? '' : 'out'}`;
-  const bubble = document.createElement('div');
-  bubble.className = `msg-bubble ${isIn ? 'in' : isBot ? 'bot' : 'out'}`;
-  bubble.textContent = msg.contenido;
-  const time = document.createElement('div');
-  time.className = 'msg-time';
-  time.textContent = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}) : '';
-  bubble.appendChild(time);
-  row.appendChild(bubble);
-  c.appendChild(row);
-}
-function scrollChat() { const c = document.getElementById('chat-messages'); c.scrollTop = c.scrollHeight; }
-async function enviarMensaje() {
-  if (!leadActivo) return;
-  const inp = document.getElementById('chat-input');
-  const txt = inp.value.trim(); if (!txt) return;
-  inp.value = ''; inp.disabled = true;
-  try {
-    const resp = await fetch(`/api/chat/${leadActivo.id}/enviar`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contenido: txt }),
-    });
-    const msg = await resp.json();
-    if (resp.ok) { renderMsg(msg); scrollChat(); }
-    else { showToast('Error', msg.error || 'No se pudo enviar'); }
-  } catch { showToast('Error', 'Error de conexion'); }
-  finally { inp.disabled = false; inp.focus(); }
+function scrollChat(){const c=document.getElementById('chat-messages');c.scrollTop=c.scrollHeight;}
+async function enviarMensaje(){
+  if(!leadActivo)return;const inp=document.getElementById('chat-input'),txt=inp.value.trim();if(!txt)return;
+  inp.value='';inp.disabled=true;
+  try{const r=await fetch('/api/chat/'+leadActivo.id+'/enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contenido:txt})});const msg=await r.json();if(r.ok){renderMsg(msg);scrollChat();}else showToast('Error',msg.error||'');}catch{showToast('Error','Conexion');}finally{inp.disabled=false;inp.focus();}
 }
 
-// Table
-function filterTable(q) {
-  document.querySelectorAll('#leads-tbody tr').forEach(r => {
-    r.style.display = r.textContent.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
-  });
-}
+// Table filter
+function filterTable(q){const ql=q.toLowerCase();document.querySelectorAll('#leads-tbody tr').forEach(r=>{r.style.display=r.textContent.toLowerCase().includes(ql)?'':'none';});}
 
 // Modal
-function openModal() { document.getElementById('modal').classList.add('open'); }
-function closeModal() { document.getElementById('modal').classList.remove('open'); }
-function calcValor() {
-  const c = parseFloat(document.getElementById('f-cantidad').value) || 0;
-  const p = parseFloat(document.getElementById('f-precio').value) || 0;
-  if (c > 0 && p > 0) document.getElementById('f-valor').value = c * p;
+function openModal(){document.getElementById('modal').classList.add('open');}
+function closeModal(){document.getElementById('modal').classList.remove('open');}
+function calcValor(){const c=parseFloat(document.getElementById('f-cantidad').value)||0,p=parseFloat(document.getElementById('f-precio').value)||0;if(c>0&&p>0)document.getElementById('f-valor').value=c*p;}
+function crearLead(){
+  const nombre=document.getElementById('f-nombre').value.trim();if(!nombre){document.getElementById('f-nombre').focus();return;}
+  const telefono=document.getElementById('f-tel').value.trim();if(!telefono){document.getElementById('f-tel').focus();return;}
+  fetch('/api/leads/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    nombre,telefono,marca_interes:document.getElementById('f-marca').value,origen:document.getElementById('f-origen').value,
+    cantidad_productos:parseInt(document.getElementById('f-cantidad').value)||null,
+    precio_unitario:parseFloat(document.getElementById('f-precio').value)||null,
+    valor_estimado:parseFloat(document.getElementById('f-valor').value)||null,
+  })}).then(r=>r.json()).then(()=>{closeModal();location.reload();}).catch(()=>showToast('Error','No se pudo crear'));
 }
-function crearLead() {
-  const nombre = document.getElementById('f-nombre').value.trim();
-  if (!nombre) { document.getElementById('f-nombre').focus(); return; }
-  const telefono = document.getElementById('f-tel').value.trim();
-  if (!telefono) { document.getElementById('f-tel').focus(); return; }
-  fetch('/api/leads/', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      nombre, telefono,
-      marca_interes: document.getElementById('f-marca').value,
-      origen: document.getElementById('f-origen').value,
-      cantidad_productos: parseInt(document.getElementById('f-cantidad').value) || null,
-      precio_unitario: parseFloat(document.getElementById('f-precio').value) || null,
-      valor_estimado: parseFloat(document.getElementById('f-valor').value) || null,
-    }),
-  })
-  .then(r => r.json())
-  .then(lead => {
-    agregarTarjeta(lead); closeModal();
-    ['f-nombre','f-tel','f-cantidad','f-precio','f-valor'].forEach(id => document.getElementById(id).value = '');
-    showToast('Lead creado', lead.nombre);
-  })
-  .catch(() => showToast('Error', 'No se pudo crear'));
-}
+
+// Proyecto helpers
+function addAvance(){const inp=document.getElementById('cl-input'),txt=inp.value.trim();if(!txt)return;inp.value='';const d=new Date(),ds=d.getDate()+' '+['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][d.getMonth()];const cl=document.getElementById('changelog'),item=document.createElement('div');item.className='cl-item';item.innerHTML=`<div class="cl-date">${ds}</div><div class="cl-dot" style="background:var(--green);"></div><div class="cl-body"><div class="cl-title">${txt}</div><div class="cl-author">Diego</div></div>`;cl.insertBefore(item,cl.firstChild);showToast('Avance',txt);}
+function addIdeaPrompt(){const t=prompt('Titulo:');if(!t)return;const d=prompt('Descripcion:')||'';const g=document.getElementById('ideas-grid'),c=document.createElement('div');c.className='idea-card';c.innerHTML=`<div class="idea-card-title">${t}</div><div class="idea-card-desc">${d}</div><div class="idea-card-meta"><span class="tag" style="background:var(--yellow-bg);color:var(--yellow);">Media</span><span class="idea-vote" onclick="toggleVote(this)">&#9650; 0</span></div>`;g.appendChild(c);}
+function toggleVote(el){const v=el.classList.contains('voted');let n=parseInt(el.textContent.trim().split(' ')[1])||0;if(v){n--;el.classList.remove('voted');}else{n++;el.classList.add('voted');}el.innerHTML='&#9650; '+n;}
+function addNote(){const inp=document.getElementById('note-input'),txt=inp.value.trim();if(!txt)return;inp.value='';const d=new Date(),ts=d.getDate()+' '+['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][d.getMonth()]+', '+d.getHours()+':'+(d.getMinutes()<10?'0':'')+d.getMinutes();const notes=document.getElementById('collab-notes'),item=document.createElement('div');item.className='note-item';item.innerHTML=`<div class="note-av" style="background:var(--blue-bg);color:var(--blue);">DI</div><div class="note-body"><div class="note-author">Diego <span class="note-time">${ts}</span></div><div class="note-text">${txt}</div></div>`;notes.appendChild(item);item.scrollIntoView({behavior:'smooth'});}
 
 // Toast
-function showToast(title, msg) {
-  const c = document.getElementById('toasts');
-  const t = document.createElement('div'); t.className = 'toast';
-  t.innerHTML = `<div class="toast-dot" style="background:var(--accent)"></div><div class="toast-body"><div class="toast-title">${title}</div><div class="toast-msg">${msg}</div></div><span class="toast-close" onclick="this.parentElement.remove()">&times;</span>`;
-  c.appendChild(t); setTimeout(() => t.remove(), 4000);
-}
+function showToast(title,msg){const c=document.getElementById('toasts'),t=document.createElement('div');t.className='toast';t.innerHTML=`<div class="toast-dot" style="background:var(--accent)"></div><div class="toast-body"><div class="toast-title">${title}</div><div class="toast-msg">${msg}</div></div><span class="toast-close" onclick="this.parentElement.remove()">&times;</span>`;c.appendChild(t);setTimeout(()=>t.remove(),4000);}
 
 // Init
-actualizarContadores();
+updateCounts();loadDashboard();
 </script>
 </body>
 </html>
