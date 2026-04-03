@@ -214,6 +214,7 @@ tbody td{padding:8px 12px;font-size:14px;}
   <div class="slink active" onclick="showView('dashboard',this)"><span class="slink-emoji">&#128202;</span> Dashboard</div>
   <div class="slink" onclick="showView('pipeline',this)"><span class="slink-emoji">&#128203;</span> Pipeline</div>
   <div class="slink" onclick="showView('leads',this)"><span class="slink-emoji">&#128101;</span> Todos los leads</div>
+  <div class="slink" onclick="showView('vendedores',this)"><span class="slink-emoji">&#128100;</span> Vendedores</div>
   <div class="slink" onclick="showView('proyecto',this)"><span class="slink-emoji">&#128221;</span> Proyecto</div>
 
   <div class="sidebar-divider"></div>
@@ -254,7 +255,16 @@ tbody td{padding:8px 12px;font-size:14px;}
     </div>
   </div>
   <div class="filter-bar">
+    <span style="font-size:13px;color:var(--text2);">Periodo:</span>
+    <select class="filter-select" id="dash-mes" onchange="loadDashboard()">
+      <option value="">Mes actual</option>
+      <option value="2026-01">Enero 2026</option>
+      <option value="2026-02">Febrero 2026</option>
+      <option value="2026-03">Marzo 2026</option>
+      <option value="2026-04">Abril 2026</option>
+    </select>
     <div style="margin-left:auto;display:flex;gap:6px;">
+      <button class="btn" onclick="openGastoModal()">+ Registrar gasto</button>
       <button class="btn btn-filled" onclick="openModal()">+ Nuevo lead</button>
     </div>
   </div>
@@ -461,17 +471,53 @@ tbody td{padding:8px 12px;font-size:14px;}
   </div>
 </div>
 
+<!-- ===== VENDEDORES ===== -->
+<div class="view" id="view-vendedores">
+  <div class="toolbar">
+    <span style="font-size:16px;font-weight:600;">Equipo Comercial</span>
+    <div style="margin-left:auto;"><button class="btn btn-filled" onclick="openVendedorModal()">+ Agregar vendedor</button></div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Nombre</th><th>WhatsApp</th><th>Rol</th><th>Especialidad (marcas)</th><th>En turno</th><th>Ultimo lead</th><th></th></tr></thead>
+      <tbody id="vendedores-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
 </main>
 </div>
 
-<!-- Modals -->
+<!-- Modal: Nuevo Lead -->
 <div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()"><div class="modal">
   <div class="modal-title">Nuevo lead</div>
   <div class="form-row"><div class="form-group"><label class="form-label">Nombre</label><input class="form-input" id="f-nombre" type="text" placeholder="Juan Perez"/></div><div class="form-group"><label class="form-label">Telefono</label><input class="form-input" id="f-tel" type="text" placeholder="+52 55 ..."/></div></div>
-  <div class="form-row"><div class="form-group"><label class="form-label">Unidad de negocio</label><select class="form-select" id="f-marca"><option value="">Sin especificar</option><option>Aromatex Home</option><option>Aromatex</option><option>Pestex</option><option>Weldex</option><option>Nexo</option></select></div><div class="form-group"><label class="form-label">Origen</label><select class="form-select" id="f-origen"><option value="Meta Ads">Meta Ads</option><option value="WhatsApp Organico">WhatsApp Organico</option><option value="Web">Web</option><option value="Prospeccion">Prospeccion</option></select></div></div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Unidad de negocio</label><select class="form-select" id="f-marca"><option value="">Sin especificar</option><option>Aromatex Home</option><option>Aromatex</option><option>Pestex</option><option>Weldex</option><option>Nexo</option></select></div><div class="form-group"><label class="form-label">Origen</label><select class="form-select" id="f-origen" onchange="toggleVendedorSelect()"><option value="Web" selected>Web</option><option value="WhatsApp Organico">WhatsApp Organico</option><option value="Prospeccion">Prospeccion</option><option value="Meta Ads">Meta Ads (auto-asigna)</option></select></div></div>
+  <div class="form-group" id="f-vendedor-group"><label class="form-label">Asignar a vendedor</label><select class="form-select" id="f-vendedor"><option value="">Sin asignar</option></select></div>
   <div class="form-row"><div class="form-group"><label class="form-label">Cantidad</label><input class="form-input" id="f-cantidad" type="number" placeholder="10" oninput="calcValor()"/></div><div class="form-group"><label class="form-label">Precio unitario</label><input class="form-input" id="f-precio" type="number" placeholder="1790" oninput="calcValor()"/></div></div>
   <div class="form-group"><label class="form-label">Valor total</label><input class="form-input" id="f-valor" type="number" placeholder="Se calcula" style="font-weight:600;color:var(--green);"/></div>
   <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn btn-filled" onclick="crearLead()">Crear lead</button></div>
+</div></div>
+
+<!-- Modal: Gasto publicidad -->
+<div class="modal-overlay" id="modal-gasto" onclick="if(event.target===this)closeGastoModal()"><div class="modal">
+  <div class="modal-title">Registrar gasto de publicidad</div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Plataforma</label><select class="form-select" id="g-plat"><option>Facebook</option><option>Instagram</option><option>Google</option><option>TikTok</option></select></div><div class="form-group"><label class="form-label">Unidad de negocio</label><select class="form-select" id="g-marca"><option value="">General</option><option>Aromatex Home</option><option>Aromatex</option><option>Pestex</option><option>Weldex</option><option>Nexo</option></select></div></div>
+  <div class="form-group"><label class="form-label">Campana</label><input class="form-input" id="g-camp" type="text" placeholder="Nombre de campana"/></div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Monto ($)</label><input class="form-input" id="g-monto" type="number" placeholder="0"/></div><div class="form-group"><label class="form-label">Fecha</label><input class="form-input" id="g-fecha" type="date"/></div></div>
+  <div class="modal-actions"><button class="btn" onclick="closeGastoModal()">Cancelar</button><button class="btn btn-filled" onclick="crearGasto()">Registrar</button></div>
+</div></div>
+
+<!-- Modal: Vendedor -->
+<div class="modal-overlay" id="modal-vendedor" onclick="if(event.target===this)closeVendedorModal()"><div class="modal">
+  <div class="modal-title" id="mv-title">Agregar vendedor</div>
+  <input type="hidden" id="mv-id" value=""/>
+  <div class="form-group"><label class="form-label">Nombre</label><input class="form-input" id="mv-nombre" type="text" placeholder="Nombre completo"/></div>
+  <div class="form-group"><label class="form-label">WhatsApp</label><input class="form-input" id="mv-tel" type="text" placeholder="+52 55 ..."/></div>
+  <div class="form-group"><label class="form-label">Rol</label><select class="form-select" id="mv-rol"><option>Asesor Comercial</option><option>SDR</option><option>Líder Comercial</option><option>Gerente de Ventas</option></select></div>
+  <div class="form-group"><label class="form-label">Especialidad (marcas, separadas por coma)</label><input class="form-input" id="mv-marcas" type="text" placeholder="Weldex, Aromatex, Nexo"/></div>
+  <div class="form-group"><label class="form-label" style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="mv-turno" checked/> En turno (recibe leads automaticos)</label></div>
+  <div class="modal-actions"><button class="btn" onclick="closeVendedorModal()">Cancelar</button><button class="btn btn-filled" onclick="guardarVendedor()">Guardar</button></div>
 </div></div>
 <div class="toast-container" id="toasts"></div>
 
@@ -550,10 +596,12 @@ function filterCards(q){const ql=q.toLowerCase();document.querySelectorAll('.k-c
 async function loadDashboard(){
   document.getElementById('dash-date').textContent=new Date().toLocaleDateString('es-MX',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   try{
+    const mes=document.getElementById('dash-mes')?.value||'';
+    const mesParam=mes?'?mes='+mes:'';
     const [embudo,pipeVals,gastosData]=await Promise.all([
-      fetch('/api/dashboard/embudo').then(r=>r.json()),
+      fetch('/api/dashboard/embudo'+mesParam).then(r=>r.json()),
       fetch('/api/dashboard/pipeline-valores').then(r=>r.json()),
-      fetch('/api/dashboard/gastos').then(r=>r.json()),
+      fetch('/api/dashboard/gastos'+(mes?'?mes='+mes:'')).then(r=>r.json()),
     ]);
     // Metrics
     document.getElementById('m-total').textContent=embudo.leads_totales;
@@ -682,12 +730,23 @@ function calcValor(){const c=parseFloat(document.getElementById('f-cantidad').va
 function crearLead(){
   const nombre=document.getElementById('f-nombre').value.trim();if(!nombre){document.getElementById('f-nombre').focus();return;}
   const telefono=document.getElementById('f-tel').value.trim();if(!telefono){document.getElementById('f-tel').focus();return;}
-  fetch('/api/leads/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-    nombre,telefono,marca_interes:document.getElementById('f-marca').value,origen:document.getElementById('f-origen').value,
+  const origen=document.getElementById('f-origen').value;
+  const vendedor_id=document.getElementById('f-vendedor').value||null;
+  const payload={
+    nombre,telefono,
+    marca_interes:document.getElementById('f-marca').value,
+    origen,
     cantidad_productos:parseInt(document.getElementById('f-cantidad').value)||null,
     precio_unitario:parseFloat(document.getElementById('f-precio').value)||null,
     valor_estimado:parseFloat(document.getElementById('f-valor').value)||null,
-  })}).then(r=>r.json()).then(()=>{closeModal();location.reload();}).catch(()=>showToast('Error','No se pudo crear'));
+  };
+  // Solo enviar vendedor si NO es Meta Ads (Meta Ads auto-asigna)
+  if(origen!=='Meta Ads'&&vendedor_id){
+    payload.usuario_asignado_id=vendedor_id;
+  }
+  fetch('/api/leads/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(r=>r.json()).then(()=>{closeModal();location.reload();})
+    .catch(()=>showToast('Error','No se pudo crear'));
 }
 
 // Proyecto — loads from API
@@ -800,8 +859,110 @@ async function addNote(){
 // Toast
 function showToast(title,msg){const c=document.getElementById('toasts'),t=document.createElement('div');t.className='toast';t.innerHTML=`<div class="toast-dot" style="background:var(--accent)"></div><div class="toast-body"><div class="toast-title">${title}</div><div class="toast-msg">${msg}</div></div><span class="toast-close" onclick="this.parentElement.remove()">&times;</span>`;c.appendChild(t);setTimeout(()=>t.remove(),4000);}
 
+// Vendedores
+let _vendedores=[];
+async function loadVendedores(){
+  try{
+    const r=await fetch('/api/vendedores/');_vendedores=await r.json();
+    // Table
+    const tb=document.getElementById('vendedores-tbody');tb.innerHTML='';
+    _vendedores.forEach(v=>{
+      const marcas=(v.especialidad_marca||[]).join(', ')||'-';
+      const turno=v.en_turno?'<span style="color:var(--green);">&#9679; Si</span>':'<span style="color:var(--red);">&#9675; No</span>';
+      const ultimo=v.ultimo_lead_asignado?new Date(v.ultimo_lead_asignado).toLocaleDateString('es-MX'):'Nunca';
+      tb.innerHTML+=`<tr>
+        <td class="td-name">${v.nombre}</td>
+        <td class="td-phone">${v.telefono_whatsapp||'-'}</td>
+        <td><span class="tag" style="background:var(--purple-bg);color:var(--purple);">${v.rol_comercial}</span></td>
+        <td>${marcas}</td>
+        <td>${turno}</td>
+        <td style="font-size:12px;color:var(--text3);">${ultimo}</td>
+        <td><button class="btn" onclick="editVendedor('${v.id}')">Editar</button></td>
+      </tr>`;
+    });
+    // Populate vendedor select in lead modal
+    const sel=document.getElementById('f-vendedor');
+    sel.innerHTML='<option value="">Sin asignar</option>';
+    _vendedores.filter(v=>v.en_turno).forEach(v=>{
+      sel.innerHTML+=`<option value="${v.id}">${v.nombre}</option>`;
+    });
+  }catch(e){console.error('Vendedores error:',e);}
+}
+
+function toggleVendedorSelect(){
+  const origen=document.getElementById('f-origen').value;
+  const group=document.getElementById('f-vendedor-group');
+  // Meta Ads = auto-asignacion, ocultar selector
+  group.style.display=(origen==='Meta Ads')?'none':'block';
+}
+
+function openVendedorModal(id){
+  document.getElementById('mv-id').value='';
+  document.getElementById('mv-nombre').value='';
+  document.getElementById('mv-tel').value='';
+  document.getElementById('mv-marcas').value='';
+  document.getElementById('mv-turno').checked=true;
+  document.getElementById('mv-title').textContent='Agregar vendedor';
+  document.getElementById('modal-vendedor').classList.add('open');
+}
+function closeVendedorModal(){document.getElementById('modal-vendedor').classList.remove('open');}
+
+function editVendedor(id){
+  const v=_vendedores.find(x=>x.id===id);if(!v)return;
+  document.getElementById('mv-id').value=v.id;
+  document.getElementById('mv-nombre').value=v.nombre;
+  document.getElementById('mv-tel').value=v.telefono_whatsapp||'';
+  document.getElementById('mv-rol').value=v.rol_comercial;
+  document.getElementById('mv-marcas').value=(v.especialidad_marca||[]).join(', ');
+  document.getElementById('mv-turno').checked=v.en_turno;
+  document.getElementById('mv-title').textContent='Editar vendedor';
+  document.getElementById('modal-vendedor').classList.add('open');
+}
+
+async function guardarVendedor(){
+  const id=document.getElementById('mv-id').value;
+  const body={
+    nombre:document.getElementById('mv-nombre').value.trim(),
+    telefono_whatsapp:document.getElementById('mv-tel').value.trim(),
+    rol_comercial:document.getElementById('mv-rol').value,
+    especialidad_marca:document.getElementById('mv-marcas').value.split(',').map(s=>s.trim()).filter(Boolean),
+    en_turno:document.getElementById('mv-turno').checked,
+  };
+  if(!body.nombre){document.getElementById('mv-nombre').focus();return;}
+  try{
+    const url=id?'/api/vendedores/'+id:'/api/vendedores/';
+    await fetch(url,{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    closeVendedorModal();loadVendedores();
+    showToast(id?'Vendedor actualizado':'Vendedor creado',body.nombre);
+  }catch{showToast('Error','No se pudo guardar');}
+}
+
+// Gastos modal
+function openGastoModal(){
+  document.getElementById('g-fecha').value=new Date().toISOString().split('T')[0];
+  document.getElementById('modal-gasto').classList.add('open');
+}
+function closeGastoModal(){document.getElementById('modal-gasto').classList.remove('open');}
+
+async function crearGasto(){
+  const monto=parseFloat(document.getElementById('g-monto').value);
+  if(!monto){document.getElementById('g-monto').focus();return;}
+  try{
+    await fetch('/api/dashboard/gastos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      plataforma:document.getElementById('g-plat').value,
+      marca:document.getElementById('g-marca').value,
+      campana:document.getElementById('g-camp').value.trim(),
+      monto,
+      fecha:document.getElementById('g-fecha').value,
+    })});
+    closeGastoModal();loadDashboard();
+    document.getElementById('g-camp').value='';document.getElementById('g-monto').value='';
+    showToast('Gasto registrado',fmt$(monto));
+  }catch{showToast('Error','No se pudo guardar');}
+}
+
 // Init
-updateCounts();loadDashboard();loadProyecto();
+updateCounts();loadDashboard();loadProyecto();loadVendedores();toggleVendedorSelect();
 </script>
 </body>
 </html>
