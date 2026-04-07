@@ -214,7 +214,7 @@ tbody td{padding:8px 12px;font-size:14px;}
   <div class="slink active" onclick="showView('dashboard',this)"><span class="slink-emoji">&#128202;</span> Dashboard</div>
   <div class="slink" onclick="showView('pipeline',this)"><span class="slink-emoji">&#128203;</span> Pipeline</div>
   <div class="slink" onclick="showView('leads',this)"><span class="slink-emoji">&#128101;</span> Todos los leads</div>
-  <div class="slink" onclick="showView('vendedores',this)"><span class="slink-emoji">&#128100;</span> Vendedores</div>
+  <div class="slink admin-only" onclick="showView('vendedores',this)"><span class="slink-emoji">&#128100;</span> Vendedores</div>
   <div class="slink" onclick="showView('proyecto',this)"><span class="slink-emoji">&#128221;</span> Proyecto</div>
 
   <div class="sidebar-divider"></div>
@@ -264,7 +264,7 @@ tbody td{padding:8px 12px;font-size:14px;}
       <option value="2026-04">Abril 2026</option>
     </select>
     <div style="margin-left:auto;display:flex;gap:6px;">
-      <button class="btn" onclick="openGastoModal()">+ Registrar gasto</button>
+      <button class="btn admin-only" onclick="openGastoModal()">+ Registrar gasto</button>
       <button class="btn btn-filled" onclick="openModal()">+ Nuevo lead</button>
     </div>
   </div>
@@ -272,7 +272,7 @@ tbody td{padding:8px 12px;font-size:14px;}
     <div class="metric-card"><div class="metric-label">Leads totales</div><div class="metric-value" id="m-total">0</div><div class="metric-sub" id="m-total-sub"></div></div>
     <div class="metric-card"><div class="metric-label">Pipe activo</div><div class="metric-value" style="color:var(--orange)" id="m-pipe">$0</div><div class="metric-sub" id="m-pipe-sub"></div></div>
     <div class="metric-card"><div class="metric-label">Cierres ganados</div><div class="metric-value" style="color:var(--green)" id="m-ganados">0</div><div class="metric-sub" id="m-revenue"></div></div>
-    <div class="metric-card"><div class="metric-label">Gasto ads</div><div class="metric-value" style="color:var(--red)" id="m-gasto">$0</div><div class="metric-sub" id="m-cpl"></div></div>
+    <div class="metric-card admin-only"><div class="metric-label">Gasto ads</div><div class="metric-value" style="color:var(--red)" id="m-gasto">$0</div><div class="metric-sub" id="m-cpl"></div></div>
   </div>
   <div style="padding:16px 48px 0;">
     <div class="dash-card">
@@ -296,7 +296,7 @@ tbody td{padding:8px 12px;font-size:14px;}
         <span class="kpi">ROI: <strong id="f-roi" style="color:var(--green);">0x</strong></span>
       </div>
     </div>
-    <div class="dash-card">
+    <div class="dash-card admin-only">
       <div class="dash-card-title">Gastos de publicidad</div>
       <div id="gastos-list"></div>
     </div>
@@ -551,6 +551,10 @@ tbody td{padding:8px 12px;font-size:14px;}
 
 <script>
 const socket=io();
+// Role-based access
+window.ROL_USUARIO='{{ user_rol }}'.toLowerCase().replace(' ','_');
+window.VENDEDOR_ID='{{ usuario_id }}';
+const IS_ADMIN=ROL_USUARIO==='super_admin';
 let leadActivo=null,draggingId=null,filtroMarca='';
 const ETAPA_COLORS={'Nuevo Lead':'#6366f1','1er Contacto':'#9333ea','2do Contacto':'#9333ea','3er Contacto':'#9333ea','4to Contacto':'#9333ea','Cotizaci\u00f3n':'#2563eb','Demo':'#0891b2','Negociaci\u00f3n':'#d97706','Cerrado Ganado':'#16a34a','Cerrado Perdido':'#dc2626'};
 function fmt$(n){return '$'+Number(n).toLocaleString('es-MX',{minimumFractionDigits:0});}
@@ -1022,8 +1026,16 @@ async function crearGasto(){
   }catch{showToast('Error','No se pudo guardar');}
 }
 
+// Role-based UI
+function applyRoleVisibility(){
+  if(IS_ADMIN)return;
+  // Hide elements for vendedor role
+  document.querySelectorAll('.admin-only').forEach(el=>el.style.display='none');
+}
+
 // Init
 updateCounts();loadDashboard();loadProyecto();loadVendedores();toggleVendedorSelect();
+applyRoleVisibility();
 </script>
 </body>
 </html>

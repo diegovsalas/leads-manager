@@ -2,6 +2,7 @@
 from flask import Blueprint, request, jsonify
 from extensions import db
 from models import Usuario, RolComercial
+from blueprints.auth import require_role
 
 vendedores_bp = Blueprint("vendedores", __name__)
 
@@ -13,6 +14,7 @@ def listar():
 
 
 @vendedores_bp.route("/", methods=["POST"])
+@require_role(["super_admin"])
 def crear():
     data = request.get_json() or {}
     nombre = data.get("nombre", "").strip()
@@ -38,6 +40,7 @@ def crear():
 
 
 @vendedores_bp.route("/<uuid:vendedor_id>", methods=["PUT"])
+@require_role(["super_admin"])
 def actualizar(vendedor_id):
     vendedor = db.session.get(Usuario, vendedor_id)
     if not vendedor:
@@ -63,6 +66,7 @@ def actualizar(vendedor_id):
 
 
 @vendedores_bp.route("/<uuid:vendedor_id>", methods=["DELETE"])
+@require_role(["super_admin"])
 def eliminar(vendedor_id):
     vendedor = db.session.get(Usuario, vendedor_id)
     if not vendedor:

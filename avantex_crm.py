@@ -104,6 +104,7 @@ def create_app():
             etapas=list(EtapaPipeline),
             user_nombre=session.get("user_nombre", ""),
             user_rol=session.get("user_rol", ""),
+            usuario_id=session.get("usuario_id", ""),
         )
 
     # ── Crear tablas en primera ejecución ──────
