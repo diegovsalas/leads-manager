@@ -70,16 +70,16 @@ def create_app():
 
     # Colores para cada etapa del Kanban
     COLORES_ETAPA = {
-        EtapaPipeline.NUEVO_LEAD:     "#2eaadc",
-        EtapaPipeline.CONTACTO_1:     "#9065b0",
-        EtapaPipeline.CONTACTO_2:     "#9065b0",
-        EtapaPipeline.CONTACTO_3:     "#9065b0",
-        EtapaPipeline.CONTACTO_4:     "#9065b0",
-        EtapaPipeline.COTIZACION:     "#e07c1a",
-        EtapaPipeline.DEMO:           "#cb912f",
-        EtapaPipeline.NEGOCIACION:    "#d44c7c",
-        EtapaPipeline.CIERRE_GANADO:  "#0f7b6c",
-        EtapaPipeline.CIERRE_PERDIDO: "#eb5757",
+        EtapaPipeline.NUEVO_LEAD:     "#6366f1",
+        EtapaPipeline.CONTACTO_1:     "#9333ea",
+        EtapaPipeline.CONTACTO_2:     "#9333ea",
+        EtapaPipeline.CONTACTO_3:     "#9333ea",
+        EtapaPipeline.CONTACTO_4:     "#9333ea",
+        EtapaPipeline.COTIZACION:     "#2563eb",
+        EtapaPipeline.DEMO:           "#0891b2",
+        EtapaPipeline.NEGOCIACION:    "#d97706",
+        EtapaPipeline.CIERRE_GANADO:  "#16a34a",
+        EtapaPipeline.CIERRE_PERDIDO: "#dc2626",
     }
 
     @app.route("/")

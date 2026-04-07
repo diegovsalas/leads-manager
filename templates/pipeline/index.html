@@ -345,6 +345,8 @@ tbody td{padding:8px 12px;font-size:14px;}
             <div class="k-card-tags">
               {% if lead.marca_interes %}<span class="tag tag-marca">{{ lead.marca_interes }}</span>{% endif %}
               {% if lead.valor_calculado %}<span class="tag tag-valor">${{ "{:,.0f}".format(lead.valor_calculado) }}</span>{% endif %}
+              {% if lead.tipo_cliente == 'Recurrente' %}<span class="tag" style="background:#dcfce7;color:#16a34a;">Recurrente</span>{% endif %}
+              {% if lead.tipo_cliente == 'Eventual' %}<span class="tag" style="background:#dbeafe;color:#2563eb;">Eventual</span>{% endif %}
             </div>
             <div class="k-card-foot">
               <span class="tag tag-origen">{{ lead.origen.value if lead.origen else 'Manual' }}</span>
@@ -519,12 +521,38 @@ tbody td{padding:8px 12px;font-size:14px;}
   <div class="form-group"><label class="form-label" style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="mv-turno" checked/> En turno (recibe leads automaticos)</label></div>
   <div class="modal-actions"><button class="btn" onclick="closeVendedorModal()">Cancelar</button><button class="btn btn-filled" onclick="guardarVendedor()">Guardar</button></div>
 </div></div>
+
+<!-- Modal: Cerrado Perdido (motivo requerido) -->
+<div class="modal-overlay" id="modal-perdido" onclick="if(event.target===this)closePerdidoModal()"><div class="modal">
+  <div class="modal-title" style="color:var(--red);">Cerrar como Perdido</div>
+  <input type="hidden" id="mp-lead-id" value=""/>
+  <div class="form-group">
+    <label class="form-label">Motivo de perdida (requerido)</label>
+    <select class="form-select" id="mp-motivo-select" onchange="if(this.value==='Otro'){document.getElementById('mp-otro').style.display='block';document.getElementById('mp-motivo-text').value='';document.getElementById('mp-motivo-text').focus();}else{document.getElementById('mp-otro').style.display='none';document.getElementById('mp-motivo-text').value=this.value;}">
+      <option value="">Selecciona un motivo</option>
+      <option value="Precio alto">Precio alto</option>
+      <option value="Eligio competencia">Eligio competencia</option>
+      <option value="Sin presupuesto">Sin presupuesto</option>
+      <option value="No contesta">No contesta</option>
+      <option value="Proyecto cancelado">Proyecto cancelado</option>
+      <option value="Otro">Otro (especificar)</option>
+    </select>
+  </div>
+  <div class="form-group" id="mp-otro" style="display:none;">
+    <input class="form-input" id="mp-motivo-text" type="text" placeholder="Describe el motivo..."/>
+  </div>
+  <div class="modal-actions">
+    <button class="btn" onclick="closePerdidoModal()">Cancelar</button>
+    <button class="btn" style="background:#dc2626;color:#fff;font-weight:500;padding:6px 12px;" onclick="confirmarPerdido()">Confirmar perdida</button>
+  </div>
+</div></div>
+
 <div class="toast-container" id="toasts"></div>
 
 <script>
 const socket=io();
 let leadActivo=null,draggingId=null,filtroMarca='';
-const ETAPA_COLORS={'Nuevo Lead':'#2eaadc','1er Contacto':'#9065b0','2do Contacto':'#9065b0','3er Contacto':'#9065b0','4to Contacto':'#9065b0','Cotizaci\u00f3n':'#e07c1a','Demo':'#cb912f','Negociaci\u00f3n':'#d44c7c','Cerrado Ganado':'#0f7b6c','Cerrado Perdido':'#eb5757'};
+const ETAPA_COLORS={'Nuevo Lead':'#6366f1','1er Contacto':'#9333ea','2do Contacto':'#9333ea','3er Contacto':'#9333ea','4to Contacto':'#9333ea','Cotizaci\u00f3n':'#2563eb','Demo':'#0891b2','Negociaci\u00f3n':'#d97706','Cerrado Ganado':'#16a34a','Cerrado Perdido':'#dc2626'};
 function fmt$(n){return '$'+Number(n).toLocaleString('es-MX',{minimumFractionDigits:0});}
 
 // SocketIO
@@ -575,6 +603,15 @@ function applyFilter(){
 function onDragStart(e,id){draggingId=id;e.target.classList.add('dragging');e.dataTransfer.effectAllowed='move';}
 function onDrop(e,etapa){
   e.preventDefault();e.currentTarget.classList.remove('drag-over');if(!draggingId)return;
+  // Si se mueve a Cerrado Perdido, pedir motivo
+  if(etapa==='Cerrado Perdido'){
+    const leadId=draggingId;
+    draggingId=null;
+    document.getElementById('mp-lead-id').value=leadId;
+    document.getElementById('mp-motivo').value='';
+    document.getElementById('modal-perdido').classList.add('open');
+    return;
+  }
   const col=document.getElementById('kcards-'+etapa),card=document.getElementById('kcard-'+draggingId);
   if(col&&card){col.appendChild(card);updateCounts();}
   fetch('/api/leads/'+draggingId+'/mover',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({etapa_pipeline:etapa})}).catch(console.error);
@@ -619,11 +656,13 @@ async function loadDashboard(){
     // Pipe bars
     const pb=document.getElementById('pipe-bars');pb.innerHTML='';
     const etapas=['Nuevo Lead','1er Contacto','2do Contacto','3er Contacto','4to Contacto','Cotizaci\u00f3n','Demo','Negociaci\u00f3n','Cerrado Ganado','Cerrado Perdido'];
+    // Colores para pipe bars del dashboard
+    const DASH_COLORS={'Nuevo Lead':'#6366f1','1er Contacto':'#9333ea','2do Contacto':'#9333ea','3er Contacto':'#9333ea','4to Contacto':'#9333ea','Cotizaci\u00f3n':'#2563eb','Demo':'#0891b2','Negociaci\u00f3n':'#d97706','Cerrado Ganado':'#16a34a','Cerrado Perdido':'#dc2626'};
     const maxV=Math.max(...etapas.map(e=>(pipeVals[e]||{}).valor||0),1);
     etapas.forEach(e=>{
       const d=pipeVals[e]||{cantidad:0,valor:0};
       const h=Math.max((d.valor/maxV)*130,d.cantidad>0?16:4);
-      const color=ETAPA_COLORS[e]||'#787774';
+      const color=DASH_COLORS[e]||ETAPA_COLORS[e]||'#787774';
       pb.innerHTML+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
         <div style="font-size:12px;font-weight:600;">${fmt$(d.valor)}</div>
         <div style="font-size:11px;color:var(--text2);">${d.cantidad}</div>
@@ -938,6 +977,23 @@ async function guardarVendedor(){
 }
 
 // Gastos modal
+// Cerrado Perdido modal
+function closePerdidoModal(){document.getElementById('modal-perdido').classList.remove('open');}
+async function confirmarPerdido(){
+  const leadId=document.getElementById('mp-lead-id').value;
+  const select=document.getElementById('mp-motivo-select');
+  let motivo=select.value==='Otro'?document.getElementById('mp-motivo-text').value.trim():select.value;
+  if(!motivo){showToast('Error','El motivo es requerido');select.focus();return;}
+  try{
+    // Move to Cerrado Perdido
+    await fetch('/api/leads/'+leadId+'/mover',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({etapa_pipeline:'Cerrado Perdido'})});
+    // Save motivo
+    await fetch('/api/leads/'+leadId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({motivo_perdida:motivo})});
+    closePerdidoModal();
+    location.reload();
+  }catch{showToast('Error','No se pudo actualizar');}
+}
+
 function openGastoModal(){
   document.getElementById('g-fecha').value=new Date().toISOString().split('T')[0];
   document.getElementById('modal-gasto').classList.add('open');
