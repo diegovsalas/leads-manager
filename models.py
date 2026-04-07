@@ -137,10 +137,9 @@ class Lead(db.Model):
     motivo_perdida = db.Column(db.String(300), nullable=True)
 
     # Seguimiento y clasificacion
-    tipo_cliente = db.Column(db.Text, nullable=True)  # 'Recurrente', 'Eventual'
+    tipo_cliente = db.Column(db.Text, nullable=True)
     fecha_ultimo_contacto = db.Column(db.DateTime(timezone=True), default=_utcnow)
     proximo_contacto = db.Column(db.DateTime(timezone=True), nullable=True)
-    motivo_perdido = db.Column(db.Text, nullable=True)
     en_nurturing = db.Column(db.Boolean, default=False, nullable=False)
 
     # FK → usuarios
@@ -199,7 +198,6 @@ class Lead(db.Model):
             "tipo_cliente": self.tipo_cliente,
             "fecha_ultimo_contacto": self.fecha_ultimo_contacto.isoformat() if self.fecha_ultimo_contacto else None,
             "proximo_contacto": self.proximo_contacto.isoformat() if self.proximo_contacto else None,
-            "motivo_perdido": self.motivo_perdido,
             "en_nurturing": self.en_nurturing,
             "usuario_asignado": vendedor,
             "fecha_creacion": self.fecha_creacion.isoformat(),
