@@ -560,6 +560,11 @@ socket.on('connect',()=>{document.getElementById('ws-dot').classList.add('live')
 socket.on('disconnect',()=>{document.getElementById('ws-dot').classList.remove('live');document.getElementById('ws-label').textContent='Desconectado';});
 socket.on('nuevo_lead',l=>{showToast('Nuevo lead',l.nombre||'');setTimeout(()=>location.reload(),1000);});
 socket.on('lead_movido',({lead_id,etapa_pipeline})=>{const c=document.getElementById('kcard-'+lead_id),col=document.getElementById('kcards-'+etapa_pipeline);if(c&&col){col.appendChild(c);updateCounts();}});
+socket.on('lead_etapa_cambiada',({lead_id,etapa_nueva,nombre,motivo})=>{
+  if(motivo==='cadencia_automatica'){showToast('Cadencia',nombre+' → '+etapa_nueva);}
+  const c=document.getElementById('kcard-'+lead_id),col=document.getElementById('kcards-'+etapa_nueva);
+  if(c&&col){col.appendChild(c);updateCounts();}
+});
 socket.on('nuevo_mensaje',({mensaje})=>{if(leadActivo&&leadActivo.id==mensaje.lead_id){renderMsg(mensaje);scrollChat();}});
 socket.on('mensaje_global',({lead_nombre,preview})=>{showToast('WhatsApp',lead_nombre+': '+preview);});
 

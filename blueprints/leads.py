@@ -125,3 +125,28 @@ def actualizar_lead(lead_id):
 
     db.session.commit()
     return jsonify(lead.to_dict())
+
+
+@leads_bp.route("/<uuid:lead_id>/registrar_respuesta", methods=["POST"])
+def registrar_respuesta(lead_id):
+    """
+    Registra que el lead respondió (mensaje entrante de WhatsApp).
+    Detiene la cadencia automatica para este lead.
+    """
+    from datetime import datetime, timezone
+
+    lead = db.session.get(Lead, lead_id)
+    if not lead:
+        return jsonify({"error": "Lead no encontrado"}), 404
+
+    lead.respondio_ultimo_contacto = True
+    lead.fecha_ultimo_contacto = datetime.now(timezone.utc)
+
+    db.session.commit()
+
+    return jsonify({
+        "ok": True,
+        "lead_id": str(lead.id),
+        "respondio": True,
+        "etapa": lead.etapa_pipeline.value,
+    })

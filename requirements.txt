@@ -6,3 +6,4 @@ python-dotenv>=1.0
 requests>=2.31
 eventlet>=0.35
 gunicorn>=21.2
+apscheduler>=3.10

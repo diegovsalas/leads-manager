@@ -213,10 +213,15 @@ def _procesar_mensaje_whatsapp(value: dict):
             direccion       = DireccionMensaje.ENTRANTE,
             contenido       = contenido,
         )
+        # ── Registrar respuesta (detiene cadencia) ──
+        from datetime import datetime, timezone as tz
+        lead.respondio_ultimo_contacto = True
+        lead.fecha_ultimo_contacto = datetime.now(tz.utc)
+
         db.session.add(nuevo_mensaje)
         db.session.commit()
 
-        logger.info(f"Mensaje WA guardado: lead={lead.id}, tipo={tipo}")
+        logger.info(f"Mensaje WA guardado: lead={lead.id}, tipo={tipo}, cadencia detenida")
 
         # ── Emitir evento SocketIO al frontend ──
         socketio.emit("nuevo_mensaje", {

@@ -110,7 +110,28 @@ def create_app():
     with app.app_context():
         db.create_all()
 
+    # ── Cadencia automatica (cada 15 minutos) ──
+    _start_scheduler(app)
+
     return app
+
+
+def _start_scheduler(app):
+    """Inicia APScheduler para ejecutar check_cadencia() cada 15 min."""
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+
+        def _run_cadencia():
+            with app.app_context():
+                from cadencia import check_cadencia
+                check_cadencia()
+
+        scheduler = BackgroundScheduler(daemon=True)
+        scheduler.add_job(_run_cadencia, "interval", minutes=15, id="cadencia_followup")
+        scheduler.start()
+        app.logger.info("Scheduler de cadencia iniciado (cada 15 min)")
+    except Exception as e:
+        app.logger.warning(f"No se pudo iniciar scheduler: {e}")
 
 
 # ──────────────────────────────────────────────
