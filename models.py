@@ -45,8 +45,27 @@ class DireccionMensaje(enum.Enum):
     SALIENTE_BOT     = "Saliente_Bot"
 
 
+class PlataformaAds(enum.Enum):
+    FACEBOOK  = "Facebook"
+    INSTAGRAM = "Instagram"
+    GOOGLE    = "Google"
+    TIKTOK    = "TikTok"
+    OTRO      = "Otro"
+
+
+class RolCRM(enum.Enum):
+    SUPER_ADMIN = "Super Admin"
+    VENDEDOR    = "Vendedor"
+
+
+class TipoProyecto(enum.Enum):
+    AVANCE = "avance"
+    IDEA   = "idea"
+    NOTA   = "nota"
+
+
 # ──────────────────────────────────────────────
-# Helper
+# Helpers
 # ──────────────────────────────────────────────
 def _utcnow():
     return datetime.now(timezone.utc)
@@ -57,90 +76,85 @@ def _genuuid():
 
 
 # ──────────────────────────────────────────────
-# Tabla 1: usuarios (equipo comercial)
+# Tabla: usuarios (perfil comercial de vendedores)
 # ──────────────────────────────────────────────
 class Usuario(db.Model):
     __tablename__ = "usuarios"
 
-    id = db.Column(
-        UUID(as_uuid=True), primary_key=True, default=_genuuid
-    )
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
     nombre = db.Column(db.String(150), nullable=False)
     telefono_whatsapp = db.Column(db.String(30), nullable=True)
     rol_comercial = db.Column(
-        db.Enum(RolComercial, name="rol_comercial_enum", values_callable=lambda e: [x.value for x in e]),
-        nullable=False,
-        default=RolComercial.ASESOR_COMERCIAL,
+        db.Enum(RolComercial, name="rol_comercial_enum",
+                values_callable=lambda e: [x.value for x in e]),
+        nullable=False, default=RolComercial.ASESOR_COMERCIAL,
     )
-    # Array de marcas: ['Aromatex', 'Pestex', 'Weldex', 'Todas']
     especialidad_marca = db.Column(
-        ARRAY(db.String(80)),
-        nullable=False,
-        default=list,
-        server_default="{}",
+        ARRAY(db.String(80)), nullable=False, default=list, server_default="{}",
     )
-    # Round-Robin: se asigna al vendedor con el timestamp más antiguo
-    ultimo_lead_asignado = db.Column(
-        db.DateTime(timezone=True), nullable=True
-    )
+    ultimo_lead_asignado = db.Column(db.DateTime(timezone=True), nullable=True)
     en_turno = db.Column(db.Boolean, default=True, nullable=False)
 
     # Relaciones
     leads = db.relationship("Lead", back_populates="usuario_asignado", lazy="dynamic")
     estados_bot = db.relationship("EstadoBotInterno", back_populates="usuario", lazy="dynamic")
+    metas = db.relationship("MetaVendedor", back_populates="usuario", lazy="dynamic")
 
     def __repr__(self):
-        return f"<Usuario {self.nombre} | {self.rol_comercial.value}>"
+        return f"<Usuario {self.nombre}>"
 
     def to_dict(self):
         return {
             "id": str(self.id),
             "nombre": self.nombre,
             "telefono_whatsapp": self.telefono_whatsapp,
-            "rol_comercial": self.rol_comercial.value,
+            "rol_comercial": self.rol_comercial.value if self.rol_comercial else None,
             "especialidad_marca": self.especialidad_marca or [],
-            "ultimo_lead_asignado": (
-                self.ultimo_lead_asignado.isoformat()
-                if self.ultimo_lead_asignado
-                else None
-            ),
+            "ultimo_lead_asignado": self.ultimo_lead_asignado.isoformat() if self.ultimo_lead_asignado else None,
             "en_turno": self.en_turno,
         }
 
 
 # ──────────────────────────────────────────────
-# Tabla 2: leads (oportunidades de venta)
+# Tabla: leads
 # ──────────────────────────────────────────────
 class Lead(db.Model):
     __tablename__ = "leads"
 
-    id = db.Column(
-        UUID(as_uuid=True), primary_key=True, default=_genuuid
-    )
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
     telefono = db.Column(db.String(30), unique=True, nullable=False)
     nombre = db.Column(db.String(200), nullable=True)
     origen = db.Column(
-        db.Enum(OrigenLead, name="origen_lead_enum", values_callable=lambda e: [x.value for x in e]),
+        db.Enum(OrigenLead, name="origen_lead_enum",
+                values_callable=lambda e: [x.value for x in e]),
         nullable=True,
     )
     marca_interes = db.Column(db.String(80), nullable=True)
     etapa_pipeline = db.Column(
-        db.Enum(EtapaPipeline, name="etapa_pipeline_enum", values_callable=lambda e: [x.value for x in e]),
-        nullable=False,
-        default=EtapaPipeline.NUEVO_LEAD,
+        db.Enum(EtapaPipeline, name="etapa_pipeline_enum",
+                values_callable=lambda e: [x.value for x in e]),
+        nullable=False, default=EtapaPipeline.NUEVO_LEAD,
     )
 
-    # Cotizacion: cantidad × precio_unitario = valor_estimado
+    # Cotizacion
     cantidad_productos = db.Column(db.Integer, nullable=True)
     precio_unitario = db.Column(db.Numeric(14, 2), nullable=True)
     valor_estimado = db.Column(db.Numeric(14, 2), nullable=True)
-    motivo_perdida = db.Column(db.String(300), nullable=True)
+    motivo_perdida = db.Column(db.Text, nullable=True)
 
     # Seguimiento y clasificacion
     tipo_cliente = db.Column(db.Text, nullable=True)
     fecha_ultimo_contacto = db.Column(db.DateTime(timezone=True), default=_utcnow)
     proximo_contacto = db.Column(db.DateTime(timezone=True), nullable=True)
     en_nurturing = db.Column(db.Boolean, default=False, nullable=False)
+    respondio_ultimo_contacto = db.Column(db.Boolean, default=False, nullable=False)
+
+    # ICP (Ideal Customer Profile)
+    icp_score = db.Column(db.Integer, nullable=True)
+    icp_nivel = db.Column(db.Text, nullable=True)
+    num_sucursales = db.Column(db.Integer, nullable=True)
+    tipo_industria = db.Column(db.Text, nullable=True)
+    tamano_empresa = db.Column(db.Text, nullable=True)
 
     # FK → usuarios
     usuario_asignado_id = db.Column(
@@ -148,34 +162,26 @@ class Lead(db.Model):
     )
     usuario_asignado = db.relationship("Usuario", back_populates="leads")
 
-    # Metadatos Meta Ads (conservados del esquema anterior)
+    # Metadatos Meta Ads
     meta_lead_id = db.Column(db.String(100), unique=True, nullable=True)
     meta_form_id = db.Column(db.String(100), nullable=True)
     meta_ad_id = db.Column(db.String(100), nullable=True)
     meta_campaign = db.Column(db.String(200), nullable=True)
 
     # Timestamps
-    fecha_creacion = db.Column(
-        db.DateTime(timezone=True), default=_utcnow, nullable=False
-    )
-    fecha_actualizacion = db.Column(
-        db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
-    )
+    fecha_creacion = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+    fecha_actualizacion = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
 
     # Relaciones
-    mensajes = db.relationship(
-        "MensajeWhatsapp",
-        back_populates="lead",
-        order_by="MensajeWhatsapp.timestamp",
-        lazy="dynamic",
-    )
+    mensajes = db.relationship("MensajeWhatsapp", back_populates="lead", order_by="MensajeWhatsapp.timestamp", lazy="dynamic")
+    conversaciones = db.relationship("Conversacion", back_populates="lead", lazy="dynamic")
+    cotizaciones_rel = db.relationship("Cotizacion", back_populates="lead", lazy="dynamic")
 
     def __repr__(self):
         return f"<Lead {self.nombre} | {self.telefono}>"
 
     @property
     def valor_calculado(self):
-        """cantidad × precio_unitario si ambos existen, si no valor_estimado."""
         if self.cantidad_productos and self.precio_unitario:
             return self.cantidad_productos * self.precio_unitario
         return self.valor_estimado
@@ -199,6 +205,12 @@ class Lead(db.Model):
             "fecha_ultimo_contacto": self.fecha_ultimo_contacto.isoformat() if self.fecha_ultimo_contacto else None,
             "proximo_contacto": self.proximo_contacto.isoformat() if self.proximo_contacto else None,
             "en_nurturing": self.en_nurturing,
+            "respondio_ultimo_contacto": self.respondio_ultimo_contacto,
+            "icp_score": self.icp_score,
+            "icp_nivel": self.icp_nivel,
+            "num_sucursales": self.num_sucursales,
+            "tipo_industria": self.tipo_industria,
+            "tamano_empresa": self.tamano_empresa,
             "usuario_asignado": vendedor,
             "fecha_creacion": self.fecha_creacion.isoformat(),
             "fecha_actualizacion": self.fecha_actualizacion.isoformat(),
@@ -207,28 +219,22 @@ class Lead(db.Model):
 
 
 # ──────────────────────────────────────────────
-# Tabla 3: mensajes_whatsapp (historial de chat)
+# Tabla: mensajes_whatsapp (historial viejo)
 # ──────────────────────────────────────────────
 class MensajeWhatsapp(db.Model):
     __tablename__ = "mensajes_whatsapp"
 
-    id = db.Column(
-        UUID(as_uuid=True), primary_key=True, default=_genuuid
-    )
-    lead_id = db.Column(
-        UUID(as_uuid=True), db.ForeignKey("leads.id"), nullable=False
-    )
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    lead_id = db.Column(UUID(as_uuid=True), db.ForeignKey("leads.id"), nullable=False)
     lead = db.relationship("Lead", back_populates="mensajes")
-
     direccion = db.Column(
-        db.Enum(DireccionMensaje, name="direccion_mensaje_enum", values_callable=lambda e: [x.value for x in e]),
+        db.Enum(DireccionMensaje, name="direccion_mensaje_enum",
+                values_callable=lambda e: [x.value for x in e]),
         nullable=False,
     )
     contenido = db.Column(db.Text, nullable=False)
     meta_message_id = db.Column(db.String(100), unique=True, nullable=True)
-    timestamp = db.Column(
-        db.DateTime(timezone=True), default=_utcnow, nullable=False
-    )
+    timestamp = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
 
     def __repr__(self):
         return f"<Mensaje [{self.direccion.value}] lead={self.lead_id}>"
@@ -245,30 +251,67 @@ class MensajeWhatsapp(db.Model):
 
 
 # ──────────────────────────────────────────────
-# Tabla 4: estado_bot_interno
+# Tabla: conversaciones (nuevo historial de chat)
+# ──────────────────────────────────────────────
+class Conversacion(db.Model):
+    __tablename__ = "conversaciones"
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    lead_id = db.Column(UUID(as_uuid=True), db.ForeignKey("leads.id"), nullable=False)
+    lead = db.relationship("Lead", back_populates="conversaciones")
+    direccion = db.Column(db.Text, nullable=False)  # 'entrante' | 'saliente'
+    mensaje = db.Column(db.Text, nullable=False)
+    enviado_por = db.Column(db.Text, nullable=True)  # 'bot' | nombre del usuario
+    timestamp = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "lead_id": str(self.lead_id),
+            "direccion": self.direccion,
+            "mensaje": self.mensaje,
+            "enviado_por": self.enviado_por,
+            "timestamp": self.timestamp.isoformat(),
+        }
+
+
+# ──────────────────────────────────────────────
+# Tabla: cotizaciones
+# ──────────────────────────────────────────────
+class Cotizacion(db.Model):
+    __tablename__ = "cotizaciones"
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    lead_id = db.Column(UUID(as_uuid=True), db.ForeignKey("leads.id"), nullable=False)
+    lead = db.relationship("Lead", back_populates="cotizaciones_rel")
+    contenido = db.Column(db.Text, nullable=False)
+    generado_por = db.Column(db.Text, default="bot")
+    fecha = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+    enviada_whatsapp = db.Column(db.Boolean, default=False, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "lead_id": str(self.lead_id),
+            "contenido": self.contenido,
+            "generado_por": self.generado_por,
+            "fecha": self.fecha.isoformat(),
+            "enviada_whatsapp": self.enviada_whatsapp,
+        }
+
+
+# ──────────────────────────────────────────────
+# Tabla: estado_bot_interno
 # ──────────────────────────────────────────────
 class EstadoBotInterno(db.Model):
     __tablename__ = "estado_bot_interno"
 
-    id = db.Column(
-        UUID(as_uuid=True), primary_key=True, default=_genuuid
-    )
-    usuario_id = db.Column(
-        UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=False
-    )
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    usuario_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=False)
     usuario = db.relationship("Usuario", back_populates="estados_bot")
-
-    lead_contexto_id = db.Column(
-        UUID(as_uuid=True), db.ForeignKey("leads.id"), nullable=True
-    )
+    lead_contexto_id = db.Column(UUID(as_uuid=True), db.ForeignKey("leads.id"), nullable=True)
     lead_contexto = db.relationship("Lead")
-
-    esperando_input = db.Column(
-        db.String(50), nullable=False, default="ninguno"
-    )
-
-    def __repr__(self):
-        return f"<BotState usuario={self.usuario_id} esperando={self.esperando_input}>"
+    esperando_input = db.Column(db.String(50), nullable=False, default="ninguno")
 
     def to_dict(self):
         return {
@@ -280,38 +323,23 @@ class EstadoBotInterno(db.Model):
 
 
 # ──────────────────────────────────────────────
-# Tabla 5: gastos_publicidad (inversion en ads)
+# Tabla: gastos_publicidad
 # ──────────────────────────────────────────────
-class PlataformaAds(enum.Enum):
-    FACEBOOK  = "Facebook"
-    INSTAGRAM = "Instagram"
-    GOOGLE    = "Google"
-    TIKTOK    = "TikTok"
-    OTRO      = "Otro"
-
-
 class GastoPublicidad(db.Model):
     __tablename__ = "gastos_publicidad"
 
-    id = db.Column(
-        UUID(as_uuid=True), primary_key=True, default=_genuuid
-    )
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
     plataforma = db.Column(
-        db.Enum(PlataformaAds, name="plataforma_ads_enum", values_callable=lambda e: [x.value for x in e]),
+        db.Enum(PlataformaAds, name="plataforma_ads_enum",
+                values_callable=lambda e: [x.value for x in e]),
         nullable=False,
     )
-    marca = db.Column(db.String(80), nullable=True)  # Aromatex, Pestex, etc.
+    marca = db.Column(db.String(80), nullable=True)
     campana = db.Column(db.String(200), nullable=True)
     monto = db.Column(db.Numeric(14, 2), nullable=False)
     fecha = db.Column(db.Date, nullable=False)
     notas = db.Column(db.String(300), nullable=True)
-
-    fecha_registro = db.Column(
-        db.DateTime(timezone=True), default=_utcnow, nullable=False
-    )
-
-    def __repr__(self):
-        return f"<Gasto {self.plataforma.value} ${self.monto} {self.fecha}>"
+    fecha_registro = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
 
     def to_dict(self):
         return {
@@ -326,48 +354,33 @@ class GastoPublicidad(db.Model):
 
 
 # ──────────────────────────────────────────────
-# Tabla 6: users_crm (usuarios de la plataforma)
+# Tabla: users_crm (login del sistema)
 # ──────────────────────────────────────────────
-class TipoProyecto(enum.Enum):
-    AVANCE = "avance"
-    IDEA   = "idea"
-    NOTA   = "nota"
-
-
-class RolCRM(enum.Enum):
-    SUPER_ADMIN = "Super Admin"
-    ADMIN       = "Admin"
-    VIEWER      = "Viewer"
-
-
 class UserCRM(db.Model):
     __tablename__ = "users_crm"
 
-    id = db.Column(
-        UUID(as_uuid=True), primary_key=True, default=_genuuid
-    )
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
     nombre = db.Column(db.String(150), nullable=False)
     correo = db.Column(db.String(200), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
     rol = db.Column(
-        db.Enum(RolCRM, name="rol_crm_enum", values_callable=lambda e: [x.value for x in e]),
-        nullable=False,
-        default=RolCRM.VIEWER,
+        db.Enum(RolCRM, name="rol_crm_enum",
+                values_callable=lambda e: [x.value for x in e]),
+        nullable=False, default=RolCRM.VENDEDOR,
     )
     activo = db.Column(db.Boolean, default=True, nullable=False)
     foto_url = db.Column(db.String(500), nullable=True)
-    fecha_creacion = db.Column(
-        db.DateTime(timezone=True), default=_utcnow, nullable=False
-    )
+    fecha_creacion = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    # FK → usuarios (vincula login con perfil comercial)
+    usuario_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=True)
+    usuario = db.relationship("Usuario")
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
-
-    def __repr__(self):
-        return f"<UserCRM {self.nombre} | {self.rol.value}>"
 
     def to_dict(self):
         return {
@@ -377,33 +390,52 @@ class UserCRM(db.Model):
             "rol": self.rol.value,
             "activo": self.activo,
             "foto_url": self.foto_url,
+            "usuario_id": str(self.usuario_id) if self.usuario_id else None,
         }
 
 
 # ──────────────────────────────────────────────
-# Tabla 7: proyecto_items (gestión colaborativa)
+# Tabla: metas_vendedor
+# ──────────────────────────────────────────────
+class MetaVendedor(db.Model):
+    __tablename__ = "metas_vendedor"
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    usuario_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=False)
+    usuario = db.relationship("Usuario", back_populates="metas")
+    mes = db.Column(db.Text, nullable=False)  # '2026-04'
+    meta_mxn = db.Column(db.Numeric(12, 2), nullable=True)
+    created_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users_crm.id"), nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    __table_args__ = (db.UniqueConstraint('usuario_id', 'mes'),)
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "usuario_id": str(self.usuario_id),
+            "mes": self.mes,
+            "meta_mxn": float(self.meta_mxn) if self.meta_mxn else None,
+            "created_by": str(self.created_by) if self.created_by else None,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+# ──────────────────────────────────────────────
+# Tabla: proyecto_items (gestión colaborativa)
 # ──────────────────────────────────────────────
 class ProyectoItem(db.Model):
     __tablename__ = "proyecto_items"
 
-    id = db.Column(
-        UUID(as_uuid=True), primary_key=True, default=_genuuid
-    )
-    tipo = db.Column(
-        db.String(20), nullable=False
-    )
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    tipo = db.Column(db.String(20), nullable=False)
     titulo = db.Column(db.String(300), nullable=False)
     descripcion = db.Column(db.Text, nullable=True)
     autor = db.Column(db.String(150), nullable=False)
     prioridad = db.Column(db.String(50), nullable=True)
     votos = db.Column(db.Integer, nullable=False, default=0)
     prompt_dev = db.Column(db.Text, nullable=True)
-    fecha_creacion = db.Column(
-        db.DateTime(timezone=True), default=_utcnow, nullable=False
-    )
-
-    def __repr__(self):
-        return f"<ProyectoItem {self.tipo} | {self.titulo[:40]}>"
+    fecha_creacion = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
 
     def to_dict(self):
         return {
