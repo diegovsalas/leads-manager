@@ -46,6 +46,7 @@ def create_app():
     from blueprints.dashboard  import dashboard_bp
     from blueprints.proyecto   import proyecto_bp
     from blueprints.vendedores import vendedores_bp
+    from blueprints.metas      import metas_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp,   url_prefix="/webhook")
@@ -54,6 +55,7 @@ def create_app():
     app.register_blueprint(dashboard_bp,  url_prefix="/api/dashboard")
     app.register_blueprint(proyecto_bp,   url_prefix="/api/proyecto")
     app.register_blueprint(vendedores_bp, url_prefix="/api/vendedores")
+    app.register_blueprint(metas_bp,      url_prefix="/api/metas")
 
     # ── Proteger todas las rutas excepto login y webhooks ──
     @app.before_request

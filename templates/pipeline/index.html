@@ -274,6 +274,31 @@ tbody td{padding:8px 12px;font-size:14px;}
     <div class="metric-card"><div class="metric-label">Cierres ganados</div><div class="metric-value" style="color:var(--green)" id="m-ganados">0</div><div class="metric-sub" id="m-revenue"></div></div>
     <div class="metric-card admin-only"><div class="metric-label">Gasto ads</div><div class="metric-value" style="color:var(--red)" id="m-gasto">$0</div><div class="metric-sub" id="m-cpl"></div></div>
   </div>
+
+  <!-- Meta vendedor card (solo para vendedores) -->
+  <div id="meta-vendedor-card" style="display:none;padding:16px 48px 0;">
+    <div class="dash-card" style="border-left:4px solid #16a34a;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">Tu meta del mes</div>
+          <div style="font-size:28px;font-weight:700;" id="meta-v-target">$0</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">Llevas</div>
+          <div style="font-size:28px;font-weight:700;color:var(--green);" id="meta-v-actual">$0</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">Avance</div>
+          <div style="font-size:28px;font-weight:700;" id="meta-v-pct">0%</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;background:var(--border-light);border-radius:99px;height:12px;overflow:hidden;">
+        <div id="meta-v-bar" style="height:100%;border-radius:99px;transition:width 300ms;width:0%;"></div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px;text-align:right;" id="meta-v-falta"></div>
+    </div>
+  </div>
+
   <div style="padding:16px 48px 0;">
     <div class="dash-card">
       <div class="dash-card-title">Valor del pipeline por etapa</div>
@@ -477,11 +502,20 @@ tbody td{padding:8px 12px;font-size:14px;}
 <div class="view" id="view-vendedores">
   <div class="toolbar">
     <span style="font-size:16px;font-weight:600;">Equipo Comercial</span>
-    <div style="margin-left:auto;"><button class="btn btn-filled" onclick="openVendedorModal()">+ Agregar vendedor</button></div>
+    <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+      <select class="filter-select" id="metas-mes" onchange="loadVendedores()" style="font-size:12px;">
+        <option value="">Mes actual</option>
+        <option value="2026-01">Ene 2026</option>
+        <option value="2026-02">Feb 2026</option>
+        <option value="2026-03">Mar 2026</option>
+        <option value="2026-04">Abr 2026</option>
+      </select>
+      <button class="btn btn-filled" onclick="openVendedorModal()">+ Agregar vendedor</button>
+    </div>
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Nombre</th><th>WhatsApp</th><th>Rol</th><th>Especialidad (marcas)</th><th>En turno</th><th>Ultimo lead</th><th></th></tr></thead>
+      <thead><tr><th>Nombre</th><th>Especialidad</th><th>En turno</th><th>Meta del mes</th><th>Ventas</th><th>Avance</th><th>%</th><th></th></tr></thead>
       <tbody id="vendedores-tbody"></tbody>
     </table>
   </div>
@@ -912,19 +946,42 @@ let _vendedores=[];
 async function loadVendedores(){
   try{
     const r=await fetch('/api/vendedores/');_vendedores=await r.json();
+
+    // Load metas if admin
+    let metas=[];
+    const metasMes=document.getElementById('metas-mes')?.value||'';
+    if(IS_ADMIN){
+      try{
+        const mr=await fetch('/api/metas/resumen-equipo'+(metasMes?'?mes='+metasMes:''));
+        metas=await mr.json();
+      }catch{}
+    }
+    const metasMap={};
+    metas.forEach(m=>{metasMap[m.usuario_id]=m;});
+
     // Table
     const tb=document.getElementById('vendedores-tbody');tb.innerHTML='';
     _vendedores.forEach(v=>{
       const marcas=(v.especialidad_marca||[]).join(', ')||'-';
       const turno=v.en_turno?'<span style="color:var(--green);">&#9679; Si</span>':'<span style="color:var(--red);">&#9675; No</span>';
-      const ultimo=v.ultimo_lead_asignado?new Date(v.ultimo_lead_asignado).toLocaleDateString('es-MX'):'Nunca';
+      const m=metasMap[v.id]||{meta_mxn:0,ventas_actual:0,porcentaje:0,tiene_meta:false};
+      const pct=m.porcentaje||0;
+      const barColor=pct>=80?'#16a34a':pct>=50?'#d97706':'#dc2626';
+      const metaCell=IS_ADMIN
+        ?`<td><input type="number" value="${m.meta_mxn||''}" placeholder="0" style="width:90px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;font-family:var(--mono);text-align:right;" onchange="saveMeta('${v.id}',this.value)"/></td>`
+        :`<td style="font-family:var(--mono);font-size:13px;">${m.tiene_meta?fmt$(m.meta_mxn):'-'}</td>`;
       tb.innerHTML+=`<tr>
         <td class="td-name">${v.nombre}</td>
-        <td class="td-phone">${v.telefono_whatsapp||'-'}</td>
-        <td><span class="tag" style="background:var(--purple-bg);color:var(--purple);">${v.rol_comercial}</span></td>
-        <td>${marcas}</td>
+        <td style="font-size:12px;">${marcas}</td>
         <td>${turno}</td>
-        <td style="font-size:12px;color:var(--text3);">${ultimo}</td>
+        ${metaCell}
+        <td style="font-family:var(--mono);font-size:13px;color:var(--green);">${fmt$(m.ventas_actual)}</td>
+        <td style="width:120px;">
+          <div style="background:var(--border-light);border-radius:99px;height:8px;overflow:hidden;">
+            <div style="height:100%;width:${Math.min(pct,100)}%;background:${barColor};border-radius:99px;transition:width 300ms;"></div>
+          </div>
+        </td>
+        <td style="font-size:13px;font-weight:600;color:${barColor};">${pct}%</td>
         <td><button class="btn" onclick="editVendedor('${v.id}')">Editar</button></td>
       </tr>`;
     });
@@ -935,6 +992,38 @@ async function loadVendedores(){
       sel.innerHTML+=`<option value="${v.id}">${v.nombre}</option>`;
     });
   }catch(e){console.error('Vendedores error:',e);}
+}
+
+async function saveMeta(usuarioId,val){
+  const monto=parseFloat(val);
+  if(!monto||monto<=0)return;
+  const mes=document.getElementById('metas-mes')?.value||'';
+  try{
+    await fetch('/api/metas/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      usuario_id:usuarioId,mes:mes||undefined,meta_mxn:monto
+    })});
+    showToast('Meta guardada',fmt$(monto));
+  }catch{showToast('Error','No se pudo guardar');}
+}
+
+async function loadMetaVendedor(){
+  if(IS_ADMIN){document.getElementById('meta-vendedor-card').style.display='none';return;}
+  try{
+    const r=await fetch('/api/metas/mi-progreso');
+    const d=await r.json();
+    if(!d.tiene_meta){document.getElementById('meta-vendedor-card').style.display='none';return;}
+    document.getElementById('meta-vendedor-card').style.display='block';
+    document.getElementById('meta-v-target').textContent=fmt$(d.meta_mxn);
+    document.getElementById('meta-v-actual').textContent=fmt$(d.ventas_actual);
+    const pct=d.porcentaje;
+    document.getElementById('meta-v-pct').textContent=pct+'%';
+    document.getElementById('meta-v-pct').style.color=pct>=80?'#16a34a':pct>=50?'#d97706':'#dc2626';
+    const bar=document.getElementById('meta-v-bar');
+    bar.style.width=Math.min(pct,100)+'%';
+    bar.style.background=pct>=80?'#16a34a':pct>=50?'#d97706':'#dc2626';
+    const falta=d.meta_mxn-d.ventas_actual;
+    document.getElementById('meta-v-falta').textContent=falta>0?'Faltan '+fmt$(falta)+' para tu meta':'Meta alcanzada!';
+  }catch{}
 }
 
 function toggleVendedorSelect(){
@@ -1034,7 +1123,7 @@ function applyRoleVisibility(){
 }
 
 // Init
-updateCounts();loadDashboard();loadProyecto();loadVendedores();toggleVendedorSelect();
+updateCounts();loadDashboard();loadProyecto();loadVendedores();toggleVendedorSelect();loadMetaVendedor();
 applyRoleVisibility();
 </script>
 </body>
