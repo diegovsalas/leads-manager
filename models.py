@@ -35,8 +35,8 @@ class EtapaPipeline(enum.Enum):
     COTIZACION     = "Cotización"
     DEMO           = "Demo"
     NEGOCIACION    = "Negociación"
-    CIERRE_GANADO  = "Cierre Ganado"
-    CIERRE_PERDIDO = "Cierre Perdido"
+    CIERRE_GANADO  = "Cerrado Ganado"
+    CIERRE_PERDIDO = "Cerrado Perdido"
 
 
 class DireccionMensaje(enum.Enum):
