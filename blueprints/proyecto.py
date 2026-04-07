@@ -56,7 +56,8 @@ def _generar_prompt_dev(titulo, descripcion):
 def listar_items():
     """Lista items del proyecto, opcionalmente filtrados por tipo."""
     tipo = request.args.get("tipo")
-    query = ProyectoItem.query.order_by(ProyectoItem.fecha_creacion.desc())
+    query = ProyectoItem.query.filter(ProyectoItem.parent_id.is_(None))
+    query = query.order_by(ProyectoItem.fecha_creacion.desc())
     if tipo:
         query = query.filter_by(tipo=tipo)
     items = query.all()
@@ -75,11 +76,13 @@ def crear_item():
     if not tipo or not titulo or not autor:
         return jsonify({"error": "tipo, titulo y autor son requeridos"}), 400
 
-    if tipo not in ("avance", "idea", "nota"):
-        return jsonify({"error": "tipo debe ser avance, idea o nota"}), 400
+    if tipo not in ("avance", "idea", "nota", "subtarea"):
+        return jsonify({"error": "tipo debe ser avance, idea, nota o subtarea"}), 400
 
     descripcion = data.get("descripcion")
     prioridad = data.get("prioridad")
+    parent_id = data.get("parent_id")
+    fase_num = data.get("fase_num")
     prompt_dev = None
 
     if tipo == "idea":
@@ -92,11 +95,64 @@ def crear_item():
         autor=autor,
         prioridad=prioridad,
         prompt_dev=prompt_dev,
+        parent_id=parent_id,
+        fase_num=fase_num,
     )
     db.session.add(item)
     db.session.commit()
 
     return jsonify(item.to_dict()), 201
+
+
+@proyecto_bp.route("/items/<uuid:item_id>", methods=["PUT"])
+def actualizar_item(item_id):
+    """Actualiza un item del proyecto."""
+    item = db.session.get(ProyectoItem, item_id)
+    if not item:
+        return jsonify({"error": "Item no encontrado"}), 404
+
+    data = request.get_json() or {}
+    if "titulo" in data:
+        item.titulo = data["titulo"]
+    if "descripcion" in data:
+        item.descripcion = data["descripcion"]
+    if "prioridad" in data:
+        item.prioridad = data["prioridad"]
+    if "completado" in data:
+        item.completado = data["completado"]
+    if "fase_num" in data:
+        item.fase_num = data["fase_num"]
+
+    db.session.commit()
+    return jsonify(item.to_dict())
+
+
+@proyecto_bp.route("/items/<uuid:item_id>/toggle", methods=["POST"])
+def toggle_completado(item_id):
+    """Toggle completado de un item."""
+    item = db.session.get(ProyectoItem, item_id)
+    if not item:
+        return jsonify({"error": "Item no encontrado"}), 404
+
+    item.completado = not item.completado
+    db.session.commit()
+    return jsonify(item.to_dict())
+
+
+@proyecto_bp.route("/items/<uuid:item_id>/generar-prompt", methods=["POST"])
+def generar_prompt(item_id):
+    """Genera o regenera el prompt de desarrollo con Gemini."""
+    item = db.session.get(ProyectoItem, item_id)
+    if not item:
+        return jsonify({"error": "Item no encontrado"}), 404
+
+    prompt_dev = _generar_prompt_dev(item.titulo, item.descripcion)
+    if prompt_dev:
+        item.prompt_dev = prompt_dev
+        db.session.commit()
+        return jsonify(item.to_dict())
+    else:
+        return jsonify({"error": "No se pudo generar el prompt. Verifica la API key de Gemini."}), 500
 
 
 @proyecto_bp.route("/items/<uuid:item_id>/votar", methods=["POST"])

@@ -435,7 +435,12 @@ class ProyectoItem(db.Model):
     prioridad = db.Column(db.String(50), nullable=True)
     votos = db.Column(db.Integer, nullable=False, default=0)
     prompt_dev = db.Column(db.Text, nullable=True)
+    completado = db.Column(db.Boolean, nullable=False, default=False)
+    parent_id = db.Column(UUID(as_uuid=True), db.ForeignKey("proyecto_items.id", ondelete="CASCADE"), nullable=True)
+    fase_num = db.Column(db.Integer, nullable=True)
     fecha_creacion = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    subtareas = db.relationship("ProyectoItem", backref=db.backref("parent", remote_side="ProyectoItem.id"), lazy="dynamic")
 
     def to_dict(self):
         return {
@@ -447,5 +452,9 @@ class ProyectoItem(db.Model):
             "prioridad": self.prioridad,
             "votos": self.votos,
             "prompt_dev": self.prompt_dev,
+            "completado": self.completado,
+            "parent_id": str(self.parent_id) if self.parent_id else None,
+            "fase_num": self.fase_num,
             "fecha_creacion": self.fecha_creacion.isoformat(),
+            "subtareas": [s.to_dict() for s in self.subtareas.order_by(ProyectoItem.fecha_creacion).all()] if not self.parent_id else [],
         }

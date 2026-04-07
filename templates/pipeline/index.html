@@ -197,6 +197,20 @@ tbody td{padding:8px 12px;font-size:14px;}
 .idea-vote:hover,.idea-vote.voted{background:var(--green-bg);border-color:var(--green);color:var(--green);}
 .add-idea-btn{border:1px dashed var(--border);border-radius:var(--r2);padding:12px;text-align:center;color:var(--text3);cursor:pointer;font-size:13px;}
 .add-idea-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--blue-bg);}
+.idea-card{cursor:pointer;}
+.subtarea-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border-light);transition:background 80ms;}
+.subtarea-item:hover{background:var(--bg-hover);}
+.subtarea-check{width:18px;height:18px;border-radius:4px;border:2px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 80ms;background:var(--bg-card);}
+.subtarea-check.done{background:var(--green);border-color:var(--green);color:#fff;}
+.subtarea-text{font-size:14px;flex:1;min-width:0;}
+.subtarea-text.done{text-decoration:line-through;color:var(--text3);}
+.subtarea-fase{font-size:11px;color:var(--text3);white-space:nowrap;}
+.subtarea-del{color:var(--text3);cursor:pointer;font-size:14px;padding:2px 6px;border-radius:var(--r);opacity:0;transition:opacity 80ms;}
+.subtarea-item:hover .subtarea-del{opacity:1;}
+.subtarea-del:hover{background:var(--red-bg);color:var(--red);}
+.subtarea-progress{display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:13px;color:var(--text2);}
+.subtarea-progress-bar{flex:1;height:6px;background:var(--border-light);border-radius:99px;max-width:200px;}
+.subtarea-progress-fill{height:100%;border-radius:99px;background:var(--green);transition:width .3s;}
 .collab-notes{display:flex;flex-direction:column;gap:10px;margin-top:12px;}
 .note-item{display:flex;gap:10px;padding:10px;border:1px solid var(--border-light);border-radius:var(--r2);}
 .note-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0;}
@@ -739,15 +753,27 @@ tbody td{padding:8px 12px;font-size:14px;}
     <div class="section-h2">Ideas y backlog</div>
     <div class="ideas-grid" id="ideas-grid"><div class="chat-empty-msg">Cargando ideas...</div></div>
     <div class="add-idea-btn" onclick="addIdeaModal()">+ Agregar idea (Gemini genera el prompt de desarrollo)</div>
-    <!-- Prompt viewer -->
-    <div id="prompt-viewer" style="display:none;margin-top:16px;border:1px solid var(--border-light);border-radius:var(--r2);padding:16px;background:var(--bg-sidebar);">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <div style="font-size:14px;font-weight:600;">Prompt de desarrollo generado por Gemini</div>
-        <button class="btn" onclick="document.getElementById('prompt-viewer').style.display='none'">&times; Cerrar</button>
-      </div>
-      <pre id="prompt-viewer-text" style="font-size:13px;color:var(--text2);white-space:pre-wrap;line-height:1.6;max-height:400px;overflow-y:auto;font-family:var(--font);"></pre>
-      <button class="btn btn-blue" style="margin-top:8px;" onclick="navigator.clipboard.writeText(document.getElementById('prompt-viewer-text').textContent);showToast('Copiado','Prompt copiado al portapapeles');">Copiar prompt</button>
+    <!-- Prompt viewer moved to modal-idea -->
+    <div class="section-h2">Subtareas del proyecto</div>
+    <div class="subtarea-progress" id="subtarea-progress">
+      <div class="subtarea-progress-bar"><div class="subtarea-progress-fill" id="subtarea-progress-fill" style="width:0%;"></div></div>
+      <span id="subtarea-progress-text">0/0 completadas</span>
     </div>
+    <div id="subtareas-list" style="border:1px solid var(--border-light);border-radius:var(--r2);overflow:hidden;margin-bottom:16px;">
+      <div style="color:var(--text3);font-size:13px;padding:16px;text-align:center;">Cargando subtareas...</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <input class="note-input" id="st-input" type="text" placeholder="Nueva subtarea..." onkeydown="if(event.key==='Enter')addSubtarea()"/>
+      <select class="filter-select" id="st-fase" style="font-size:12px;min-width:100px;">
+        <option value="">Sin fase</option>
+        <option value="10">Fase 10</option><option value="11">Fase 11</option><option value="12">Fase 12</option>
+        <option value="13">Fase 13</option><option value="14">Fase 14</option><option value="15">Fase 15</option>
+        <option value="16">Fase 16</option><option value="17">Fase 17</option><option value="18">Fase 18</option>
+        <option value="19">Fase 19</option><option value="20">Fase 20</option>
+      </select>
+      <button class="btn btn-filled" onclick="addSubtarea()">Agregar</button>
+    </div>
+
     <div class="section-h2">Notas del equipo</div>
     <div class="collab-notes" id="collab-notes"><div class="chat-empty-msg">Cargando notas...</div></div>
     <div class="note-input-row" style="margin-top:12px;">
@@ -840,6 +866,60 @@ tbody td{padding:8px 12px;font-size:14px;}
     <button class="btn" style="background:#dc2626;color:#fff;font-weight:500;padding:6px 12px;" onclick="confirmarPerdido()">Confirmar perdida</button>
   </div>
 </div></div>
+
+<!-- Modal: Detalle de Idea -->
+<div class="modal-overlay" id="modal-idea" onclick="if(event.target===this)closeIdeaModal()">
+<div class="modal" style="width:600px;max-height:85vh;overflow-y:auto;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+    <div class="modal-title" style="margin-bottom:0;">Detalle de idea</div>
+    <div style="display:flex;gap:6px;">
+      <button class="btn" style="color:var(--red);" onclick="deleteIdea()">Eliminar</button>
+      <button class="btn" onclick="closeIdeaModal()">&times;</button>
+    </div>
+  </div>
+  <input type="hidden" id="idea-id"/>
+  <div class="form-group">
+    <label class="form-label">Titulo</label>
+    <input class="form-input" id="idea-titulo" type="text"/>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Descripcion</label>
+    <textarea class="form-input" id="idea-descripcion" rows="3" style="resize:vertical;"></textarea>
+  </div>
+  <div class="form-row">
+    <div class="form-group">
+      <label class="form-label">Prioridad</label>
+      <select class="form-select" id="idea-prioridad">
+        <option value="Alta">Alta</option>
+        <option value="Media">Media</option>
+        <option value="Baja">Baja</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Autor</label>
+      <input class="form-input" id="idea-autor" type="text" readonly style="background:var(--bg-sidebar);"/>
+    </div>
+  </div>
+  <div class="modal-actions" style="border-top:none;padding-top:8px;">
+    <button class="btn btn-filled" onclick="saveIdea()">Guardar cambios</button>
+  </div>
+  <div style="border-top:1px solid var(--border-light);margin-top:12px;padding-top:16px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div style="font-size:14px;font-weight:600;">Prompt para Claude (generado por Gemini)</div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-blue" id="idea-gen-btn" onclick="regeneratePrompt()">Generar prompt</button>
+        <button class="btn" id="idea-copy-btn" onclick="copyIdeaPrompt()" style="display:none;">Copiar</button>
+      </div>
+    </div>
+    <div id="idea-prompt-area" style="display:none;">
+      <pre id="idea-prompt-text" style="font-size:13px;color:var(--text2);white-space:pre-wrap;line-height:1.6;max-height:300px;overflow-y:auto;font-family:var(--font);background:var(--bg-sidebar);border:1px solid var(--border-light);border-radius:var(--r2);padding:12px;"></pre>
+    </div>
+    <div id="idea-no-prompt" style="font-size:13px;color:var(--text3);padding:12px;text-align:center;border:1px dashed var(--border);border-radius:var(--r2);">
+      Sin prompt generado. Haz clic en "Generar prompt" para crear uno con Gemini AI.
+    </div>
+  </div>
+</div>
+</div>
 
 <div class="toast-container" id="toasts"></div>
 
@@ -1097,15 +1177,19 @@ const PRIO_COLORS={Alta:['var(--orange-bg)','var(--orange)'],Media:['var(--yello
 function fmtDate(iso){const d=new Date(iso);return d.getDate()+' '+['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][d.getMonth()];}
 function fmtDateTime(iso){const d=new Date(iso);return fmtDate(iso)+', '+d.getHours()+':'+(d.getMinutes()<10?'0':'')+d.getMinutes();}
 
-// Store prompts safely (avoids inline escaping issues)
+// Store prompts and ideas safely
 const _prompts={};
+const _ideas={};
+
+const FASE_NAMES={10:'WhatsApp Cloud API',11:'Meta Ads Webhooks',12:'Chat en vivo',13:'Bot WhatsApp',14:'ICP Scoring',15:'Cotizaciones PDF',16:'Reportes avanzados',17:'Google SSO',18:'Notificaciones',19:'QA + Testing',20:'Go-Live'};
 
 async function loadProyecto(){
   try{
-    const [avances,ideas,notas]=await Promise.all([
+    const [avances,ideas,notas,subtareas]=await Promise.all([
       fetch('/api/proyecto/items?tipo=avance').then(r=>r.json()),
       fetch('/api/proyecto/items?tipo=idea').then(r=>r.json()),
       fetch('/api/proyecto/items?tipo=nota').then(r=>r.json()),
+      fetch('/api/proyecto/items?tipo=subtarea').then(r=>r.json()),
     ]);
     // Avances
     const cl=document.getElementById('changelog');cl.innerHTML='';
@@ -1113,26 +1197,29 @@ async function loadProyecto(){
       cl.innerHTML+=`<div class="cl-item"><div class="cl-date">${fmtDate(a.fecha_creacion)}</div><div class="cl-dot" style="background:var(--green);"></div><div class="cl-body"><div class="cl-title">${a.titulo}</div>${a.descripcion?`<div class="cl-desc">${a.descripcion}</div>`:''}<div class="cl-author">${a.autor}</div></div></div>`;
     });
     if(!avances.length)cl.innerHTML='<div style="color:var(--text3);font-size:13px;">Sin avances registrados</div>';
-    // Ideas
+    // Ideas — clickable cards
     const ig=document.getElementById('ideas-grid');ig.innerHTML='';
     ideas.forEach(i=>{
       const pc=PRIO_COLORS[i.prioridad]||PRIO_COLORS.Media;
-      // Store prompt in JS object, reference by ID
       if(i.prompt_dev)_prompts[i.id]=i.prompt_dev;
-      const promptBtn=i.prompt_dev
-        ?`<span style="cursor:pointer;font-size:11px;color:var(--accent);margin-left:auto;" onclick="showPromptById('${i.id}')">&#128196; Ver prompt</span>`
+      _ideas[i.id]=i;
+      const hasPrompt=!!i.prompt_dev;
+      const promptBadge=hasPrompt
+        ?`<span style="font-size:11px;color:var(--accent);margin-left:auto;">&#128196; Prompt listo</span>`
         :`<span style="font-size:11px;color:var(--text3);margin-left:auto;">Sin prompt</span>`;
-      ig.innerHTML+=`<div class="idea-card" data-id="${i.id}">
+      ig.innerHTML+=`<div class="idea-card" data-id="${i.id}" onclick="openIdeaDetail('${i.id}')">
         <div class="idea-card-title">${i.titulo}</div>
         <div class="idea-card-desc">${i.descripcion||''}</div>
         <div class="idea-card-meta">
           <span class="tag" style="background:${pc[0]};color:${pc[1]};">${i.prioridad||'Media'}</span>
-          <span class="idea-vote" onclick="voteIdea('${i.id}',this)">&#9650; ${i.votos}</span>
-          ${promptBtn}
+          <span class="idea-vote" onclick="event.stopPropagation();voteIdea('${i.id}',this)">&#9650; ${i.votos}</span>
+          ${promptBadge}
         </div>
       </div>`;
     });
     if(!ideas.length)ig.innerHTML='<div style="color:var(--text3);font-size:13px;">Sin ideas registradas</div>';
+    // Subtareas
+    renderSubtareas(subtareas);
     // Notas
     const cn=document.getElementById('collab-notes');cn.innerHTML='';
     notas.forEach(n=>{
@@ -1143,12 +1230,128 @@ async function loadProyecto(){
   }catch(e){console.error('Proyecto load error:',e);}
 }
 
+// --- Subtareas ---
+function renderSubtareas(subtareas){
+  const list=document.getElementById('subtareas-list');
+  const done=subtareas.filter(s=>s.completado).length;
+  const total=subtareas.length;
+  const pct=total>0?Math.round((done/total)*100):0;
+  document.getElementById('subtarea-progress-fill').style.width=pct+'%';
+  document.getElementById('subtarea-progress-text').textContent=done+'/'+total+' completadas ('+pct+'%)';
+  if(!total){list.innerHTML='<div style="color:var(--text3);font-size:13px;padding:16px;text-align:center;">Sin subtareas. Agrega una para dar seguimiento al proyecto.</div>';return;}
+  list.innerHTML='';
+  subtareas.forEach(s=>{
+    const faseLabel=s.fase_num?'Fase '+s.fase_num:'';
+    list.innerHTML+=`<div class="subtarea-item">
+      <div class="subtarea-check ${s.completado?'done':''}" onclick="toggleSubtarea('${s.id}')">${s.completado?'&#10003;':''}</div>
+      <div class="subtarea-text ${s.completado?'done':''}">${s.titulo}</div>
+      ${faseLabel?`<span class="subtarea-fase">${faseLabel}</span>`:''}
+      <span class="subtarea-del" onclick="deleteSubtarea('${s.id}')">&times;</span>
+    </div>`;
+  });
+}
+
+async function addSubtarea(){
+  const inp=document.getElementById('st-input'),titulo=inp.value.trim();
+  if(!titulo){inp.focus();return;}
+  const faseNum=document.getElementById('st-fase').value||null;
+  inp.value='';
+  try{
+    await fetch('/api/proyecto/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:'subtarea',titulo,autor:USER_NOMBRE,fase_num:faseNum?parseInt(faseNum):null})});
+    await loadProyecto();showToast('Subtarea agregada',titulo);
+  }catch{showToast('Error','No se pudo guardar');}
+}
+
+async function toggleSubtarea(id){
+  try{await fetch('/api/proyecto/items/'+id+'/toggle',{method:'POST'});await loadProyecto();}catch{showToast('Error','No se pudo actualizar');}
+}
+
+async function deleteSubtarea(id){
+  if(!confirm('Eliminar esta subtarea?'))return;
+  try{await fetch('/api/proyecto/items/'+id,{method:'DELETE'});await loadProyecto();showToast('Eliminada','Subtarea eliminada');}catch{}
+}
+
+// --- Idea detail modal ---
+function openIdeaDetail(id){
+  const idea=_ideas[id];if(!idea)return;
+  document.getElementById('idea-id').value=id;
+  document.getElementById('idea-titulo').value=idea.titulo;
+  document.getElementById('idea-descripcion').value=idea.descripcion||'';
+  document.getElementById('idea-prioridad').value=idea.prioridad||'Media';
+  document.getElementById('idea-autor').value=idea.autor;
+  // Prompt area
+  if(idea.prompt_dev){
+    document.getElementById('idea-prompt-area').style.display='block';
+    document.getElementById('idea-prompt-text').textContent=idea.prompt_dev;
+    document.getElementById('idea-no-prompt').style.display='none';
+    document.getElementById('idea-copy-btn').style.display='inline-flex';
+    document.getElementById('idea-gen-btn').textContent='Regenerar prompt';
+  }else{
+    document.getElementById('idea-prompt-area').style.display='none';
+    document.getElementById('idea-no-prompt').style.display='block';
+    document.getElementById('idea-copy-btn').style.display='none';
+    document.getElementById('idea-gen-btn').textContent='Generar prompt';
+  }
+  document.getElementById('modal-idea').classList.add('open');
+}
+
+function closeIdeaModal(){document.getElementById('modal-idea').classList.remove('open');}
+
+async function saveIdea(){
+  const id=document.getElementById('idea-id').value;
+  const body={
+    titulo:document.getElementById('idea-titulo').value.trim(),
+    descripcion:document.getElementById('idea-descripcion').value.trim(),
+    prioridad:document.getElementById('idea-prioridad').value,
+  };
+  if(!body.titulo){document.getElementById('idea-titulo').focus();return;}
+  try{
+    await fetch('/api/proyecto/items/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    closeIdeaModal();await loadProyecto();showToast('Idea actualizada',body.titulo);
+  }catch{showToast('Error','No se pudo guardar');}
+}
+
+async function deleteIdea(){
+  const id=document.getElementById('idea-id').value;
+  if(!confirm('Eliminar esta idea y su prompt?'))return;
+  try{
+    await fetch('/api/proyecto/items/'+id,{method:'DELETE'});
+    closeIdeaModal();await loadProyecto();showToast('Eliminada','Idea eliminada');
+  }catch{showToast('Error','No se pudo eliminar');}
+}
+
+async function regeneratePrompt(){
+  const id=document.getElementById('idea-id').value;
+  const btn=document.getElementById('idea-gen-btn');
+  btn.textContent='Generando...';btn.disabled=true;
+  try{
+    const r=await fetch('/api/proyecto/items/'+id+'/generar-prompt',{method:'POST'});
+    const item=await r.json();
+    if(r.ok&&item.prompt_dev){
+      _prompts[id]=item.prompt_dev;
+      _ideas[id].prompt_dev=item.prompt_dev;
+      document.getElementById('idea-prompt-area').style.display='block';
+      document.getElementById('idea-prompt-text').textContent=item.prompt_dev;
+      document.getElementById('idea-no-prompt').style.display='none';
+      document.getElementById('idea-copy-btn').style.display='inline-flex';
+      btn.textContent='Regenerar prompt';
+      showToast('Prompt generado','Gemini genero el prompt exitosamente');
+    }else{
+      showToast('Error',item.error||'No se pudo generar');
+      btn.textContent='Reintentar';
+    }
+  }catch{showToast('Error','Fallo la conexion');btn.textContent='Reintentar';}
+  finally{btn.disabled=false;}
+}
+
+function copyIdeaPrompt(){
+  const text=document.getElementById('idea-prompt-text').textContent;
+  navigator.clipboard.writeText(text);
+  showToast('Copiado','Prompt copiado al portapapeles');
+}
+
 function showPromptById(id){
-  const text=_prompts[id];
-  if(!text){showToast('Sin prompt','Esta idea no tiene prompt generado');return;}
-  document.getElementById('prompt-viewer').style.display='block';
-  document.getElementById('prompt-viewer-text').textContent=text;
-  document.getElementById('prompt-viewer').scrollIntoView({behavior:'smooth'});
+  openIdeaDetail(id);
 }
 
 async function addAvance(){
@@ -1170,14 +1373,11 @@ async function addIdeaModal(){
   try{
     const r=await fetch('/api/proyecto/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:'idea',titulo,descripcion,autor:USER_NOMBRE,prioridad})});
     const item=await r.json();
-    // Store prompt and reload
     if(item.prompt_dev)_prompts[item.id]=item.prompt_dev;
+    _ideas[item.id]=item;
     await loadProyecto();
     showToast('Idea guardada',titulo);
-    // Auto-show the generated prompt
-    if(item.prompt_dev){
-      setTimeout(()=>showPromptById(item.id),300);
-    }
+    if(item.prompt_dev){setTimeout(()=>openIdeaDetail(item.id),300);}
   }catch{showToast('Error','No se pudo guardar');}
 }
 
@@ -1186,6 +1386,7 @@ async function voteIdea(id,el){
     const r=await fetch('/api/proyecto/items/'+id+'/votar',{method:'POST'});
     const item=await r.json();
     el.innerHTML='&#9650; '+item.votos;
+    if(_ideas[id])_ideas[id].votos=item.votos;
   }catch{}
 }
 
