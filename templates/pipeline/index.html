@@ -524,7 +524,7 @@ tbody td{padding:8px 12px;font-size:14px;}
 <script>
 const socket=io();
 let leadActivo=null,draggingId=null,filtroMarca='';
-const ETAPA_COLORS={'Nuevo Lead':'#2eaadc','Calificando':'#9065b0','Presentaci\u00f3n/Cotizaci\u00f3n':'#e07c1a','Seguimiento':'#8b5cf6','Cierre Ganado':'#0f7b6c','Cierre Perdido':'#eb5757'};
+const ETAPA_COLORS={'Nuevo Lead':'#2eaadc','1er Contacto':'#9065b0','2do Contacto':'#9065b0','3er Contacto':'#9065b0','4to Contacto':'#9065b0','Cotizaci\u00f3n':'#e07c1a','Demo':'#cb912f','Negociaci\u00f3n':'#d44c7c','Cerrado Ganado':'#0f7b6c','Cerrado Perdido':'#eb5757'};
 function fmt$(n){return '$'+Number(n).toLocaleString('es-MX',{minimumFractionDigits:0});}
 
 // SocketIO
@@ -618,7 +618,7 @@ async function loadDashboard(){
 
     // Pipe bars
     const pb=document.getElementById('pipe-bars');pb.innerHTML='';
-    const etapas=['Nuevo Lead','Calificando','Presentaci\u00f3n/Cotizaci\u00f3n','Seguimiento','Cierre Ganado','Cierre Perdido'];
+    const etapas=['Nuevo Lead','1er Contacto','2do Contacto','3er Contacto','4to Contacto','Cotizaci\u00f3n','Demo','Negociaci\u00f3n','Cerrado Ganado','Cerrado Perdido'];
     const maxV=Math.max(...etapas.map(e=>(pipeVals[e]||{}).valor||0),1);
     etapas.forEach(e=>{
       const d=pipeVals[e]||{cantidad:0,valor:0};

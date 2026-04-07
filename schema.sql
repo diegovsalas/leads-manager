@@ -23,11 +23,15 @@ CREATE TYPE origen_lead_enum AS ENUM (
 
 CREATE TYPE etapa_pipeline_enum AS ENUM (
     'Nuevo Lead',
-    'Calificando',
-    'Presentación/Cotización',
-    'Seguimiento',
-    'Cierre Ganado',
-    'Cierre Perdido'
+    '1er Contacto',
+    '2do Contacto',
+    '3er Contacto',
+    '4to Contacto',
+    'Cotización',
+    'Demo',
+    'Negociación',
+    'Cerrado Ganado',
+    'Cerrado Perdido'
 );
 
 CREATE TYPE direccion_mensaje_enum AS ENUM (

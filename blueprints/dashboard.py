@@ -106,14 +106,19 @@ def embudo():
     total = leads_q.count()
 
     etapas_calificadas = [
-        EtapaPipeline.CALIFICANDO,
-        EtapaPipeline.PRESENTACION_COTIZACION,
-        EtapaPipeline.SEGUIMIENTO,
+        EtapaPipeline.CONTACTO_1,
+        EtapaPipeline.CONTACTO_2,
+        EtapaPipeline.CONTACTO_3,
+        EtapaPipeline.CONTACTO_4,
+        EtapaPipeline.COTIZACION,
+        EtapaPipeline.DEMO,
+        EtapaPipeline.NEGOCIACION,
         EtapaPipeline.CIERRE_GANADO,
     ]
     etapas_cotizadas = [
-        EtapaPipeline.PRESENTACION_COTIZACION,
-        EtapaPipeline.SEGUIMIENTO,
+        EtapaPipeline.COTIZACION,
+        EtapaPipeline.DEMO,
+        EtapaPipeline.NEGOCIACION,
         EtapaPipeline.CIERRE_GANADO,
     ]
 
