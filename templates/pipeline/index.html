@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Leads Manager Grupo Avantex</title>
+<title>Leads Manager Avantex</title>
+<link rel="icon" type="image/x-icon" href="/static/img/favicon.ico"/>
+<link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png"/>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <style>
 :root{--bg:#fff;--bg-sidebar:#fbfbfa;--bg-hover:#f1f1ef;--bg-active:#f1f1ef;--bg-card:#fff;--bg-input:#fff;--bg-tag:#f1f1ef;--border:#e3e2e0;--border-light:#ebebea;--text:#37352f;--text2:#787774;--text3:#b4b4b0;--accent:#2eaadc;--red:#eb5757;--red-bg:#fbe4e4;--orange:#e07c1a;--orange-bg:#faebdd;--green:#0f7b6c;--green-bg:#dbeddb;--blue:#2eaadc;--blue-bg:#d3e5ef;--purple:#9065b0;--purple-bg:#e8deee;--pink:#d44c7c;--pink-bg:#f5e0e9;--yellow:#cb912f;--yellow-bg:#fdecc8;--font:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;--mono:"SFMono-Regular",Menlo,Consolas,monospace;--r:4px;--r2:6px;--shadow:0 1px 3px rgba(0,0,0,.04),0 0 0 1px var(--border);--shadow-lg:0 4px 12px rgba(0,0,0,.08),0 0 0 1px var(--border);}
@@ -210,7 +212,7 @@ tbody td{padding:8px 12px;font-size:14px;}
 
 <!-- ===== SIDEBAR ===== -->
 <aside class="sidebar">
-  <div class="sidebar-logo"><div class="sidebar-logo-icon">L</div><span class="sidebar-logo-text">Leads Manager</span></div>
+  <div class="sidebar-logo"><img src="/static/img/logo.png" alt="Leads Manager" style="width:28px;height:28px;border-radius:4px;object-fit:cover;"/><span class="sidebar-logo-text">Leads Manager</span></div>
   <div class="slink active" onclick="showView('dashboard',this)"><span class="slink-emoji">&#128202;</span> Dashboard</div>
   <div class="slink" onclick="showView('pipeline',this)"><span class="slink-emoji">&#128203;</span> Pipeline</div>
   <div class="slink" onclick="showView('leads',this)"><span class="slink-emoji">&#128101;</span> Todos los leads</div>
