@@ -440,8 +440,6 @@ class ProyectoItem(db.Model):
     fase_num = db.Column(db.Integer, nullable=True)
     fecha_creacion = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
 
-    subtareas = db.relationship("ProyectoItem", backref=db.backref("parent", remote_side="ProyectoItem.id"), lazy="dynamic")
-
     def to_dict(self):
         return {
             "id": str(self.id),
@@ -456,5 +454,4 @@ class ProyectoItem(db.Model):
             "parent_id": str(self.parent_id) if self.parent_id else None,
             "fase_num": self.fase_num,
             "fecha_creacion": self.fecha_creacion.isoformat(),
-            "subtareas": [s.to_dict() for s in self.subtareas.order_by(ProyectoItem.fecha_creacion).all()] if not self.parent_id else [],
         }
