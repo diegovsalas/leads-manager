@@ -436,7 +436,7 @@ class ProyectoItem(db.Model):
     votos = db.Column(db.Integer, nullable=False, default=0)
     prompt_dev = db.Column(db.Text, nullable=True)
     completado = db.Column(db.Boolean, nullable=False, default=False)
-    parent_id = db.Column(UUID(as_uuid=True), db.ForeignKey("proyecto_items.id", ondelete="CASCADE"), nullable=True)
+    parent_id = db.Column(UUID(as_uuid=True), nullable=True)
     fase_num = db.Column(db.Integer, nullable=True)
     fecha_creacion = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
 

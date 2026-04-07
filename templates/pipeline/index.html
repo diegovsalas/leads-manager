@@ -1186,10 +1186,10 @@ const FASE_NAMES={10:'WhatsApp Cloud API',11:'Meta Ads Webhooks',12:'Chat en viv
 async function loadProyecto(){
   try{
     const [avances,ideas,notas,subtareas]=await Promise.all([
-      fetch('/api/proyecto/items?tipo=avance').then(r=>r.json()),
-      fetch('/api/proyecto/items?tipo=idea').then(r=>r.json()),
-      fetch('/api/proyecto/items?tipo=nota').then(r=>r.json()),
-      fetch('/api/proyecto/items?tipo=subtarea').then(r=>r.json()),
+      fetch('/api/proyecto/items?tipo=avance').then(r=>r.ok?r.json():[]).catch(()=>[]),
+      fetch('/api/proyecto/items?tipo=idea').then(r=>r.ok?r.json():[]).catch(()=>[]),
+      fetch('/api/proyecto/items?tipo=nota').then(r=>r.ok?r.json():[]).catch(()=>[]),
+      fetch('/api/proyecto/items?tipo=subtarea').then(r=>r.ok?r.json():[]).catch(()=>[]),
     ]);
     // Avances
     const cl=document.getElementById('changelog');cl.innerHTML='';
