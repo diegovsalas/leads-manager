@@ -166,6 +166,19 @@ tbody td{padding:8px 12px;font-size:14px;}
 .team-card-name{font-size:14px;font-weight:600;}
 .team-card-role{font-size:12px;color:var(--text2);}
 .status-dot{width:6px;height:6px;border-radius:50%;display:inline-block;}
+.crono-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px;}
+.crono-table th{text-align:left;padding:8px 10px;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.3px;border-bottom:2px solid var(--border);background:var(--bg-sidebar);}
+.crono-table td{padding:8px 10px;border-bottom:1px solid var(--border-light);vertical-align:middle;}
+.crono-table tr:hover td{background:var(--bg-hover);}
+.crono-phase{font-weight:600;color:var(--text);white-space:nowrap;}
+.crono-status{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;padding:2px 8px;border-radius:99px;white-space:nowrap;}
+.crono-done{background:var(--green-bg);color:var(--green);}
+.crono-active{background:var(--blue-bg);color:var(--blue);}
+.crono-pending{background:var(--bg-tag);color:var(--text3);}
+.crono-blocked{background:var(--red-bg);color:var(--red);}
+.crono-bar-bg{height:6px;background:var(--border-light);border-radius:99px;flex:1;min-width:80px;}
+.crono-bar-fill{height:100%;border-radius:99px;transition:width .3s;}
+.crono-deps{font-size:11px;color:var(--text3);font-style:italic;}
 .changelog{display:flex;flex-direction:column;}
 .cl-item{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border-light);}
 .cl-date{width:80px;flex-shrink:0;font-size:12px;color:var(--text3);padding-top:2px;}
@@ -433,7 +446,7 @@ tbody td{padding:8px 12px;font-size:14px;}
     <div class="page-subtitle">CRM comercial in-house — Backend Flask + Supabase + Meta/WhatsApp API</div>
     <table class="prop-table">
       <tr><td class="prop-key">Estado</td><td><span class="tag" style="background:var(--yellow-bg);color:var(--yellow);">En desarrollo</span></td></tr>
-      <tr><td class="prop-key">Sprint actual</td><td>Sprint 2 — Pipeline + Round-Robin</td></tr>
+      <tr><td class="prop-key">Sprint actual</td><td>Sprint 5 — WhatsApp + Meta Ads</td></tr>
       <tr><td class="prop-key">Deploy</td><td>Render (backend) + Supabase (DB)</td></tr>
       <tr><td class="prop-key">Repositorio</td><td style="font-family:var(--mono);font-size:13px;">github.com/diegovsalas/leads-manager</td></tr>
       <tr><td class="prop-key">Inicio</td><td>1 Abril 2026</td></tr>
@@ -471,6 +484,251 @@ tbody td{padding:8px 12px;font-size:14px;}
         <li>Ingesta desde Meta Ads</li><li>Bot interno WhatsApp</li><li>Dashboard con embudo y ROI</li><li>Cotizacion (cantidad x precio)</li>
       </ul>
     </div>
+    <div class="section-h2">Cronograma del proyecto</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:16px;">Roadmap completo con fases, responsables, fechas y dependencias. Actualizado al 7 de abril 2026.</div>
+    <table class="crono-table">
+      <thead>
+        <tr>
+          <th style="width:30px;">#</th>
+          <th>Fase</th>
+          <th>Responsable</th>
+          <th>Inicio</th>
+          <th>Fin</th>
+          <th style="width:100px;">Progreso</th>
+          <th>Estado</th>
+          <th>Dependencias</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- FASE 1 -->
+        <tr>
+          <td style="color:var(--text3);">1</td>
+          <td class="crono-phase">Infraestructura y deploy</td>
+          <td>Diego V.</td>
+          <td>1 Abr</td>
+          <td>2 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:100%;background:var(--green);"></div></div></td>
+          <td><span class="crono-status crono-done">Completado</span></td>
+          <td class="crono-deps">—</td>
+        </tr>
+        <!-- FASE 2 -->
+        <tr>
+          <td style="color:var(--text3);">2</td>
+          <td class="crono-phase">Modelos y BD (Supabase)</td>
+          <td>Diego V.</td>
+          <td>1 Abr</td>
+          <td>3 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:100%;background:var(--green);"></div></div></td>
+          <td><span class="crono-status crono-done">Completado</span></td>
+          <td class="crono-deps">Fase 1</td>
+        </tr>
+        <!-- FASE 3 -->
+        <tr>
+          <td style="color:var(--text3);">3</td>
+          <td class="crono-phase">Auth + RBAC + Login</td>
+          <td>Diego V.</td>
+          <td>2 Abr</td>
+          <td>3 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:100%;background:var(--green);"></div></div></td>
+          <td><span class="crono-status crono-done">Completado</span></td>
+          <td class="crono-deps">Fase 2</td>
+        </tr>
+        <!-- FASE 4 -->
+        <tr>
+          <td style="color:var(--text3);">4</td>
+          <td class="crono-phase">Pipeline Kanban + Lead CRUD</td>
+          <td>Diego V. / Andrea R.</td>
+          <td>3 Abr</td>
+          <td>4 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:100%;background:var(--green);"></div></div></td>
+          <td><span class="crono-status crono-done">Completado</span></td>
+          <td class="crono-deps">Fase 3</td>
+        </tr>
+        <!-- FASE 5 -->
+        <tr>
+          <td style="color:var(--text3);">5</td>
+          <td class="crono-phase">Round-Robin + Auto-asignacion</td>
+          <td>Diego V. / Alejandro G.</td>
+          <td>4 Abr</td>
+          <td>5 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:100%;background:var(--green);"></div></div></td>
+          <td><span class="crono-status crono-done">Completado</span></td>
+          <td class="crono-deps">Fase 4</td>
+        </tr>
+        <!-- FASE 6 -->
+        <tr>
+          <td style="color:var(--text3);">6</td>
+          <td class="crono-phase">Dashboard + Embudo + Gastos</td>
+          <td>Diego V. / Alejandro G.</td>
+          <td>4 Abr</td>
+          <td>6 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:100%;background:var(--green);"></div></div></td>
+          <td><span class="crono-status crono-done">Completado</span></td>
+          <td class="crono-deps">Fase 4</td>
+        </tr>
+        <!-- FASE 7 -->
+        <tr>
+          <td style="color:var(--text3);">7</td>
+          <td class="crono-phase">Cadencia automatica (follow-up)</td>
+          <td>Diego V.</td>
+          <td>5 Abr</td>
+          <td>6 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:100%;background:var(--green);"></div></div></td>
+          <td><span class="crono-status crono-done">Completado</span></td>
+          <td class="crono-deps">Fase 5</td>
+        </tr>
+        <!-- FASE 8 -->
+        <tr>
+          <td style="color:var(--text3);">8</td>
+          <td class="crono-phase">Metas vendedor + Equipo comercial</td>
+          <td>Diego V. / Alejandro G.</td>
+          <td>6 Abr</td>
+          <td>7 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:100%;background:var(--green);"></div></div></td>
+          <td><span class="crono-status crono-done">Completado</span></td>
+          <td class="crono-deps">Fase 6</td>
+        </tr>
+        <!-- FASE 9 -->
+        <tr>
+          <td style="color:var(--text3);">9</td>
+          <td class="crono-phase">Pagina de proyecto + Gemini AI</td>
+          <td>Diego V. / Andrea R.</td>
+          <td>6 Abr</td>
+          <td>7 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:100%;background:var(--green);"></div></div></td>
+          <td><span class="crono-status crono-done">Completado</span></td>
+          <td class="crono-deps">Fase 4</td>
+        </tr>
+        <!-- FASE 10 -->
+        <tr style="background:rgba(46,170,220,.04);">
+          <td style="color:var(--blue);font-weight:600;">10</td>
+          <td class="crono-phase" style="color:var(--blue);">WhatsApp Cloud API</td>
+          <td>Diego V. / Andrea R.</td>
+          <td>8 Abr</td>
+          <td>12 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:15%;background:var(--blue);"></div></div></td>
+          <td><span class="crono-status crono-active">En progreso</span></td>
+          <td class="crono-deps">Fase 4 — Requiere WHATSAPP_TOKEN</td>
+        </tr>
+        <!-- FASE 11 -->
+        <tr style="background:rgba(46,170,220,.04);">
+          <td style="color:var(--blue);font-weight:600;">11</td>
+          <td class="crono-phase" style="color:var(--blue);">Meta Ads Webhooks</td>
+          <td>Diego V.</td>
+          <td>10 Abr</td>
+          <td>14 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:10%;background:var(--blue);"></div></div></td>
+          <td><span class="crono-status crono-active">En progreso</span></td>
+          <td class="crono-deps">Fase 5, 10 — Config Meta Business</td>
+        </tr>
+        <!-- FASE 12 -->
+        <tr>
+          <td style="color:var(--text3);">12</td>
+          <td class="crono-phase">Chat en vivo (UI bidireccional)</td>
+          <td>Andrea R. / Diego V.</td>
+          <td>14 Abr</td>
+          <td>18 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
+          <td><span class="crono-status crono-pending">Pendiente</span></td>
+          <td class="crono-deps">Fase 10</td>
+        </tr>
+        <!-- FASE 13 -->
+        <tr>
+          <td style="color:var(--text3);">13</td>
+          <td class="crono-phase">Bot WhatsApp interno (vendedores)</td>
+          <td>Diego V.</td>
+          <td>18 Abr</td>
+          <td>25 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
+          <td><span class="crono-status crono-pending">Pendiente</span></td>
+          <td class="crono-deps">Fase 10, 12</td>
+        </tr>
+        <!-- FASE 14 -->
+        <tr>
+          <td style="color:var(--text3);">14</td>
+          <td class="crono-phase">ICP Scoring + Nurturing</td>
+          <td>Alejandro G. / Diego V.</td>
+          <td>21 Abr</td>
+          <td>25 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
+          <td><span class="crono-status crono-pending">Pendiente</span></td>
+          <td class="crono-deps">Fase 8 — Definir criterios ICP</td>
+        </tr>
+        <!-- FASE 15 -->
+        <tr>
+          <td style="color:var(--text3);">15</td>
+          <td class="crono-phase">Cotizaciones automaticas (PDF)</td>
+          <td>Andrea R. / Diego V.</td>
+          <td>25 Abr</td>
+          <td>30 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
+          <td><span class="crono-status crono-pending">Pendiente</span></td>
+          <td class="crono-deps">Fase 4 — Catalogo de productos</td>
+        </tr>
+        <!-- FASE 16 -->
+        <tr>
+          <td style="color:var(--text3);">16</td>
+          <td class="crono-phase">Reportes avanzados + Export</td>
+          <td>Alejandro G. / Diego V.</td>
+          <td>28 Abr</td>
+          <td>5 May</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
+          <td><span class="crono-status crono-pending">Pendiente</span></td>
+          <td class="crono-deps">Fase 6, 8</td>
+        </tr>
+        <!-- FASE 17 -->
+        <tr>
+          <td style="color:var(--text3);">17</td>
+          <td class="crono-phase">Google SSO + Seguridad</td>
+          <td>Diego V.</td>
+          <td>5 May</td>
+          <td>9 May</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
+          <td><span class="crono-status crono-pending">Pendiente</span></td>
+          <td class="crono-deps">Fase 3</td>
+        </tr>
+        <!-- FASE 18 -->
+        <tr>
+          <td style="color:var(--text3);">18</td>
+          <td class="crono-phase">Notificaciones push + Email</td>
+          <td>Andrea R.</td>
+          <td>9 May</td>
+          <td>14 May</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
+          <td><span class="crono-status crono-pending">Pendiente</span></td>
+          <td class="crono-deps">Fase 10, 7</td>
+        </tr>
+        <!-- FASE 19 -->
+        <tr>
+          <td style="color:var(--text3);">19</td>
+          <td class="crono-phase">QA + Testing + Datos reales</td>
+          <td>Todo el equipo</td>
+          <td>14 May</td>
+          <td>21 May</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
+          <td><span class="crono-status crono-pending">Pendiente</span></td>
+          <td class="crono-deps">Fases 10-18</td>
+        </tr>
+        <!-- FASE 20 -->
+        <tr>
+          <td style="color:var(--text3);">20</td>
+          <td class="crono-phase">Go-Live + Capacitacion vendedores</td>
+          <td>Todo el equipo</td>
+          <td>21 May</td>
+          <td>23 May</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
+          <td><span class="crono-status crono-pending">Pendiente</span></td>
+          <td class="crono-deps">Fase 19</td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text2);margin-bottom:8px;">
+      <span><span class="crono-status crono-done" style="font-size:11px;">Completado</span> 9 fases</span>
+      <span><span class="crono-status crono-active" style="font-size:11px;">En progreso</span> 2 fases</span>
+      <span><span class="crono-status crono-pending" style="font-size:11px;">Pendiente</span> 9 fases</span>
+      <span style="margin-left:auto;">Go-Live estimado: <strong>23 Mayo 2026</strong></span>
+    </div>
+
     <div class="section-h2">Avances</div>
     <div class="changelog" id="changelog"><div class="chat-empty-msg">Cargando avances...</div></div>
     <div style="margin-top:12px;display:flex;gap:8px;">
