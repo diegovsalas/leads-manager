@@ -48,7 +48,9 @@ def _generar_prompt_dev(titulo, descripcion):
         resp.raise_for_status()
         data = resp.json()
         return data["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception:
+    except Exception as e:
+        import sys
+        print(f"[Gemini Error] {e}", file=sys.stderr)
         return None
 
 
@@ -56,8 +58,7 @@ def _generar_prompt_dev(titulo, descripcion):
 def listar_items():
     """Lista items del proyecto, opcionalmente filtrados por tipo."""
     tipo = request.args.get("tipo")
-    query = ProyectoItem.query.filter(ProyectoItem.parent_id.is_(None))
-    query = query.order_by(ProyectoItem.fecha_creacion.desc())
+    query = ProyectoItem.query.order_by(ProyectoItem.fecha_creacion.desc())
     if tipo:
         query = query.filter_by(tipo=tipo)
     items = query.all()
