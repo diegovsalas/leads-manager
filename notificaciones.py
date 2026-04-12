@@ -54,6 +54,13 @@ EQUIPO = [
             ("F18", "Notificaciones push + Email", "22-25 Abr", "Alejandro G. / Andrea R."),
         ],
     },
+    {
+        "nombre": "Alan Aziz",
+        "correo": "alanaziz@grupoavantex.com",
+        "tareas": [
+            ("CAT", "Compartir catálogo de precios Pestex", "12-15 Abr", "Alan Aziz"),
+        ],
+    },
 ]
 
 CC_ALWAYS = "jessicasantin@grupoavantex.com"
@@ -72,6 +79,7 @@ TAREA_DETALLE = {
     "F12": "Chat dentro del CRM para conversar con leads en tiempo real vía WhatsApp.",
     "F18": "Alertas automáticas al vendedor: lead nuevo, lead responde, seguimiento vencido, meta alcanzada.",
     "F13": "Bot para que vendedores gestionen leads desde WhatsApp. Versión mínima viable.",
+    "CAT": "Compartir catálogo de productos y precios de Pestex para integrar al módulo de cotizaciones automáticas. Los descuentos por volumen solo los autorizan Alejandro Gil o Alan Aziz.",
 }
 
 
