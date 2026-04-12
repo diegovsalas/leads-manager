@@ -120,7 +120,7 @@ def create_app():
 
 
 def _start_scheduler(app):
-    """Inicia APScheduler para ejecutar check_cadencia() cada 15 min."""
+    """Inicia APScheduler para cadencia (15 min) y notificaciones (9am CST diario)."""
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -129,10 +129,21 @@ def _start_scheduler(app):
                 from cadencia import check_cadencia
                 check_cadencia()
 
+        def _run_notificaciones():
+            with app.app_context():
+                from notificaciones import enviar_notificaciones_diarias
+                enviar_notificaciones_diarias()
+
         scheduler = BackgroundScheduler(daemon=True)
         scheduler.add_job(_run_cadencia, "interval", minutes=15, id="cadencia_followup")
+        # Notificaciones diarias a las 9:00 AM CST (UTC-6 = 15:00 UTC)
+        scheduler.add_job(
+            _run_notificaciones, "cron",
+            hour=15, minute=0,  # 15:00 UTC = 9:00 AM CST
+            id="notificaciones_diarias",
+        )
         scheduler.start()
-        app.logger.info("Scheduler de cadencia iniciado (cada 15 min)")
+        app.logger.info("Scheduler iniciado: cadencia (15 min) + notificaciones (9am CST)")
     except Exception as e:
         app.logger.warning(f"No se pudo iniciar scheduler: {e}")
 
