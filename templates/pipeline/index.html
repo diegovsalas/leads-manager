@@ -478,7 +478,7 @@ tbody td{padding:8px 12px;font-size:14px;}
               <span class="tag" style="background:{{ icp_c[0] }};color:{{ icp_c[1] }};font-weight:600;">ICP {{ lead.icp_nivel }}</span>
               {% endif %}
               {% if lead.usuario_asignado %}<span class="tag tag-vendedor">{{ lead.usuario_asignado.nombre.split(' ')[0] }}</span>{% endif %}
-              {% if etapa in [EtapaPipeline.COTIZACION, EtapaPipeline.DEMO, EtapaPipeline.NEGOCIACION] %}<span class="tag" style="background:var(--blue-bg);color:var(--accent);cursor:pointer;margin-left:auto;" onclick="event.stopPropagation();abrirCotizacion('{{ lead.id }}')">&#128196; Cotizar</span>{% endif %}
+              {% if etapa.value in ['Cotización', 'Demo', 'Negociación'] %}<span class="tag" style="background:var(--blue-bg);color:var(--accent);cursor:pointer;margin-left:auto;" onclick="event.stopPropagation();abrirCotizacion('{{ lead.id }}')">&#128196; Cotizar</span>{% endif %}
             </div>
           </div>
           {% endfor %}
