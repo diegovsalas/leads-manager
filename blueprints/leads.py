@@ -2,11 +2,30 @@
 from flask import Blueprint, request, jsonify
 from extensions import db, socketio
 from models import Lead, EtapaPipeline, OrigenLead, Usuario
+from icp_scoring import calcular_icp, INDUSTRIAS, TAMANOS
 
 leads_bp = Blueprint("leads", __name__)
 
 # Origenes que activan auto-asignacion Round-Robin
 ORIGENES_AUTO_ASSIGN = {"Meta Ads"}
+
+
+def _apply_icp(lead):
+    """Calcula y aplica ICP score/nivel al lead. Auto-flag nurturing."""
+    score, nivel = calcular_icp(
+        tipo_industria=lead.tipo_industria,
+        tamano_empresa=lead.tamano_empresa,
+        num_sucursales=lead.num_sucursales,
+        tipo_cliente=lead.tipo_cliente,
+        respondio_ultimo_contacto=lead.respondio_ultimo_contacto,
+    )
+    lead.icp_score = score
+    lead.icp_nivel = nivel
+    # C y D entran a nurturing automatico
+    if nivel in ("C", "D"):
+        lead.en_nurturing = True
+    elif lead.en_nurturing and nivel in ("A", "B"):
+        lead.en_nurturing = False
 
 
 @leads_bp.route("/", methods=["GET"])
@@ -75,7 +94,12 @@ def crear_lead():
         precio_unitario=precio,
         valor_estimado=valor,
         usuario_asignado_id=data.get("usuario_asignado_id"),
+        tipo_industria=data.get("tipo_industria"),
+        tamano_empresa=data.get("tamano_empresa"),
+        num_sucursales=data.get("num_sucursales"),
+        tipo_cliente=data.get("tipo_cliente"),
     )
+    _apply_icp(lead)
     db.session.add(lead)
     db.session.commit()
 
@@ -113,7 +137,9 @@ def actualizar_lead(lead_id):
 
     data = request.get_json() or {}
     for campo in ["nombre", "telefono", "marca_interes", "cantidad_productos",
-                   "precio_unitario", "valor_estimado", "motivo_perdida", "usuario_asignado_id"]:
+                   "precio_unitario", "valor_estimado", "motivo_perdida",
+                   "usuario_asignado_id", "tipo_industria", "tamano_empresa",
+                   "num_sucursales", "tipo_cliente"]:
         if campo in data:
             setattr(lead, campo, data[campo])
 
@@ -123,8 +149,19 @@ def actualizar_lead(lead_id):
         except ValueError:
             return jsonify({"error": "Etapa invalida"}), 400
 
+    # Recalcular ICP si se modificaron campos relevantes
+    icp_fields = {"tipo_industria", "tamano_empresa", "num_sucursales", "tipo_cliente"}
+    if icp_fields & set(data.keys()):
+        _apply_icp(lead)
+
     db.session.commit()
     return jsonify(lead.to_dict())
+
+
+@leads_bp.route("/icp-opciones", methods=["GET"])
+def icp_opciones():
+    """Retorna las opciones de industria y tamaño para el formulario."""
+    return jsonify({"industrias": INDUSTRIAS, "tamanos": TAMANOS})
 
 
 @leads_bp.route("/<uuid:lead_id>/registrar_respuesta", methods=["POST"])

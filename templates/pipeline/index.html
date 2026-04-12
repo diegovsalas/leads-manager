@@ -101,6 +101,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .tag-valor{background:var(--green-bg);color:var(--green);}
 .tag-vendedor{background:var(--bg-tag);color:var(--text2);}
 .tag-origen{background:var(--bg-tag);color:var(--text2);}
+.tag-icp-A{background:var(--green-bg);color:var(--green);font-weight:600;}
+.tag-icp-B{background:var(--blue-bg);color:var(--blue);font-weight:600;}
+.tag-icp-C{background:var(--yellow-bg);color:var(--yellow);font-weight:600;}
+.tag-icp-D{background:var(--bg-tag);color:var(--text3);font-weight:600;}
 
 /* Chat panel */
 .chat-panel{width:340px;flex-shrink:0;border-left:1px solid var(--border-light);display:none;flex-direction:column;background:var(--bg-sidebar);}
@@ -404,6 +408,11 @@ tbody td{padding:8px 12px;font-size:14px;}
             </div>
             <div class="k-card-foot">
               <span class="tag tag-origen">{{ lead.origen.value if lead.origen else 'Manual' }}</span>
+              {% if lead.icp_nivel %}
+              {% set icp_colors = {'A': ('var(--green-bg)', 'var(--green)'), 'B': ('var(--blue-bg)', 'var(--blue)'), 'C': ('var(--yellow-bg)', 'var(--yellow)'), 'D': ('var(--bg-tag)', 'var(--text3)')} %}
+              {% set icp_c = icp_colors.get(lead.icp_nivel, ('var(--bg-tag)', 'var(--text3)')) %}
+              <span class="tag" style="background:{{ icp_c[0] }};color:{{ icp_c[1] }};font-weight:600;">ICP {{ lead.icp_nivel }}</span>
+              {% endif %}
               {% if lead.usuario_asignado %}<span class="tag tag-vendedor">{{ lead.usuario_asignado.nombre.split(' ')[0] }}</span>{% endif %}
             </div>
           </div>
@@ -806,6 +815,11 @@ tbody td{padding:8px 12px;font-size:14px;}
   <div class="form-group" id="f-vendedor-group"><label class="form-label">Asignar a vendedor</label><select class="form-select" id="f-vendedor"><option value="">Sin asignar</option></select></div>
   <div class="form-row"><div class="form-group"><label class="form-label">Cantidad</label><input class="form-input" id="f-cantidad" type="number" placeholder="10" oninput="calcValor()"/></div><div class="form-group"><label class="form-label">Precio unitario</label><input class="form-input" id="f-precio" type="number" placeholder="1790" oninput="calcValor()"/></div></div>
   <div class="form-group"><label class="form-label">Valor total</label><input class="form-input" id="f-valor" type="number" placeholder="Se calcula" style="font-weight:600;color:var(--green);"/></div>
+  <div style="border-top:1px solid var(--border-light);margin-top:8px;padding-top:12px;">
+    <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;">ICP — Perfil del cliente</div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Industria</label><select class="form-select" id="f-industria"><option value="">Sin definir</option></select></div><div class="form-group"><label class="form-label">Tamano empresa</label><select class="form-select" id="f-tamano"><option value="">Sin definir</option><option>Enterprise</option><option>Mediana</option><option>Pequeña</option><option>Micro</option></select></div></div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Sucursales</label><input class="form-input" id="f-sucursales" type="number" placeholder="1" min="0"/></div><div class="form-group"><label class="form-label">Tipo cliente</label><select class="form-select" id="f-tipo-cliente"><option value="">Sin definir</option><option>Nuevo</option><option>Recurrente</option><option>Eventual</option></select></div></div>
+  </div>
   <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn btn-filled" onclick="crearLead()">Crear lead</button></div>
 </div></div>
 
@@ -1149,6 +1163,10 @@ function crearLead(){
     cantidad_productos:parseInt(document.getElementById('f-cantidad').value)||null,
     precio_unitario:parseFloat(document.getElementById('f-precio').value)||null,
     valor_estimado:parseFloat(document.getElementById('f-valor').value)||null,
+    tipo_industria:document.getElementById('f-industria').value||null,
+    tamano_empresa:document.getElementById('f-tamano').value||null,
+    num_sucursales:parseInt(document.getElementById('f-sucursales').value)||null,
+    tipo_cliente:document.getElementById('f-tipo-cliente').value||null,
   };
   // Solo enviar vendedor si NO es Meta Ads (Meta Ads auto-asigna)
   if(origen!=='Meta Ads'&&vendedor_id){
@@ -1573,6 +1591,11 @@ function applyRoleVisibility(){
 
 // Init
 updateCounts();loadDashboard();loadProyecto();loadVendedores();toggleVendedorSelect();loadMetaVendedor();
+// Load ICP industrias dropdown
+fetch('/api/leads/icp-opciones').then(r=>r.json()).then(d=>{
+  const sel=document.getElementById('f-industria');
+  if(sel&&d.industrias){d.industrias.forEach(i=>{sel.innerHTML+=`<option value="${i}">${i}</option>`;});}
+}).catch(()=>{});
 applyRoleVisibility();
 </script>
 </body>
