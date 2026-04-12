@@ -183,6 +183,10 @@ tbody td{padding:8px 12px;font-size:14px;}
 .crono-bar-bg{height:6px;background:var(--border-light);border-radius:99px;flex:1;min-width:80px;}
 .crono-bar-fill{height:100%;border-radius:99px;transition:width .3s;}
 .crono-deps{font-size:11px;color:var(--text3);font-style:italic;}
+.crono-table tbody tr{cursor:pointer;}
+.crono-detail{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r2);padding:24px 28px;width:500px;max-width:90vw;box-shadow:var(--shadow-lg);z-index:600;}
+.crono-detail-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:599;}
+.crono-detail.open,.crono-detail-overlay.open{display:block;}
 .changelog{display:flex;flex-direction:column;}
 .cl-item{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border-light);}
 .cl-date{width:80px;flex-shrink:0;font-size:12px;color:var(--text3);padding-top:2px;}
@@ -964,6 +968,18 @@ tbody td{padding:8px 12px;font-size:14px;}
 </div>
 </div>
 
+<!-- Phase detail popup -->
+<div class="crono-detail-overlay" id="crono-overlay" onclick="closeCronoDetail()"></div>
+<div class="crono-detail" id="crono-detail">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <div style="font-size:18px;font-weight:700;" id="crono-detail-title"></div>
+    <button class="btn" onclick="closeCronoDetail()" style="font-size:18px;">&times;</button>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;" id="crono-detail-badges"></div>
+  <div style="font-size:14px;line-height:1.7;color:var(--text);" id="crono-detail-desc"></div>
+  <div style="margin-top:12px;font-size:12px;color:var(--text3);" id="crono-detail-meta"></div>
+</div>
+
 <div class="toast-container" id="toasts"></div>
 
 <script>
@@ -1555,6 +1571,56 @@ async function enviarCotCorreo(){
     if(r.ok){showToast('Enviada','Cotización enviada a '+d.correo);btn.textContent='✓ Enviada';}
     else{showToast('Error',d.error);btn.textContent='Enviar por correo';btn.disabled=false;}
   }catch{showToast('Error','No se pudo enviar');btn.textContent='Enviar por correo';btn.disabled=false;}
+}
+
+// ─── Cronograma detail ───
+const CRONO_INFO={
+  1:{t:'Fase 1 — Infraestructura y deploy',d:'Configuración inicial del proyecto: repositorio GitHub, deploy en Render con gunicorn+eventlet, conexión a Supabase PostgreSQL via pooler, CI/CD con auto-deploy desde rama main.',r:'Diego V.',s:'Completado',f:'1-2 Abr'},
+  2:{t:'Fase 2 — Modelos y BD (Supabase)',d:'Diseño e implementación de todos los modelos SQLAlchemy: leads, usuarios, mensajes, conversaciones, cotizaciones, gastos, metas, proyecto. UUID como primary keys, enums PostgreSQL con values_callable.',r:'Diego V.',s:'Completado',f:'1-3 Abr'},
+  3:{t:'Fase 3 — Auth + RBAC + Login',d:'Sistema de autenticación con sesiones y werkzeug password hashing. Control de acceso por rol: Super Admin (acceso total) y Vendedor (solo sus leads). Página de login estilo Notion.',r:'Diego V.',s:'Completado',f:'2-3 Abr'},
+  4:{t:'Fase 4 — Pipeline Kanban + Lead CRUD',d:'Vista Kanban con 10 etapas de pipeline (Nuevo Lead → Cerrado Ganado/Perdido). Drag & drop con Socket.IO en tiempo real. Modal de motivo obligatorio al cerrar como perdido. CRUD completo de leads.',r:'Diego V. / Andrea R.',s:'Completado',f:'3-4 Abr'},
+  5:{t:'Fase 5 — Round-Robin + Auto-asignación',d:'Asignación automática de leads por Round-Robin solo para origen Meta Ads. Filtra vendedores por especialidad de marca (array PostgreSQL). Asigna al vendedor con menor carga.',r:'Diego V. / Alejandro G.',s:'Completado',f:'4-5 Abr'},
+  6:{t:'Fase 6 — Dashboard + Embudo + Gastos',d:'Dashboard con KPIs: total leads, valor pipeline, ganados, revenue, gasto ads, CPL, CPA, ROI. Embudo de conversión visual (barras + SVG). Registro de gastos publicitarios por plataforma.',r:'Diego V. / Alejandro G.',s:'Completado',f:'4-6 Abr'},
+  7:{t:'Fase 7 — Cadencia automática',d:'Follow-up automático: 1er→2do (24h), 2do→3er (48h), 3er→4to (48h), 4to→Perdido (48h). Se detiene si el lead responde. APScheduler ejecuta cada 15 min.',r:'Diego V.',s:'Completado',f:'5-6 Abr'},
+  8:{t:'Fase 8 — Metas vendedor + Equipo comercial',d:'Metas mensuales en MXN por vendedor. Tabla comparativa del equipo con barras de progreso. Vendedor ve su meta vs actual. Super Admin define metas y gestiona equipo.',r:'Diego V. / Alejandro G.',s:'Completado',f:'6-7 Abr'},
+  9:{t:'Fase 9 — Página de proyecto + Gemini AI',d:'Página estilo Notion con cronograma, avances, ideas (con prompts generados por Gemini 2.0 Flash), subtareas con progreso, y notas del equipo.',r:'Diego V. / Andrea R.',s:'Completado',f:'6-7 Abr'},
+  14:{t:'Fase 14 — ICP Scoring + Nurturing',d:'Sistema de calificación automática de leads (score 0-100, niveles A/B/C/D). Criterios: industria (0-30 pts), tamaño empresa (0-25 pts), sucursales (0-25 pts), señales de compra (0-20 pts). Leads C/D entran a nurturing automático.\n\n<strong>Pendiente:</strong> Alejandro Gil debe validar los pesos por industria, criterios de tamaño, umbrales de score y reglas de nurturing. Diego V. aplica los cambios en icp_scoring.py.',r:'Alejandro G. / Diego V.',s:'Iniciar hoy',f:'12-15 Abr'},
+  15:{t:'Fase 15 — Cotizaciones automáticas (PDF)',d:'Generación de cotizaciones PDF desde el Kanban con formato corporativo (datos fiscales LIMPIFEX, RFC LIM150325PV7, banco BBVA). El vendedor confirma datos antes de generar. Se envía por correo al cliente via Resend.\n\n<strong>Pendiente:</strong> 1) Alejandro Gil: catálogo Aromatex. 2) Alan Aziz: catálogo Pestex. 3) Weldex: pendiente responsable. Descuentos por volumen solo autorizan Alejandro Gil o Alan Aziz.',r:'Diego V.',s:'Iniciar hoy',f:'12-15 Abr'},
+  17:{t:'Fase 17 — Google SSO + Seguridad',d:'Implementar login con Google OAuth 2.0 para que el equipo acceda con su cuenta @grupoavantex.com sin contraseña manual. Reforzar seguridad de sesiones y tokens CSRF.',r:'Diego V.',s:'Pendiente',f:'15-17 Abr'},
+  16:{t:'Fase 16 — Reportes avanzados + Export',d:'Dashboard con reportes de conversión por vendedor, por unidad de negocio y por periodo. Exportar datos a Excel/CSV. Comparativa de rendimiento del equipo comercial.',r:'Alejandro G. / Andrea R.',s:'Pendiente',f:'16-19 Abr'},
+  10:{t:'Fase 10 — WhatsApp Cloud API',d:'Integración completa con WhatsApp Business: enviar y recibir mensajes desde el CRM, detección automática de respuestas del lead (detiene cadencia). Requiere WHATSAPP_TOKEN y WHATSAPP_PHONE_ID.\n\n<strong style="color:#eb5757;">⚠️ BLOQUEADA:</strong> Sin acceso a Meta Business. Escalar lo antes posible.',r:'Diego V. / Andrea R.',s:'Bloqueada',f:'18-21 Abr'},
+  11:{t:'Fase 11 — Meta Ads Webhooks',d:'Recibir leads automáticamente desde formularios de Facebook/Instagram Ads. El lead se crea en el CRM y se asigna por Round-Robin al vendedor con especialidad en la marca.\n\n<strong style="color:#eb5757;">⚠️ BLOQUEADA:</strong> Requiere configurar webhook URL en Meta Business Suite.',r:'Diego V. / Andrea R.',s:'Bloqueada',f:'19-22 Abr'},
+  12:{t:'Fase 12 — Chat en vivo (UI bidireccional)',d:'Interfaz de chat dentro del CRM para que los vendedores conversen con leads en tiempo real vía WhatsApp. Historial completo de mensajes, indicadores de lectura y notificaciones.',r:'Andrea R. / Diego V.',s:'Pendiente',f:'21-24 Abr'},
+  18:{t:'Fase 18 — Notificaciones push + Email',d:'Alertas automáticas al vendedor cuando: llega un lead nuevo, un lead responde, se vence un seguimiento, o se alcanza una meta. Por email (Resend) y notificación en el CRM.',r:'Alejandro G. / Andrea R.',s:'Pendiente',f:'22-25 Abr'},
+  13:{t:'Fase 13 — Bot WhatsApp interno (MVP)',d:'Bot para que los vendedores gestionen leads directamente desde WhatsApp: consultar pipeline, registrar contacto, ver próximos seguimientos. Versión mínima viable con comandos básicos.',r:'Diego V.',s:'Pendiente',f:'24-27 Abr'},
+  19:{t:'Fase 19 — QA + Testing + Datos reales',d:'Pruebas de integración completas con datos reales: flujo Meta Ad → Lead → Round-Robin → WhatsApp → Cadencia. Validar cotizaciones, ICP scoring, dashboard, reportes. Corrección de bugs.',r:'Todo el equipo',s:'Pendiente',f:'28-29 Abr'},
+  20:{t:'Fase 20 — Go-Live + Capacitación',d:'Lanzamiento oficial del CRM. Capacitación presencial a vendedores (Azael, Janeth, Damariz) sobre: uso del pipeline, chat WhatsApp, cotizaciones, y seguimiento de leads.',r:'Todo el equipo',s:'DEADLINE',f:'30 Abr'},
+};
+const CRONO_STATUS_COLORS={Completado:'var(--green)',['Iniciar hoy']:'var(--blue)',Pendiente:'var(--text3)',Bloqueada:'var(--red)',DEADLINE:'var(--green)'};
+
+document.querySelector('.crono-table tbody')?.addEventListener('click',function(e){
+  const row=e.target.closest('tr');if(!row)return;
+  const faseCell=row.querySelector('td:first-child');if(!faseCell)return;
+  const num=parseInt(faseCell.textContent);if(!num||!CRONO_INFO[num])return;
+  showCronoDetail(num);
+});
+
+function showCronoDetail(num){
+  const info=CRONO_INFO[num];if(!info)return;
+  document.getElementById('crono-detail-title').textContent=info.t;
+  document.getElementById('crono-detail-desc').innerHTML=info.d.replace(/\n/g,'<br>');
+  const sc=CRONO_STATUS_COLORS[info.s]||'var(--text3)';
+  document.getElementById('crono-detail-badges').innerHTML=`
+    <span style="font-size:12px;padding:3px 10px;border-radius:99px;background:${sc};color:#fff;font-weight:500;">${info.s}</span>
+    <span style="font-size:12px;padding:3px 10px;border-radius:99px;background:var(--bg-tag);color:var(--text2);">${info.f}</span>
+  `;
+  document.getElementById('crono-detail-meta').textContent='Responsable: '+info.r;
+  document.getElementById('crono-detail').classList.add('open');
+  document.getElementById('crono-overlay').classList.add('open');
+}
+function closeCronoDetail(){
+  document.getElementById('crono-detail').classList.remove('open');
+  document.getElementById('crono-overlay').classList.remove('open');
 }
 
 // Toast
