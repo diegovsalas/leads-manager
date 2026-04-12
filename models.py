@@ -491,3 +491,38 @@ class ProyectoItem(db.Model):
             "fase_num": self.fase_num,
             "fecha_creacion": self.fecha_creacion.isoformat(),
         }
+
+
+# ──────────────────────────────────────────────
+# Tabla: api_keys (acceso externo controlado)
+# ──────────────────────────────────────────────
+class ApiKey(db.Model):
+    __tablename__ = "api_keys"
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    nombre = db.Column(db.String(100), nullable=False)
+    api_key = db.Column(db.String(64), unique=True, nullable=False)
+    permisos = db.Column(db.JSON, nullable=False, default=lambda: ["leads:read", "leads:write"])
+    activo = db.Column(db.Boolean, default=True, nullable=False)
+    creado_por = db.Column(UUID(as_uuid=True), db.ForeignKey("users_crm.id"), nullable=True)
+    ultimo_uso = db.Column(db.DateTime(timezone=True), nullable=True)
+    usos = db.Column(db.Integer, default=0, nullable=False)
+    fecha_creacion = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "nombre": self.nombre,
+            "api_key": self.api_key[:8] + "..." + self.api_key[-4:],
+            "permisos": self.permisos,
+            "activo": self.activo,
+            "ultimo_uso": self.ultimo_uso.isoformat() if self.ultimo_uso else None,
+            "usos": self.usos,
+            "fecha_creacion": self.fecha_creacion.isoformat(),
+        }
+
+    def to_dict_full(self):
+        """Solo se usa al crear — muestra la key completa una vez."""
+        d = self.to_dict()
+        d["api_key"] = self.api_key
+        return d

@@ -48,6 +48,8 @@ def create_app():
     from blueprints.vendedores import vendedores_bp
     from blueprints.metas         import metas_bp
     from blueprints.cotizaciones  import cotizaciones_bp
+    from blueprints.apikeys       import apikeys_bp
+    from blueprints.api_v1        import api_v1_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp,      url_prefix="/webhook")
@@ -58,11 +60,13 @@ def create_app():
     app.register_blueprint(vendedores_bp,    url_prefix="/api/vendedores")
     app.register_blueprint(metas_bp,         url_prefix="/api/metas")
     app.register_blueprint(cotizaciones_bp,  url_prefix="/api/cotizaciones")
+    app.register_blueprint(apikeys_bp,       url_prefix="/api/keys")
+    app.register_blueprint(api_v1_bp,        url_prefix="/api/v1")
 
     # ── Proteger todas las rutas excepto login y webhooks ──
     @app.before_request
     def require_login():
-        allowed = ("/login", "/webhook/", "/static/")
+        allowed = ("/login", "/webhook/", "/static/", "/api/v1/")
         if any(request.path.startswith(p) for p in allowed):
             return
         if not session.get("user_id"):
