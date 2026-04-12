@@ -120,6 +120,14 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .lp-field-value{flex:1;color:var(--text);font-weight:500;}
 .lp-actions{padding:12px 20px;border-top:1px solid var(--border-light);display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;}
 
+/* Mi dia lead rows */
+.mh-lead{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border-light);border-radius:var(--r2);margin-bottom:6px;cursor:pointer;transition:all 80ms;}
+.mh-lead:hover{border-color:var(--border);box-shadow:var(--shadow);}
+.mh-lead-name{font-size:14px;font-weight:500;min-width:140px;}
+.mh-lead-phone{font-size:12px;color:var(--text3);font-family:var(--mono);min-width:100px;}
+.mh-lead-info{flex:1;display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.mh-empty{font-size:13px;color:var(--text3);padding:12px;text-align:center;border:1px dashed var(--border-light);border-radius:var(--r2);}
+
 /* Chat panel */
 .chat-panel{width:340px;flex-shrink:0;border-left:1px solid var(--border-light);display:none;flex-direction:column;background:var(--bg-sidebar);}
 .chat-panel.open{display:flex;}
@@ -263,6 +271,7 @@ tbody td{padding:8px 12px;font-size:14px;}
 <aside class="sidebar">
   <div class="sidebar-logo"><img src="/static/img/logo.png" alt="Leads Manager" style="width:28px;height:28px;border-radius:4px;object-fit:cover;"/><span class="sidebar-logo-text">Leads Manager</span></div>
   <div class="slink active" onclick="showView('dashboard',this)"><span class="slink-emoji">&#128202;</span> Dashboard</div>
+  <div class="slink" onclick="showView('mihoy',this)"><span class="slink-emoji">&#127919;</span> Mi dia <span class="slink-badge" style="color:var(--red);font-weight:600;" id="mihoy-badge"></span></div>
   <div class="slink" onclick="showView('pipeline',this)"><span class="slink-emoji">&#128203;</span> Pipeline</div>
   <div class="slink" onclick="showView('leads',this)"><span class="slink-emoji">&#128101;</span> Todos los leads</div>
   <div class="slink admin-only" onclick="showView('vendedores',this)"><span class="slink-emoji">&#128100;</span> Vendedores</div>
@@ -375,6 +384,43 @@ tbody td{padding:8px 12px;font-size:14px;}
     <div class="dash-card admin-only">
       <div class="dash-card-title">Gastos de publicidad</div>
       <div id="gastos-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MI DIA ===== -->
+<div class="view" id="view-mihoy" style="overflow-y:auto;">
+  <div class="page-header">
+    <div class="page-emoji">&#127919;</div>
+    <div class="page-title">Mi dia</div>
+    <div class="page-desc">Leads que necesitan tu atencion hoy</div>
+  </div>
+  <div style="padding:16px 48px 0;display:flex;gap:12px;" id="mihoy-stats">
+    <div class="metric-card" style="border-left:3px solid var(--red);"><div class="metric-label">Sin contactar</div><div class="metric-value" style="color:var(--red);" id="mh-sin">0</div></div>
+    <div class="metric-card" style="border-left:3px solid var(--orange);"><div class="metric-label">Por vencer cadencia</div><div class="metric-value" style="color:var(--orange);" id="mh-vencer">0</div></div>
+    <div class="metric-card" style="border-left:3px solid var(--green);"><div class="metric-label">Respondieron</div><div class="metric-value" style="color:var(--green);" id="mh-resp">0</div></div>
+    <div class="metric-card" style="border-left:3px solid var(--blue);"><div class="metric-label">En negociacion</div><div class="metric-value" style="color:var(--blue);" id="mh-neg">0</div></div>
+  </div>
+
+  <div style="padding:16px 48px;">
+    <div id="mh-sin-section" style="margin-bottom:24px;">
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--red);display:flex;align-items:center;gap:8px;">&#128680; Sin contactar <span style="font-size:12px;font-weight:400;color:var(--text3);">— Leads nuevos esperando primer contacto</span></div>
+      <div id="mh-sin-list"></div>
+    </div>
+
+    <div id="mh-vencer-section" style="margin-bottom:24px;">
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--orange);display:flex;align-items:center;gap:8px;">&#9200; Por vencer cadencia <span style="font-size:12px;font-weight:400;color:var(--text3);">— No respondieron, proximos a avanzar automaticamente</span></div>
+      <div id="mh-vencer-list"></div>
+    </div>
+
+    <div id="mh-resp-section" style="margin-bottom:24px;">
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--green);display:flex;align-items:center;gap:8px;">&#9989; Respondieron <span style="font-size:12px;font-weight:400;color:var(--text3);">— Necesitan seguimiento manual</span></div>
+      <div id="mh-resp-list"></div>
+    </div>
+
+    <div id="mh-neg-section" style="margin-bottom:24px;">
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--blue);display:flex;align-items:center;gap:8px;">&#128176; En negociacion <span style="font-size:12px;font-weight:400;color:var(--text3);">— Cotizacion, Demo o Negociacion activa</span></div>
+      <div id="mh-neg-list"></div>
     </div>
   </div>
 </div>
@@ -1538,6 +1584,59 @@ async function addNote(){
   }catch{showToast('Error','No se pudo guardar');}
 }
 
+// ─── Mi dia ───
+async function loadMiHoy(){
+  try{
+    const r=await fetch('/api/leads/mis-leads-hoy');
+    const d=await r.json();
+    const s=d.resumen;
+    document.getElementById('mh-sin').textContent=s.sin_contactar;
+    document.getElementById('mh-vencer').textContent=s.por_vencer;
+    document.getElementById('mh-resp').textContent=s.respondieron;
+    document.getElementById('mh-neg').textContent=s.en_negociacion;
+
+    // Badge
+    const badge=document.getElementById('mihoy-badge');
+    if(s.total_accion>0){badge.textContent=s.total_accion;}else{badge.textContent='';}
+
+    // Render sections
+    _renderMhList('mh-sin-list',d.sin_contactar,'Sin leads nuevos por contactar');
+    _renderMhList('mh-vencer-list',d.por_vencer,'Todos los leads estan al dia');
+    _renderMhList('mh-resp-list',d.respondieron,'Ningun lead ha respondido aun');
+    _renderMhList('mh-neg-list',d.en_negociacion,'Sin leads en negociacion activa');
+  }catch(e){console.error('Mi hoy error:',e);}
+}
+
+function _renderMhList(containerId,leads,emptyMsg){
+  const c=document.getElementById(containerId);
+  if(!leads.length){c.innerHTML=`<div class="mh-empty">${emptyMsg}</div>`;return;}
+  c.innerHTML=leads.map(l=>{
+    const etapaColor=ETAPA_COLORS[l.etapa_pipeline]||'#787774';
+    const valor=l.valor_estimado?fmt$(l.valor_estimado):'';
+    const icp=l.icp_nivel?`<span class="tag tag-icp-${l.icp_nivel}">ICP ${l.icp_nivel}</span>`:'';
+    const marca=l.marca_interes?`<span class="tag tag-marca">${l.marca_interes}</span>`:'';
+    const vendedor=l.usuario_asignado?`<span class="tag tag-vendedor">${l.usuario_asignado.nombre.split(' ')[0]}</span>`:'';
+    const tiempo=l.fecha_ultimo_contacto?_tiempoRelativo(l.fecha_ultimo_contacto):'';
+    return `<div class="mh-lead" onclick="abrirLeadPanel('${l.id}')">
+      <div class="mh-lead-name">${l.nombre||'Sin nombre'}</div>
+      <div class="mh-lead-phone">${l.telefono||''}</div>
+      <div class="mh-lead-info">
+        <span class="tag" style="background:${etapaColor}22;color:${etapaColor};">${l.etapa_pipeline}</span>
+        ${marca}${icp}${vendedor}
+        ${valor?`<span style="font-weight:600;color:var(--green);font-size:13px;">${valor}</span>`:''}
+      </div>
+      ${tiempo?`<span style="font-size:11px;color:var(--text3);white-space:nowrap;">${tiempo}</span>`:''}
+    </div>`;
+  }).join('');
+}
+
+function _tiempoRelativo(iso){
+  const d=new Date(iso),now=new Date(),diff=Math.floor((now-d)/1000);
+  if(diff<3600)return Math.floor(diff/60)+'min';
+  if(diff<86400)return Math.floor(diff/3600)+'h';
+  return Math.floor(diff/86400)+'d';
+}
+
 // ─── Lead detail panel ───
 const ICP_BADGE_STYLES={A:{bg:'var(--green-bg)',c:'var(--green)'},B:{bg:'var(--blue-bg)',c:'var(--blue)'},C:{bg:'var(--yellow-bg)',c:'var(--yellow)'},D:{bg:'var(--bg-tag)',c:'var(--text3)'}};
 
@@ -1975,7 +2074,7 @@ function applyRoleVisibility(){
 }
 
 // Init
-updateCounts();loadDashboard();loadProyecto();loadVendedores();toggleVendedorSelect();loadMetaVendedor();
+updateCounts();loadDashboard();loadMiHoy();loadProyecto();loadVendedores();toggleVendedorSelect();loadMetaVendedor();
 // Load ICP industrias dropdown
 fetch('/api/leads/icp-opciones').then(r=>r.json()).then(d=>{
   const sel=document.getElementById('f-industria');

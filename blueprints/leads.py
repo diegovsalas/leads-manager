@@ -3,6 +3,7 @@ from flask import Blueprint, request, jsonify
 from extensions import db, socketio
 from models import Lead, EtapaPipeline, OrigenLead, Usuario
 from icp_scoring import calcular_icp, INDUSTRIAS, TAMANOS
+from actividad import log_actividad
 
 leads_bp = Blueprint("leads", __name__)
 
@@ -103,6 +104,7 @@ def crear_lead():
     db.session.add(lead)
     db.session.commit()
 
+    log_actividad("crear", "lead", lead.id, f"Lead creado: {lead.nombre} ({lead.telefono})")
     socketio.emit("nuevo_lead", lead.to_dict())
     return jsonify(lead.to_dict()), 201
 
@@ -119,9 +121,11 @@ def mover_lead(lead_id):
     except (ValueError, KeyError):
         return jsonify({"error": "Etapa invalida"}), 400
 
+    etapa_anterior = lead.etapa_pipeline.value
     lead.etapa_pipeline = nueva_etapa
     db.session.commit()
 
+    log_actividad("mover", "lead", lead.id, f"{lead.nombre}: {etapa_anterior} → {nueva_etapa.value}")
     socketio.emit("lead_movido", {
         "lead_id": str(lead.id),
         "etapa_pipeline": nueva_etapa.value,
@@ -156,6 +160,68 @@ def actualizar_lead(lead_id):
 
     db.session.commit()
     return jsonify(lead.to_dict())
+
+
+@leads_bp.route("/mis-leads-hoy", methods=["GET"])
+def mis_leads_hoy():
+    """
+    Retorna los leads del vendedor logueado que necesitan acción hoy:
+    - Sin contactar (etapa Nuevo Lead)
+    - Próximos a vencer cadencia (no respondieron, en etapas de contacto)
+    - Respondieron (necesitan seguimiento manual)
+    - En negociación activa (Cotización, Demo, Negociación)
+    """
+    from datetime import datetime, timezone, timedelta
+    from blueprints.auth import get_vendedor_filter
+
+    vendedor_id = get_vendedor_filter()
+    base_q = Lead.query
+    if vendedor_id:
+        base_q = base_q.filter_by(usuario_asignado_id=vendedor_id)
+
+    ahora = datetime.now(timezone.utc)
+    hace_24h = ahora - timedelta(hours=24)
+    hace_48h = ahora - timedelta(hours=48)
+
+    # 1. Sin contactar (Nuevo Lead)
+    sin_contactar = base_q.filter_by(
+        etapa_pipeline=EtapaPipeline.NUEVO_LEAD,
+    ).order_by(Lead.fecha_creacion.desc()).all()
+
+    # 2. Próximos a vencer cadencia (en contacto, no respondieron, último contacto > 20h)
+    etapas_contacto = [EtapaPipeline.CONTACTO_1, EtapaPipeline.CONTACTO_2,
+                       EtapaPipeline.CONTACTO_3, EtapaPipeline.CONTACTO_4]
+    por_vencer = base_q.filter(
+        Lead.etapa_pipeline.in_(etapas_contacto),
+        Lead.respondio_ultimo_contacto == False,
+        Lead.fecha_ultimo_contacto <= hace_24h,
+    ).order_by(Lead.fecha_ultimo_contacto.asc()).all()
+
+    # 3. Respondieron (necesitan seguimiento)
+    respondieron = base_q.filter(
+        Lead.respondio_ultimo_contacto == True,
+        Lead.etapa_pipeline.notin_([EtapaPipeline.CIERRE_GANADO, EtapaPipeline.CIERRE_PERDIDO]),
+    ).order_by(Lead.fecha_actualizacion.desc()).all()
+
+    # 4. En negociación activa
+    etapas_negociacion = [EtapaPipeline.COTIZACION, EtapaPipeline.DEMO, EtapaPipeline.NEGOCIACION]
+    en_negociacion = base_q.filter(
+        Lead.etapa_pipeline.in_(etapas_negociacion),
+    ).order_by(Lead.fecha_actualizacion.desc()).all()
+
+    return jsonify({
+        "sin_contactar": [l.to_dict() for l in sin_contactar],
+        "por_vencer": [l.to_dict() for l in por_vencer],
+        "respondieron": [l.to_dict() for l in respondieron],
+        "en_negociacion": [l.to_dict() for l in en_negociacion],
+        "resumen": {
+            "sin_contactar": len(sin_contactar),
+            "por_vencer": len(por_vencer),
+            "respondieron": len(respondieron),
+            "en_negociacion": len(en_negociacion),
+            "total_accion": len(sin_contactar) + len(por_vencer) + len(respondieron),
+        },
+    })
 
 
 @leads_bp.route("/icp-opciones", methods=["GET"])

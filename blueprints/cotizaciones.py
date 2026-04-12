@@ -12,6 +12,7 @@ from flask import Blueprint, request, jsonify, session, send_file
 from extensions import db
 from models import Cotizacion, Lead
 from cotizador import generar_pdf, folio_siguiente, IVA_RATE
+from actividad import log_actividad
 
 cotizaciones_bp = Blueprint("cotizaciones", __name__)
 
@@ -119,6 +120,7 @@ def generar():
     db.session.add(cotizacion)
     db.session.commit()
 
+    log_actividad("cotizar", "cotizacion", cotizacion.id, f"{folio} — {data.get('nombre_cliente','')} — ${total:,.2f}")
     return jsonify(cotizacion.to_dict()), 201
 
 

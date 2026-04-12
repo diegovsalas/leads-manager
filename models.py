@@ -526,3 +526,30 @@ class ApiKey(db.Model):
         d = self.to_dict()
         d["api_key"] = self.api_key
         return d
+
+
+# ──────────────────────────────────────────────
+# Tabla: actividad_log (auditoría)
+# ──────────────────────────────────────────────
+class ActividadLog(db.Model):
+    __tablename__ = "actividad_log"
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    usuario_nombre = db.Column(db.String(150), nullable=True)
+    usuario_id = db.Column(UUID(as_uuid=True), nullable=True)
+    accion = db.Column(db.String(50), nullable=False)
+    entidad = db.Column(db.String(50), nullable=False)
+    entidad_id = db.Column(UUID(as_uuid=True), nullable=True)
+    detalle = db.Column(db.Text, nullable=True)
+    fecha = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "usuario_nombre": self.usuario_nombre,
+            "accion": self.accion,
+            "entidad": self.entidad,
+            "entidad_id": str(self.entidad_id) if self.entidad_id else None,
+            "detalle": self.detalle,
+            "fecha": self.fecha.isoformat(),
+        }

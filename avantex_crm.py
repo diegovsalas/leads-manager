@@ -140,6 +140,11 @@ def _start_scheduler(app):
                 from notificaciones import enviar_notificaciones_diarias
                 enviar_notificaciones_diarias()
 
+        def _run_backup():
+            with app.app_context():
+                from backups import ejecutar_backup
+                ejecutar_backup()
+
         scheduler = BackgroundScheduler(daemon=True)
         scheduler.add_job(_run_cadencia, "interval", minutes=15, id="cadencia_followup")
         # Notificaciones diarias a las 9:00 AM CST (UTC-6 = 15:00 UTC)
@@ -148,8 +153,14 @@ def _start_scheduler(app):
             hour=15, minute=0,  # 15:00 UTC = 9:00 AM CST
             id="notificaciones_diarias",
         )
+        # Backup diario a las 3:00 AM CST (09:00 UTC)
+        scheduler.add_job(
+            _run_backup, "cron",
+            hour=9, minute=0,  # 09:00 UTC = 3:00 AM CST
+            id="backup_diario",
+        )
         scheduler.start()
-        app.logger.info("Scheduler iniciado: cadencia (15 min) + notificaciones (9am CST)")
+        app.logger.info("Scheduler iniciado: cadencia (15 min) + notificaciones (9am) + backup (3am)")
     except Exception as e:
         app.logger.warning(f"No se pudo iniciar scheduler: {e}")
 

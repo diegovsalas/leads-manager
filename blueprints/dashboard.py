@@ -188,3 +188,13 @@ def eliminar_gasto(gasto_id):
     db.session.delete(gasto)
     db.session.commit()
     return jsonify({"ok": True})
+
+
+@dashboard_bp.route("/actividad", methods=["GET"])
+@require_role(["super_admin"])
+def actividad_reciente():
+    """Últimas 50 actividades del sistema."""
+    from models import ActividadLog
+    limit = min(int(request.args.get("limit", 50)), 200)
+    logs = ActividadLog.query.order_by(ActividadLog.fecha.desc()).limit(limit).all()
+    return jsonify([l.to_dict() for l in logs])

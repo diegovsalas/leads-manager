@@ -64,6 +64,9 @@ def login():
     session["user_rol"] = user.rol.value
     session["usuario_id"] = str(user.usuario_id) if user.usuario_id else None
 
+    from actividad import log_actividad
+    log_actividad("login", "usuario", user.id, f"{user.nombre} ({user.correo})")
+
     return redirect(url_for("index"))
 
 
