@@ -289,14 +289,50 @@ class Cotizacion(db.Model):
     fecha = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
     enviada_whatsapp = db.Column(db.Boolean, default=False, nullable=False)
 
+    # Campos extendidos para PDF
+    folio = db.Column(db.String(20), unique=True, nullable=True)
+    nombre_cliente = db.Column(db.String(200), nullable=True)
+    empresa_cliente = db.Column(db.String(200), nullable=True)
+    direccion_cliente = db.Column(db.Text, nullable=True)
+    telefono_cliente = db.Column(db.String(30), nullable=True)
+    correo_cliente = db.Column(db.String(200), nullable=True)
+    marca = db.Column(db.String(80), nullable=True)
+    items = db.Column(db.JSON, nullable=True, default=list)
+    subtotal = db.Column(db.Numeric(14, 2), nullable=True)
+    descuento_pct = db.Column(db.Numeric(5, 2), default=0)
+    descuento_monto = db.Column(db.Numeric(14, 2), default=0)
+    iva = db.Column(db.Numeric(14, 2), nullable=True)
+    total = db.Column(db.Numeric(14, 2), nullable=True)
+    condiciones_pago = db.Column(db.String(100), default="PUE")
+    vigencia_dias = db.Column(db.Integer, default=15)
+    vendedor_nombre = db.Column(db.String(150), nullable=True)
+    enviada_correo = db.Column(db.Boolean, default=False, nullable=False)
+    pdf_url = db.Column(db.Text, nullable=True)
+
     def to_dict(self):
         return {
             "id": str(self.id),
             "lead_id": str(self.lead_id),
-            "contenido": self.contenido,
+            "folio": self.folio,
+            "nombre_cliente": self.nombre_cliente,
+            "empresa_cliente": self.empresa_cliente,
+            "direccion_cliente": self.direccion_cliente,
+            "telefono_cliente": self.telefono_cliente,
+            "correo_cliente": self.correo_cliente,
+            "marca": self.marca,
+            "items": self.items or [],
+            "subtotal": float(self.subtotal) if self.subtotal else 0,
+            "descuento_pct": float(self.descuento_pct) if self.descuento_pct else 0,
+            "descuento_monto": float(self.descuento_monto) if self.descuento_monto else 0,
+            "iva": float(self.iva) if self.iva else 0,
+            "total": float(self.total) if self.total else 0,
+            "condiciones_pago": self.condiciones_pago,
+            "vigencia_dias": self.vigencia_dias,
+            "vendedor_nombre": self.vendedor_nombre,
             "generado_por": self.generado_por,
             "fecha": self.fecha.isoformat(),
             "enviada_whatsapp": self.enviada_whatsapp,
+            "enviada_correo": self.enviada_correo,
         }
 
 

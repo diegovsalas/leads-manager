@@ -414,6 +414,7 @@ tbody td{padding:8px 12px;font-size:14px;}
               <span class="tag" style="background:{{ icp_c[0] }};color:{{ icp_c[1] }};font-weight:600;">ICP {{ lead.icp_nivel }}</span>
               {% endif %}
               {% if lead.usuario_asignado %}<span class="tag tag-vendedor">{{ lead.usuario_asignado.nombre.split(' ')[0] }}</span>{% endif %}
+              <span class="tag" style="background:var(--blue-bg);color:var(--accent);cursor:pointer;margin-left:auto;" onclick="event.stopPropagation();abrirCotizacion('{{ lead.id }}')">&#128196; Cotizar</span>
             </div>
           </div>
           {% endfor %}
@@ -866,6 +867,46 @@ tbody td{padding:8px 12px;font-size:14px;}
   <div class="modal-actions">
     <button class="btn" onclick="closePerdidoModal()">Cancelar</button>
     <button class="btn" style="background:#dc2626;color:#fff;font-weight:500;padding:6px 12px;" onclick="confirmarPerdido()">Confirmar perdida</button>
+  </div>
+</div></div>
+
+<!-- Modal: Cotización -->
+<div class="modal-overlay" id="modal-cotizacion" onclick="if(event.target===this)closeCotModal()"><div class="modal" style="width:580px;max-height:90vh;overflow-y:auto;">
+  <div class="modal-title">Generar cotización</div>
+  <input type="hidden" id="cot-lead-id"/>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:12px;padding:8px;background:var(--bg-sidebar);border-radius:var(--r2);">Confirma los datos antes de generar el PDF. El vendedor puede editar cualquier campo.</div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Cliente</label><input class="form-input" id="cot-nombre" type="text"/></div><div class="form-group"><label class="form-label">Empresa</label><input class="form-input" id="cot-empresa" type="text"/></div></div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Teléfono</label><input class="form-input" id="cot-tel" type="text"/></div><div class="form-group"><label class="form-label">Correo (para envío)</label><input class="form-input" id="cot-correo" type="email" placeholder="cliente@empresa.com"/></div></div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Unidad de negocio</label><select class="form-select" id="cot-marca"><option>Aromatex</option><option>Aromatex Home</option><option>Pestex</option><option>Weldex</option><option>Nexo</option></select></div><div class="form-group"><label class="form-label">Condiciones de pago</label><select class="form-select" id="cot-pago"><option value="PUE">PUE — Pago en una exhibición</option><option value="PPD 30 días">PPD — 30 días (clientes clave)</option></select></div></div>
+  <div style="border-top:1px solid var(--border-light);margin-top:8px;padding-top:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <span style="font-size:13px;font-weight:600;">Productos / Servicios</span>
+      <button class="btn btn-blue" onclick="addCotItem()" style="font-size:12px;">+ Agregar línea</button>
+    </div>
+    <div id="cot-items"></div>
+  </div>
+  <div style="display:flex;justify-content:flex-end;gap:16px;margin-top:12px;font-size:14px;">
+    <span>Subtotal: <strong id="cot-subtotal">$0</strong></span>
+    <span>IVA 16%: <strong id="cot-iva">$0</strong></span>
+    <span style="font-size:16px;color:var(--green);">Total: <strong id="cot-total">$0</strong></span>
+  </div>
+  <div class="modal-actions">
+    <button class="btn" onclick="closeCotModal()">Cancelar</button>
+    <button class="btn btn-filled" onclick="generarCotizacion()">Generar PDF</button>
+  </div>
+</div></div>
+
+<!-- Modal: Cotización generada (acciones) -->
+<div class="modal-overlay" id="modal-cot-result" onclick="if(event.target===this)this.classList.remove('open')"><div class="modal" style="text-align:center;width:420px;">
+  <div style="font-size:48px;margin-bottom:8px;">📄</div>
+  <div class="modal-title" style="text-align:center;">Cotización generada</div>
+  <div style="font-size:16px;font-weight:600;color:var(--green);margin-bottom:4px;" id="cot-result-folio"></div>
+  <div style="font-size:14px;color:var(--text2);margin-bottom:20px;" id="cot-result-total"></div>
+  <input type="hidden" id="cot-result-id"/>
+  <div style="display:flex;flex-direction:column;gap:8px;">
+    <button class="btn btn-filled" style="width:100%;justify-content:center;padding:10px;" onclick="descargarPDF()">Descargar PDF</button>
+    <button class="btn btn-blue" style="width:100%;justify-content:center;padding:10px;" onclick="enviarCotCorreo()">Enviar por correo al cliente</button>
+    <button class="btn" style="width:100%;justify-content:center;padding:10px;" onclick="document.getElementById('modal-cot-result').classList.remove('open')">Cerrar</button>
   </div>
 </div></div>
 
@@ -1403,6 +1444,117 @@ async function addNote(){
     await fetch('/api/proyecto/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:'nota',titulo:txt,autor:USER_NOMBRE})});
     loadProyecto();showToast('Nota agregada',txt);
   }catch{showToast('Error','No se pudo guardar');}
+}
+
+// ─── Cotizaciones ───
+let _cotItemCount=0;
+async function abrirCotizacion(leadId){
+  _cotItemCount=0;
+  document.getElementById('cot-lead-id').value=leadId;
+  document.getElementById('cot-items').innerHTML='';
+  try{
+    const r=await fetch('/api/cotizaciones/preview/'+leadId);
+    const d=await r.json();
+    document.getElementById('cot-nombre').value=d.nombre_cliente||'';
+    document.getElementById('cot-empresa').value=d.empresa_cliente||'';
+    document.getElementById('cot-tel').value=d.telefono_cliente||'';
+    document.getElementById('cot-correo').value=d.correo_cliente||'';
+    document.getElementById('cot-marca').value=d.marca||'Aromatex';
+    document.getElementById('cot-pago').value=d.condiciones_pago||'PUE';
+    if(d.items&&d.items.length){d.items.forEach(i=>addCotItem(i));}else{addCotItem();}
+    calcCotTotals();
+  }catch{addCotItem();}
+  document.getElementById('modal-cotizacion').classList.add('open');
+}
+function closeCotModal(){document.getElementById('modal-cotizacion').classList.remove('open');}
+
+function addCotItem(data){
+  const idx=_cotItemCount++;
+  const s=data||{servicio:'',descripcion:'',cantidad:1,frecuencia:'Cada 1 mes',precio_unitario:0,descuento_pct:0};
+  const div=document.getElementById('cot-items');
+  div.innerHTML+=`<div class="form-row" style="margin-bottom:6px;align-items:end;" id="cot-item-${idx}">
+    <div class="form-group" style="flex:1.2;"><input class="form-input" placeholder="Servicio" value="${s.servicio}" data-field="servicio" data-idx="${idx}" style="font-size:12px;"/></div>
+    <div class="form-group" style="flex:1.5;"><input class="form-input" placeholder="Descripción" value="${s.descripcion}" data-field="descripcion" data-idx="${idx}" style="font-size:12px;"/></div>
+    <div class="form-group" style="flex:0.4;"><input class="form-input" type="number" placeholder="Cant" value="${s.cantidad}" data-field="cantidad" data-idx="${idx}" style="font-size:12px;text-align:center;" oninput="calcCotTotals()"/></div>
+    <div class="form-group" style="flex:0.8;"><input class="form-input" placeholder="Frecuencia" value="${s.frecuencia}" data-field="frecuencia" data-idx="${idx}" style="font-size:12px;"/></div>
+    <div class="form-group" style="flex:0.6;"><input class="form-input" type="number" placeholder="Precio" value="${s.precio_unitario}" data-field="precio_unitario" data-idx="${idx}" style="font-size:12px;text-align:right;" oninput="calcCotTotals()"/></div>
+    <div class="form-group" style="flex:0.4;"><input class="form-input" type="number" placeholder="Desc%" value="${s.descuento_pct}" data-field="descuento_pct" data-idx="${idx}" style="font-size:12px;text-align:center;" min="0" max="100" oninput="calcCotTotals()"/></div>
+    <button class="btn" style="color:var(--red);padding:4px 6px;margin-bottom:14px;" onclick="this.parentElement.remove();calcCotTotals()">&times;</button>
+  </div>`;
+}
+
+function getCotItems(){
+  const items=[];
+  document.querySelectorAll('[id^=cot-item-]').forEach(row=>{
+    const item={};
+    row.querySelectorAll('[data-field]').forEach(inp=>{
+      const f=inp.dataset.field;
+      item[f]=['cantidad','precio_unitario','descuento_pct'].includes(f)?parseFloat(inp.value)||0:inp.value;
+    });
+    if(item.servicio||item.precio_unitario)items.push(item);
+  });
+  return items;
+}
+
+function calcCotTotals(){
+  const items=getCotItems();
+  let sub=0,desc=0;
+  items.forEach(i=>{
+    const p=i.precio_unitario*i.cantidad;
+    const d=p*(i.descuento_pct/100);
+    sub+=p;desc+=d;
+  });
+  const neto=sub-desc;
+  const iva=neto*0.16;
+  const total=neto+iva;
+  document.getElementById('cot-subtotal').textContent=fmt$(sub);
+  document.getElementById('cot-iva').textContent=fmt$(iva);
+  document.getElementById('cot-total').textContent=fmt$(total);
+}
+
+async function generarCotizacion(){
+  const items=getCotItems();
+  if(!items.length){showToast('Error','Agrega al menos un producto');return;}
+  const body={
+    lead_id:document.getElementById('cot-lead-id').value,
+    nombre_cliente:document.getElementById('cot-nombre').value.trim(),
+    empresa_cliente:document.getElementById('cot-empresa').value.trim(),
+    telefono_cliente:document.getElementById('cot-tel').value.trim(),
+    correo_cliente:document.getElementById('cot-correo').value.trim(),
+    marca:document.getElementById('cot-marca').value,
+    condiciones_pago:document.getElementById('cot-pago').value,
+    vigencia_dias:15,
+    vendedor_nombre:USER_NOMBRE,
+    items,
+  };
+  try{
+    const r=await fetch('/api/cotizaciones/generar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const cot=await r.json();
+    if(!r.ok){showToast('Error',cot.error);return;}
+    closeCotModal();
+    // Show result modal
+    document.getElementById('cot-result-id').value=cot.id;
+    document.getElementById('cot-result-folio').textContent=cot.folio;
+    document.getElementById('cot-result-total').textContent='Total: '+fmt$(cot.total)+' MXN (IVA incluido)';
+    document.getElementById('modal-cot-result').classList.add('open');
+    showToast('Cotización generada',cot.folio);
+  }catch{showToast('Error','No se pudo generar');}
+}
+
+function descargarPDF(){
+  const id=document.getElementById('cot-result-id').value;
+  window.open('/api/cotizaciones/'+id+'/pdf','_blank');
+}
+
+async function enviarCotCorreo(){
+  const id=document.getElementById('cot-result-id').value;
+  const btn=event.target;btn.textContent='Enviando...';btn.disabled=true;
+  try{
+    const r=await fetch('/api/cotizaciones/'+id+'/enviar-correo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+    const d=await r.json();
+    if(r.ok){showToast('Enviada','Cotización enviada a '+d.correo);btn.textContent='✓ Enviada';}
+    else{showToast('Error',d.error);btn.textContent='Enviar por correo';btn.disabled=false;}
+  }catch{showToast('Error','No se pudo enviar');btn.textContent='Enviar por correo';btn.disabled=false;}
 }
 
 // Toast
