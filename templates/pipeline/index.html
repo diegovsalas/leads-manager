@@ -460,7 +460,7 @@ tbody td{padding:8px 12px;font-size:14px;}
     <div class="page-subtitle">CRM comercial in-house — Backend Flask + Supabase + Meta/WhatsApp API</div>
     <table class="prop-table">
       <tr><td class="prop-key">Estado</td><td><span class="tag" style="background:var(--yellow-bg);color:var(--yellow);">En desarrollo</span></td></tr>
-      <tr><td class="prop-key">Sprint actual</td><td>Sprint 5 — WhatsApp + Meta Ads</td></tr>
+      <tr><td class="prop-key">Sprint actual</td><td>Sprint 5 — ICP + Cotizaciones (Meta bloqueado)</td></tr>
       <tr><td class="prop-key">Deploy</td><td>Render (backend) + Supabase (DB)</td></tr>
       <tr><td class="prop-key">Repositorio</td><td style="font-family:var(--mono);font-size:13px;">github.com/diegovsalas/leads-manager</td></tr>
       <tr><td class="prop-key">Inicio</td><td>1 Abril 2026</td></tr>
@@ -499,7 +499,8 @@ tbody td{padding:8px 12px;font-size:14px;}
       </ul>
     </div>
     <div class="section-h2">Cronograma del proyecto</div>
-    <div style="font-size:13px;color:var(--text2);margin-bottom:16px;">Roadmap completo con fases, responsables, fechas y dependencias. Actualizado al 7 de abril 2026.</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:8px;">Roadmap reorganizado. Deadline: <strong style="color:var(--red);">30 Abril 2026</strong>. Trabajo L-D. Actualizado 12 Abr.</div>
+    <div style="font-size:12px;color:var(--red);background:var(--red-bg);padding:8px 12px;border-radius:var(--r2);margin-bottom:16px;">&#9888; <strong>Bloqueador:</strong> Sin acceso a Meta Business — Fases 10, 11, 12, 13 reprogramadas. Se adelantan fases independientes.</div>
     <table class="crono-table">
       <thead>
         <tr>
@@ -514,7 +515,7 @@ tbody td{padding:8px 12px;font-size:14px;}
         </tr>
       </thead>
       <tbody>
-        <!-- FASE 1 -->
+        <!-- COMPLETADAS 1-9 -->
         <tr>
           <td style="color:var(--text3);">1</td>
           <td class="crono-phase">Infraestructura y deploy</td>
@@ -525,7 +526,6 @@ tbody td{padding:8px 12px;font-size:14px;}
           <td><span class="crono-status crono-done">Completado</span></td>
           <td class="crono-deps">—</td>
         </tr>
-        <!-- FASE 2 -->
         <tr>
           <td style="color:var(--text3);">2</td>
           <td class="crono-phase">Modelos y BD (Supabase)</td>
@@ -536,7 +536,6 @@ tbody td{padding:8px 12px;font-size:14px;}
           <td><span class="crono-status crono-done">Completado</span></td>
           <td class="crono-deps">Fase 1</td>
         </tr>
-        <!-- FASE 3 -->
         <tr>
           <td style="color:var(--text3);">3</td>
           <td class="crono-phase">Auth + RBAC + Login</td>
@@ -547,7 +546,6 @@ tbody td{padding:8px 12px;font-size:14px;}
           <td><span class="crono-status crono-done">Completado</span></td>
           <td class="crono-deps">Fase 2</td>
         </tr>
-        <!-- FASE 4 -->
         <tr>
           <td style="color:var(--text3);">4</td>
           <td class="crono-phase">Pipeline Kanban + Lead CRUD</td>
@@ -558,7 +556,6 @@ tbody td{padding:8px 12px;font-size:14px;}
           <td><span class="crono-status crono-done">Completado</span></td>
           <td class="crono-deps">Fase 3</td>
         </tr>
-        <!-- FASE 5 -->
         <tr>
           <td style="color:var(--text3);">5</td>
           <td class="crono-phase">Round-Robin + Auto-asignacion</td>
@@ -569,7 +566,6 @@ tbody td{padding:8px 12px;font-size:14px;}
           <td><span class="crono-status crono-done">Completado</span></td>
           <td class="crono-deps">Fase 4</td>
         </tr>
-        <!-- FASE 6 -->
         <tr>
           <td style="color:var(--text3);">6</td>
           <td class="crono-phase">Dashboard + Embudo + Gastos</td>
@@ -580,7 +576,6 @@ tbody td{padding:8px 12px;font-size:14px;}
           <td><span class="crono-status crono-done">Completado</span></td>
           <td class="crono-deps">Fase 4</td>
         </tr>
-        <!-- FASE 7 -->
         <tr>
           <td style="color:var(--text3);">7</td>
           <td class="crono-phase">Cadencia automatica (follow-up)</td>
@@ -591,7 +586,6 @@ tbody td{padding:8px 12px;font-size:14px;}
           <td><span class="crono-status crono-done">Completado</span></td>
           <td class="crono-deps">Fase 5</td>
         </tr>
-        <!-- FASE 8 -->
         <tr>
           <td style="color:var(--text3);">8</td>
           <td class="crono-phase">Metas vendedor + Equipo comercial</td>
@@ -602,7 +596,6 @@ tbody td{padding:8px 12px;font-size:14px;}
           <td><span class="crono-status crono-done">Completado</span></td>
           <td class="crono-deps">Fase 6</td>
         </tr>
-        <!-- FASE 9 -->
         <tr>
           <td style="color:var(--text3);">9</td>
           <td class="crono-phase">Pagina de proyecto + Gemini AI</td>
@@ -613,134 +606,129 @@ tbody td{padding:8px 12px;font-size:14px;}
           <td><span class="crono-status crono-done">Completado</span></td>
           <td class="crono-deps">Fase 4</td>
         </tr>
-        <!-- FASE 10 -->
+        <!-- SEMANA 1: 12-15 Abr — Fases independientes (sin Meta) -->
         <tr style="background:rgba(46,170,220,.04);">
-          <td style="color:var(--blue);font-weight:600;">10</td>
-          <td class="crono-phase" style="color:var(--blue);">WhatsApp Cloud API</td>
-          <td>Diego V. / Andrea R.</td>
-          <td>8 Abr</td>
+          <td style="color:var(--blue);font-weight:600;">14</td>
+          <td class="crono-phase" style="color:var(--blue);">ICP Scoring + Nurturing</td>
+          <td>Alejandro G. / Diego V.</td>
           <td>12 Abr</td>
-          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:15%;background:var(--blue);"></div></div></td>
-          <td><span class="crono-status crono-active">En progreso</span></td>
-          <td class="crono-deps">Fase 4 — Requiere WHATSAPP_TOKEN</td>
+          <td>15 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--blue);"></div></div></td>
+          <td><span class="crono-status crono-active">Iniciar hoy</span></td>
+          <td class="crono-deps">Fase 8 &#10003;</td>
         </tr>
-        <!-- FASE 11 -->
         <tr style="background:rgba(46,170,220,.04);">
-          <td style="color:var(--blue);font-weight:600;">11</td>
-          <td class="crono-phase" style="color:var(--blue);">Meta Ads Webhooks</td>
-          <td>Diego V.</td>
-          <td>10 Abr</td>
-          <td>14 Abr</td>
-          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:10%;background:var(--blue);"></div></div></td>
-          <td><span class="crono-status crono-active">En progreso</span></td>
-          <td class="crono-deps">Fase 5, 10 — Config Meta Business</td>
-        </tr>
-        <!-- FASE 12 -->
-        <tr>
-          <td style="color:var(--text3);">12</td>
-          <td class="crono-phase">Chat en vivo (UI bidireccional)</td>
+          <td style="color:var(--blue);font-weight:600;">15</td>
+          <td class="crono-phase" style="color:var(--blue);">Cotizaciones automaticas (PDF)</td>
           <td>Andrea R. / Diego V.</td>
-          <td>14 Abr</td>
-          <td>18 Abr</td>
-          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
-          <td><span class="crono-status crono-pending">Pendiente</span></td>
-          <td class="crono-deps">Fase 10</td>
+          <td>12 Abr</td>
+          <td>15 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--blue);"></div></div></td>
+          <td><span class="crono-status crono-active">Iniciar hoy</span></td>
+          <td class="crono-deps">Fase 4 &#10003;</td>
         </tr>
-        <!-- FASE 13 -->
-        <tr>
-          <td style="color:var(--text3);">13</td>
-          <td class="crono-phase">Bot WhatsApp interno (vendedores)</td>
-          <td>Diego V.</td>
-          <td>18 Abr</td>
-          <td>25 Abr</td>
-          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
-          <td><span class="crono-status crono-pending">Pendiente</span></td>
-          <td class="crono-deps">Fase 10, 12</td>
-        </tr>
-        <!-- FASE 14 -->
-        <tr>
-          <td style="color:var(--text3);">14</td>
-          <td class="crono-phase">ICP Scoring + Nurturing</td>
-          <td>Alejandro G. / Diego V.</td>
-          <td>21 Abr</td>
-          <td>25 Abr</td>
-          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
-          <td><span class="crono-status crono-pending">Pendiente</span></td>
-          <td class="crono-deps">Fase 8 — Definir criterios ICP</td>
-        </tr>
-        <!-- FASE 15 -->
-        <tr>
-          <td style="color:var(--text3);">15</td>
-          <td class="crono-phase">Cotizaciones automaticas (PDF)</td>
-          <td>Andrea R. / Diego V.</td>
-          <td>25 Abr</td>
-          <td>30 Abr</td>
-          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
-          <td><span class="crono-status crono-pending">Pendiente</span></td>
-          <td class="crono-deps">Fase 4 — Catalogo de productos</td>
-        </tr>
-        <!-- FASE 16 -->
-        <tr>
-          <td style="color:var(--text3);">16</td>
-          <td class="crono-phase">Reportes avanzados + Export</td>
-          <td>Alejandro G. / Diego V.</td>
-          <td>28 Abr</td>
-          <td>5 May</td>
-          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
-          <td><span class="crono-status crono-pending">Pendiente</span></td>
-          <td class="crono-deps">Fase 6, 8</td>
-        </tr>
-        <!-- FASE 17 -->
+        <!-- SEMANA 1: 15-18 Abr -->
         <tr>
           <td style="color:var(--text3);">17</td>
           <td class="crono-phase">Google SSO + Seguridad</td>
           <td>Diego V.</td>
-          <td>5 May</td>
-          <td>9 May</td>
+          <td>15 Abr</td>
+          <td>17 Abr</td>
           <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
           <td><span class="crono-status crono-pending">Pendiente</span></td>
-          <td class="crono-deps">Fase 3</td>
+          <td class="crono-deps">Fase 3 &#10003;</td>
         </tr>
-        <!-- FASE 18 -->
+        <tr>
+          <td style="color:var(--text3);">16</td>
+          <td class="crono-phase">Reportes avanzados + Export</td>
+          <td>Alejandro G. / Andrea R.</td>
+          <td>16 Abr</td>
+          <td>19 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
+          <td><span class="crono-status crono-pending">Pendiente</span></td>
+          <td class="crono-deps">Fase 6, 8 &#10003;</td>
+        </tr>
+        <!-- SEMANA 2: 18-22 Abr — Meta desbloqueado -->
+        <tr style="background:rgba(235,87,87,.04);">
+          <td style="color:var(--red);font-weight:600;">10</td>
+          <td class="crono-phase" style="color:var(--red);">WhatsApp Cloud API</td>
+          <td>Diego V. / Andrea R.</td>
+          <td>18 Abr</td>
+          <td>21 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--red);"></div></div></td>
+          <td><span class="crono-status crono-blocked">Bloqueada</span></td>
+          <td class="crono-deps">&#9888; Requiere acceso Meta Business</td>
+        </tr>
+        <tr style="background:rgba(235,87,87,.04);">
+          <td style="color:var(--red);font-weight:600;">11</td>
+          <td class="crono-phase" style="color:var(--red);">Meta Ads Webhooks</td>
+          <td>Diego V.</td>
+          <td>19 Abr</td>
+          <td>22 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--red);"></div></div></td>
+          <td><span class="crono-status crono-blocked">Bloqueada</span></td>
+          <td class="crono-deps">&#9888; Requiere acceso Meta Business</td>
+        </tr>
+        <!-- SEMANA 2-3: 21-25 Abr — Post Meta -->
+        <tr>
+          <td style="color:var(--text3);">12</td>
+          <td class="crono-phase">Chat en vivo (UI bidireccional)</td>
+          <td>Andrea R. / Diego V.</td>
+          <td>21 Abr</td>
+          <td>24 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
+          <td><span class="crono-status crono-pending">Pendiente</span></td>
+          <td class="crono-deps">Fase 10</td>
+        </tr>
         <tr>
           <td style="color:var(--text3);">18</td>
           <td class="crono-phase">Notificaciones push + Email</td>
-          <td>Andrea R.</td>
-          <td>9 May</td>
-          <td>14 May</td>
+          <td>Alejandro G. / Andrea R.</td>
+          <td>22 Abr</td>
+          <td>25 Abr</td>
           <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
           <td><span class="crono-status crono-pending">Pendiente</span></td>
           <td class="crono-deps">Fase 10, 7</td>
         </tr>
-        <!-- FASE 19 -->
+        <tr>
+          <td style="color:var(--text3);">13</td>
+          <td class="crono-phase">Bot WhatsApp interno (MVP)</td>
+          <td>Diego V.</td>
+          <td>24 Abr</td>
+          <td>27 Abr</td>
+          <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
+          <td><span class="crono-status crono-pending">Pendiente</span></td>
+          <td class="crono-deps">Fase 10, 12</td>
+        </tr>
+        <!-- SEMANA 3: 28-29 Abr — QA -->
         <tr>
           <td style="color:var(--text3);">19</td>
           <td class="crono-phase">QA + Testing + Datos reales</td>
           <td>Todo el equipo</td>
-          <td>14 May</td>
-          <td>21 May</td>
+          <td>28 Abr</td>
+          <td>29 Abr</td>
           <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
           <td><span class="crono-status crono-pending">Pendiente</span></td>
           <td class="crono-deps">Fases 10-18</td>
         </tr>
-        <!-- FASE 20 -->
-        <tr>
-          <td style="color:var(--text3);">20</td>
-          <td class="crono-phase">Go-Live + Capacitacion vendedores</td>
+        <!-- 30 Abr — GO LIVE -->
+        <tr style="background:rgba(15,123,108,.06);">
+          <td style="color:var(--green);font-weight:700;">20</td>
+          <td class="crono-phase" style="color:var(--green);">Go-Live + Capacitacion vendedores</td>
           <td>Todo el equipo</td>
-          <td>21 May</td>
-          <td>23 May</td>
+          <td colspan="2" style="font-weight:700;color:var(--green);">30 Abr</td>
           <td><div class="crono-bar-bg"><div class="crono-bar-fill" style="width:0%;background:var(--text3);"></div></div></td>
           <td><span class="crono-status crono-pending">Pendiente</span></td>
           <td class="crono-deps">Fase 19</td>
         </tr>
       </tbody>
     </table>
-    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text2);margin-bottom:8px;">
-      <span><span class="crono-status crono-done" style="font-size:11px;">Completado</span> 9 fases</span>
-      <span><span class="crono-status crono-active" style="font-size:11px;">En progreso</span> 2 fases</span>
-      <span><span class="crono-status crono-pending" style="font-size:11px;">Pendiente</span> 9 fases</span>
-      <span style="margin-left:auto;">Go-Live estimado: <strong>23 Mayo 2026</strong></span>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text2);margin-bottom:8px;align-items:center;">
+      <span><span class="crono-status crono-done" style="font-size:11px;">Completado</span> 9</span>
+      <span><span class="crono-status crono-active" style="font-size:11px;">Iniciar hoy</span> 2</span>
+      <span><span class="crono-status crono-blocked" style="font-size:11px;">Bloqueada</span> 2</span>
+      <span><span class="crono-status crono-pending" style="font-size:11px;">Pendiente</span> 7</span>
+      <span style="margin-left:auto;font-weight:700;color:var(--red);">DEADLINE: 30 Abril 2026</span>
     </div>
 
     <div class="section-h2">Avances</div>
