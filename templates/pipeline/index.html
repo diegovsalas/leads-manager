@@ -106,6 +106,20 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .tag-icp-C{background:var(--yellow-bg);color:var(--yellow);font-weight:600;}
 .tag-icp-D{background:var(--bg-tag);color:var(--text3);font-weight:600;}
 
+/* Lead detail panel */
+.lead-panel{position:fixed;top:0;right:-520px;width:520px;height:100vh;background:var(--bg-card);border-left:1px solid var(--border);box-shadow:-4px 0 24px rgba(0,0,0,.08);z-index:400;transition:right .2s ease;display:flex;flex-direction:column;}
+.lead-panel.open{right:0;}
+.lead-panel-overlay{position:fixed;inset:0;background:rgba(0,0,0,.15);z-index:399;display:none;}
+.lead-panel-overlay.open{display:block;}
+.lp-header{padding:16px 20px;border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.lp-body{flex:1;overflow-y:auto;padding:20px;}
+.lp-section{margin-bottom:20px;}
+.lp-section-title{font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border-light);}
+.lp-field{display:flex;align-items:center;padding:4px 0;font-size:13px;}
+.lp-field-label{width:120px;color:var(--text2);flex-shrink:0;}
+.lp-field-value{flex:1;color:var(--text);font-weight:500;}
+.lp-actions{padding:12px 20px;border-top:1px solid var(--border-light);display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;}
+
 /* Chat panel */
 .chat-panel{width:340px;flex-shrink:0;border-left:1px solid var(--border-light);display:none;flex-direction:column;background:var(--bg-sidebar);}
 .chat-panel.open{display:flex;}
@@ -256,8 +270,8 @@ tbody td{padding:8px 12px;font-size:14px;}
 
   <div class="sidebar-divider"></div>
   <div class="sidebar-section">Integraciones</div>
-  <div class="slink" onclick="showToast('Meta Ads','Webhook activo')"><span class="slink-emoji">&#128308;</span> Meta Ads <span class="slink-badge" style="color:var(--green);">&#9679; Activo</span></div>
-  <div class="slink" onclick="showToast('WhatsApp API','Conectado')"><span class="slink-emoji">&#128172;</span> WhatsApp API <span class="slink-badge" style="color:var(--green);">&#9679; Activo</span></div>
+  <div class="slink" onclick="showToast('Meta Ads','Bloqueado — Sin acceso a Meta Business')"><span class="slink-emoji">&#128308;</span> Meta Ads <span class="slink-badge" style="color:var(--red);">&#9679; Bloqueado</span></div>
+  <div class="slink" onclick="showToast('WhatsApp API','Pendiente — Requiere WHATSAPP_TOKEN')"><span class="slink-emoji">&#128172;</span> WhatsApp API <span class="slink-badge" style="color:var(--yellow);">&#9679; Pendiente</span></div>
 
   <div class="sidebar-divider"></div>
   <div class="sidebar-section">Unidades de negocio</div>
@@ -398,7 +412,7 @@ tbody td{padding:8px 12px;font-size:14px;}
                data-nombre="{{ lead.nombre or 'Sin nombre' }}" data-telefono="{{ lead.telefono or '' }}"
                data-marca="{{ lead.marca_interes or '' }}"
                draggable="true" ondragstart="onDragStart(event,'{{ lead.id }}')" ondragend="this.classList.remove('dragging')"
-               onclick="abrirChat('{{ lead.id }}','{{ (lead.nombre or 'Sin nombre')|e }}','{{ lead.telefono or '' }}')">
+               onclick="abrirLeadPanel('{{ lead.id }}')">
             <div class="k-card-name">{{ lead.nombre or 'Sin nombre' }}</div>
             <div class="k-card-phone">{{ lead.telefono or '' }}</div>
             {% if lead.cantidad_productos and lead.precio_unitario %}
@@ -418,7 +432,7 @@ tbody td{padding:8px 12px;font-size:14px;}
               <span class="tag" style="background:{{ icp_c[0] }};color:{{ icp_c[1] }};font-weight:600;">ICP {{ lead.icp_nivel }}</span>
               {% endif %}
               {% if lead.usuario_asignado %}<span class="tag tag-vendedor">{{ lead.usuario_asignado.nombre.split(' ')[0] }}</span>{% endif %}
-              <span class="tag" style="background:var(--blue-bg);color:var(--accent);cursor:pointer;margin-left:auto;" onclick="event.stopPropagation();abrirCotizacion('{{ lead.id }}')">&#128196; Cotizar</span>
+              {% if etapa in [EtapaPipeline.COTIZACION, EtapaPipeline.DEMO, EtapaPipeline.NEGOCIACION] %}<span class="tag" style="background:var(--blue-bg);color:var(--accent);cursor:pointer;margin-left:auto;" onclick="event.stopPropagation();abrirCotizacion('{{ lead.id }}')">&#128196; Cotizar</span>{% endif %}
             </div>
           </div>
           {% endfor %}
@@ -451,7 +465,7 @@ tbody td{padding:8px 12px;font-size:14px;}
     <table><thead><tr><th>Nombre</th><th>Telefono</th><th>Unidad</th><th>Cantidad</th><th>Valor</th><th>Etapa</th><th>Vendedor</th><th>Origen</th></tr></thead>
     <tbody id="leads-tbody">
       {% for etapa in etapas %}{% for lead in pipeline[etapa.value].leads %}
-      <tr data-marca="{{ lead.marca_interes or '' }}">
+      <tr data-marca="{{ lead.marca_interes or '' }}" onclick="abrirLeadPanel('{{ lead.id }}')">
         <td class="td-name">{{ lead.nombre or 'Sin nombre' }}</td>
         <td class="td-phone">{{ lead.telefono or '-' }}</td>
         <td>{% if lead.marca_interes %}<span class="tag tag-marca">{{ lead.marca_interes }}</span>{% else %}-{% endif %}</td>
@@ -873,6 +887,68 @@ tbody td{padding:8px 12px;font-size:14px;}
     <button class="btn" style="background:#dc2626;color:#fff;font-weight:500;padding:6px 12px;" onclick="confirmarPerdido()">Confirmar perdida</button>
   </div>
 </div></div>
+
+<!-- Lead detail panel -->
+<div class="lead-panel-overlay" id="lp-overlay" onclick="closeLeadPanel()"></div>
+<div class="lead-panel" id="lead-panel">
+  <div class="lp-header">
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:18px;font-weight:700;" id="lp-nombre"></div>
+      <div style="font-size:12px;color:var(--text3);font-family:var(--mono);" id="lp-telefono"></div>
+    </div>
+    <div id="lp-icp-badge" style="font-size:13px;font-weight:600;padding:3px 10px;border-radius:99px;"></div>
+    <button class="btn" onclick="closeLeadPanel()" style="font-size:18px;flex-shrink:0;">&times;</button>
+  </div>
+  <div class="lp-body">
+    <input type="hidden" id="lp-id"/>
+
+    <div class="lp-section">
+      <div class="lp-section-title">Informacion general</div>
+      <div class="lp-field"><span class="lp-field-label">Etapa</span><span class="lp-field-value" id="lp-etapa"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Origen</span><span class="lp-field-value" id="lp-origen"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Unidad</span><span class="lp-field-value" id="lp-marca"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Vendedor</span><span class="lp-field-value" id="lp-vendedor"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Tipo cliente</span><span class="lp-field-value" id="lp-tipo-cliente"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Creado</span><span class="lp-field-value" id="lp-creado"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Actualizado</span><span class="lp-field-value" id="lp-actualizado"></span></div>
+    </div>
+
+    <div class="lp-section">
+      <div class="lp-section-title">Valor comercial</div>
+      <div class="lp-field"><span class="lp-field-label">Cantidad</span><span class="lp-field-value" id="lp-cantidad"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Precio unitario</span><span class="lp-field-value" id="lp-precio"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Valor estimado</span><span class="lp-field-value" style="font-size:16px;color:var(--green);" id="lp-valor"></span></div>
+    </div>
+
+    <div class="lp-section">
+      <div class="lp-section-title">ICP Score</div>
+      <div class="lp-field"><span class="lp-field-label">Score</span><span class="lp-field-value" id="lp-icp-score"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Nivel</span><span class="lp-field-value" id="lp-icp-nivel"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Industria</span><span class="lp-field-value" id="lp-industria"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Tamano empresa</span><span class="lp-field-value" id="lp-tamano"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Sucursales</span><span class="lp-field-value" id="lp-sucursales"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Nurturing</span><span class="lp-field-value" id="lp-nurturing"></span></div>
+    </div>
+
+    <div class="lp-section">
+      <div class="lp-section-title">Seguimiento</div>
+      <div class="lp-field"><span class="lp-field-label">Ultimo contacto</span><span class="lp-field-value" id="lp-ultimo-contacto"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Respondio</span><span class="lp-field-value" id="lp-respondio"></span></div>
+      <div class="lp-field" id="lp-motivo-row" style="display:none;"><span class="lp-field-label">Motivo perdida</span><span class="lp-field-value" style="color:var(--red);" id="lp-motivo"></span></div>
+    </div>
+
+    <div class="lp-section">
+      <div class="lp-section-title">Cotizaciones</div>
+      <div id="lp-cotizaciones" style="font-size:13px;color:var(--text3);">Cargando...</div>
+    </div>
+  </div>
+  <div class="lp-actions">
+    <button class="btn btn-filled" onclick="closeLeadPanel();abrirChat(document.getElementById('lp-id').value,document.getElementById('lp-nombre').textContent,document.getElementById('lp-telefono').textContent)">Chat</button>
+    <button class="btn btn-blue" onclick="closeLeadPanel();abrirCotizacion(document.getElementById('lp-id').value)">Cotizar</button>
+    <button class="btn" onclick="editLeadFromPanel()">Editar</button>
+    <span style="margin-left:auto;font-size:11px;color:var(--text3);" id="lp-lead-id-display"></span>
+  </div>
+</div>
 
 <!-- Modal: Cotización -->
 <div class="modal-overlay" id="modal-cotizacion" onclick="if(event.target===this)closeCotModal()"><div class="modal" style="width:580px;max-height:90vh;overflow-y:auto;">
@@ -1460,6 +1536,97 @@ async function addNote(){
     await fetch('/api/proyecto/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:'nota',titulo:txt,autor:USER_NOMBRE})});
     loadProyecto();showToast('Nota agregada',txt);
   }catch{showToast('Error','No se pudo guardar');}
+}
+
+// ─── Lead detail panel ───
+const ICP_BADGE_STYLES={A:{bg:'var(--green-bg)',c:'var(--green)'},B:{bg:'var(--blue-bg)',c:'var(--blue)'},C:{bg:'var(--yellow-bg)',c:'var(--yellow)'},D:{bg:'var(--bg-tag)',c:'var(--text3)'}};
+
+async function abrirLeadPanel(id){
+  try{
+    const r=await fetch('/api/leads/'+id);
+    if(!r.ok)return;
+    const l=await r.json();
+    document.getElementById('lp-id').value=l.id;
+    document.getElementById('lp-lead-id-display').textContent='ID: '+l.id.substring(0,8)+'...';
+    document.getElementById('lp-nombre').textContent=l.nombre||'Sin nombre';
+    document.getElementById('lp-telefono').textContent=l.telefono||'';
+
+    // ICP badge
+    const badge=document.getElementById('lp-icp-badge');
+    if(l.icp_nivel){
+      const s=ICP_BADGE_STYLES[l.icp_nivel]||ICP_BADGE_STYLES.D;
+      badge.style.background=s.bg;badge.style.color=s.c;
+      badge.textContent='ICP '+l.icp_nivel+(l.icp_score?' ('+l.icp_score+')':'');
+      badge.style.display='inline-block';
+    }else{badge.style.display='none';}
+
+    // General
+    const etapaColor=ETAPA_COLORS[l.etapa_pipeline]||'#787774';
+    document.getElementById('lp-etapa').innerHTML=`<span class="tag" style="background:${etapaColor}22;color:${etapaColor};">${l.etapa_pipeline}</span>`;
+    document.getElementById('lp-origen').textContent=l.origen||'Manual';
+    document.getElementById('lp-marca').innerHTML=l.marca_interes?`<span class="tag tag-marca">${l.marca_interes}</span>`:'—';
+    document.getElementById('lp-vendedor').textContent=l.usuario_asignado?l.usuario_asignado.nombre:'Sin asignar';
+    document.getElementById('lp-tipo-cliente').textContent=l.tipo_cliente||'—';
+    document.getElementById('lp-creado').textContent=fmtDateTime(l.fecha_creacion);
+    document.getElementById('lp-actualizado').textContent=fmtDateTime(l.fecha_actualizacion);
+
+    // Valor
+    document.getElementById('lp-cantidad').textContent=l.cantidad_productos||'—';
+    document.getElementById('lp-precio').textContent=l.precio_unitario?fmt$(l.precio_unitario):'—';
+    document.getElementById('lp-valor').textContent=l.valor_estimado?fmt$(l.valor_estimado):'—';
+
+    // ICP
+    document.getElementById('lp-icp-score').textContent=l.icp_score!=null?l.icp_score+'/100':'Sin calcular';
+    document.getElementById('lp-icp-nivel').textContent=l.icp_nivel||'—';
+    document.getElementById('lp-industria').textContent=l.tipo_industria||'Sin definir';
+    document.getElementById('lp-tamano').textContent=l.tamano_empresa||'Sin definir';
+    document.getElementById('lp-sucursales').textContent=l.num_sucursales||'—';
+    document.getElementById('lp-nurturing').innerHTML=l.en_nurturing?'<span style="color:var(--yellow);">Si — en nurturing</span>':'No';
+
+    // Seguimiento
+    document.getElementById('lp-ultimo-contacto').textContent=l.fecha_ultimo_contacto?fmtDateTime(l.fecha_ultimo_contacto):'—';
+    document.getElementById('lp-respondio').innerHTML=l.respondio_ultimo_contacto?'<span style="color:var(--green);">Si</span>':'<span style="color:var(--text3);">No</span>';
+    const motivoRow=document.getElementById('lp-motivo-row');
+    if(l.motivo_perdida){motivoRow.style.display='flex';document.getElementById('lp-motivo').textContent=l.motivo_perdida;}else{motivoRow.style.display='none';}
+
+    // Cotizaciones
+    const cotDiv=document.getElementById('lp-cotizaciones');
+    cotDiv.innerHTML='<span style="color:var(--text3);">Cargando...</span>';
+    fetch('/api/cotizaciones/lead/'+l.id).then(r=>r.ok?r.json():[]).then(cots=>{
+      if(!cots.length){cotDiv.innerHTML='<span style="color:var(--text3);">Sin cotizaciones</span>';return;}
+      cotDiv.innerHTML=cots.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border-light);">
+        <span style="font-weight:600;color:var(--accent);">${c.folio}</span>
+        <span style="color:var(--green);font-weight:600;">${fmt$(c.total)}</span>
+        <span style="color:var(--text3);font-size:11px;">${fmtDate(c.fecha)}</span>
+        ${c.enviada_correo?'<span style="font-size:11px;color:var(--green);">Enviada</span>':''}
+        <a href="/api/cotizaciones/${c.id}/pdf" target="_blank" style="margin-left:auto;font-size:11px;color:var(--accent);text-decoration:none;">PDF</a>
+      </div>`).join('');
+    }).catch(()=>{cotDiv.innerHTML='<span style="color:var(--text3);">Error al cargar</span>';});
+
+    // Open panel
+    document.getElementById('lead-panel').classList.add('open');
+    document.getElementById('lp-overlay').classList.add('open');
+  }catch(e){console.error('Lead panel error:',e);}
+}
+
+function closeLeadPanel(){
+  document.getElementById('lead-panel').classList.remove('open');
+  document.getElementById('lp-overlay').classList.remove('open');
+}
+
+function editLeadFromPanel(){
+  const id=document.getElementById('lp-id').value;
+  // For now show a prompt-based edit (TODO: full edit modal)
+  const campo=prompt('Que campo quieres editar?\n\n1) tipo_industria\n2) tamano_empresa\n3) num_sucursales\n4) tipo_cliente\n5) nombre\n\nEscribe el numero:');
+  const campos={1:'tipo_industria',2:'tamano_empresa',3:'num_sucursales',4:'tipo_cliente',5:'nombre'};
+  const field=campos[campo];
+  if(!field)return;
+  const valor=prompt('Nuevo valor para '+field+':');
+  if(valor===null)return;
+  const body={};
+  body[field]=field==='num_sucursales'?parseInt(valor):valor;
+  fetch('/api/leads/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(r=>r.json()).then(()=>{abrirLeadPanel(id);showToast('Actualizado',field);}).catch(()=>showToast('Error','No se pudo actualizar'));
 }
 
 // ─── Cotizaciones ───
