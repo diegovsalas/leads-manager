@@ -66,7 +66,7 @@ def create_app():
     # ── Proteger todas las rutas excepto login y webhooks ──
     @app.before_request
     def require_login():
-        allowed = ("/login", "/webhook/", "/static/", "/api/v1/")
+        allowed = ("/login", "/auth/google", "/webhook/", "/static/", "/api/v1/")
         if any(request.path.startswith(p) for p in allowed):
             return
         if not session.get("user_id"):
