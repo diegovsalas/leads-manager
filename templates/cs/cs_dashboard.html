@@ -109,11 +109,11 @@
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
         <h2 class="text-sm font-semibold text-gray-800 mb-4">Facturación por Mes</h2>
-        <canvas id="mrrTrendChart" height="220"></canvas>
+        <div style="max-height:220px"><canvas id="mrrTrendChart"></canvas></div>
     </div>
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
         <h2 class="text-sm font-semibold text-gray-800 mb-4">Operación por Mes</h2>
-        <canvas id="operacionTrendChart" height="220"></canvas>
+        <div style="max-height:220px"><canvas id="operacionTrendChart"></canvas></div>
     </div>
 </div>
 
@@ -131,7 +131,7 @@
             </div>
             {% endfor %}
         </div>
-        <canvas id="healthDonut" height="180"></canvas>
+        <div style="max-height:180px"><canvas id="healthDonut"></canvas></div>
     </div>
 
     <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
@@ -157,7 +157,7 @@
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
         <h2 class="text-sm font-semibold text-gray-800 mb-4">MRR por KAM</h2>
-        <canvas id="kamBarChart" height="220"></canvas>
+        <div style="max-height:220px"><canvas id="kamBarChart"></canvas></div>
     </div>
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
         <h2 class="text-sm font-semibold text-gray-800 mb-4">Detalle por KAM</h2>
