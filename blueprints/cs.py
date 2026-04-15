@@ -54,28 +54,130 @@ def _ctx():
     }
 
 
+def _get_periodo():
+    """
+    Retorna (inicio, fin, label, periodo_param) según ?periodo= en query string.
+    Formatos: '2026-Q1', '2026-04', 'all'. Default: mes actual.
+    """
+    param = request.args.get("periodo", "")
+
+    if param and "-Q" in param:
+        # Trimestre: 2026-Q1
+        year = int(param.split("-Q")[0])
+        quarter = int(param.split("-Q")[1])
+        month_start = (quarter - 1) * 3 + 1
+        inicio = date(year, month_start, 1)
+        if month_start + 3 > 12:
+            fin = date(year + 1, 1, 1)
+        else:
+            fin = date(year, month_start + 3, 1)
+        label = f"Q{quarter} {year}"
+    elif param and len(param) == 7:
+        # Mes: 2026-04
+        year, month = int(param[:4]), int(param[5:7])
+        inicio = date(year, month, 1)
+        if month == 12:
+            fin = date(year + 1, 1, 1)
+        else:
+            fin = date(year, month + 1, 1)
+        meses = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                 "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+        label = f"{meses[month]} {year}"
+    elif param == "all":
+        inicio = date(2020, 1, 1)
+        fin = date(2030, 1, 1)
+        label = "Todo el historial"
+    else:
+        # Default: mes actual
+        hoy = date.today()
+        inicio = hoy.replace(day=1)
+        if hoy.month == 12:
+            fin = date(hoy.year + 1, 1, 1)
+        else:
+            fin = date(hoy.year, hoy.month + 1, 1)
+        meses = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                 "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+        label = f"{meses[hoy.month]} {hoy.year}"
+        param = hoy.strftime("%Y-%m")
+
+    return inicio, fin, label, param
+
+
+def _periodos_disponibles():
+    """Retorna lista de periodos para el selector."""
+    return [
+        {"value": "2026-Q1", "label": "Q1 2026 (Ene-Mar)"},
+        {"value": "2026-Q2", "label": "Q2 2026 (Abr-Jun)"},
+        {"value": "2026-01", "label": "Enero 2026"},
+        {"value": "2026-02", "label": "Febrero 2026"},
+        {"value": "2026-03", "label": "Marzo 2026"},
+        {"value": "2026-04", "label": "Abril 2026"},
+        {"value": "2026-05", "label": "Mayo 2026"},
+        {"value": "2026-06", "label": "Junio 2026"},
+        {"value": "all", "label": "Todo el historial"},
+    ]
+
+
+def _calc_facturacion_periodo(account_ids, inicio, fin):
+    """Calcula facturación del periodo desde cs_invoices (no campos estáticos)."""
+    rows = (
+        db.session.query(
+            CSInvoice.account_id,
+            func.coalesce(func.sum(CSInvoice.total), 0),
+            func.coalesce(func.sum(CSInvoice.pagado), 0),
+            func.coalesce(func.sum(CSInvoice.pendiente), 0),
+            func.count(CSInvoice.id),
+        )
+        .filter(
+            CSInvoice.account_id.in_(account_ids),
+            CSInvoice.fecha_cobro >= inicio,
+            CSInvoice.fecha_cobro < fin,
+        )
+        .group_by(CSInvoice.account_id)
+        .all()
+    )
+    result = {}
+    for acc_id, total, pagado, pendiente, num in rows:
+        result[str(acc_id)] = {
+            "facturado": float(total), "pagado": float(pagado),
+            "pendiente": float(pendiente), "num_facturas": num,
+        }
+    return result
+
+
 # ══════════════════════════════════════════════
-# DASHBOARD — optimizado: 2 queries para scores
+# DASHBOARD
 # ══════════════════════════════════════════════
 @cs_bp.route("/")
 def dashboard():
+    inicio, fin, periodo_label, periodo_param = _get_periodo()
+
     kam_filter = _current_kam_id()
     q = CSAccount.query
     if kam_filter:
         q = q.filter_by(kam_id=kam_filter)
     accounts = q.all()
+    account_ids = [a.id for a in accounts]
 
-    # Batch: 2 queries en lugar de 40+
+    # Facturación dinámica del periodo
+    fact_periodo = _calc_facturacion_periodo(account_ids, inicio, fin)
+
     scores_map = calcular_health_scores_batch(accounts)
 
     mrr_total = sum(float(a.mrr or 0) for a in accounts)
     arr_total = sum(float(a.arr_proyectado or 0) for a in accounts)
     total_sucursales = sum(a.sucursales for a in accounts)
 
+    # Facturación del periodo
+    facturado_periodo = sum(f["facturado"] for f in fact_periodo.values())
+    pagado_periodo = sum(f["pagado"] for f in fact_periodo.values())
+    pendiente_periodo = sum(f["pendiente"] for f in fact_periodo.values())
+
     account_scores = []
     for acc in accounts:
         hs = scores_map[str(acc.id)]
-        account_scores.append({"account": acc, "health": hs})
+        fp = fact_periodo.get(str(acc.id), {"facturado": 0, "pagado": 0, "pendiente": 0})
+        account_scores.append({"account": acc, "health": hs, "fact": fp})
     account_scores.sort(key=lambda x: x["health"]["score"])
     top_riesgo = account_scores[:5]
 
@@ -96,8 +198,6 @@ def dashboard():
 
     cuentas_onboarding = [a for a in accounts if a.es_cuenta_nueva]
     pipeline = CSOnboardingAccount.query.all()
-
-    # Alertas usa los scores pre-calculados
     alertas = generar_alertas(accounts=accounts, scores_map=scores_map)
     alertas_criticas = [a for a in alertas if a["severidad"] == "critica"]
 
@@ -105,10 +205,14 @@ def dashboard():
         "cs_dashboard.html",
         mrr_total=mrr_total, arr_total=arr_total,
         num_cuentas=len(accounts), total_sucursales=total_sucursales,
+        facturado_periodo=facturado_periodo, pagado_periodo=pagado_periodo,
+        pendiente_periodo=pendiente_periodo,
         top_riesgo=top_riesgo, cat_counts=cat_counts,
         kam_data=kam_data, cuentas_onboarding=cuentas_onboarding,
         alertas=alertas, alertas_criticas=alertas_criticas,
         pipeline=pipeline, account_scores=account_scores,
+        periodo_label=periodo_label, periodo_param=periodo_param,
+        periodos=_periodos_disponibles(),
         **_ctx(),
     )
 
@@ -118,29 +222,46 @@ def dashboard():
 # ══════════════════════════════════════════════
 @cs_bp.route("/account/<uuid:account_id>")
 def account_detail(account_id):
+    inicio, fin, periodo_label, periodo_param = _get_periodo()
+
     account = db.session.get(CSAccount, account_id)
     if not account:
         return "Cuenta no encontrada", 404
     health = calcular_health_score(account)
 
-    invoices = CSInvoice.query.filter_by(account_id=account.id).order_by(CSInvoice.fecha_cobro.desc()).all()
+    # Facturas del periodo seleccionado
+    invoices = (
+        CSInvoice.query.filter_by(account_id=account.id)
+        .filter(CSInvoice.fecha_cobro >= inicio, CSInvoice.fecha_cobro < fin)
+        .order_by(CSInvoice.fecha_cobro.desc()).all()
+    )
     total_facturado = sum(float(i.total or 0) for i in invoices)
     total_pagado = sum(float(i.pagado or 0) for i in invoices)
     total_pendiente = sum(float(i.pendiente or 0) for i in invoices)
     facturas_pagadas = sum(1 for i in invoices if i.estatus == "Pagada")
     facturas_pendientes = sum(1 for i in invoices if i.estatus != "Pagada")
 
-    # Conteo de citas por estatus (1 query agregado en lugar de cargar miles de rows)
+    # Citas del periodo
     citas_estatus_rows = (
         db.session.query(CSAppointment.estatus, func.count(CSAppointment.id))
-        .filter_by(account_id=account.id)
+        .filter(
+            CSAppointment.account_id == account.id,
+            CSAppointment.fecha_inicio >= inicio,
+            CSAppointment.fecha_inicio < fin,
+        )
         .group_by(CSAppointment.estatus)
         .all()
     )
     citas_por_estatus = {estatus: cnt for estatus, cnt in citas_estatus_rows}
 
-    # Solo cargar últimas 200 citas para la tabla (no las 3000+)
-    appointments = CSAppointment.query.filter_by(account_id=account.id).order_by(CSAppointment.fecha_inicio.desc()).limit(200).all()
+    appointments = (
+        CSAppointment.query.filter(
+            CSAppointment.account_id == account.id,
+            CSAppointment.fecha_inicio >= inicio,
+            CSAppointment.fecha_inicio < fin,
+        )
+        .order_by(CSAppointment.fecha_inicio.desc()).limit(200).all()
+    )
 
     notes = CSNote.query.filter_by(account_id=account.id).order_by(CSNote.created_at.desc()).all()
     tasks = CSTask.query.filter_by(account_id=account.id).order_by(CSTask.completada, CSTask.fecha_limite).all()
@@ -155,7 +276,10 @@ def account_detail(account_id):
         appointments=appointments, citas_por_estatus=citas_por_estatus,
         notes=notes, tasks=tasks, tareas_pendientes=tareas_pendientes,
         today=date.today(), account_alerts=alertas_por_cuenta(str(account_id)),
-        kams=_get_kams(), **_ctx(),
+        kams=_get_kams(),
+        periodo_label=periodo_label, periodo_param=periodo_param,
+        periodos=_periodos_disponibles(),
+        **_ctx(),
     )
 
 

@@ -5,7 +5,16 @@
 <div class="flex items-center justify-between mb-8">
     <div>
         <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p class="text-sm text-gray-500 mt-0.5">Grupo Avantex — Customer Success Q1 2026</p>
+        <p class="text-sm text-gray-500 mt-0.5">Grupo Avantex — Customer Success · {{ periodo_label }}</p>
+    </div>
+    <div class="flex items-center gap-2">
+        <label class="text-xs text-gray-500">Periodo:</label>
+        <select onchange="window.location='/cs/?periodo='+this.value"
+                class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+            {% for p in periodos %}
+            <option value="{{ p.value }}" {% if p.value == periodo_param %}selected{% endif %}>{{ p.label }}</option>
+            {% endfor %}
+        </select>
     </div>
 </div>
 
@@ -42,10 +51,26 @@
         ('Cuentas', num_cuentas, 'bajo gestión'),
         ('Sucursales', '{:,}'.format(total_sucursales), 'activas'),
     ] %}
+    {% set kpis_fact = [
+        ('Facturado', '${:,.0f}'.format(facturado_periodo), periodo_label, 'gray'),
+        ('Pagado', '${:,.0f}'.format(pagado_periodo), periodo_label, 'green'),
+        ('Pendiente', '${:,.0f}'.format(pendiente_periodo), periodo_label, 'red' if pendiente_periodo > 0 else 'gray'),
+    ] %}
     {% for label, value, sub in kpis %}
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow">
         <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-2">{{ label }}</p>
         <p class="text-2xl font-bold text-gray-900">{{ value }}</p>
+        <p class="text-xs text-gray-400 mt-1">{{ sub }}</p>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Facturación del periodo -->
+<div class="grid grid-cols-3 gap-5 mb-8">
+    {% for label, value, sub, color in kpis_fact %}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-2">{{ label }}</p>
+        <p class="text-2xl font-bold text-{{ color }}-600">{{ value }}</p>
         <p class="text-xs text-gray-400 mt-1">{{ sub }}</p>
     </div>
     {% endfor %}

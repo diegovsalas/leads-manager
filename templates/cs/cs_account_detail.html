@@ -3,11 +3,22 @@
 
 {% block content %}
 
-<!-- Breadcrumb -->
-<div class="mb-4">
-    <a href="/cs/" class="text-sm text-brand-600 hover:underline">Dashboard</a>
-    <span class="text-gray-400 mx-1">/</span>
-    <span class="text-sm text-gray-500">{{ account.nombre }}</span>
+<!-- Breadcrumb + Periodo -->
+<div class="flex items-center justify-between mb-4">
+    <div>
+        <a href="/cs/" class="text-sm text-brand-600 hover:underline">Dashboard</a>
+        <span class="text-gray-400 mx-1">/</span>
+        <span class="text-sm text-gray-500">{{ account.nombre }}</span>
+    </div>
+    <div class="flex items-center gap-2">
+        <label class="text-xs text-gray-500">Periodo:</label>
+        <select onchange="window.location='/cs/account/{{ account.id }}?periodo='+this.value"
+                class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white">
+            {% for p in periodos %}
+            <option value="{{ p.value }}" {% if p.value == periodo_param %}selected{% endif %}>{{ p.label }}</option>
+            {% endfor %}
+        </select>
+    </div>
 </div>
 
 <!-- Header de la cuenta -->
@@ -249,7 +260,7 @@
 
                 <!-- Mini KPIs de facturación -->
                 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                    <h2 class="text-sm font-semibold text-gray-700 mb-4">Facturación Q1 2026</h2>
+                    <h2 class="text-sm font-semibold text-gray-700 mb-4">Facturación — {{ periodo_label }}</h2>
                     <div class="grid grid-cols-3 gap-4 text-center">
                         <div>
                             <p class="text-lg font-bold text-gray-800">${{ "{:,.0f}".format(total_facturado) }}</p>
@@ -310,7 +321,7 @@
     <div x-show="tab === 'facturacion'" style="display: none;">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div class="flex justify-between items-center mb-4">
-                <h2 class="text-sm font-semibold text-gray-700">Facturas Q1 2026</h2>
+                <h2 class="text-sm font-semibold text-gray-700">Facturas — {{ periodo_label }}</h2>
                 <div class="flex gap-4 text-xs text-gray-500">
                     <span class="text-green-600 font-medium">{{ facturas_pagadas }} pagadas</span>
                     <span class="text-red-500 font-medium">{{ facturas_pendientes }} pendientes</span>
