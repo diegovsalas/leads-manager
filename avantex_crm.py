@@ -98,19 +98,25 @@ def create_app():
 
     @app.route("/")
     def index():
+        # 1 query en lugar de 10
+        from sqlalchemy.orm import joinedload
+        all_leads = (
+            Lead.query
+            .options(joinedload(Lead.usuario_asignado))
+            .order_by(Lead.fecha_actualizacion.desc())
+            .all()
+        )
+        leads_by_etapa = {}
+        for lead in all_leads:
+            leads_by_etapa.setdefault(lead.etapa_pipeline, []).append(lead)
+
         pipeline = {}
         for etapa in EtapaPipeline:
-            leads = (
-                Lead.query
-                .filter_by(etapa_pipeline=etapa)
-                .order_by(Lead.fecha_actualizacion.desc())
-                .all()
-            )
             pipeline[etapa.value] = {
                 "etapa_enum":  etapa,
                 "etapa_nombre": etapa.value,
                 "color":       COLORES_ETAPA.get(etapa, "#6b7280"),
-                "leads":       leads,
+                "leads":       leads_by_etapa.get(etapa, []),
             }
         return render_template(
             "pipeline/index.html",

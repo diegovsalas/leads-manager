@@ -130,10 +130,17 @@ def account_detail(account_id):
     facturas_pagadas = sum(1 for i in invoices if i.estatus == "Pagada")
     facturas_pendientes = sum(1 for i in invoices if i.estatus != "Pagada")
 
-    appointments = CSAppointment.query.filter_by(account_id=account.id).order_by(CSAppointment.fecha_inicio.desc()).all()
-    citas_por_estatus = {}
-    for apt in appointments:
-        citas_por_estatus[apt.estatus] = citas_por_estatus.get(apt.estatus, 0) + 1
+    # Conteo de citas por estatus (1 query agregado en lugar de cargar miles de rows)
+    citas_estatus_rows = (
+        db.session.query(CSAppointment.estatus, func.count(CSAppointment.id))
+        .filter_by(account_id=account.id)
+        .group_by(CSAppointment.estatus)
+        .all()
+    )
+    citas_por_estatus = {estatus: cnt for estatus, cnt in citas_estatus_rows}
+
+    # Solo cargar últimas 200 citas para la tabla (no las 3000+)
+    appointments = CSAppointment.query.filter_by(account_id=account.id).order_by(CSAppointment.fecha_inicio.desc()).limit(200).all()
 
     notes = CSNote.query.filter_by(account_id=account.id).order_by(CSNote.created_at.desc()).all()
     tasks = CSTask.query.filter_by(account_id=account.id).order_by(CSTask.completada, CSTask.fecha_limite).all()
