@@ -579,7 +579,7 @@
                     <form action="/cs/account/{{ account.id }}/tasks/{{ task.id }}/toggle" method="POST">
                         <button type="submit" class="mt-0.5 text-lg hover:scale-110 transition-transform cursor-pointer"
                                 title="{{ 'Marcar como pendiente' if task.completada else 'Marcar como completada' }}">
-                            {{ '&#10003;' if task.completada else '&#9675;' }}
+                            {% if task.completada %}✅{% else %}⬜{% endif %}
                         </button>
                     </form>
                     <div class="flex-1">

@@ -62,7 +62,7 @@
                 <div class="space-y-1">
                     <div class="flex items-center gap-2 text-xs">
                         <span class="{% if tiene_qbr %}text-green-500{% else %}text-gray-300{% endif %}">
-                            {{ '&#10003;' if tiene_qbr else '&#9675;' }}
+                            {% if tiene_qbr %}✅{% else %}⬜{% endif %}
                         </span>
                         <span class="{% if tiene_qbr %}text-gray-600{% else %}text-gray-400{% endif %}">
                             QBR agendado
@@ -70,7 +70,7 @@
                     </div>
                     <div class="flex items-center gap-2 text-xs">
                         <span class="{% if tiene_checkin %}text-green-500{% else %}text-gray-300{% endif %}">
-                            {{ '&#10003;' if tiene_checkin else '&#9675;' }}
+                            {% if tiene_checkin %}✅{% else %}⬜{% endif %}
                         </span>
                         <span class="{% if tiene_checkin %}text-gray-600{% else %}text-gray-400{% endif %}">
                             Check-in realizado
@@ -79,7 +79,7 @@
                     <div class="flex items-center gap-2 text-xs">
                         {% set tiene_pago = item.account.pagado_q1 > 0 %}
                         <span class="{% if tiene_pago %}text-green-500{% else %}text-gray-300{% endif %}">
-                            {{ '&#10003;' if tiene_pago else '&#9675;' }}
+                            {% if tiene_pago %}✅{% else %}⬜{% endif %}
                         </span>
                         <span class="{% if tiene_pago %}text-gray-600{% else %}text-gray-400{% endif %}">
                             Primer pago recibido
@@ -93,7 +93,7 @@
                 <p class="text-xs text-gray-500 font-medium mb-1">Tareas pendientes:</p>
                 {% for t in item.tareas[:3] %}
                 <div class="flex items-center gap-2 text-xs text-gray-600 py-0.5">
-                    <span class="text-gray-400">&#9675;</span>
+                    <span class="text-gray-400">○</span>
                     <span class="px-1.5 py-0.5 bg-gray-100 rounded text-gray-500">{{ t.tipo }}</span>
                     <span>{{ t.descripcion[:50] }}</span>
                 </div>
