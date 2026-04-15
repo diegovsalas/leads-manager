@@ -175,7 +175,7 @@ def dashboard():
 
     # Comparación con periodo anterior (solo si es mes individual)
     delta_facturado = delta_pagado = delta_pendiente = None
-    if len(periodo_param) == 7 and periodo_param != "all":
+    if len(periodo_param) == 7 and "-Q" not in periodo_param and periodo_param != "all":
         # Calcular mes anterior
         y, m = int(periodo_param[:4]), int(periodo_param[5:7])
         if m == 1:

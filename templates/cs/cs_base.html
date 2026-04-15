@@ -52,21 +52,13 @@
     <aside class="cs-sidebar">
         <div class="cs-sidebar-brand"><span class="hl">CS</span>AVANTEX</div>
 
-        {% set nav_items = [
-            ('/cs/', 'cs.dashboard', '&#128202;', 'Dashboard'),
-            ('/cs/clientes', 'cs.clientes', '&#127970;', 'Clientes'),
-            ('/cs/contactos', 'cs.contactos_directory', '&#128101;', 'Contactos'),
-            ('/cs/kam', 'cs.kam_view', '&#128100;', 'KAMs'),
-            ('/cs/oportunidades', 'cs.oportunidades', '&#127919;', 'Oportunidades'),
-            ('/cs/onboarding', 'cs.onboarding', '&#128640;', 'Onboarding'),
-            ('/cs/alertas', 'cs.alertas_view', '&#128276;', 'Alertas'),
-        ] %}
-        {% for href, endpoint, icon, label in nav_items %}
-        <a href="{{ href }}"
-           class="cs-link {% if request.endpoint == endpoint %}active{% endif %}">
-            {{ icon }} {{ label }}
-        </a>
-        {% endfor %}
+        <a href="/cs/" class="cs-link {% if request.endpoint == 'cs.dashboard' %}active{% endif %}">📊 Dashboard</a>
+        <a href="/cs/clientes" class="cs-link {% if request.endpoint == 'cs.clientes' %}active{% endif %}">🏢 Clientes</a>
+        <a href="/cs/contactos" class="cs-link {% if request.endpoint == 'cs.contactos_directory' %}active{% endif %}">👥 Contactos</a>
+        <a href="/cs/kam" class="cs-link {% if request.endpoint == 'cs.kam_view' %}active{% endif %}">👤 KAMs</a>
+        <a href="/cs/oportunidades" class="cs-link {% if request.endpoint == 'cs.oportunidades' %}active{% endif %}">🎯 Oportunidades</a>
+        <a href="/cs/onboarding" class="cs-link {% if request.endpoint == 'cs.onboarding' %}active{% endif %}">🚀 Onboarding</a>
+        <a href="/cs/alertas" class="cs-link {% if request.endpoint == 'cs.alertas_view' %}active{% endif %}">🔔 Alertas</a>
 
         {% if not is_kam %}
         <div class="cs-divider"></div>
