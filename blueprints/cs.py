@@ -173,6 +173,28 @@ def dashboard():
     pagado_periodo = sum(f["pagado"] for f in fact_periodo.values())
     pendiente_periodo = sum(f["pendiente"] for f in fact_periodo.values())
 
+    # Comparación con periodo anterior (solo si es mes individual)
+    delta_facturado = delta_pagado = delta_pendiente = None
+    if len(periodo_param) == 7 and periodo_param != "all":
+        # Calcular mes anterior
+        y, m = int(periodo_param[:4]), int(periodo_param[5:7])
+        if m == 1:
+            prev_inicio = date(y - 1, 12, 1)
+            prev_fin = date(y, 1, 1)
+        else:
+            prev_inicio = date(y, m - 1, 1)
+            prev_fin = date(y, m, 1)
+        fact_prev = _calc_facturacion_periodo(account_ids, prev_inicio, prev_fin)
+        prev_facturado = sum(f["facturado"] for f in fact_prev.values())
+        prev_pagado = sum(f["pagado"] for f in fact_prev.values())
+        prev_pendiente = sum(f["pendiente"] for f in fact_prev.values())
+        if prev_facturado > 0:
+            delta_facturado = round((facturado_periodo - prev_facturado) / prev_facturado * 100, 1)
+        if prev_pagado > 0:
+            delta_pagado = round((pagado_periodo - prev_pagado) / prev_pagado * 100, 1)
+        if prev_pendiente > 0:
+            delta_pendiente = round((pendiente_periodo - prev_pendiente) / prev_pendiente * 100, 1)
+
     account_scores = []
     for acc in accounts:
         hs = scores_map[str(acc.id)]
@@ -207,6 +229,8 @@ def dashboard():
         num_cuentas=len(accounts), total_sucursales=total_sucursales,
         facturado_periodo=facturado_periodo, pagado_periodo=pagado_periodo,
         pendiente_periodo=pendiente_periodo,
+        delta_facturado=delta_facturado, delta_pagado=delta_pagado,
+        delta_pendiente=delta_pendiente,
         top_riesgo=top_riesgo, cat_counts=cat_counts,
         kam_data=kam_data, cuentas_onboarding=cuentas_onboarding,
         alertas=alertas, alertas_criticas=alertas_criticas,
@@ -459,6 +483,61 @@ def asignar_kam_onboarding(ob_id):
         ob.kam_id = kam_id if kam_id else None
         db.session.commit()
     return redirect(url_for("cs.onboarding"))
+
+
+# ══════════════════════════════════════════════
+# API — Chart data (JSON)
+# ══════════════════════════════════════════════
+@cs_bp.route("/api/mrr-trend")
+def api_mrr_trend():
+    """MRR facturado por mes (últimos 6 meses con datos)."""
+    rows = (
+        db.session.query(
+            func.date_trunc("month", CSInvoice.fecha_cobro).label("mes"),
+            func.sum(CSInvoice.total),
+            func.sum(CSInvoice.pagado),
+            func.sum(CSInvoice.pendiente),
+        )
+        .filter(CSInvoice.fecha_cobro.isnot(None))
+        .group_by("mes")
+        .order_by("mes")
+        .all()
+    )
+    return jsonify([{
+        "mes": r[0].strftime("%Y-%m") if r[0] else "",
+        "mes_label": r[0].strftime("%b %Y") if r[0] else "",
+        "facturado": float(r[1] or 0),
+        "pagado": float(r[2] or 0),
+        "pendiente": float(r[3] or 0),
+    } for r in rows])
+
+
+@cs_bp.route("/api/operacion-trend")
+def api_operacion_trend():
+    """Citas por estatus por mes."""
+    from sqlalchemy import case, extract
+    rows = (
+        db.session.query(
+            func.date_trunc("month", CSAppointment.fecha_inicio).label("mes"),
+            func.count(CSAppointment.id).label("total"),
+            func.sum(case((CSAppointment.estatus == "Terminada", 1), else_=0)).label("terminadas"),
+            func.sum(case((CSAppointment.estatus == "Cancelada", 1), else_=0)).label("canceladas"),
+            func.sum(case((CSAppointment.estatus == "No Realizada", 1), else_=0)).label("no_realizadas"),
+        )
+        .filter(CSAppointment.fecha_inicio.isnot(None))
+        .group_by("mes")
+        .order_by("mes")
+        .all()
+    )
+    return jsonify([{
+        "mes": r[0].strftime("%Y-%m") if r[0] else "",
+        "mes_label": r[0].strftime("%b %Y") if r[0] else "",
+        "total": int(r.total),
+        "terminadas": int(r.terminadas or 0),
+        "canceladas": int(r.canceladas or 0),
+        "no_realizadas": int(r.no_realizadas or 0),
+        "pct_cumplimiento": round(int(r.terminadas or 0) / int(r.total) * 100, 1) if r.total > 0 else 0,
+    } for r in rows])
 
 
 # ══════════════════════════════════════════════

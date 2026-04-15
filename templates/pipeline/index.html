@@ -18,25 +18,25 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px;}
 
-.shell{display:grid;grid-template-columns:240px 1fr;height:100vh;}
-.sidebar{background:var(--bg-sidebar);border-right:none;display:flex;flex-direction:column;overflow:hidden;padding-top:12px;box-shadow:2px 0 8px rgba(0,0,0,.15);}
-.content{overflow:hidden;display:flex;flex-direction:column;background:var(--bg);}
-.sidebar-logo{padding:4px 14px 20px;display:flex;align-items:center;gap:8px;}
-.sidebar-logo-icon{width:22px;height:22px;border-radius:4px;background:var(--text);display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;font-weight:700;}
-.sidebar-logo-text{font-size:16px;font-weight:800;color:#fff;letter-spacing:-.3px;}
-.sidebar-logo-text .brand-highlight{color:#9171f5;}
-.sidebar-section{padding:20px 14px 6px;font-size:11px;font-weight:500;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.5px;}
-.slink{display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:var(--r);cursor:pointer;color:rgba(255,255,255,.6);transition:all 120ms;font-size:14px;margin:1px 4px;line-height:1.5;user-select:none;}
-.slink:hover{background:rgba(255,255,255,.08);color:rgba(255,255,255,.9);}
-.slink.active{background:rgba(255,255,255,.12);color:#c4b5fd;font-weight:500;}
-.slink[data-marca].active{background:rgba(203,145,47,.15);color:#fbbf24;font-weight:500;}
-.slink-emoji{font-size:16px;width:22px;text-align:center;flex-shrink:0;}
-.slink-badge{margin-left:auto;font-size:12px;color:rgba(255,255,255,.35);}
-.sidebar-divider{height:1px;background:rgba(255,255,255,.08);margin:8px 14px;}
-.sidebar-bottom{margin-top:auto;padding:12px;border-top:1px solid rgba(255,255,255,.08);}
-.ws-status{display:flex;align-items:center;gap:6px;font-size:12px;color:rgba(255,255,255,.4);}
-.ws-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.3);}
+.shell{display:flex;flex-direction:column;height:100vh;}
+.topnav{background:#1e1b3a;color:#fff;display:flex;align-items:center;height:48px;padding:0 20px;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,.15);z-index:50;}
+.topnav-brand{font-size:16px;font-weight:800;letter-spacing:-.3px;margin-right:24px;flex-shrink:0;}
+.topnav-brand .hl{color:#9171f5;}
+.topnav-links{display:flex;gap:2px;flex:1;overflow-x:auto;}
+.nav-link{padding:6px 12px;border-radius:var(--r);cursor:pointer;color:rgba(255,255,255,.55);transition:all 120ms;font-size:13px;user-select:none;white-space:nowrap;display:inline-flex;align-items:center;gap:5px;text-decoration:none;}
+.nav-link:hover{background:rgba(255,255,255,.08);color:rgba(255,255,255,.9);}
+.nav-link.active{background:rgba(255,255,255,.12);color:#c4b5fd;font-weight:500;}
+.nav-link .nav-badge{font-size:11px;color:rgba(255,255,255,.35);}
+.nav-marca{border-left:1px solid rgba(255,255,255,.1);margin-left:4px;padding-left:6px;}
+.nav-marca .nav-link.active{background:rgba(203,145,47,.15);color:#fbbf24;}
+.topnav-right{display:flex;align-items:center;gap:10px;margin-left:auto;flex-shrink:0;}
+.topnav-user{display:flex;align-items:center;gap:6px;}
+.topnav-avatar{width:26px;height:26px;border-radius:50%;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;}
+.topnav-name{font-size:12px;color:rgba(255,255,255,.7);}
+.ws-status{display:flex;align-items:center;gap:4px;font-size:11px;color:rgba(255,255,255,.35);}
+.ws-dot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.3);}
 .ws-dot.live{background:#22c55e;}
+.content{overflow:hidden;display:flex;flex-direction:column;background:var(--bg);flex:1;}
 
 .view{display:none;flex:1;overflow:hidden;flex-direction:column;}
 .view.active{display:flex;}
@@ -270,42 +270,37 @@ tbody td{padding:8px 12px;font-size:14px;}
 <body>
 <div class="shell">
 
-<!-- ===== SIDEBAR ===== -->
-<aside class="sidebar">
-  <div class="sidebar-logo"><img src="/static/img/logo.png" alt="CRM Avantex" style="width:28px;height:28px;border-radius:4px;object-fit:cover;"/><span class="sidebar-logo-text"><span class="brand-highlight">CRM</span>AVANTEX</span></div>
-  <div class="slink active" onclick="showView('dashboard',this)"><span class="slink-emoji">&#128202;</span> Dashboard</div>
-  <div class="slink" onclick="showView('mihoy',this)"><span class="slink-emoji">&#127919;</span> Mi dia <span class="slink-badge" style="color:var(--red);font-weight:600;" id="mihoy-badge"></span></div>
-  <div class="slink" onclick="showView('pipeline',this)"><span class="slink-emoji">&#128203;</span> Pipeline</div>
-  <div class="slink" onclick="showView('leads',this)"><span class="slink-emoji">&#128101;</span> Todos los leads</div>
-  <div class="slink admin-only" onclick="showView('vendedores',this)"><span class="slink-emoji">&#128100;</span> Vendedores</div>
-  <div class="slink" onclick="showView('proyecto',this)"><span class="slink-emoji">&#128221;</span> Proyecto</div>
-  <a href="/cs/" class="slink admin-only" style="text-decoration:none;"><span class="slink-emoji">&#127961;</span> CS Dashboard</a>
+<!-- ===== TOP NAV ===== -->
+<nav class="topnav">
+  <span class="topnav-brand"><span class="hl">CRM</span>AVANTEX</span>
 
-  <div class="sidebar-divider"></div>
-  <div class="sidebar-section">Integraciones</div>
-  <div class="slink" onclick="showToast('Meta Ads','Bloqueado — Sin acceso a Meta Business')"><span class="slink-emoji">&#128308;</span> Meta Ads <span class="slink-badge" style="color:#ef4444;">&#9679; Bloqueado</span></div>
-  <div class="slink" onclick="showToast('WhatsApp API','Pendiente — Requiere WHATSAPP_TOKEN')"><span class="slink-emoji">&#128172;</span> WhatsApp API <span class="slink-badge" style="color:#eab308;">&#9679; Pendiente</span></div>
+  <div class="topnav-links">
+    <div class="nav-link active" onclick="showView('dashboard',this)">Dashboard</div>
+    <div class="nav-link" onclick="showView('mihoy',this)">Mi dia <span class="nav-badge" style="color:#ef4444;font-weight:600;" id="mihoy-badge"></span></div>
+    <div class="nav-link" onclick="showView('pipeline',this)">Pipeline</div>
+    <div class="nav-link" onclick="showView('leads',this)">Leads</div>
+    <div class="nav-link admin-only" onclick="showView('vendedores',this)">Vendedores</div>
+    <div class="nav-link" onclick="showView('proyecto',this)">Proyecto</div>
+    <a href="/cs/" class="nav-link admin-only">CS Dashboard</a>
 
-  <div class="sidebar-divider"></div>
-  <div class="sidebar-section">Unidades de negocio</div>
-  <div class="slink" data-marca="Aromatex Home" onclick="setFiltroMarca('Aromatex Home',this)"><span class="slink-emoji">&#127810;</span> Aromatex Home</div>
-  <div class="slink" data-marca="Aromatex" onclick="setFiltroMarca('Aromatex',this)"><span class="slink-emoji">&#127811;</span> Aromatex</div>
-  <div class="slink" data-marca="Pestex" onclick="setFiltroMarca('Pestex',this)"><span class="slink-emoji">&#128027;</span> Pestex</div>
-  <div class="slink" data-marca="Weldex" onclick="setFiltroMarca('Weldex',this)"><span class="slink-emoji">&#128293;</span> Weldex</div>
-  <div class="slink" data-marca="Nexo" onclick="setFiltroMarca('Nexo',this)"><span class="slink-emoji">&#128279;</span> Nexo</div>
-
-  <div class="sidebar-bottom">
-    <div style="display:flex;align-items:center;gap:8px;padding:4px 0 8px;">
-      <div style="width:28px;height:28px;border-radius:50%;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;">{{ user_nombre[:2]|upper }}</div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:rgba(255,255,255,.85);">{{ user_nombre }}</div>
-        <div style="font-size:11px;color:rgba(255,255,255,.4);">{{ user_rol }}</div>
-      </div>
-      <a href="/logout" style="font-size:11px;color:rgba(255,255,255,.35);text-decoration:none;" title="Cerrar sesion">&#9211;</a>
+    <div class="nav-marca">
+      <div class="nav-link" data-marca="Aromatex Home" onclick="setFiltroMarca('Aromatex Home',this)">Aromatex Home</div>
+      <div class="nav-link" data-marca="Aromatex" onclick="setFiltroMarca('Aromatex',this)">Aromatex</div>
+      <div class="nav-link" data-marca="Pestex" onclick="setFiltroMarca('Pestex',this)">Pestex</div>
+      <div class="nav-link" data-marca="Weldex" onclick="setFiltroMarca('Weldex',this)">Weldex</div>
+      <div class="nav-link" data-marca="Nexo" onclick="setFiltroMarca('Nexo',this)">Nexo</div>
     </div>
-    <div class="ws-status"><div class="ws-dot" id="ws-dot"></div><span id="ws-label">Conectando...</span></div>
   </div>
-</aside>
+
+  <div class="topnav-right">
+    <div class="ws-status"><div class="ws-dot" id="ws-dot"></div><span id="ws-label"></span></div>
+    <div class="topnav-user">
+      <div class="topnav-avatar">{{ user_nombre[:2]|upper }}</div>
+      <span class="topnav-name">{{ user_nombre }}</span>
+    </div>
+    <a href="/logout" style="font-size:11px;color:rgba(255,255,255,.35);text-decoration:none;" title="Cerrar sesion">&#9211;</a>
+  </div>
+</nav>
 
 <main class="content">
 
@@ -1134,14 +1129,14 @@ socket.on('mensaje_global',({lead_nombre,preview})=>{showToast('WhatsApp',lead_n
 function showView(name,el){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name)?.classList.add('active');
-  if(el){document.querySelectorAll('.sidebar .slink:not([data-marca])').forEach(s=>s.classList.remove('active'));el.classList.add('active');}
+  if(el){document.querySelectorAll('.topnav-links > .nav-link').forEach(s=>s.classList.remove('active'));el.classList.add('active');}
 }
 
 // UN filter
 function setFiltroMarca(marca,el){
   if(filtroMarca===marca){clearFiltroMarca();return;}
   filtroMarca=marca;
-  document.querySelectorAll('.slink[data-marca]').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-link[data-marca]').forEach(s=>s.classList.remove('active'));
   if(el)el.classList.add('active');
   document.getElementById('filter-banner').style.display='block';
   document.getElementById('filter-banner-text').textContent=marca;
@@ -1149,7 +1144,7 @@ function setFiltroMarca(marca,el){
 }
 function clearFiltroMarca(){
   filtroMarca='';
-  document.querySelectorAll('.slink[data-marca]').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-link[data-marca]').forEach(s=>s.classList.remove('active'));
   document.getElementById('filter-banner').style.display='none';
   applyFilter();
 }

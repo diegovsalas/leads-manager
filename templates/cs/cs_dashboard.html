@@ -67,13 +67,54 @@
 
 <!-- Facturación del periodo -->
 <div class="grid grid-cols-3 gap-5 mb-8">
-    {% for label, value, sub, color in kpis_fact %}
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-        <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-2">{{ label }}</p>
-        <p class="text-2xl font-bold text-{{ color }}-600">{{ value }}</p>
-        <p class="text-xs text-gray-400 mt-1">{{ sub }}</p>
+        <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-2">Facturado</p>
+        <p class="text-2xl font-bold text-gray-800">${{ "{:,.0f}".format(facturado_periodo) }}</p>
+        <div class="flex items-center gap-2 mt-1">
+            <p class="text-xs text-gray-400">{{ periodo_label }}</p>
+            {% if delta_facturado is not none %}
+            <span class="text-xs font-semibold {% if delta_facturado >= 0 %}text-green-600{% else %}text-red-500{% endif %}">
+                {{ "+" if delta_facturado >= 0 }}{{ delta_facturado }}% vs anterior
+            </span>
+            {% endif %}
+        </div>
     </div>
-    {% endfor %}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-2">Pagado</p>
+        <p class="text-2xl font-bold text-green-600">${{ "{:,.0f}".format(pagado_periodo) }}</p>
+        <div class="flex items-center gap-2 mt-1">
+            <p class="text-xs text-gray-400">{{ periodo_label }}</p>
+            {% if delta_pagado is not none %}
+            <span class="text-xs font-semibold {% if delta_pagado >= 0 %}text-green-600{% else %}text-red-500{% endif %}">
+                {{ "+" if delta_pagado >= 0 }}{{ delta_pagado }}% vs anterior
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-2">Pendiente</p>
+        <p class="text-2xl font-bold {% if pendiente_periodo > 0 %}text-red-500{% else %}text-gray-400{% endif %}">${{ "{:,.0f}".format(pendiente_periodo) }}</p>
+        <div class="flex items-center gap-2 mt-1">
+            <p class="text-xs text-gray-400">{{ periodo_label }}</p>
+            {% if delta_pendiente is not none %}
+            <span class="text-xs font-semibold {% if delta_pendiente <= 0 %}text-green-600{% else %}text-red-500{% endif %}">
+                {{ "+" if delta_pendiente >= 0 }}{{ delta_pendiente }}% vs anterior
+            </span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Gráficas MRR + Operación -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <h2 class="text-sm font-semibold text-gray-800 mb-4">Facturación por Mes</h2>
+        <canvas id="mrrTrendChart" height="220"></canvas>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <h2 class="text-sm font-semibold text-gray-800 mb-4">Operación por Mes</h2>
+        <canvas id="operacionTrendChart" height="220"></canvas>
+    </div>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
@@ -171,5 +212,63 @@ new Chart(document.getElementById('healthDonut'),{type:'doughnut',data:{labels:[
 {% if not is_kam and kam_data %}
 new Chart(document.getElementById('kamBarChart'),{type:'bar',data:{labels:[{% for k in kam_data %}'{{k.nombre.split(" ")[0]}}'{% if not loop.last %},{% endif %}{% endfor %}],datasets:[{label:'MRR',data:[{% for k in kam_data %}{{k.mrr|round(0)}}{% if not loop.last %},{% endif %}{% endfor %}],backgroundColor:['#7c3aed','#a855f7','#06b6d4','#f59e0b'],borderRadius:8,barThickness:28}]},options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{callback:function(v){return '$'+(v/1000).toFixed(0)+'K'},font:{family:'Inter',size:11}}},y:{ticks:{font:{family:'Inter',size:12}}}}}});
 {% endif %}
+
+// MRR Trend Chart
+fetch('/cs/api/mrr-trend').then(r=>r.json()).then(data=>{
+    const ctx=document.getElementById('mrrTrendChart');
+    if(!ctx||!data.length) return;
+    new Chart(ctx,{
+        type:'bar',
+        data:{
+            labels:data.map(d=>d.mes_label),
+            datasets:[
+                {label:'Pagado',data:data.map(d=>d.pagado),backgroundColor:'#22c55e',borderRadius:4,order:2},
+                {label:'Pendiente',data:data.map(d=>d.pendiente),backgroundColor:'#ef4444',borderRadius:4,order:2},
+                {label:'Facturado',data:data.map(d=>d.facturado),type:'line',borderColor:'#7c3aed',backgroundColor:'transparent',borderWidth:2,pointRadius:4,pointBackgroundColor:'#7c3aed',tension:.3,order:1},
+            ]
+        },
+        options:{
+            responsive:true,
+            plugins:{
+                legend:{position:'bottom',labels:{boxWidth:12,padding:12,font:{family:'Inter',size:11}}},
+                tooltip:{callbacks:{label:function(c){return c.dataset.label+': $'+c.parsed.y.toLocaleString('en-US')}},backgroundColor:'#1e1b3a',cornerRadius:8}
+            },
+            scales:{
+                x:{stacked:true,grid:{display:false},ticks:{font:{family:'Inter',size:11}}},
+                y:{stacked:true,ticks:{callback:function(v){return '$'+(v/1000).toFixed(0)+'K'},font:{family:'Inter',size:11}},grid:{color:'#f3f4f6'}}
+            }
+        }
+    });
+});
+
+// Operación Trend Chart
+fetch('/cs/api/operacion-trend').then(r=>r.json()).then(data=>{
+    const ctx=document.getElementById('operacionTrendChart');
+    if(!ctx||!data.length) return;
+    new Chart(ctx,{
+        type:'bar',
+        data:{
+            labels:data.map(d=>d.mes_label),
+            datasets:[
+                {label:'Terminadas',data:data.map(d=>d.terminadas),backgroundColor:'#22c55e',borderRadius:4},
+                {label:'Canceladas',data:data.map(d=>d.canceladas),backgroundColor:'#ef4444',borderRadius:4},
+                {label:'No Realizadas',data:data.map(d=>d.no_realizadas),backgroundColor:'#f59e0b',borderRadius:4},
+                {label:'% Cumplimiento',data:data.map(d=>d.pct_cumplimiento),type:'line',borderColor:'#7c3aed',backgroundColor:'transparent',borderWidth:2,pointRadius:4,pointBackgroundColor:'#7c3aed',tension:.3,yAxisID:'y1'},
+            ]
+        },
+        options:{
+            responsive:true,
+            plugins:{
+                legend:{position:'bottom',labels:{boxWidth:12,padding:12,font:{family:'Inter',size:11}}},
+                tooltip:{backgroundColor:'#1e1b3a',cornerRadius:8}
+            },
+            scales:{
+                x:{stacked:true,grid:{display:false},ticks:{font:{family:'Inter',size:11}}},
+                y:{stacked:true,ticks:{font:{family:'Inter',size:11}},grid:{color:'#f3f4f6'}},
+                y1:{position:'right',min:0,max:100,ticks:{callback:function(v){return v+'%'},font:{family:'Inter',size:11}},grid:{display:false}}
+            }
+        }
+    });
+});
 </script>
 {% endblock %}
