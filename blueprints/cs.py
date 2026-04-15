@@ -276,8 +276,14 @@ def editar_cliente(account_id):
     acc = db.session.get(CSAccount, account_id)
     if not acc:
         return "No encontrado", 404
-    acc.giro = request.form.get("giro", acc.giro).strip()
-    acc.tier = request.form.get("tier", acc.tier).strip()
+    if "logo_url" in request.form:
+        acc.logo_url = request.form.get("logo_url", "").strip()
+    if "giro" in request.form:
+        # Multi-select: getlist returns multiple values
+        giros = request.form.getlist("giro")
+        acc.giro = ",".join(g.strip() for g in giros if g.strip())
+    if "tier" in request.form:
+        acc.tier = request.form.get("tier", "").strip()
     db.session.commit()
     return redirect(url_for("cs.clientes"))
 

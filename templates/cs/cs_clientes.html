@@ -10,6 +10,18 @@
     </div>
 </div>
 
+{% set GIROS = {
+    'Retail': '🛍️',
+    'Hospitalidad': '🏨',
+    'Salud': '🏥',
+    'Educacion': '🎓',
+    'Automotriz': '🚗',
+    'Alianza Comercial': '🤝',
+    'Banca': '🏦',
+    'Food Services': '🍽️',
+    'Servicios / Entretenimiento': '🎭',
+} %}
+
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
     <div class="overflow-x-auto">
         <table class="w-full text-sm">
@@ -24,26 +36,36 @@
                     <th class="px-4 py-3 text-right">Score</th>
                     <th class="px-4 py-3 text-right">NPS</th>
                     <th class="px-4 py-3 text-right">MRR</th>
-                    <th class="px-4 py-3">Acciones</th>
+                    <th class="px-4 py-3"></th>
                 </tr>
             </thead>
             <tbody>
                 {% for item in clientes %}
                 {% set acc = item.account %}
                 {% set hs = item.health %}
-                <tr class="border-b last:border-0 hover:bg-gray-50 group" x-data="{ editing: false }">
-                    <!-- ID -->
+                <tr class="border-b last:border-0 hover:bg-gray-50">
                     <td class="px-4 py-3 text-xs text-gray-400 font-mono">{{ acc.id|string|truncate(8, True, '') }}</td>
 
-                    <!-- Nombre -->
+                    <!-- Cliente con logo -->
                     <td class="px-4 py-3">
-                        <a href="/cs/account/{{ acc.id }}" class="font-semibold text-brand-600 hover:underline">{{ acc.nombre }}</a>
-                        <div class="text-xs text-gray-400 mt-0.5">
-                            {% for un in (acc.unidades_contratadas or '').split(',') if un.strip() %}
-                            <span class="inline-block px-1.5 py-0.5 rounded text-xs font-medium mr-1
-                                {% if un.strip() == 'PESTEX' %}bg-green-100 text-green-700{% else %}bg-purple-100 text-purple-700{% endif %}">{{ un.strip() }}</span>
-                            {% endfor %}
-                            · {{ acc.sucursales }} suc.
+                        <div class="flex items-center gap-3">
+                            {% if acc.logo_url %}
+                            <img src="{{ acc.logo_url }}" alt="{{ acc.nombre }}" class="w-8 h-8 rounded-lg object-contain bg-gray-50 border flex-shrink-0">
+                            {% else %}
+                            <div class="w-8 h-8 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                {{ acc.nombre[:2]|upper }}
+                            </div>
+                            {% endif %}
+                            <div>
+                                <a href="/cs/account/{{ acc.id }}" class="font-semibold text-brand-600 hover:underline">{{ acc.nombre }}</a>
+                                <div class="text-xs text-gray-400 mt-0.5">
+                                    {% for un in (acc.unidades_contratadas or '').split(',') if un.strip() %}
+                                    <span class="inline-block px-1.5 py-0.5 rounded text-xs font-medium mr-1
+                                        {% if un.strip() == 'PESTEX' %}bg-green-100 text-green-700{% else %}bg-purple-100 text-purple-700{% endif %}">{{ un.strip() }}</span>
+                                    {% endfor %}
+                                    · {{ acc.sucursales }} suc.
+                                </div>
+                            </div>
                         </div>
                     </td>
 
@@ -58,47 +80,27 @@
                         {% endif %}
                     </td>
 
-                    <!-- Giro (editable) -->
+                    <!-- Giro con iconos -->
                     <td class="px-4 py-3">
-                        <template x-if="!editing">
-                            <span class="text-xs text-gray-600 cursor-pointer" @click="editing=true">
-                                {{ acc.giro or '—' }}
-                            </span>
-                        </template>
-                        <template x-if="editing">
-                            <form action="/cs/clientes/{{ acc.id }}/editar" method="POST" class="flex gap-1">
-                                <input type="hidden" name="tier" value="{{ acc.tier }}">
-                                <input type="text" name="giro" value="{{ acc.giro }}" placeholder="Giro..."
-                                       class="text-xs border border-gray-300 rounded px-2 py-1 w-28">
-                                <button type="submit" class="text-xs text-brand-600 hover:text-brand-700 font-medium">OK</button>
-                            </form>
-                        </template>
+                        {% for g in (acc.giro or '').split(',') if g.strip() %}
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 mr-1 mb-0.5">
+                            {{ GIROS.get(g.strip(), '📌') }} {{ g.strip() }}
+                        </span>
+                        {% endfor %}
+                        {% if not acc.giro %}
+                        <span class="text-xs text-gray-300">—</span>
+                        {% endif %}
                     </td>
 
-                    <!-- Tier (editable) -->
+                    <!-- Tier -->
                     <td class="px-4 py-3 text-center">
-                        <template x-if="!editing">
-                            <span class="cursor-pointer px-2 py-0.5 rounded-full text-xs font-semibold
-                                {% if acc.tier == 'Gold' %}bg-yellow-100 text-yellow-700
-                                {% elif acc.tier == 'Silver' %}bg-gray-200 text-gray-600
-                                {% elif acc.tier == 'Bronze' %}bg-orange-100 text-orange-700
-                                {% else %}bg-gray-100 text-gray-400{% endif %}"
-                                @click="editing=true">
-                                {{ acc.tier or '—' }}
-                            </span>
-                        </template>
-                        <template x-if="editing">
-                            <form action="/cs/clientes/{{ acc.id }}/editar" method="POST" class="flex gap-1">
-                                <input type="hidden" name="giro" value="{{ acc.giro }}">
-                                <select name="tier" class="text-xs border border-gray-300 rounded px-1 py-1">
-                                    <option value="">—</option>
-                                    <option value="Gold" {% if acc.tier == 'Gold' %}selected{% endif %}>Gold</option>
-                                    <option value="Silver" {% if acc.tier == 'Silver' %}selected{% endif %}>Silver</option>
-                                    <option value="Bronze" {% if acc.tier == 'Bronze' %}selected{% endif %}>Bronze</option>
-                                </select>
-                                <button type="submit" class="text-xs text-brand-600 font-medium">OK</button>
-                            </form>
-                        </template>
+                        <span class="px-2 py-0.5 rounded-full text-xs font-semibold
+                            {% if acc.tier == 'Gold' %}bg-yellow-100 text-yellow-700
+                            {% elif acc.tier == 'Silver' %}bg-gray-200 text-gray-600
+                            {% elif acc.tier == 'Bronze' %}bg-orange-100 text-orange-700
+                            {% else %}bg-gray-100 text-gray-400{% endif %}">
+                            {{ acc.tier or '—' }}
+                        </span>
                     </td>
 
                     <!-- Salud -->
@@ -138,9 +140,10 @@
                     <!-- MRR -->
                     <td class="px-4 py-3 text-right font-semibold text-gray-800">${{ "{:,.0f}".format(acc.mrr|float) }}</td>
 
-                    <!-- Acciones -->
+                    <!-- Editar -->
                     <td class="px-4 py-3">
-                        <a href="/cs/account/{{ acc.id }}" class="text-xs text-brand-600 hover:underline">Ver detalle</a>
+                        <button onclick="openEditModal('{{ acc.id }}','{{ acc.nombre }}','{{ acc.logo_url }}','{{ acc.giro }}','{{ acc.tier }}')"
+                                class="text-xs text-brand-600 hover:underline">Editar</button>
                     </td>
                 </tr>
                 {% endfor %}
@@ -148,5 +151,95 @@
         </table>
     </div>
 </div>
+
+<!-- Modal Editar Cliente -->
+<div id="modal-edit-cliente" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-semibold text-gray-800" id="edit-title">Editar Cliente</h2>
+            <button onclick="document.getElementById('modal-edit-cliente').classList.add('hidden')"
+                    class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+
+        <form id="edit-form" method="POST">
+            <!-- Logo URL -->
+            <div class="mb-4">
+                <label class="text-xs text-gray-500 block mb-1">Logo (URL de imagen)</label>
+                <div class="flex gap-2 items-center">
+                    <img id="edit-logo-preview" src="" alt="" class="w-10 h-10 rounded-lg object-contain bg-gray-50 border hidden">
+                    <input type="text" name="logo_url" id="edit-logo" placeholder="https://logo.clearbit.com/empresa.com"
+                           class="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2"
+                           oninput="var p=document.getElementById('edit-logo-preview');if(this.value){p.src=this.value;p.classList.remove('hidden')}else{p.classList.add('hidden')}">
+                </div>
+                <p class="text-xs text-gray-400 mt-1">Tip: usa logo.clearbit.com/dominio.com para logos automaticos</p>
+            </div>
+
+            <!-- Giro (multi-select con checkboxes) -->
+            <div class="mb-4">
+                <label class="text-xs text-gray-500 block mb-2">Giro (selecciona uno o mas)</label>
+                <div class="grid grid-cols-2 gap-2" id="giro-checkboxes">
+                    {% for giro_name, giro_icon in GIROS.items() %}
+                    <label class="flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors giro-label">
+                        <input type="checkbox" name="giro" value="{{ giro_name }}" class="rounded text-brand-600 giro-check">
+                        <span class="text-sm">{{ giro_icon }} {{ giro_name }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Tier -->
+            <div class="mb-4">
+                <label class="text-xs text-gray-500 block mb-1">Tier</label>
+                <select name="tier" id="edit-tier" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                    <option value="">Sin asignar</option>
+                    <option value="Gold">🥇 Gold</option>
+                    <option value="Silver">🥈 Silver</option>
+                    <option value="Bronze">🥉 Bronze</option>
+                </select>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-5">
+                <button type="button" onclick="document.getElementById('modal-edit-cliente').classList.add('hidden')"
+                        class="px-4 py-2 text-sm text-gray-600">Cancelar</button>
+                <button type="submit" class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openEditModal(id, nombre, logoUrl, giro, tier) {
+    document.getElementById('edit-title').textContent = 'Editar — ' + nombre;
+    document.getElementById('edit-form').action = '/cs/clientes/' + id + '/editar';
+    document.getElementById('edit-logo').value = logoUrl || '';
+    document.getElementById('edit-tier').value = tier || '';
+
+    // Logo preview
+    var preview = document.getElementById('edit-logo-preview');
+    if (logoUrl) { preview.src = logoUrl; preview.classList.remove('hidden'); }
+    else { preview.classList.add('hidden'); }
+
+    // Reset giro checkboxes
+    var giros = giro ? giro.split(',') : [];
+    document.querySelectorAll('.giro-check').forEach(function(cb) {
+        cb.checked = giros.indexOf(cb.value) !== -1;
+        // Highlight selected
+        var label = cb.closest('.giro-label');
+        if (cb.checked) { label.classList.add('bg-brand-50', 'border-brand-300'); }
+        else { label.classList.remove('bg-brand-50', 'border-brand-300'); }
+    });
+
+    document.getElementById('modal-edit-cliente').classList.remove('hidden');
+}
+
+// Toggle highlight on checkbox change
+document.querySelectorAll('.giro-check').forEach(function(cb) {
+    cb.addEventListener('change', function() {
+        var label = this.closest('.giro-label');
+        if (this.checked) { label.classList.add('bg-brand-50', 'border-brand-300'); }
+        else { label.classList.remove('bg-brand-50', 'border-brand-300'); }
+    });
+});
+</script>
 
 {% endblock %}
