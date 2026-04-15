@@ -563,6 +563,7 @@ class CSAccount(db.Model):
     notes = db.relationship("CSNote", backref="account", lazy=True, order_by="CSNote.created_at.desc()")
     tasks = db.relationship("CSTask", backref="account", lazy=True, order_by="CSTask.created_at.desc()")
     contactos = db.relationship("CSContacto", backref="account", lazy=True, order_by="CSContacto.is_owner.desc()")
+    entregables = db.relationship("CSEntregable", backref="account", lazy=True, order_by="CSEntregable.orden")
 
     def to_dict(self):
         return {
@@ -649,6 +650,19 @@ class CSContacto(db.Model):
             "is_owner": self.is_owner, "notas": self.notas,
             "cuenta": self.account.nombre if self.account else "",
         }
+
+
+class CSEntregable(db.Model):
+    """Entregable/flujo de servicio recurrente por cuenta."""
+    __tablename__ = "cs_entregables"
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=False)
+    unidad_negocio = db.Column(db.String(30), default="")
+    descripcion = db.Column(db.Text, nullable=False)
+    fecha_entrega = db.Column(db.String(100), default="")  # "1 al 5 de cada mes"
+    responsable = db.Column(db.String(120), default="")
+    orden = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
 
 
 class CSOnboardingAccount(db.Model):

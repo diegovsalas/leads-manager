@@ -11,7 +11,8 @@ from sqlalchemy import func
 from extensions import db
 from models import (
     CSAccount, CSInvoice, CSAppointment, CSNote, CSTask,
-    CSOnboardingAccount, CSOpportunity, CSContacto, UserCRM, RolCRM,
+    CSOnboardingAccount, CSOpportunity, CSContacto, CSEntregable,
+    UserCRM, RolCRM,
 )
 from cs_health_score import calcular_health_score, calcular_health_scores_batch
 from cs_alerts import generar_alertas, alertas_por_cuenta
@@ -338,6 +339,12 @@ def account_detail(account_id):
     tasks = CSTask.query.filter_by(account_id=account.id).order_by(CSTask.completada, CSTask.fecha_limite).all()
     tareas_pendientes = sum(1 for t in tasks if not t.completada)
     contactos = CSContacto.query.filter_by(account_id=account.id).order_by(CSContacto.is_owner.desc(), CSContacto.nombre).all()
+    entregables = CSEntregable.query.filter_by(account_id=account.id).order_by(CSEntregable.unidad_negocio, CSEntregable.orden).all()
+    # Agrupar por UN
+    entregables_por_un = {}
+    for e in entregables:
+        un = e.unidad_negocio or "General"
+        entregables_por_un.setdefault(un, []).append(e)
 
     return render_template(
         "cs_account_detail.html",
@@ -348,6 +355,7 @@ def account_detail(account_id):
         appointments=appointments, citas_por_estatus=citas_por_estatus,
         notes=notes, tasks=tasks, tareas_pendientes=tareas_pendientes,
         contactos=contactos,
+        entregables=entregables, entregables_por_un=entregables_por_un,
         today=date.today(), account_alerts=alertas_por_cuenta(str(account_id)),
         kams=_get_kams(),
         periodo_label=periodo_label, periodo_param=periodo_param,
@@ -903,6 +911,39 @@ def eliminar_contacto(contacto_id):
     if referer:
         return redirect(referer)
     return redirect(url_for("cs.contactos_directory"))
+
+
+# ══════════════════════════════════════════════
+# ENTREGABLES — Flujo de servicio por cuenta
+# ══════════════════════════════════════════════
+@cs_bp.route("/account/<uuid:account_id>/entregables", methods=["POST"])
+def crear_entregable(account_id):
+    descripcion = request.form.get("descripcion", "").strip()
+    if descripcion:
+        # Calcular orden (siguiente en la UN)
+        un = request.form.get("unidad_negocio", "").strip()
+        max_orden = db.session.query(func.coalesce(func.max(CSEntregable.orden), 0)).filter_by(
+            account_id=account_id, unidad_negocio=un
+        ).scalar()
+        db.session.add(CSEntregable(
+            account_id=account_id,
+            unidad_negocio=un,
+            descripcion=descripcion,
+            fecha_entrega=request.form.get("fecha_entrega", "").strip(),
+            responsable=request.form.get("responsable", "").strip(),
+            orden=max_orden + 1,
+        ))
+        db.session.commit()
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=entregables#entregables")
+
+
+@cs_bp.route("/account/<uuid:account_id>/entregables/<uuid:ent_id>/delete", methods=["POST"])
+def eliminar_entregable(account_id, ent_id):
+    e = db.session.get(CSEntregable, ent_id)
+    if e:
+        db.session.delete(e)
+        db.session.commit()
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=entregables#entregables")
 
 
 # ══════════════════════════════════════════════
