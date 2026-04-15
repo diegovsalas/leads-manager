@@ -1,0 +1,226 @@
+{% extends "cs/cs_base.html" %}
+{% block title %}Oportunidades — Avantex CS{% endblock %}
+
+{% block content %}
+
+<div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-800">Oportunidades</h1>
+        <p class="text-sm text-gray-500">Pipeline de ventas — upsell, expansión y nuevos servicios</p>
+    </div>
+    <button onclick="document.getElementById('modal-nueva-opp').classList.remove('hidden')"
+            class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors shadow-sm">
+        + Nueva Oportunidad
+    </button>
+</div>
+
+<!-- KPIs -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+        <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">Oportunidades</p>
+        <p class="text-xl font-bold text-gray-800">{{ total_opps }}</p>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+        <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">Valor Pipeline</p>
+        <p class="text-xl font-bold text-blue-600">${{ "{:,.0f}".format(valor_pipeline) }}</p>
+        <p class="text-xs text-gray-400">MRR estimado (activas)</p>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+        <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">Ganadas</p>
+        <p class="text-xl font-bold text-green-600">{{ ganadas }}</p>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+        <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">MRR Ganado</p>
+        <p class="text-xl font-bold text-green-600">${{ "{:,.0f}".format(valor_ganado) }}</p>
+    </div>
+</div>
+
+<!-- Pipeline Kanban -->
+<div class="flex gap-4 overflow-x-auto pb-4">
+    {% set etapa_colors = {
+        'prospeccion': 'blue',
+        'propuesta_enviada': 'purple',
+        'negociacion': 'yellow',
+        'ganada': 'green',
+        'perdida': 'red'
+    } %}
+
+    {% for key, label in etapas %}
+    {% set data = pipeline[key] %}
+    {% set color = etapa_colors[key] %}
+    <div class="min-w-[280px] flex-1">
+        <!-- Header de columna -->
+        <div class="flex items-center gap-2 mb-3">
+            <span class="w-3 h-3 rounded-full bg-{{ color }}-500"></span>
+            <h3 class="text-sm font-semibold text-gray-700">{{ label }}</h3>
+            <span class="text-xs text-gray-400 bg-gray-100 px-1.5 rounded-full">{{ data.opps|length }}</span>
+        </div>
+
+        <!-- Cards -->
+        <div class="space-y-3">
+            {% for opp in data.opps %}
+            <div class="bg-white rounded-lg shadow-sm border p-4 hover:shadow-md transition-shadow">
+                <div class="flex justify-between items-start mb-2">
+                    <h4 class="text-sm font-medium text-gray-800">{{ opp.cliente_nombre }}</h4>
+                    <span class="text-xs font-semibold text-{{ color }}-600 bg-{{ color }}-50 px-1.5 py-0.5 rounded">
+                        {{ opp.unidad_negocio }}
+                    </span>
+                </div>
+                <p class="text-xs text-gray-500 mb-2">{{ opp.descripcion[:80] }}</p>
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-sm font-bold text-gray-700">${{ "{:,.0f}".format(opp.valor_estimado) }}/mes</span>
+                    <span class="text-xs text-gray-400">
+                        {% for t_key, t_label in tipos if t_key == opp.tipo %}{{ t_label }}{% endfor %}
+                    </span>
+                </div>
+
+                {% if opp.kam %}
+                <p class="text-xs text-gray-400 mb-3">KAM: {{ opp.kam.nombre.split(' ')[0] }}</p>
+                {% endif %}
+
+                <!-- Acciones: mover etapa -->
+                <div class="flex flex-wrap gap-1">
+                    {% for e_key, e_label in etapas if e_key != key %}
+                    <form action="/cs/oportunidades/{{ opp.id }}/etapa" method="POST" class="inline">
+                        <input type="hidden" name="etapa" value="{{ e_key }}">
+                        <button type="submit"
+                                class="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+                            {{ e_label[:10] }}
+                        </button>
+                    </form>
+                    {% endfor %}
+                </div>
+
+                <!-- Cotización rápida + eliminar -->
+                <div class="flex justify-between items-center mt-3 pt-2 border-t">
+                    {% if key not in ('ganada', 'perdida') %}
+                    <a href="/cs/cotizaciones/nueva?opp_id={{ opp.id }}"
+                       class="text-xs text-brand-600 hover:underline">Crear cotización</a>
+                    {% else %}
+                    <span></span>
+                    {% endif %}
+                    <form action="/cs/oportunidades/{{ opp.id }}/delete" method="POST"
+                          onsubmit="return confirm('¿Eliminar esta oportunidad?')">
+                        <button type="submit" class="text-xs text-red-400 hover:text-red-600">Eliminar</button>
+                    </form>
+                </div>
+
+                <!-- Cotizaciones vinculadas -->
+                {% if opp.quotes %}
+                <div class="mt-2 pt-2 border-t">
+                    <p class="text-xs text-gray-400 mb-1">Cotizaciones:</p>
+                    {% for q in opp.quotes %}
+                    <a href="/cs/cotizaciones/{{ q.id }}"
+                       class="text-xs text-brand-600 hover:underline block">
+                        {{ q.folio }} — ${{ "{:,.0f}".format(q.total) }}
+                        <span class="text-gray-400">({{ q.estatus }})</span>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            {% if not data.opps %}
+            <div class="text-center py-8 text-gray-300 text-sm border-2 border-dashed rounded-lg">
+                Sin oportunidades
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Modal: Nueva oportunidad -->
+<div id="modal-nueva-opp" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-semibold text-gray-800">Nueva Oportunidad</h2>
+            <button onclick="document.getElementById('modal-nueva-opp').classList.add('hidden')"
+                    class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+
+        <form action="/cs/oportunidades/crear" method="POST">
+            <div class="space-y-4">
+                <!-- Cuenta existente o prospecto -->
+                <div>
+                    <label class="text-xs text-gray-500 block mb-1">Cuenta existente (opcional)</label>
+                    <select name="account_id" id="opp_account_select"
+                            onchange="document.getElementById('prospecto_field').style.display = this.value ? 'none' : 'block'"
+                            class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                        <option value="">— Prospecto nuevo —</option>
+                        {% for acc in accounts %}
+                        <option value="{{ acc.id }}">{{ acc.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div id="prospecto_field">
+                    <label class="text-xs text-gray-500 block mb-1">Nombre del prospecto</label>
+                    <input type="text" name="prospecto_nombre" placeholder="Ej: Grupo Haber"
+                           class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                </div>
+
+                <div>
+                    <label class="text-xs text-gray-500 block mb-1">Contacto</label>
+                    <input type="text" name="contacto" placeholder="Nombre del contacto"
+                           class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs text-gray-500 block mb-1">Tipo</label>
+                        <select name="tipo" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                            {% for t_key, t_label in tipos %}
+                            <option value="{{ t_key }}">{{ t_label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500 block mb-1">Unidad de Negocio</label>
+                        <select name="unidad_negocio" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                            <option value="AROMATEX">AROMATEX</option>
+                            <option value="PESTEX">PESTEX</option>
+                            <option value="AROMATEX,PESTEX">Ambas</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs text-gray-500 block mb-1">MRR estimado ($)</label>
+                        <input type="number" name="valor_estimado" step="0.01" placeholder="0.00"
+                               class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500 block mb-1">KAM</label>
+                        <select name="kam_id" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                            <option value="">Sin asignar</option>
+                            {% for k in kams %}
+                            <option value="{{ k.id }}">{{ k.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-xs text-gray-500 block mb-1">Descripción</label>
+                    <textarea name="descripcion" rows="2" placeholder="Detalle de la oportunidad..."
+                              class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 resize-none"></textarea>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6">
+                <button type="button"
+                        onclick="document.getElementById('modal-nueva-opp').classList.add('hidden')"
+                        class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancelar</button>
+                <button type="submit"
+                        class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700">
+                    Crear Oportunidad
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

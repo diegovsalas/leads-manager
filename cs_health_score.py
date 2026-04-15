@@ -1,13 +1,84 @@
 # cs_health_score.py
 """
-Health Score para CS Dashboard — adaptado a PostgreSQL/UUID.
+Health Score para CS Dashboard — optimizado con queries batch.
 Score: 0-100 → Sana(70+), Atención(40-69), Riesgo(0-39)
 """
 from datetime import date
+from sqlalchemy import func
+from extensions import db
 from models import CSAccount, CSInvoice, CSAppointment
 
 
+def _preload_cita_stats(account_ids):
+    """Carga stats de citas en batch: {account_id: {completadas, relevantes}}"""
+    if not account_ids:
+        return {}
+
+    rows = (
+        db.session.query(
+            CSAppointment.account_id,
+            CSAppointment.estatus,
+            func.count(CSAppointment.id),
+        )
+        .filter(CSAppointment.account_id.in_(account_ids))
+        .group_by(CSAppointment.account_id, CSAppointment.estatus)
+        .all()
+    )
+
+    stats = {}
+    for acc_id, estatus, cnt in rows:
+        key = str(acc_id)
+        if key not in stats:
+            stats[key] = {"completadas": 0, "relevantes": 0}
+        if estatus == "Terminada":
+            stats[key]["completadas"] += cnt
+        if estatus not in ("Cancelada", "Servicio Duplicado"):
+            stats[key]["relevantes"] += cnt
+
+    return stats
+
+
+def _preload_recencia(account_ids):
+    """Última fecha de pago por cuenta: {account_id: date}"""
+    if not account_ids:
+        return {}
+
+    rows = (
+        db.session.query(
+            CSInvoice.account_id,
+            func.max(CSInvoice.fecha_pago),
+        )
+        .filter(
+            CSInvoice.account_id.in_(account_ids),
+            CSInvoice.fecha_pago.isnot(None),
+        )
+        .group_by(CSInvoice.account_id)
+        .all()
+    )
+
+    return {str(acc_id): fecha for acc_id, fecha in rows}
+
+
+def calcular_health_scores_batch(accounts: list[CSAccount]) -> dict:
+    """Calcula health scores para múltiples cuentas con solo 2 queries."""
+    account_ids = [a.id for a in accounts]
+    cita_stats = _preload_cita_stats(account_ids)
+    recencia_map = _preload_recencia(account_ids)
+
+    results = {}
+    for acc in accounts:
+        results[str(acc.id)] = _calcular_score(acc, cita_stats, recencia_map)
+    return results
+
+
 def calcular_health_score(account: CSAccount) -> dict:
+    """Calcula health score para una sola cuenta (usa batch internamente)."""
+    cita_stats = _preload_cita_stats([account.id])
+    recencia_map = _preload_recencia([account.id])
+    return _calcular_score(account, cita_stats, recencia_map)
+
+
+def _calcular_score(account, cita_stats, recencia_map):
     desglose = {}
     facturacion = float(account.facturacion_q1 or 0)
     pagado = float(account.pagado_q1 or 0)
@@ -28,10 +99,11 @@ def calcular_health_score(account: CSAccount) -> dict:
         "detalle": f'{len(uns)} UN(s): {", ".join(uns) if uns else "ninguna"}',
     }
 
-    # 3. OPERACIÓN (15%)
-    citas = CSAppointment.query.filter_by(account_id=account.id).all()
-    completadas = sum(1 for c in citas if c.estatus == "Terminada")
-    relevantes = sum(1 for c in citas if c.estatus not in ("Cancelada", "Servicio Duplicado"))
+    # 3. OPERACIÓN (15%) — from preloaded stats
+    key = str(account.id)
+    stats = cita_stats.get(key, {"completadas": 0, "relevantes": 0})
+    completadas = stats["completadas"]
+    relevantes = stats["relevantes"]
     ratio_citas = completadas / relevantes if relevantes > 0 else 0.5
     score_operacion = ratio_citas * 100
     desglose["operacion"] = {
@@ -39,15 +111,11 @@ def calcular_health_score(account: CSAccount) -> dict:
         "detalle": f"{completadas}/{relevantes} citas completadas ({ratio_citas:.1%})",
     }
 
-    # 4. RECENCIA (10%)
-    ultima_pagada = (
-        CSInvoice.query.filter_by(account_id=account.id)
-        .filter(CSInvoice.fecha_pago.isnot(None))
-        .order_by(CSInvoice.fecha_pago.desc()).first()
-    )
+    # 4. RECENCIA (10%) — from preloaded
     hoy = date.today()
-    if ultima_pagada and ultima_pagada.fecha_pago:
-        dias = (hoy - ultima_pagada.fecha_pago).days
+    ultima_pago = recencia_map.get(key)
+    if ultima_pago:
+        dias = (hoy - ultima_pago).days
         score_recencia = 100 if dias <= 30 else 70 if dias <= 60 else 40 if dias <= 90 else 10
     else:
         dias = None

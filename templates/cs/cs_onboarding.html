@@ -1,0 +1,184 @@
+{% extends "cs/cs_base.html" %}
+{% block title %}Onboarding — Avantex CS{% endblock %}
+
+{% block content %}
+
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-800">Pipeline de Onboarding</h1>
+    <p class="text-sm text-gray-500">Cuentas nuevas en proceso + pipeline futuro</p>
+</div>
+
+<!-- Cuentas nuevas activas (del top 20) -->
+<div class="mb-8">
+    <h2 class="text-lg font-semibold text-gray-700 mb-4">Cuentas Nuevas en Onboarding</h2>
+
+    {% if cuentas_nuevas %}
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {% for item in cuentas_nuevas %}
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div class="flex items-start justify-between mb-3">
+                <div>
+                    <a href="/cs/account/{{ item.account.id }}"
+                       class="text-lg font-semibold text-brand-600 hover:underline">
+                        {{ item.account.nombre }}
+                    </a>
+                    <p class="text-sm text-gray-500">
+                        KAM: {{ item.account.kam.nombre }}
+                        · {{ item.account.unidades_contratadas }}
+                    </p>
+                </div>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold
+                    {% if item.health.color == 'green' %}bg-green-100 text-green-700
+                    {% elif item.health.color == 'yellow' %}bg-yellow-100 text-yellow-700
+                    {% else %}bg-red-100 text-red-700{% endif %}">
+                    {{ item.health.score }}
+                </span>
+            </div>
+
+            <!-- KPIs de la cuenta nueva -->
+            <div class="grid grid-cols-3 gap-3 text-center mb-4">
+                <div class="bg-gray-50 rounded-lg p-2">
+                    <p class="text-sm font-bold text-gray-800">${{ "{:,.0f}".format(item.account.mrr) }}</p>
+                    <p class="text-xs text-gray-400">MRR</p>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-2">
+                    <p class="text-sm font-bold text-gray-800">{{ "{:,}".format(item.account.sucursales) }}</p>
+                    <p class="text-xs text-gray-400">Sucursales</p>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-2">
+                    {% set pct_cobro = (item.account.pagado_q1 / item.account.facturacion_q1 * 100) if item.account.facturacion_q1 > 0 else 0 %}
+                    <p class="text-sm font-bold {% if pct_cobro >= 70 %}text-green-600{% elif pct_cobro >= 40 %}text-yellow-500{% else %}text-red-500{% endif %}">
+                        {{ "{:.0f}".format(pct_cobro) }}%
+                    </p>
+                    <p class="text-xs text-gray-400">Cobrado</p>
+                </div>
+            </div>
+
+            <!-- Checklist de onboarding -->
+            <div class="border-t pt-3">
+                <p class="text-xs text-gray-500 font-medium mb-2">Progreso de onboarding:</p>
+                {% set tiene_qbr = item.tareas|selectattr('tipo', 'equalto', 'QBR')|list %}
+                {% set tiene_checkin = item.tareas|selectattr('tipo', 'equalto', 'check-in')|list %}
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2 text-xs">
+                        <span class="{% if tiene_qbr %}text-green-500{% else %}text-gray-300{% endif %}">
+                            {{ '&#10003;' if tiene_qbr else '&#9675;' }}
+                        </span>
+                        <span class="{% if tiene_qbr %}text-gray-600{% else %}text-gray-400{% endif %}">
+                            QBR agendado
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs">
+                        <span class="{% if tiene_checkin %}text-green-500{% else %}text-gray-300{% endif %}">
+                            {{ '&#10003;' if tiene_checkin else '&#9675;' }}
+                        </span>
+                        <span class="{% if tiene_checkin %}text-gray-600{% else %}text-gray-400{% endif %}">
+                            Check-in realizado
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs">
+                        {% set tiene_pago = item.account.pagado_q1 > 0 %}
+                        <span class="{% if tiene_pago %}text-green-500{% else %}text-gray-300{% endif %}">
+                            {{ '&#10003;' if tiene_pago else '&#9675;' }}
+                        </span>
+                        <span class="{% if tiene_pago %}text-gray-600{% else %}text-gray-400{% endif %}">
+                            Primer pago recibido
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {% if item.tareas %}
+            <div class="border-t pt-3 mt-3">
+                <p class="text-xs text-gray-500 font-medium mb-1">Tareas pendientes:</p>
+                {% for t in item.tareas[:3] %}
+                <div class="flex items-center gap-2 text-xs text-gray-600 py-0.5">
+                    <span class="text-gray-400">&#9675;</span>
+                    <span class="px-1.5 py-0.5 bg-gray-100 rounded text-gray-500">{{ t.tipo }}</span>
+                    <span>{{ t.descripcion[:50] }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-gray-50 border rounded-xl p-6 text-center">
+        <p class="text-gray-400 text-sm">No hay cuentas nuevas actualmente en onboarding.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Pipeline futuro -->
+<div>
+    <h2 class="text-lg font-semibold text-gray-700 mb-4">Pipeline Futuro</h2>
+
+    {% if pipeline %}
+    <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="border-b text-left text-gray-500 text-xs uppercase tracking-wide bg-gray-50">
+                    <th class="px-4 py-3">Cliente</th>
+                    <th class="px-4 py-3 text-right">Sucursales</th>
+                    <th class="px-4 py-3 text-right">Tarifa/suc</th>
+                    <th class="px-4 py-3">Frecuencia</th>
+                    <th class="px-4 py-3 text-right">MRR Proyectado</th>
+                    <th class="px-4 py-3">KAM Asignado</th>
+                    <th class="px-4 py-3">Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in pipeline %}
+                <tr class="border-b last:border-0 hover:bg-gray-50">
+                    <td class="px-4 py-3 font-medium text-gray-800">{{ p.nombre }}</td>
+                    <td class="px-4 py-3 text-right">{{ p.sucursales }}</td>
+                    <td class="px-4 py-3 text-right">${{ "{:,.0f}".format(p.tarifa) }}</td>
+                    <td class="px-4 py-3 text-gray-600">{{ p.frecuencia }}</td>
+                    <td class="px-4 py-3 text-right font-semibold text-purple-600">
+                        ${{ "{:,.0f}".format(p.mrr_proyectado) }}/mes
+                    </td>
+                    <td class="px-4 py-3">
+                        {% if p.kam_rel %}
+                        <span class="text-gray-700">{{ p.kam_rel.nombre }}</span>
+                        {% else %}
+                        <span class="text-gray-400 text-xs">Sin asignar</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3">
+                        <form action="/cs/onboarding/{{ p.id }}/asignar" method="POST" class="flex gap-2">
+                            <select name="kam_id" class="text-xs border border-gray-300 rounded px-2 py-1">
+                                <option value="">Sin asignar</option>
+                                {% for k in kams %}
+                                <option value="{{ k.id }}" {% if p.kam_id == k.id %}selected{% endif %}>
+                                    {{ k.nombre.split(' ')[0] }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit"
+                                    class="px-2 py-1 bg-brand-600 text-white text-xs rounded hover:bg-brand-700">
+                                Asignar
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- MRR potencial -->
+    <div class="mt-4 bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
+        <p class="text-sm text-purple-600">MRR potencial del pipeline:</p>
+        <p class="text-2xl font-bold text-purple-700">
+            ${{ "{:,.0f}".format(pipeline|map(attribute='mrr_proyectado')|sum) }}/mes
+        </p>
+    </div>
+    {% else %}
+    <div class="bg-gray-50 border rounded-xl p-6 text-center">
+        <p class="text-gray-400 text-sm">No hay cuentas en pipeline.</p>
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}

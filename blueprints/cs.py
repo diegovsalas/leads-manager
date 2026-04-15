@@ -11,14 +11,27 @@ from models import (
     CSAccount, CSInvoice, CSAppointment, CSNote, CSTask,
     CSOnboardingAccount, CSOpportunity, UserCRM, RolCRM,
 )
-from cs_health_score import calcular_health_score
+from cs_health_score import calcular_health_score, calcular_health_scores_batch
 from cs_alerts import generar_alertas, alertas_por_cuenta
 
 cs_bp = Blueprint("cs", __name__, template_folder="../templates/cs")
 
+ETAPAS_PIPELINE = [
+    ("prospeccion", "Prospección"),
+    ("propuesta_enviada", "Propuesta Enviada"),
+    ("negociacion", "Negociación"),
+    ("ganada", "Ganada"),
+    ("perdida", "Perdida"),
+]
+
+TIPOS_OPORTUNIDAD = [
+    ("upsell_un", "Upsell de UN"),
+    ("expansion_sucursales", "Expansión de sucursales"),
+    ("nuevo_servicio", "Nuevo servicio"),
+]
+
 
 def _get_kams():
-    """Retorna todos los usuarios con rol KAM."""
     return UserCRM.query.filter_by(rol=RolCRM.KAM, activo=True).order_by(UserCRM.nombre).all()
 
 
@@ -27,14 +40,22 @@ def _is_kam():
 
 
 def _current_kam_id():
-    """Si es KAM, retorna su user_id. Si es admin, retorna None."""
     if _is_kam():
         return session.get("user_id")
     return None
 
 
+def _ctx():
+    """Context vars comunes para todos los templates."""
+    return {
+        "user_nombre": session.get("user_nombre", ""),
+        "user_rol": session.get("user_rol", ""),
+        "is_kam": _is_kam(),
+    }
+
+
 # ══════════════════════════════════════════════
-# DASHBOARD
+# DASHBOARD — optimizado: 2 queries para scores
 # ══════════════════════════════════════════════
 @cs_bp.route("/")
 def dashboard():
@@ -44,13 +65,16 @@ def dashboard():
         q = q.filter_by(kam_id=kam_filter)
     accounts = q.all()
 
+    # Batch: 2 queries en lugar de 40+
+    scores_map = calcular_health_scores_batch(accounts)
+
     mrr_total = sum(float(a.mrr or 0) for a in accounts)
     arr_total = sum(float(a.arr_proyectado or 0) for a in accounts)
     total_sucursales = sum(a.sucursales for a in accounts)
 
     account_scores = []
     for acc in accounts:
-        hs = calcular_health_score(acc)
+        hs = scores_map[str(acc.id)]
         account_scores.append({"account": acc, "health": hs})
     account_scores.sort(key=lambda x: x["health"]["score"])
     top_riesgo = account_scores[:5]
@@ -72,7 +96,9 @@ def dashboard():
 
     cuentas_onboarding = [a for a in accounts if a.es_cuenta_nueva]
     pipeline = CSOnboardingAccount.query.all()
-    alertas = generar_alertas()
+
+    # Alertas usa los scores pre-calculados
+    alertas = generar_alertas(accounts=accounts, scores_map=scores_map)
     alertas_criticas = [a for a in alertas if a["severidad"] == "critica"]
 
     return render_template(
@@ -83,9 +109,7 @@ def dashboard():
         kam_data=kam_data, cuentas_onboarding=cuentas_onboarding,
         alertas=alertas, alertas_criticas=alertas_criticas,
         pipeline=pipeline, account_scores=account_scores,
-        user_nombre=session.get("user_nombre", ""),
-        user_rol=session.get("user_rol", ""),
-        is_kam=_is_kam(),
+        **_ctx(),
     )
 
 
@@ -115,8 +139,6 @@ def account_detail(account_id):
     tasks = CSTask.query.filter_by(account_id=account.id).order_by(CSTask.completada, CSTask.fecha_limite).all()
     tareas_pendientes = sum(1 for t in tasks if not t.completada)
 
-    kams = _get_kams()
-
     return render_template(
         "cs_account_detail.html",
         account=account, health=health, invoices=invoices,
@@ -126,10 +148,7 @@ def account_detail(account_id):
         appointments=appointments, citas_por_estatus=citas_por_estatus,
         notes=notes, tasks=tasks, tareas_pendientes=tareas_pendientes,
         today=date.today(), account_alerts=alertas_por_cuenta(str(account_id)),
-        kams=kams,
-        user_nombre=session.get("user_nombre", ""),
-        user_rol=session.get("user_rol", ""),
-        is_kam=_is_kam(),
+        kams=_get_kams(), **_ctx(),
     )
 
 
@@ -151,9 +170,11 @@ def kam_view(kam_id=None):
         return "KAM no encontrado", 404
 
     accounts = CSAccount.query.filter_by(kam_id=kam.id).order_by(CSAccount.mrr.desc()).all()
+    scores_map = calcular_health_scores_batch(accounts)
+
     account_scores = []
     for acc in accounts:
-        hs = calcular_health_score(acc)
+        hs = scores_map[str(acc.id)]
         tareas = CSTask.query.filter_by(account_id=acc.id, completada=False).order_by(CSTask.fecha_limite).all()
         account_scores.append({"account": acc, "health": hs, "tareas_pendientes": tareas})
 
@@ -180,10 +201,7 @@ def kam_view(kam_id=None):
         kams=kams, kam=kam, account_scores=account_scores,
         mrr_kam=mrr_kam, arr_kam=arr_kam, sucursales_kam=sucursales_kam,
         avg_score=avg_score, balance_score=balance_score,
-        todas_tareas=todas_tareas,
-        user_nombre=session.get("user_nombre", ""),
-        user_rol=session.get("user_rol", ""),
-        is_kam=_is_kam(),
+        todas_tareas=todas_tareas, **_ctx(),
     )
 
 
@@ -192,7 +210,9 @@ def kam_view(kam_id=None):
 # ══════════════════════════════════════════════
 @cs_bp.route("/alertas")
 def alertas_view():
-    alertas = generar_alertas()
+    accounts = CSAccount.query.all()
+    scores_map = calcular_health_scores_batch(accounts)
+    alertas = generar_alertas(accounts=accounts, scores_map=scores_map)
     por_severidad = {"critica": [], "alta": [], "media": []}
     for a in alertas:
         por_severidad[a["severidad"]].append(a)
@@ -202,10 +222,112 @@ def alertas_view():
     return render_template(
         "cs_alertas.html",
         alertas=alertas, por_severidad=por_severidad, por_kam=por_kam,
-        user_nombre=session.get("user_nombre", ""),
-        user_rol=session.get("user_rol", ""),
-        is_kam=_is_kam(),
+        **_ctx(),
     )
+
+
+# ══════════════════════════════════════════════
+# OPORTUNIDADES
+# ══════════════════════════════════════════════
+@cs_bp.route("/oportunidades")
+def oportunidades():
+    pipeline = {}
+    for key, label in ETAPAS_PIPELINE:
+        opps = CSOpportunity.query.filter_by(etapa=key).order_by(CSOpportunity.created_at.desc()).all()
+        pipeline[key] = {"label": label, "opps": opps}
+
+    total_opps = CSOpportunity.query.count()
+    valor_pipeline = db.session.query(
+        func.coalesce(func.sum(CSOpportunity.valor_estimado), 0)
+    ).filter(CSOpportunity.etapa.notin_(["ganada", "perdida"])).scalar()
+    ganadas = CSOpportunity.query.filter_by(etapa="ganada").count()
+    valor_ganado = db.session.query(
+        func.coalesce(func.sum(CSOpportunity.valor_estimado), 0)
+    ).filter_by(etapa="ganada").scalar()
+
+    accounts = CSAccount.query.order_by(CSAccount.nombre).all()
+    kams = _get_kams()
+
+    return render_template(
+        "cs_oportunidades.html",
+        pipeline=pipeline, etapas=ETAPAS_PIPELINE,
+        tipos=TIPOS_OPORTUNIDAD,
+        total_opps=total_opps, valor_pipeline=float(valor_pipeline),
+        ganadas=ganadas, valor_ganado=float(valor_ganado),
+        accounts=accounts, kams=kams, **_ctx(),
+    )
+
+
+@cs_bp.route("/oportunidades/crear", methods=["POST"])
+def crear_oportunidad():
+    account_id = request.form.get("account_id", "").strip()
+    opp = CSOpportunity(
+        account_id=account_id if account_id else None,
+        prospecto_nombre=request.form.get("prospecto_nombre", "").strip(),
+        contacto=request.form.get("contacto", "").strip(),
+        tipo=request.form.get("tipo", "upsell_un"),
+        unidad_negocio=request.form.get("unidad_negocio", ""),
+        descripcion=request.form.get("descripcion", "").strip(),
+        valor_estimado=float(request.form.get("valor_estimado", 0) or 0),
+        etapa="prospeccion",
+        kam_id=request.form.get("kam_id") or None,
+    )
+    db.session.add(opp)
+    db.session.commit()
+    return redirect(url_for("cs.oportunidades"))
+
+
+@cs_bp.route("/oportunidades/<uuid:opp_id>/etapa", methods=["POST"])
+def cambiar_etapa(opp_id):
+    opp = db.session.get(CSOpportunity, opp_id)
+    if opp:
+        nueva = request.form.get("etapa", "")
+        if nueva in [e[0] for e in ETAPAS_PIPELINE]:
+            opp.etapa = nueva
+            db.session.commit()
+    return redirect(url_for("cs.oportunidades"))
+
+
+@cs_bp.route("/oportunidades/<uuid:opp_id>/delete", methods=["POST"])
+def eliminar_oportunidad(opp_id):
+    opp = db.session.get(CSOpportunity, opp_id)
+    if opp:
+        db.session.delete(opp)
+        db.session.commit()
+    return redirect(url_for("cs.oportunidades"))
+
+
+# ══════════════════════════════════════════════
+# ONBOARDING
+# ══════════════════════════════════════════════
+@cs_bp.route("/onboarding")
+def onboarding():
+    cuentas_nuevas = CSAccount.query.filter_by(es_cuenta_nueva=True).all()
+    scores_map = calcular_health_scores_batch(cuentas_nuevas)
+    cuentas_nuevas_data = []
+    for acc in cuentas_nuevas:
+        hs = scores_map[str(acc.id)]
+        tareas = CSTask.query.filter_by(account_id=acc.id, completada=False).all()
+        cuentas_nuevas_data.append({"account": acc, "health": hs, "tareas": tareas})
+
+    pipeline = CSOnboardingAccount.query.all()
+    kams = _get_kams()
+
+    return render_template(
+        "cs_onboarding.html",
+        cuentas_nuevas=cuentas_nuevas_data,
+        pipeline=pipeline, kams=kams, **_ctx(),
+    )
+
+
+@cs_bp.route("/onboarding/<uuid:ob_id>/asignar", methods=["POST"])
+def asignar_kam_onboarding(ob_id):
+    ob = db.session.get(CSOnboardingAccount, ob_id)
+    if ob:
+        kam_id = request.form.get("kam_id", "").strip()
+        ob.kam_id = kam_id if kam_id else None
+        db.session.commit()
+    return redirect(url_for("cs.onboarding"))
 
 
 # ══════════════════════════════════════════════
@@ -232,8 +354,7 @@ def create_note(account_id):
     contenido = request.form.get("contenido", "").strip()
     autor = request.form.get("autor", "").strip()
     if contenido:
-        nota = CSNote(account_id=account_id, autor=autor, contenido=contenido)
-        db.session.add(nota)
+        db.session.add(CSNote(account_id=account_id, autor=autor, contenido=contenido))
         db.session.commit()
     return redirect(url_for("cs.account_detail", account_id=account_id) + "#notas")
 
@@ -258,12 +379,11 @@ def create_task(account_id):
                 fecha_limite = datetime.strptime(fecha_str, "%Y-%m-%d").date()
             except ValueError:
                 pass
-        tarea = CSTask(
+        db.session.add(CSTask(
             account_id=account_id, tipo=request.form.get("tipo", "check-in"),
             descripcion=descripcion, responsable=request.form.get("responsable", ""),
             fecha_limite=fecha_limite,
-        )
-        db.session.add(tarea)
+        ))
         db.session.commit()
     return redirect(url_for("cs.account_detail", account_id=account_id) + "#tareas")
 
