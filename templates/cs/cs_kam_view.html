@@ -54,6 +54,18 @@
     </div>
 </div>
 
+<!-- Gráficas del KAM -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <h2 class="text-sm font-semibold text-gray-800 mb-4">Facturación por Mes — {{ kam.nombre.split(' ')[0] }}</h2>
+        <canvas id="kamMrrTrend" height="200"></canvas>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <h2 class="text-sm font-semibold text-gray-800 mb-4">Operación por Mes — {{ kam.nombre.split(' ')[0] }}</h2>
+        <canvas id="kamOpTrend" height="200"></canvas>
+    </div>
+</div>
+
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
     <!-- Cuentas del KAM (2/3 del ancho) -->
@@ -259,5 +271,18 @@ new Chart(document.getElementById('kamMrrBar'), {
         }
     }
 });
+
+// KAM MRR + Operación trends
+const kamId = '{{ kam.id }}';
+function buildTrend(ctx, data, type) {
+    if (!ctx || !data.length) return;
+    if (type === 'mrr') {
+        new Chart(ctx, {type:'bar',data:{labels:data.map(d=>d.mes_label),datasets:[{label:'Pagado',data:data.map(d=>d.pagado),backgroundColor:'#22c55e',borderRadius:4,order:2},{label:'Pendiente',data:data.map(d=>d.pendiente),backgroundColor:'#ef4444',borderRadius:4,order:2},{label:'Facturado',data:data.map(d=>d.facturado),type:'line',borderColor:'#7c3aed',backgroundColor:'transparent',borderWidth:2,pointRadius:4,pointBackgroundColor:'#7c3aed',tension:.3,order:1}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{boxWidth:12,padding:10,font:{size:10}}},tooltip:{callbacks:{label:c=>c.dataset.label+': $'+c.parsed.y.toLocaleString('en-US')},backgroundColor:'#1e1b3a',cornerRadius:8}},scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:10}}},y:{stacked:true,ticks:{callback:v=>'$'+(v/1000).toFixed(0)+'K',font:{size:10}},grid:{color:'#f3f4f6'}}}}});
+    } else {
+        new Chart(ctx, {type:'bar',data:{labels:data.map(d=>d.mes_label),datasets:[{label:'Terminadas',data:data.map(d=>d.terminadas),backgroundColor:'#22c55e',borderRadius:4},{label:'Canceladas',data:data.map(d=>d.canceladas),backgroundColor:'#ef4444',borderRadius:4},{label:'No Realizadas',data:data.map(d=>d.no_realizadas),backgroundColor:'#f59e0b',borderRadius:4},{label:'% Cumpl.',data:data.map(d=>d.pct_cumplimiento),type:'line',borderColor:'#7c3aed',backgroundColor:'transparent',borderWidth:2,pointRadius:4,pointBackgroundColor:'#7c3aed',tension:.3,yAxisID:'y1'}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{boxWidth:12,padding:10,font:{size:10}}},tooltip:{backgroundColor:'#1e1b3a',cornerRadius:8}},scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:10}}},y:{stacked:true,ticks:{font:{size:10}},grid:{color:'#f3f4f6'}},y1:{position:'right',min:0,max:100,ticks:{callback:v=>v+'%',font:{size:10}},grid:{display:false}}}}});
+    }
+}
+fetch('/cs/api/mrr-trend?kam_id='+kamId).then(r=>r.json()).then(d=>buildTrend(document.getElementById('kamMrrTrend'),d,'mrr'));
+fetch('/cs/api/operacion-trend?kam_id='+kamId).then(r=>r.json()).then(d=>buildTrend(document.getElementById('kamOpTrend'),d,'op'));
 </script>
 {% endblock %}

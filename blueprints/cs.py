@@ -490,8 +490,9 @@ def asignar_kam_onboarding(ob_id):
 # ══════════════════════════════════════════════
 @cs_bp.route("/api/mrr-trend")
 def api_mrr_trend():
-    """MRR facturado por mes (últimos 6 meses con datos)."""
-    rows = (
+    """MRR facturado por mes. Filtrable por ?account_id= o ?kam_id="""
+    from sqlalchemy import case
+    q = (
         db.session.query(
             func.date_trunc("month", CSInvoice.fecha_cobro).label("mes"),
             func.sum(CSInvoice.total),
@@ -499,10 +500,22 @@ def api_mrr_trend():
             func.sum(CSInvoice.pendiente),
         )
         .filter(CSInvoice.fecha_cobro.isnot(None))
-        .group_by("mes")
-        .order_by("mes")
-        .all()
     )
+
+    account_id = request.args.get("account_id")
+    kam_id = request.args.get("kam_id")
+    if account_id:
+        q = q.filter(CSInvoice.account_id == account_id)
+    elif kam_id:
+        kam_accounts = [a.id for a in CSAccount.query.filter_by(kam_id=kam_id).all()]
+        if kam_accounts:
+            q = q.filter(CSInvoice.account_id.in_(kam_accounts))
+    elif _is_kam():
+        kam_accounts = [a.id for a in CSAccount.query.filter_by(kam_id=_current_kam_id()).all()]
+        if kam_accounts:
+            q = q.filter(CSInvoice.account_id.in_(kam_accounts))
+
+    rows = q.group_by("mes").order_by("mes").all()
     return jsonify([{
         "mes": r[0].strftime("%Y-%m") if r[0] else "",
         "mes_label": r[0].strftime("%b %Y") if r[0] else "",
@@ -514,9 +527,9 @@ def api_mrr_trend():
 
 @cs_bp.route("/api/operacion-trend")
 def api_operacion_trend():
-    """Citas por estatus por mes."""
-    from sqlalchemy import case, extract
-    rows = (
+    """Citas por estatus por mes. Filtrable por ?account_id= o ?kam_id="""
+    from sqlalchemy import case
+    q = (
         db.session.query(
             func.date_trunc("month", CSAppointment.fecha_inicio).label("mes"),
             func.count(CSAppointment.id).label("total"),
@@ -525,10 +538,22 @@ def api_operacion_trend():
             func.sum(case((CSAppointment.estatus == "No Realizada", 1), else_=0)).label("no_realizadas"),
         )
         .filter(CSAppointment.fecha_inicio.isnot(None))
-        .group_by("mes")
-        .order_by("mes")
-        .all()
     )
+
+    account_id = request.args.get("account_id")
+    kam_id = request.args.get("kam_id")
+    if account_id:
+        q = q.filter(CSAppointment.account_id == account_id)
+    elif kam_id:
+        kam_accounts = [a.id for a in CSAccount.query.filter_by(kam_id=kam_id).all()]
+        if kam_accounts:
+            q = q.filter(CSAppointment.account_id.in_(kam_accounts))
+    elif _is_kam():
+        kam_accounts = [a.id for a in CSAccount.query.filter_by(kam_id=_current_kam_id()).all()]
+        if kam_accounts:
+            q = q.filter(CSAppointment.account_id.in_(kam_accounts))
+
+    rows = q.group_by("mes").order_by("mes").all()
     return jsonify([{
         "mes": r[0].strftime("%Y-%m") if r[0] else "",
         "mes_label": r[0].strftime("%b %Y") if r[0] else "",
