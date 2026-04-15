@@ -276,7 +276,7 @@ def editar_cliente(account_id):
     acc = db.session.get(CSAccount, account_id)
     if not acc:
         return "No encontrado", 404
-    if "logo_url" in request.form:
+    if "logo_url" in request.form and hasattr(acc, "logo_url"):
         acc.logo_url = request.form.get("logo_url", "").strip()
     if "giro" in request.form:
         # Multi-select: getlist returns multiple values
