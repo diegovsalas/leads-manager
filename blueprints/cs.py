@@ -331,6 +331,24 @@ def asignar_kam_onboarding(ob_id):
 
 
 # ══════════════════════════════════════════════
+# QBR
+# ══════════════════════════════════════════════
+@cs_bp.route("/account/<uuid:account_id>/qbr")
+def download_qbr(account_id):
+    account = db.session.get(CSAccount, account_id)
+    if not account:
+        return "Cuenta no encontrada", 404
+    from cs_qbr_generator import generar_qbr
+    excel_buffer = generar_qbr(account, trimestre="Q1 2026")
+    nombre_limpio = account.nombre.replace(" ", "_").replace("/", "-")
+    return send_file(
+        excel_buffer, as_attachment=True,
+        download_name=f"QBR_Q1_2026_{nombre_limpio}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+# ══════════════════════════════════════════════
 # CRUD — KPIs, Notas, Tareas
 # ══════════════════════════════════════════════
 @cs_bp.route("/account/<uuid:account_id>/kpis", methods=["POST"])
