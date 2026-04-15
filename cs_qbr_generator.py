@@ -146,7 +146,7 @@ def _get_appointments_data(account: Account):
         tipo = 'recurrente' if es_recurrente else 'evento'
 
         records.append({
-            'id': a.id,
+            'id': str(a.id),
             'propiedad': a.propiedad,
             'zona': a.zona if a.zona and a.zona != 'nan' else 'Sin zona',
             'tecnico': a.tecnico if a.tecnico and a.tecnico != 'nan' else '',
