@@ -135,22 +135,22 @@
         </button>
     </div>
 
-    <!-- Gráficas de la cuenta -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <h2 class="text-sm font-semibold text-gray-800 mb-4">Facturación por Mes</h2>
-            <canvas id="accountMrrChart" height="200"></canvas>
-        </div>
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <h2 class="text-sm font-semibold text-gray-800 mb-4">Operación por Mes</h2>
-            <canvas id="accountOpChart" height="200"></canvas>
-        </div>
-    </div>
-
     <!-- ============================================================ -->
-    <!-- TAB: RESUMEN -->
+    <!-- TAB: RESUMEN (gráficas fijas aquí) -->
     <!-- ============================================================ -->
     <div x-show="tab === 'resumen'">
+        <!-- Gráficas en Resumen -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <h2 class="text-sm font-semibold text-gray-800 mb-4">Facturación por Mes</h2>
+                <canvas id="accountMrrChart" height="200"></canvas>
+            </div>
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <h2 class="text-sm font-semibold text-gray-800 mb-4">Operación por Mes</h2>
+                <canvas id="accountOpChart" height="200"></canvas>
+            </div>
+        </div>
+
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
             <!-- Health Score auditable -->
@@ -336,6 +336,10 @@
     <!-- TAB: FACTURACIÓN -->
     <!-- ============================================================ -->
     <div x-show="tab === 'facturacion'" style="display: none;">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+            <h2 class="text-sm font-semibold text-gray-800 mb-4">Facturación por Mes</h2>
+            <canvas id="factTabChart" height="180"></canvas>
+        </div>
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-sm font-semibold text-gray-700">Facturas — {{ periodo_label }}</h2>
@@ -391,6 +395,10 @@
     <!-- TAB: OPERACIÓN -->
     <!-- ============================================================ -->
     <div x-show="tab === 'operacion'" style="display: none;">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+            <h2 class="text-sm font-semibold text-gray-800 mb-4">Operación por Mes</h2>
+            <canvas id="opTabChart" height="180"></canvas>
+        </div>
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-sm font-semibold text-gray-700">Citas de Servicio</h2>
@@ -757,7 +765,13 @@ function buildChart(ctx, data, type) {
     }
 }
 
-fetch('/cs/api/mrr-trend?account_id='+accId).then(r=>r.json()).then(d=>buildChart(document.getElementById('accountMrrChart'),d,'mrr'));
-fetch('/cs/api/operacion-trend?account_id='+accId).then(r=>r.json()).then(d=>buildChart(document.getElementById('accountOpChart'),d,'op'));
+fetch('/cs/api/mrr-trend?account_id='+accId).then(r=>r.json()).then(d=>{
+    buildChart(document.getElementById('accountMrrChart'),d,'mrr');
+    buildChart(document.getElementById('factTabChart'),d,'mrr');
+});
+fetch('/cs/api/operacion-trend?account_id='+accId).then(r=>r.json()).then(d=>{
+    buildChart(document.getElementById('accountOpChart'),d,'op');
+    buildChart(document.getElementById('opTabChart'),d,'op');
+});
 </script>
 {% endblock %}

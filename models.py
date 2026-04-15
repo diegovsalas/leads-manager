@@ -551,6 +551,8 @@ class CSAccount(db.Model):
     pagado_q1 = db.Column(db.Numeric(14, 2), default=0)
     pendiente_q1 = db.Column(db.Numeric(14, 2), default=0)
     num_facturas_q1 = db.Column(db.Integer, default=0)
+    giro = db.Column(db.String(100), default="")
+    tier = db.Column(db.String(20), default="")  # Gold, Silver, Bronze
     nps = db.Column(db.Float, nullable=True)
     pulso = db.Column(db.String(20), nullable=True)
     eficiencia_operativa = db.Column(db.Float, nullable=True)

@@ -242,6 +242,45 @@ def dashboard():
 
 
 # ══════════════════════════════════════════════
+# CLIENTES — directorio
+# ══════════════════════════════════════════════
+@cs_bp.route("/clientes")
+def clientes():
+    kam_filter = _current_kam_id()
+    q = CSAccount.query
+    if kam_filter:
+        q = q.filter_by(kam_id=kam_filter)
+    accounts = q.order_by(CSAccount.nombre).all()
+    scores_map = calcular_health_scores_batch(accounts)
+
+    clientes_data = []
+    for acc in accounts:
+        hs = scores_map[str(acc.id)]
+        owners = CSContacto.query.filter_by(account_id=acc.id, is_owner=True).all()
+        clientes_data.append({
+            "account": acc, "health": hs,
+            "owners": owners,
+        })
+
+    return render_template(
+        "cs_clientes.html",
+        clientes=clientes_data,
+        **_ctx(),
+    )
+
+
+@cs_bp.route("/clientes/<uuid:account_id>/editar", methods=["POST"])
+def editar_cliente(account_id):
+    acc = db.session.get(CSAccount, account_id)
+    if not acc:
+        return "No encontrado", 404
+    acc.giro = request.form.get("giro", acc.giro).strip()
+    acc.tier = request.form.get("tier", acc.tier).strip()
+    db.session.commit()
+    return redirect(url_for("cs.clientes"))
+
+
+# ══════════════════════════════════════════════
 # ACCOUNT DETAIL
 # ══════════════════════════════════════════════
 @cs_bp.route("/account/<uuid:account_id>")
