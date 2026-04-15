@@ -1,0 +1,582 @@
+{% extends "cs/cs_base.html" %}
+{% block title %}{{ account.nombre }} — Avantex CS{% endblock %}
+
+{% block content %}
+
+<!-- Breadcrumb -->
+<div class="mb-4">
+    <a href="/cs/" class="text-sm text-brand-600 hover:underline">Dashboard</a>
+    <span class="text-gray-400 mx-1">/</span>
+    <span class="text-sm text-gray-500">{{ account.nombre }}</span>
+</div>
+
+<!-- Header de la cuenta -->
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+    <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+        <!-- Info principal -->
+        <div>
+            <div class="flex items-center gap-3 mb-2">
+                <h1 class="text-2xl font-bold text-gray-800">{{ account.nombre }}</h1>
+                {% if account.es_cuenta_nueva %}
+                <span class="px-2 py-0.5 bg-brand-100 text-brand-700 text-xs font-medium rounded-full">NUEVA</span>
+                {% endif %}
+                <span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold
+                    {% if health.color == 'green' %}bg-green-100 text-green-700
+                    {% elif health.color == 'yellow' %}bg-yellow-100 text-yellow-700
+                    {% else %}bg-red-100 text-red-700{% endif %}">
+                    {{ health.categoria }} · {{ health.score }}
+                </span>
+            </div>
+            <p class="text-sm text-gray-500">
+                KAM: <span class="font-medium text-gray-700">{{ account.kam.nombre }}</span>
+                · UNs: <span class="font-medium text-gray-700">{{ account.unidades_contratadas }}</span>
+            </p>
+        </div>
+
+        <!-- KPIs de la cuenta + botón QBR -->
+        <div class="flex items-start gap-6">
+            <div class="flex gap-6 text-center">
+                <div>
+                    <p class="text-xs text-gray-500 uppercase">MRR</p>
+                    <p class="text-lg font-bold text-gray-800">${{ "{:,.0f}".format(account.mrr) }}</p>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-500 uppercase">ARR</p>
+                    <p class="text-lg font-bold text-gray-800">${{ "{:,.0f}".format(account.arr_proyectado) }}</p>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-500 uppercase">Sucursales</p>
+                    <p class="text-lg font-bold text-gray-800">{{ "{:,}".format(account.sucursales) }}</p>
+                </div>
+            </div>
+            <a href="/cs/account/{{ account.id }}/qbr"
+               class="ml-4 inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 transition-colors shadow-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Descargar QBR
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Alertas de esta cuenta -->
+{% if account_alerts %}
+<div class="mb-6 space-y-2">
+    {% for alerta in account_alerts %}
+    <div class="rounded-lg p-3 border-l-4 flex items-start justify-between
+                {% if alerta.severidad == 'critica' %}bg-red-50 border-red-500
+                {% elif alerta.severidad == 'alta' %}bg-orange-50 border-orange-500
+                {% else %}bg-yellow-50 border-yellow-400{% endif %}">
+        <div>
+            <div class="flex items-center gap-2 mb-0.5">
+                <span class="px-1.5 py-0.5 rounded text-xs font-bold
+                    {% if alerta.severidad == 'critica' %}bg-red-200 text-red-800
+                    {% elif alerta.severidad == 'alta' %}bg-orange-200 text-orange-800
+                    {% else %}bg-yellow-200 text-yellow-800{% endif %}">
+                    {{ alerta.severidad|upper }}
+                </span>
+                <span class="text-sm font-medium text-gray-800">{{ alerta.titulo }}</span>
+            </div>
+            <p class="text-xs text-gray-500">{{ alerta.detalle }}</p>
+        </div>
+        <span class="text-xs text-blue-600 font-medium shrink-0 ml-4">{{ alerta.accion }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Tabs con Alpine.js -->
+<div x-data="{ tab: 'resumen' }">
+
+    <!-- Tab buttons -->
+    <div class="flex border-b mb-6 overflow-x-auto">
+        <button @click="tab = 'resumen'"
+                :class="tab === 'resumen' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
+            Resumen
+        </button>
+        <button @click="tab = 'facturacion'"
+                :class="tab === 'facturacion' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
+            Facturación <span class="ml-1 text-xs text-gray-400">({{ invoices|length }})</span>
+        </button>
+        <button @click="tab = 'operacion'"
+                :class="tab === 'operacion' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
+            Operación <span class="ml-1 text-xs text-gray-400">({{ appointments|length }})</span>
+        </button>
+        <button @click="tab = 'notas'"
+                :class="tab === 'notas' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
+            Notas <span class="ml-1 text-xs text-gray-400">({{ notes|length }})</span>
+        </button>
+        <button @click="tab = 'tareas'"
+                :class="tab === 'tareas' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
+            Tareas <span class="ml-1 text-xs text-gray-400">({{ tareas_pendientes }} pend.)</span>
+        </button>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- TAB: RESUMEN -->
+    <!-- ============================================================ -->
+    <div x-show="tab === 'resumen'">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+            <!-- Health Score auditable -->
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <h2 class="text-sm font-semibold text-gray-700 mb-4">Health Score — Desglose</h2>
+
+                <!-- Score grande -->
+                <div class="text-center mb-6">
+                    <div class="inline-flex items-center justify-center w-24 h-24 rounded-full border-4
+                        {% if health.color == 'green' %}border-green-400
+                        {% elif health.color == 'yellow' %}border-yellow-400
+                        {% else %}border-red-400{% endif %}">
+                        <span class="text-3xl font-bold
+                            {% if health.color == 'green' %}text-green-600
+                            {% elif health.color == 'yellow' %}text-yellow-500
+                            {% else %}text-red-600{% endif %}">
+                            {{ health.score }}
+                        </span>
+                    </div>
+                    <p class="text-sm text-gray-500 mt-2">de 100 puntos</p>
+                </div>
+
+                <!-- Barras de cada componente -->
+                {% for key, comp in health.desglose.items() %}
+                <div class="mb-4">
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="text-gray-600 capitalize">
+                            {% if key == 'cobranza' %}Cobranza ({{ comp.peso }}%)
+                            {% elif key == 'uns' %}UNs contratadas ({{ comp.peso }}%)
+                            {% elif key == 'operacion' %}Operación ({{ comp.peso }}%)
+                            {% elif key == 'recencia' %}Recencia de pago ({{ comp.peso }}%)
+                            {% endif %}
+                        </span>
+                        <span class="font-semibold
+                            {% if comp.score >= 70 %}text-green-600
+                            {% elif comp.score >= 40 %}text-yellow-500
+                            {% else %}text-red-600{% endif %}">
+                            {{ comp.score }}
+                        </span>
+                    </div>
+                    <!-- Barra de progreso -->
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="h-2 rounded-full
+                            {% if comp.score >= 70 %}bg-green-500
+                            {% elif comp.score >= 40 %}bg-yellow-400
+                            {% else %}bg-red-500{% endif %}"
+                            style="width: {{ comp.score }}%"></div>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-0.5">{{ comp.detalle }}</p>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- KPIs manuales + facturación + operación -->
+            <div class="space-y-6">
+
+                <!-- KPIs Manuales -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                    <h2 class="text-sm font-semibold text-gray-700 mb-4">KPIs Manuales</h2>
+                    <form action="/cs/account/{{ account.id }}/kpis" method="POST">
+                        <div class="grid grid-cols-3 gap-4 mb-4">
+                            <!-- NPS -->
+                            <div>
+                                <label class="text-xs text-gray-400 block mb-1">NPS (0-10)</label>
+                                <input type="number" name="nps" min="0" max="10" step="1"
+                                       value="{{ account.nps|default('', true) if account.nps is not none else '' }}"
+                                       placeholder="—"
+                                       class="w-full text-sm border border-gray-300 rounded-xl px-3 py-2 text-center font-semibold focus:ring-2 focus:ring-brand-500">
+                                {% if account.nps is not none %}
+                                <p class="text-xs mt-1 text-center font-medium
+                                    {% if account.nps >= 9 %}text-green-600
+                                    {% elif account.nps >= 7 %}text-yellow-500
+                                    {% else %}text-red-500{% endif %}">
+                                    {% if account.nps >= 9 %}Promotor
+                                    {% elif account.nps >= 7 %}Pasivo
+                                    {% else %}Detractor{% endif %}
+                                </p>
+                                {% endif %}
+                            </div>
+                            <!-- Pulso -->
+                            <div>
+                                <label class="text-xs text-gray-400 block mb-1">Pulso</label>
+                                <select name="pulso"
+                                        class="w-full text-sm border border-gray-300 rounded-xl px-3 py-2 text-center font-semibold focus:ring-2 focus:ring-brand-500">
+                                    <option value="">Sin dato</option>
+                                    <option value="Sana" {% if account.pulso == 'Sana' %}selected{% endif %}>Sana</option>
+                                    <option value="Atención" {% if account.pulso == 'Atención' %}selected{% endif %}>Atención</option>
+                                    <option value="Riesgo" {% if account.pulso == 'Riesgo' %}selected{% endif %}>Riesgo</option>
+                                </select>
+                                {% if account.pulso %}
+                                <p class="text-xs mt-1 text-center">
+                                    <span class="inline-block w-2.5 h-2.5 rounded-full
+                                        {% if account.pulso == 'Sana' %}bg-green-500
+                                        {% elif account.pulso == 'Atención' %}bg-yellow-400
+                                        {% else %}bg-red-500{% endif %}"></span>
+                                </p>
+                                {% endif %}
+                            </div>
+                            <!-- Eficiencia Operativa -->
+                            <div>
+                                <label class="text-xs text-gray-400 block mb-1">Efic. Operativa (%)</label>
+                                <input type="number" name="eficiencia_operativa" min="0" max="100" step="0.1"
+                                       value="{{ '{:.1f}'.format(account.eficiencia_operativa) if account.eficiencia_operativa is not none else '' }}"
+                                       placeholder="—"
+                                       class="w-full text-sm border border-gray-300 rounded-xl px-3 py-2 text-center font-semibold focus:ring-2 focus:ring-brand-500">
+                                {% if account.eficiencia_operativa is not none %}
+                                <p class="text-xs mt-1 text-center font-medium
+                                    {% if account.eficiencia_operativa >= 95 %}text-green-600
+                                    {% elif account.eficiencia_operativa >= 90 %}text-yellow-500
+                                    {% else %}text-red-500{% endif %}">
+                                    {% if account.eficiencia_operativa >= 95 %}Sana
+                                    {% elif account.eficiencia_operativa >= 90 %}Atención
+                                    {% else %}Riesgo{% endif %}
+                                </p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <button type="submit"
+                                class="w-full px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 transition-colors">
+                            Guardar KPIs
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Mini KPIs de facturación -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                    <h2 class="text-sm font-semibold text-gray-700 mb-4">Facturación Q1 2026</h2>
+                    <div class="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                            <p class="text-lg font-bold text-gray-800">${{ "{:,.0f}".format(total_facturado) }}</p>
+                            <p class="text-xs text-gray-500">Facturado</p>
+                        </div>
+                        <div>
+                            <p class="text-lg font-bold text-green-600">${{ "{:,.0f}".format(total_pagado) }}</p>
+                            <p class="text-xs text-gray-500">Pagado</p>
+                        </div>
+                        <div>
+                            <p class="text-lg font-bold text-red-500">${{ "{:,.0f}".format(total_pendiente) }}</p>
+                            <p class="text-xs text-gray-500">Pendiente</p>
+                        </div>
+                    </div>
+                    <!-- Barra de progreso de cobranza -->
+                    <div class="mt-4">
+                        {% set pct = (total_pagado / total_facturado * 100) if total_facturado > 0 else 0 %}
+                        <div class="flex justify-between text-xs text-gray-500 mb-1">
+                            <span>Avance de cobranza</span>
+                            <span>{{ "{:.1f}".format(pct) }}%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2.5">
+                            <div class="h-2.5 rounded-full {% if pct >= 70 %}bg-green-500{% elif pct >= 40 %}bg-yellow-400{% else %}bg-red-500{% endif %}"
+                                 style="width: {{ pct }}%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mini KPIs de operación -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                    <h2 class="text-sm font-semibold text-gray-700 mb-4">Citas de Servicio</h2>
+                    <div class="space-y-2">
+                        {% for estatus, count in citas_por_estatus|dictsort %}
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-gray-600">{{ estatus }}</span>
+                            <span class="text-sm font-semibold
+                                {% if estatus == 'Terminada' %}text-green-600
+                                {% elif estatus == 'Cancelada' %}text-red-500
+                                {% elif estatus == 'Agendada' or estatus == 'Técnico Asignado' %}text-blue-600
+                                {% else %}text-gray-600{% endif %}">
+                                {{ count }}
+                            </span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="mt-3 pt-3 border-t flex justify-between">
+                        <span class="text-sm font-medium text-gray-700">Total</span>
+                        <span class="text-sm font-bold text-gray-800">{{ appointments|length }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- TAB: FACTURACIÓN -->
+    <!-- ============================================================ -->
+    <div x-show="tab === 'facturacion'" style="display: none;">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-sm font-semibold text-gray-700">Facturas Q1 2026</h2>
+                <div class="flex gap-4 text-xs text-gray-500">
+                    <span class="text-green-600 font-medium">{{ facturas_pagadas }} pagadas</span>
+                    <span class="text-red-500 font-medium">{{ facturas_pendientes }} pendientes</span>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b text-left text-gray-500 text-xs uppercase tracking-wide">
+                            <th class="pb-2">Folio</th>
+                            <th class="pb-2">Concepto</th>
+                            <th class="pb-2">UEN</th>
+                            <th class="pb-2 text-right">Total</th>
+                            <th class="pb-2 text-right">Pagado</th>
+                            <th class="pb-2 text-right">Pendiente</th>
+                            <th class="pb-2">F. Cobro</th>
+                            <th class="pb-2">F. Vence</th>
+                            <th class="pb-2 text-center">Estatus</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for inv in invoices %}
+                        <tr class="border-b last:border-0 hover:bg-gray-50 text-xs">
+                            <td class="py-2 font-mono">{{ inv.folio }}</td>
+                            <td class="py-2 max-w-xs truncate" title="{{ inv.concepto }}">{{ inv.concepto[:60] }}</td>
+                            <td class="py-2">{{ inv.uen[:20] }}</td>
+                            <td class="py-2 text-right">${{ "{:,.2f}".format(inv.total) }}</td>
+                            <td class="py-2 text-right text-green-600">${{ "{:,.2f}".format(inv.pagado) }}</td>
+                            <td class="py-2 text-right {% if inv.pendiente > 0 %}text-red-500{% else %}text-gray-400{% endif %}">
+                                ${{ "{:,.2f}".format(inv.pendiente) }}
+                            </td>
+                            <td class="py-2 text-gray-500">{{ inv.fecha_cobro.strftime('%d/%m/%Y') if inv.fecha_cobro else '-' }}</td>
+                            <td class="py-2 text-gray-500">{{ inv.fecha_vencimiento.strftime('%d/%m/%Y') if inv.fecha_vencimiento else '-' }}</td>
+                            <td class="py-2 text-center">
+                                <span class="px-1.5 py-0.5 rounded text-xs font-medium
+                                    {% if inv.estatus == 'Pagada' %}bg-green-100 text-green-700
+                                    {% else %}bg-red-100 text-red-700{% endif %}">
+                                    {{ inv.estatus }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- TAB: OPERACIÓN -->
+    <!-- ============================================================ -->
+    <div x-show="tab === 'operacion'" style="display: none;">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-sm font-semibold text-gray-700">Citas de Servicio</h2>
+                <span class="text-xs text-gray-500">{{ appointments|length }} registros</span>
+            </div>
+
+            <!-- Filtro rápido por estatus -->
+            <div x-data="{ filtro: 'todos' }" class="mb-4">
+                <div class="flex flex-wrap gap-2 mb-4">
+                    <button @click="filtro = 'todos'"
+                            :class="filtro === 'todos' ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-600'"
+                            class="px-3 py-1 rounded-full text-xs font-medium">Todos</button>
+                    {% for estatus in citas_por_estatus.keys()|sort %}
+                    <button @click="filtro = '{{ estatus }}'"
+                            :class="filtro === '{{ estatus }}' ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-600'"
+                            class="px-3 py-1 rounded-full text-xs font-medium">{{ estatus }} ({{ citas_por_estatus[estatus] }})</button>
+                    {% endfor %}
+                </div>
+
+                <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                    <table class="w-full text-sm">
+                        <thead class="sticky top-0 bg-white">
+                            <tr class="border-b text-left text-gray-500 text-xs uppercase tracking-wide">
+                                <th class="pb-2">Propiedad</th>
+                                <th class="pb-2">Zona</th>
+                                <th class="pb-2">Técnico</th>
+                                <th class="pb-2">Servicio</th>
+                                <th class="pb-2">F. Inicio</th>
+                                <th class="pb-2 text-center">Estatus</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for apt in appointments %}
+                            <tr class="border-b last:border-0 hover:bg-gray-50 text-xs"
+                                x-show="filtro === 'todos' || filtro === '{{ apt.estatus }}'">
+                                <td class="py-2 max-w-xs truncate" title="{{ apt.propiedad }}">{{ apt.propiedad[:50] }}</td>
+                                <td class="py-2 text-gray-500">{{ apt.zona[:20] if apt.zona else '-' }}</td>
+                                <td class="py-2 text-gray-600">{{ apt.tecnico[:20] if apt.tecnico and apt.tecnico != 'nan' else '-' }}</td>
+                                <td class="py-2 text-gray-600">{{ apt.titulo_servicio[:30] }}</td>
+                                <td class="py-2 text-gray-500">{{ apt.fecha_inicio.strftime('%d/%m/%Y') if apt.fecha_inicio else '-' }}</td>
+                                <td class="py-2 text-center">
+                                    <span class="px-1.5 py-0.5 rounded text-xs font-medium
+                                        {% if apt.estatus == 'Terminada' %}bg-green-100 text-green-700
+                                        {% elif apt.estatus == 'Cancelada' %}bg-red-100 text-red-700
+                                        {% elif apt.estatus == 'Agendada' or apt.estatus == 'Técnico Asignado' %}bg-brand-100 text-brand-700
+                                        {% elif apt.estatus == 'No Realizada' %}bg-orange-100 text-orange-700
+                                        {% else %}bg-gray-100 text-gray-600{% endif %}">
+                                        {{ apt.estatus }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- TAB: NOTAS -->
+    <!-- ============================================================ -->
+    <div x-show="tab === 'notas'" style="display: none;" id="notas">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <h2 class="text-sm font-semibold text-gray-700 mb-4">Bitácora</h2>
+
+            <!-- Formulario para agregar nota -->
+            <form action="/cs/account/{{ account.id }}/notes" method="POST" class="mb-6">
+                <div class="flex gap-3 mb-2">
+                    <select name="autor"
+                            class="w-48 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+                        <option value="">Seleccionar autor</option>
+                        <option value="{{ account.kam.nombre }}">{{ account.kam.nombre }}</option>
+                        <option value="Francisco Rodriguez">Francisco Rodriguez</option>
+                        <option value="Katia Gutierrez">Katia Gutierrez</option>
+                        <option value="Heidi Tovar">Heidi Tovar</option>
+                        <option value="Nallely Quiroz">Nallely Quiroz</option>
+                    </select>
+                </div>
+                <div class="flex gap-2">
+                    <textarea name="contenido" rows="2" required placeholder="Escribe una nota..."
+                              class="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none"></textarea>
+                    <button type="submit"
+                            class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 transition-colors self-end">
+                        Agregar
+                    </button>
+                </div>
+            </form>
+
+            <!-- Lista de notas -->
+            {% if notes %}
+            <div class="space-y-4">
+                {% for note in notes %}
+                <div class="border-l-4 border-blue-300 pl-4 py-2 group">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-sm font-medium text-gray-700">{{ note.autor or 'Sin autor' }}</span>
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs text-gray-400">{{ note.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
+                            <form action="/cs/account/{{ account.id }}/notes/{{ note.id }}/delete" method="POST"
+                                  class="opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onsubmit="return confirm('¿Eliminar esta nota?')">
+                                <button type="submit" class="text-xs text-red-400 hover:text-red-600">Eliminar</button>
+                            </form>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-600 whitespace-pre-line">{{ note.contenido }}</p>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-6">
+                <p class="text-gray-400 text-sm">Sin notas registradas. Agrega la primera arriba.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- TAB: TAREAS -->
+    <!-- ============================================================ -->
+    <div x-show="tab === 'tareas'" style="display: none;" id="tareas">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <h2 class="text-sm font-semibold text-gray-700 mb-4">Tareas / Playbooks</h2>
+
+            <!-- Formulario para agregar tarea -->
+            <form action="/cs/account/{{ account.id }}/tasks" method="POST" class="mb-6 p-4 bg-gray-50 rounded-lg border">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                    <div>
+                        <label class="text-xs text-gray-500 block mb-1">Tipo</label>
+                        <select name="tipo"
+                                class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500">
+                            <option value="check-in">Check-in</option>
+                            <option value="QBR">QBR</option>
+                            <option value="upsell">Upsell</option>
+                            <option value="renovación">Renovación</option>
+                            <option value="onboarding">Onboarding</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500 block mb-1">Responsable</label>
+                        <select name="responsable"
+                                class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500">
+                            <option value="{{ account.kam.nombre }}">{{ account.kam.nombre }}</option>
+                            <option value="Francisco Rodriguez">Francisco Rodriguez</option>
+                            <option value="Katia Gutierrez">Katia Gutierrez</option>
+                            <option value="Heidi Tovar">Heidi Tovar</option>
+                            <option value="Nallely Quiroz">Nallely Quiroz</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div class="md:col-span-3">
+                        <label class="text-xs text-gray-500 block mb-1">Descripción</label>
+                        <input type="text" name="descripcion" required placeholder="¿Qué hay que hacer?"
+                               class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500 block mb-1">Fecha límite</label>
+                        <input type="date" name="fecha_limite"
+                               class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500">
+                    </div>
+                </div>
+                <div class="mt-3 text-right">
+                    <button type="submit"
+                            class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 transition-colors">
+                        Agregar Tarea
+                    </button>
+                </div>
+            </form>
+
+            <!-- Lista de tareas -->
+            {% if tasks %}
+            <div class="space-y-3">
+                {% for task in tasks %}
+                <div class="flex items-start gap-3 p-3 rounded-lg border group
+                            {{ 'bg-green-50 border-green-200' if task.completada else 'bg-white' }}">
+                    <!-- Botón toggle completar -->
+                    <form action="/cs/account/{{ account.id }}/tasks/{{ task.id }}/toggle" method="POST">
+                        <button type="submit" class="mt-0.5 text-lg hover:scale-110 transition-transform cursor-pointer"
+                                title="{{ 'Marcar como pendiente' if task.completada else 'Marcar como completada' }}">
+                            {{ '&#10003;' if task.completada else '&#9675;' }}
+                        </button>
+                    </form>
+                    <div class="flex-1">
+                        <p class="text-sm font-medium text-gray-800 {{ 'line-through text-gray-400' if task.completada }}">
+                            {{ task.descripcion }}
+                        </p>
+                        <div class="flex gap-3 text-xs text-gray-500 mt-1">
+                            <span class="px-1.5 py-0.5 bg-gray-100 rounded">{{ task.tipo }}</span>
+                            <span>{{ task.responsable }}</span>
+                            {% if task.fecha_limite %}
+                            <span class="{% if not task.completada and task.fecha_limite < today %}text-red-500 font-medium{% endif %}">
+                                Vence: {{ task.fecha_limite.strftime('%d/%m/%Y') }}
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <!-- Botón eliminar -->
+                    <form action="/cs/account/{{ account.id }}/tasks/{{ task.id }}/delete" method="POST"
+                          class="opacity-0 group-hover:opacity-100 transition-opacity"
+                          onsubmit="return confirm('¿Eliminar esta tarea?')">
+                        <button type="submit" class="text-xs text-red-400 hover:text-red-600 mt-1">Eliminar</button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-6">
+                <p class="text-gray-400 text-sm">Sin tareas registradas. Agrega la primera arriba.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}

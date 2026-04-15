@@ -1,0 +1,88 @@
+{% extends "cs/cs_base.html" %}
+{% block title %}Alertas — Avantex CS{% endblock %}
+
+{% block content %}
+
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-800">Centro de Alertas</h1>
+    <p class="text-sm text-gray-500">{{ alertas|length }} alertas activas — evaluación automática de las 20 cuentas</p>
+</div>
+
+<!-- Resumen por severidad -->
+<div class="grid grid-cols-3 gap-4 mb-6">
+    <div class="bg-red-50 border border-red-200 rounded-xl p-4">
+        <div class="flex items-center gap-2 mb-1">
+            <span class="w-3 h-3 rounded-full bg-red-500"></span>
+            <span class="text-sm font-semibold text-red-700">Críticas</span>
+        </div>
+        <p class="text-2xl font-bold text-red-600">{{ por_severidad.critica|length }}</p>
+    </div>
+    <div class="bg-orange-50 border border-orange-200 rounded-xl p-4">
+        <div class="flex items-center gap-2 mb-1">
+            <span class="w-3 h-3 rounded-full bg-orange-500"></span>
+            <span class="text-sm font-semibold text-orange-700">Altas</span>
+        </div>
+        <p class="text-2xl font-bold text-orange-600">{{ por_severidad.alta|length }}</p>
+    </div>
+    <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+        <div class="flex items-center gap-2 mb-1">
+            <span class="w-3 h-3 rounded-full bg-yellow-400"></span>
+            <span class="text-sm font-semibold text-yellow-700">Media</span>
+        </div>
+        <p class="text-2xl font-bold text-yellow-600">{{ por_severidad.media|length }}</p>
+    </div>
+</div>
+
+<!-- Alertas agrupadas por KAM -->
+{% for kam_nombre, kam_alertas in por_kam|dictsort %}
+<div class="mb-6">
+    <h2 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+        <span class="w-6 h-6 bg-brand-600 text-white rounded-full flex items-center justify-center text-xs">
+            {{ kam_nombre.split(' ')[0][0] }}{{ kam_nombre.split(' ')[1][0] if kam_nombre.split(' ')|length > 1 else '' }}
+        </span>
+        {{ kam_nombre }}
+        <span class="text-xs text-gray-400 font-normal">({{ kam_alertas|length }} alertas)</span>
+    </h2>
+
+    <div class="space-y-3">
+        {% for alerta in kam_alertas %}
+        <div class="bg-white rounded-lg shadow-sm border-l-4 p-4
+                    {% if alerta.severidad == 'critica' %}border-red-500
+                    {% elif alerta.severidad == 'alta' %}border-orange-500
+                    {% else %}border-yellow-400{% endif %}">
+            <div class="flex items-start justify-between">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="px-2 py-0.5 rounded text-xs font-semibold
+                            {% if alerta.severidad == 'critica' %}bg-red-100 text-red-700
+                            {% elif alerta.severidad == 'alta' %}bg-orange-100 text-orange-700
+                            {% else %}bg-yellow-100 text-yellow-700{% endif %}">
+                            {{ alerta.severidad|upper }}
+                        </span>
+                        <a href="/cs/account/{{ alerta.account_id }}"
+                           class="text-sm font-semibold text-brand-600 hover:underline">
+                            {{ alerta.cuenta }}
+                        </a>
+                    </div>
+                    <p class="text-sm font-medium text-gray-800">{{ alerta.titulo }}</p>
+                    <p class="text-xs text-gray-500 mt-1">{{ alerta.detalle }}</p>
+                </div>
+                <div class="ml-4 text-right shrink-0">
+                    <p class="text-xs text-gray-400 mb-1">Acción sugerida:</p>
+                    <p class="text-xs font-medium text-blue-600">{{ alerta.accion }}</p>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+
+{% if not alertas %}
+<div class="bg-green-50 border border-green-200 rounded-xl p-8 text-center">
+    <p class="text-green-700 font-semibold">Sin alertas activas</p>
+    <p class="text-green-600 text-sm mt-1">Todas las cuentas están en buen estado.</p>
+</div>
+{% endif %}
+
+{% endblock %}

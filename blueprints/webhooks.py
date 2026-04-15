@@ -236,6 +236,140 @@ def _procesar_mensaje_whatsapp(value: dict):
         })
 
 
+
+# ══════════════════════════════════════════════
+# WEBHOOK BAILEYS — recibe mensajes del bot Node.js
+# ══════════════════════════════════════════════
+
+@webhooks_bp.route("/baileys", methods=["POST"])
+def recibir_mensaje_baileys():
+    """Recibe mensajes desde el microservicio Baileys."""
+    import os
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Payload inválido"}), 400
+
+    secret = data.get("secret", "")
+    if secret != os.getenv("BOT_SECRET", "avantex-bot-2026"):
+        return jsonify({"error": "No autorizado"}), 403
+
+    telefono = data.get("telefono", "")
+    nombre = data.get("nombre", "")
+    contenido = data.get("contenido", "")
+    session_id = data.get("session_id", "")
+    lead_data = data.get("lead_data")
+
+    if not telefono:
+        return jsonify({"error": "telefono requerido"}), 400
+
+    # ── Buscar o crear Lead ──
+    lead = Lead.query.filter_by(telefono=telefono).first()
+
+    if not lead and lead_data:
+        # Bot completó calificación — crear lead calificado
+        from asignacion import asignar_lead_comercial
+        marca = lead_data.get("marca", "")
+
+        try:
+            lead = asignar_lead_comercial({
+                "telefono": telefono,
+                "nombre": lead_data.get("nombre", nombre),
+                "origen": OrigenLead.WHATSAPP_ORGANICO.value,
+                "marca_interes": marca,
+            })
+            # Guardar datos de calificación
+            lead.empresa = lead_data.get("empresa", "")
+            lead.icp_sucursales = lead_data.get("sucursales", "")
+            db.session.commit()
+
+            logger.info(f"Lead Baileys calificado: {lead.nombre} → {lead.usuario_asignado.nombre if lead.usuario_asignado else 'Sin asignar'}")
+
+            # Notificar al vendedor por WhatsApp
+            _notificar_vendedor_baileys(lead, session_id, lead_data)
+
+        except ValueError:
+            lead = Lead(
+                nombre=lead_data.get("nombre", nombre),
+                telefono=telefono,
+                origen=OrigenLead.WHATSAPP_ORGANICO,
+                etapa_pipeline=EtapaPipeline.NUEVO_LEAD,
+                marca_interes=lead_data.get("marca", ""),
+            )
+            db.session.add(lead)
+            db.session.commit()
+
+    elif not lead:
+        # Mensaje sin calificación completada — crear lead básico
+        lead = Lead(
+            nombre=nombre or telefono,
+            telefono=telefono,
+            origen=OrigenLead.WHATSAPP_ORGANICO,
+            etapa_pipeline=EtapaPipeline.NUEVO_LEAD,
+        )
+        db.session.add(lead)
+        db.session.flush()
+
+    # ── Guardar mensaje ──
+    nuevo_mensaje = MensajeWhatsapp(
+        lead_id=lead.id,
+        direccion=DireccionMensaje.ENTRANTE,
+        contenido=contenido,
+    )
+
+    from datetime import datetime, timezone as tz
+    lead.respondio_ultimo_contacto = True
+    lead.fecha_ultimo_contacto = datetime.now(tz.utc)
+
+    db.session.add(nuevo_mensaje)
+    db.session.commit()
+
+    # ── Emitir SocketIO ──
+    socketio.emit("nuevo_mensaje", {
+        "mensaje": nuevo_mensaje.to_dict(),
+        "lead": lead.to_dict(),
+    }, room=f"lead_{lead.id}")
+
+    socketio.emit("mensaje_global", {
+        "lead_id": str(lead.id),
+        "lead_nombre": lead.nombre,
+        "preview": contenido[:80],
+    })
+
+    return jsonify({"ok": True, "lead_id": str(lead.id)}), 200
+
+
+def _notificar_vendedor_baileys(lead, session_id, lead_data):
+    """Envía notificación por WhatsApp al vendedor asignado."""
+    import os, requests as http
+    vendedor = lead.usuario_asignado
+    if not vendedor or not vendedor.telefono:
+        return
+
+    bot_url = os.getenv("BAILEYS_URL", "http://localhost:3001")
+    bot_secret = os.getenv("BOT_SECRET", "avantex-bot-2026")
+
+    mensaje = (
+        f"🔔 *Nuevo lead asignado*\n\n"
+        f"👤 {lead_data.get('nombre', '')}\n"
+        f"🏢 {lead_data.get('empresa', '')}\n"
+        f"📍 {lead_data.get('sucursales', '')} sucursales\n"
+        f"🎯 {lead_data.get('servicio', '')}\n"
+        f"📱 {lead.telefono}\n"
+        f"🏷️ {lead_data.get('marca', '')}\n\n"
+        f"📋 Ver en CRM: https://leads-manager-avantex.onrender.com"
+    )
+
+    try:
+        http.post(f"{bot_url}/api/send", json={
+            "session_id": session_id,
+            "telefono": vendedor.telefono,
+            "contenido": mensaje,
+            "secret": bot_secret,
+        }, timeout=10)
+    except Exception as e:
+        logger.warning(f"No se pudo notificar al vendedor: {e}")
+
+
 def _extraer_contenido(msg: dict, tipo: str) -> str:
     """Extrae el texto o descripción del mensaje según su tipo."""
     extractores = {

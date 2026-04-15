@@ -37,6 +37,11 @@ def get_vendedor_filter():
     return session.get("usuario_id")
 
 
+def is_kam():
+    """Retorna True si el usuario logueado es KAM."""
+    return session.get("user_rol", "").upper() == "KAM"
+
+
 @auth_bp.route("/login", methods=["GET"])
 def login_page():
     if session.get("user_id"):
@@ -68,6 +73,9 @@ def login():
     from actividad import log_actividad
     log_actividad("login", "usuario", user.id, f"{user.nombre} ({user.correo})")
 
+    # KAMs van directo al CS Dashboard
+    if user.rol.value.upper() == "KAM":
+        return redirect("/cs/")
     return redirect(url_for("index"))
 
 
@@ -213,4 +221,6 @@ def google_callback():
     from actividad import log_actividad
     log_actividad("login_google", "usuario", user.id, f"{user.nombre} ({user.correo}) via Google SSO")
 
+    if user.rol.value.upper() == "KAM":
+        return redirect("/cs/")
     return redirect(url_for("index"))

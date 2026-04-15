@@ -50,6 +50,7 @@ def create_app():
     from blueprints.cotizaciones  import cotizaciones_bp
     from blueprints.apikeys       import apikeys_bp
     from blueprints.api_v1        import api_v1_bp
+    from blueprints.cs            import cs_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp,      url_prefix="/webhook")
@@ -62,6 +63,7 @@ def create_app():
     app.register_blueprint(cotizaciones_bp,  url_prefix="/api/cotizaciones")
     app.register_blueprint(apikeys_bp,       url_prefix="/api/keys")
     app.register_blueprint(api_v1_bp,        url_prefix="/api/v1")
+    app.register_blueprint(cs_bp,            url_prefix="/cs")
 
     # ── Proteger todas las rutas excepto login y webhooks ──
     @app.before_request
@@ -71,6 +73,10 @@ def create_app():
             return
         if not session.get("user_id"):
             return redirect(url_for("auth.login_page"))
+        # KAMs solo pueden acceder a /cs/ y /logout
+        if session.get("user_rol", "").upper() == "KAM":
+            if not request.path.startswith("/cs/") and request.path != "/logout":
+                return redirect("/cs/")
 
     # ── Ruta principal (vista Kanban + Chat) ───
     from flask import render_template

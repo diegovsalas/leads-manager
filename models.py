@@ -56,6 +56,7 @@ class PlataformaAds(enum.Enum):
 class RolCRM(enum.Enum):
     SUPER_ADMIN = "Super Admin"
     VENDEDOR    = "Vendedor"
+    KAM         = "KAM"
 
 
 class TipoProyecto(enum.Enum):
@@ -526,6 +527,137 @@ class ApiKey(db.Model):
         d = self.to_dict()
         d["api_key"] = self.api_key
         return d
+
+
+# ──────────────────────────────────────────────
+# Tabla: actividad_log (auditoría)
+# ──────────────────────────────────────────────
+# ──────────────────────────────────────────────
+# Tablas: CS Dashboard (Customer Success)
+# ──────────────────────────────────────────────
+class CSAccount(db.Model):
+    """Cuenta (cliente) bajo gestión de Customer Success."""
+    __tablename__ = "cs_accounts"
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    nombre = db.Column(db.String(200), nullable=False, unique=True)
+    kam_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users_crm.id"), nullable=False)
+    es_cuenta_nueva = db.Column(db.Boolean, default=False)
+    mrr = db.Column(db.Numeric(14, 2), default=0)
+    arr_proyectado = db.Column(db.Numeric(14, 2), default=0)
+    sucursales = db.Column(db.Integer, default=0)
+    unidades_contratadas = db.Column(db.String(100), default="")
+    facturacion_q1 = db.Column(db.Numeric(14, 2), default=0)
+    pagado_q1 = db.Column(db.Numeric(14, 2), default=0)
+    pendiente_q1 = db.Column(db.Numeric(14, 2), default=0)
+    num_facturas_q1 = db.Column(db.Integer, default=0)
+    nps = db.Column(db.Float, nullable=True)
+    pulso = db.Column(db.String(20), nullable=True)
+    eficiencia_operativa = db.Column(db.Float, nullable=True)
+
+    kam = db.relationship("UserCRM", backref="cs_accounts")
+    invoices = db.relationship("CSInvoice", backref="account", lazy=True)
+    appointments = db.relationship("CSAppointment", backref="account", lazy=True)
+    notes = db.relationship("CSNote", backref="account", lazy=True, order_by="CSNote.created_at.desc()")
+    tasks = db.relationship("CSTask", backref="account", lazy=True, order_by="CSTask.created_at.desc()")
+
+    def to_dict(self):
+        return {
+            "id": str(self.id), "nombre": self.nombre,
+            "kam_id": str(self.kam_id), "mrr": float(self.mrr or 0),
+            "sucursales": self.sucursales,
+            "unidades_contratadas": self.unidades_contratadas,
+        }
+
+
+class CSInvoice(db.Model):
+    __tablename__ = "cs_invoices"
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=False)
+    folio = db.Column(db.String(50), default="")
+    serie = db.Column(db.String(20), default="")
+    concepto = db.Column(db.String(300), default="")
+    uen = db.Column(db.String(50), default="")
+    subtotal = db.Column(db.Numeric(14, 2), default=0)
+    impuestos = db.Column(db.Numeric(14, 2), default=0)
+    total = db.Column(db.Numeric(14, 2), default=0)
+    pendiente = db.Column(db.Numeric(14, 2), default=0)
+    pagado = db.Column(db.Numeric(14, 2), default=0)
+    fecha_cobro = db.Column(db.Date, nullable=True)
+    fecha_vencimiento = db.Column(db.Date, nullable=True)
+    fecha_pago = db.Column(db.Date, nullable=True)
+    estatus = db.Column(db.String(30), default="")
+
+
+class CSAppointment(db.Model):
+    __tablename__ = "cs_appointments"
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=False)
+    propiedad = db.Column(db.String(300), default="")
+    direccion = db.Column(db.String(500), default="")
+    zona = db.Column(db.String(100), default="")
+    tecnico = db.Column(db.String(120), default="")
+    fecha_inicio = db.Column(db.DateTime(timezone=True), nullable=True)
+    fecha_terminacion = db.Column(db.DateTime(timezone=True), nullable=True)
+    estatus = db.Column(db.String(50), default="")
+    titulo_servicio = db.Column(db.String(200), default="")
+    cantidad = db.Column(db.Integer, default=1)
+
+
+class CSNote(db.Model):
+    __tablename__ = "cs_notes"
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=False)
+    autor = db.Column(db.String(120), default="")
+    contenido = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+
+
+class CSTask(db.Model):
+    __tablename__ = "cs_tasks"
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=False)
+    tipo = db.Column(db.String(50), default="check-in")
+    descripcion = db.Column(db.Text, nullable=False)
+    responsable = db.Column(db.String(120), default="")
+    fecha_limite = db.Column(db.Date, nullable=True)
+    completada = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+
+
+class CSOnboardingAccount(db.Model):
+    __tablename__ = "cs_onboarding_accounts"
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    nombre = db.Column(db.String(200), nullable=False)
+    sucursales = db.Column(db.Integer, default=0)
+    tarifa = db.Column(db.Numeric(14, 2), default=0)
+    frecuencia = db.Column(db.String(30), default="mensual")
+    mrr_proyectado = db.Column(db.Numeric(14, 2), default=0)
+    kam_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users_crm.id"), nullable=True)
+    kam = db.relationship("UserCRM", foreign_keys=[kam_id])
+
+
+class CSOpportunity(db.Model):
+    __tablename__ = "cs_opportunities"
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=True)
+    prospecto_nombre = db.Column(db.String(200), default="")
+    contacto = db.Column(db.String(200), default="")
+    tipo = db.Column(db.String(50), nullable=False)
+    unidad_negocio = db.Column(db.String(30), default="")
+    descripcion = db.Column(db.Text, default="")
+    valor_estimado = db.Column(db.Numeric(14, 2), default=0)
+    etapa = db.Column(db.String(30), default="prospeccion")
+    kam_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users_crm.id"), nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+    account = db.relationship("CSAccount", backref="opportunities")
+    kam = db.relationship("UserCRM", foreign_keys=[kam_id])
+
+    @property
+    def cliente_nombre(self):
+        if self.account:
+            return self.account.nombre
+        return self.prospecto_nombre or "Sin nombre"
 
 
 # ──────────────────────────────────────────────
