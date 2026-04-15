@@ -1,0 +1,46 @@
+{% extends "cs/cs_base.html" %}
+{% block title %}Resultado — CS Avantex{% endblock %}
+
+{% block content %}
+
+<div class="max-w-lg mx-auto mt-12">
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
+        <p class="text-4xl mb-4">{% if errores == 0 %}✅{% else %}⚠️{% endif %}</p>
+        <h1 class="text-xl font-bold text-gray-800 mb-2">Carga de {{ tipo }} completada</h1>
+
+        <div class="grid grid-cols-3 gap-4 my-6">
+            <div class="bg-green-50 rounded-xl p-3">
+                <p class="text-2xl font-bold text-green-600">{{ "{:,}".format(insertados) }}</p>
+                <p class="text-xs text-green-700">Insertados</p>
+            </div>
+            <div class="bg-yellow-50 rounded-xl p-3">
+                <p class="text-2xl font-bold text-yellow-600">{{ "{:,}".format(no_match) }}</p>
+                <p class="text-xs text-yellow-700">Sin match</p>
+            </div>
+            <div class="bg-red-50 rounded-xl p-3">
+                <p class="text-2xl font-bold text-red-600">{{ "{:,}".format(errores) }}</p>
+                <p class="text-xs text-red-700">Errores</p>
+            </div>
+        </div>
+
+        <p class="text-sm text-gray-500 mb-6">{{ total }} filas procesadas del CSV</p>
+
+        {% if no_match > 0 %}
+        <p class="text-xs text-yellow-600 mb-4">
+            {{ no_match }} filas no coincidieron con ninguna cuenta registrada.
+            Verifica que el campo "Cliente" del CSV coincida con los nombres en el sistema.
+        </p>
+        {% endif %}
+
+        <div class="flex gap-3 justify-center">
+            <a href="/cs/cargar-datos" class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-200">
+                Cargar mas datos
+            </a>
+            <a href="/cs/" class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700">
+                Ver Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

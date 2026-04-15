@@ -3,8 +3,10 @@
 CS Dashboard — Customer Success para KAMs.
 Rutas bajo /cs/
 """
+import csv
+import io
 from datetime import datetime, date
-from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, send_file
+from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, send_file, flash
 from sqlalchemy import func
 from extensions import db
 from models import (
@@ -604,6 +606,220 @@ def api_operacion_trend():
         "no_realizadas": int(r.no_realizadas or 0),
         "pct_cumplimiento": round(int(r.terminadas or 0) / int(r.total) * 100, 1) if r.total > 0 else 0,
     } for r in rows])
+
+
+# ══════════════════════════════════════════════
+# CARGA DE DATOS — CSV upload
+# ══════════════════════════════════════════════
+def _parse_money(val):
+    if not val or val == "nan":
+        return 0.0
+    return float(str(val).replace("$", "").replace(",", "").strip() or 0)
+
+
+def _parse_date_cobros(val):
+    """Parsea '31 mar 2026' o '15 abr 2026'."""
+    if not val or val == "nan" or str(val).strip() == "":
+        return None
+    import locale
+    for fmt in ("%d %b %Y", "%d/%m/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(str(val).strip(), fmt).date()
+        except ValueError:
+            continue
+    # Intentar con meses en español
+    meses_es = {
+        "ene": "01", "feb": "02", "mar": "03", "abr": "04",
+        "may": "05", "jun": "06", "jul": "07", "ago": "08",
+        "sep": "09", "oct": "10", "nov": "11", "dic": "12",
+    }
+    parts = str(val).strip().split()
+    if len(parts) == 3:
+        dia, mes_str, anio = parts
+        mes_num = meses_es.get(mes_str.lower()[:3])
+        if mes_num:
+            try:
+                return datetime.strptime(f"{dia}/{mes_num}/{anio}", "%d/%m/%Y").date()
+            except ValueError:
+                pass
+    return None
+
+
+def _parse_datetime_citas(val):
+    """Parsea '06/04/2026 17:41:21'."""
+    if not val or val == "nan" or str(val).strip() == "":
+        return None
+    for fmt in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M:%S", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(str(val).strip(), fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _match_account(cliente_nombre, accounts_map):
+    """Busca la cuenta por nombre parcial (case-insensitive)."""
+    if not cliente_nombre:
+        return None
+    nombre_lower = str(cliente_nombre).lower()
+    for acc_nombre, acc_id in accounts_map.items():
+        if acc_nombre.lower() in nombre_lower or nombre_lower in acc_nombre.lower():
+            return acc_id
+    return None
+
+
+@cs_bp.route("/cargar-datos")
+def cargar_datos():
+    """Vista para cargar CSVs de cobros y citas."""
+    accounts = CSAccount.query.order_by(CSAccount.nombre).all()
+    # Conteos actuales
+    num_invoices = CSInvoice.query.count()
+    num_appointments = CSAppointment.query.count()
+    return render_template(
+        "cs_cargar_datos.html",
+        accounts=accounts, num_invoices=num_invoices,
+        num_appointments=num_appointments, **_ctx(),
+    )
+
+
+@cs_bp.route("/cargar-datos/cobros", methods=["POST"])
+def cargar_cobros():
+    """Procesa CSV de cobros/facturas."""
+    file = request.files.get("archivo")
+    if not file or not file.filename.endswith(".csv"):
+        return redirect(url_for("cs.cargar_datos"))
+
+    # Build account name map
+    accounts = CSAccount.query.all()
+    accounts_map = {a.nombre: str(a.id) for a in accounts}
+
+    content = file.read().decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(content))
+
+    insertados = 0
+    no_match = 0
+    errores = 0
+
+    for row in reader:
+        cliente = row.get("Cliente", "").strip()
+        acc_id = _match_account(cliente, accounts_map)
+        if not acc_id:
+            no_match += 1
+            continue
+
+        try:
+            inv = CSInvoice(
+                account_id=acc_id,
+                folio=row.get("Folio", ""),
+                serie=row.get("Serie de Folio", ""),
+                concepto=row.get("Concepto", ""),
+                uen=row.get("UEN", ""),
+                subtotal=_parse_money(row.get("Monto Subtotal")),
+                impuestos=_parse_money(row.get("Impuestos")),
+                total=_parse_money(row.get("Total")),
+                pendiente=_parse_money(row.get("Pendiente")),
+                pagado=_parse_money(row.get("Pagado")),
+                fecha_cobro=_parse_date_cobros(row.get("Fecha de Cobro")),
+                fecha_vencimiento=_parse_date_cobros(row.get("Fecha de Vencimiento")),
+                fecha_pago=_parse_date_cobros(row.get("Fecha de Pago")),
+                estatus=row.get("Estatus", ""),
+            )
+            db.session.add(inv)
+            insertados += 1
+        except Exception:
+            errores += 1
+
+    db.session.commit()
+
+    # Actualizar totales en cs_accounts
+    _recalcular_facturacion(accounts)
+
+    return render_template(
+        "cs_cargar_resultado.html",
+        tipo="Cobros", insertados=insertados, no_match=no_match,
+        errores=errores, total=insertados + no_match + errores,
+        **_ctx(),
+    )
+
+
+@cs_bp.route("/cargar-datos/citas", methods=["POST"])
+def cargar_citas():
+    """Procesa CSV de citas/operación."""
+    file = request.files.get("archivo")
+    if not file or not file.filename.endswith(".csv"):
+        return redirect(url_for("cs.cargar_datos"))
+
+    accounts = CSAccount.query.all()
+    accounts_map = {a.nombre: str(a.id) for a in accounts}
+
+    content = file.read().decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(content))
+
+    insertados = 0
+    no_match = 0
+    errores = 0
+
+    for row in reader:
+        cliente = row.get("Cliente", "").strip()
+        acc_id = _match_account(cliente, accounts_map)
+        if not acc_id:
+            no_match += 1
+            continue
+
+        try:
+            apt = CSAppointment(
+                account_id=acc_id,
+                propiedad=row.get("Propiedad", ""),
+                direccion=row.get("Dirección", row.get("Direccion", "")),
+                zona=row.get("Zona", ""),
+                tecnico=row.get("Tecnico", row.get("Técnico", "")),
+                fecha_inicio=_parse_datetime_citas(row.get("Fecha de Inicio")),
+                fecha_terminacion=_parse_datetime_citas(row.get("Fecha de Terminación", row.get("Fecha de Terminacion", ""))),
+                estatus=row.get("Estatus", ""),
+                titulo_servicio=row.get("Titulo Servicio", row.get("Título Servicio", "")),
+                cantidad=int(float(row.get("Cantidad", 1) or 1)),
+            )
+            db.session.add(apt)
+            insertados += 1
+        except Exception:
+            errores += 1
+
+    db.session.commit()
+    return render_template(
+        "cs_cargar_resultado.html",
+        tipo="Citas", insertados=insertados, no_match=no_match,
+        errores=errores, total=insertados + no_match + errores,
+        **_ctx(),
+    )
+
+
+@cs_bp.route("/cargar-datos/limpiar/<tipo>", methods=["POST"])
+def limpiar_datos(tipo):
+    """Elimina todos los registros de un tipo para recargar."""
+    if tipo == "cobros":
+        CSInvoice.query.delete()
+        db.session.commit()
+    elif tipo == "citas":
+        CSAppointment.query.delete()
+        db.session.commit()
+    return redirect(url_for("cs.cargar_datos"))
+
+
+def _recalcular_facturacion(accounts):
+    """Recalcula los campos facturacion_q1, pagado_q1, pendiente_q1 desde las facturas."""
+    for acc in accounts:
+        totals = db.session.query(
+            func.coalesce(func.sum(CSInvoice.total), 0),
+            func.coalesce(func.sum(CSInvoice.pagado), 0),
+            func.coalesce(func.sum(CSInvoice.pendiente), 0),
+            func.count(CSInvoice.id),
+        ).filter_by(account_id=acc.id).first()
+
+        acc.facturacion_q1 = float(totals[0])
+        acc.pagado_q1 = float(totals[1])
+        acc.pendiente_q1 = float(totals[2])
+        acc.num_facturas_q1 = totals[3]
+    db.session.commit()
 
 
 # ══════════════════════════════════════════════

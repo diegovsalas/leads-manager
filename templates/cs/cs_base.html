@@ -60,8 +60,9 @@
         <a href="/cs/onboarding" class="cs-link {% if request.endpoint == 'cs.onboarding' %}active{% endif %}">🚀 Onboarding</a>
         <a href="/cs/alertas" class="cs-link {% if request.endpoint == 'cs.alertas_view' %}active{% endif %}">🔔 Alertas</a>
 
-        {% if not is_kam %}
         <div class="cs-divider"></div>
+        {% if not is_kam %}
+        <a href="/cs/cargar-datos" class="cs-link {% if request.endpoint == 'cs.cargar_datos' %}active{% endif %}">📁 Cargar Datos</a>
         <a href="/" class="cs-link" style="color:rgba(255,255,255,.35);">← CRM</a>
         {% endif %}
 
