@@ -3,81 +3,92 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Login — Leads Manager Avantex</title>
+<title>Login — CRM Avantex</title>
 <link rel="icon" type="image/x-icon" href="/static/img/favicon.ico"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
 <style>
-:root{--bg:#fbfbfa;--bg-card:#fff;--border:#e3e2e0;--border-light:#ebebea;--text:#37352f;--text2:#787774;--text3:#b4b4b0;--accent:#2eaadc;--red:#eb5757;--green:#0f7b6c;--font:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;--r:4px;--r2:6px;--shadow:0 1px 3px rgba(0,0,0,.04),0 0 0 1px var(--border);}
 *{box-sizing:border-box;margin:0;padding:0;}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;-webkit-font-smoothing:antialiased;}
-.login-page{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;}
-.login-card{background:var(--bg-card);border:1px solid var(--border-light);border-radius:var(--r2);padding:40px 36px;width:100%;max-width:400px;box-shadow:var(--shadow);}
+html,body{height:100%;font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;}
+.login-page{display:flex;min-height:100vh;}
+.login-left{flex:1;background:#1e1b3a;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#fff;padding:40px;}
+.login-left-brand{font-size:36px;font-weight:800;letter-spacing:-1px;margin-bottom:8px;}
+.login-left-brand span{color:#9171f5;}
+.login-left-sub{font-size:14px;color:rgba(255,255,255,.5);max-width:280px;text-align:center;line-height:1.6;}
+.login-right{width:440px;background:#fff;display:flex;align-items:center;justify-content:center;padding:40px;border-left:1px solid #eee;}
+.login-card{width:100%;max-width:360px;}
 .login-logo{display:flex;align-items:center;gap:10px;margin-bottom:32px;justify-content:center;}
-.login-logo-icon{width:32px;height:32px;border-radius:6px;background:var(--text);display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff;font-weight:700;}
-.login-logo-text{font-size:18px;font-weight:700;color:var(--text);letter-spacing:-.3px;}
-.login-logo-text span{font-weight:400;color:var(--text2);}
-.login-title{font-size:22px;font-weight:700;text-align:center;margin-bottom:4px;letter-spacing:-.3px;}
-.login-subtitle{font-size:14px;color:var(--text2);text-align:center;margin-bottom:28px;}
+.login-title{font-size:22px;font-weight:700;text-align:center;margin-bottom:4px;letter-spacing:-.3px;color:#1e1b3a;}
+.login-subtitle{font-size:14px;color:#787774;text-align:center;margin-bottom:28px;}
 .form-group{margin-bottom:16px;}
-.form-label{font-size:12px;font-weight:500;color:var(--text2);margin-bottom:5px;display:block;}
-.form-input{width:100%;padding:9px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:14px;font-family:var(--font);outline:none;transition:border-color 80ms,box-shadow 80ms;}
-.form-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(46,170,220,.15);}
-.form-input::placeholder{color:var(--text3);}
-.btn-login{width:100%;padding:10px;border-radius:var(--r);font-size:14px;font-weight:600;cursor:pointer;border:none;font-family:var(--font);transition:all 80ms;background:var(--text);color:#fff;margin-top:4px;}
-.btn-login:hover{background:#2c2c2c;}
-.divider{display:flex;align-items:center;gap:12px;margin:20px 0;color:var(--text3);font-size:12px;}
-.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border-light);}
-.btn-google{width:100%;padding:9px;border-radius:var(--r);font-size:14px;font-weight:500;cursor:pointer;border:1px solid var(--border);font-family:var(--font);transition:all 80ms;background:var(--bg-card);color:var(--text);display:flex;align-items:center;justify-content:center;gap:10px;}
-.btn-google:hover{background:var(--bg);border-color:var(--text3);}
+.form-label{font-size:12px;font-weight:500;color:#787774;margin-bottom:5px;display:block;}
+.form-input{width:100%;padding:10px 12px;background:#fff;border:1px solid #e3e2e0;border-radius:8px;color:#37352f;font-size:14px;font-family:inherit;outline:none;transition:border-color 80ms,box-shadow 80ms;}
+.form-input:focus{border-color:#7c3aed;box-shadow:0 0 0 3px rgba(124,58,237,.1);}
+.form-input::placeholder{color:#b4b4b0;}
+.btn-login{width:100%;padding:11px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none;font-family:inherit;transition:all 80ms;background:#7c3aed;color:#fff;margin-top:4px;}
+.btn-login:hover{background:#6d28d9;}
+.divider{display:flex;align-items:center;gap:12px;margin:20px 0;color:#b4b4b0;font-size:12px;}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:#ebebea;}
+.btn-google{width:100%;padding:10px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;border:1px solid #e3e2e0;font-family:inherit;transition:all 80ms;background:#fff;color:#37352f;display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;}
+.btn-google:hover{background:#f5f5f9;border-color:#b4b4b0;}
 .btn-google svg{flex-shrink:0;}
-.error-msg{background:#fbe4e4;color:var(--red);padding:8px 12px;border-radius:var(--r);font-size:13px;margin-bottom:16px;text-align:center;}
-.login-footer{text-align:center;margin-top:24px;font-size:12px;color:var(--text3);}
+.error-msg{background:#fef2f2;color:#dc2626;padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:16px;text-align:center;border:1px solid #fecaca;}
+.login-footer{text-align:center;margin-top:24px;font-size:12px;color:#b4b4b0;}
+@media(max-width:768px){.login-left{display:none;}.login-right{width:100%;border:none;}}
 </style>
 </head>
 <body>
 <div class="login-page">
-  <div class="login-card">
 
-    <div class="login-logo">
-      <img src="/static/img/logo.png" alt="Logo" style="width:40px;height:40px;border-radius:6px;object-fit:cover;"/>
-      <div class="login-logo-text">Leads Manager <span>Grupo Avantex</span></div>
-    </div>
-
-    <div class="login-title">Iniciar sesion</div>
-    <div class="login-subtitle">Accede a tu cuenta del CRM</div>
-
-    {% if error %}
-    <div class="error-msg">{{ error }}</div>
-    {% endif %}
-
-    <form method="POST" action="/login">
-      <div class="form-group">
-        <label class="form-label">Correo electronico</label>
-        <input class="form-input" type="email" name="correo" placeholder="tu@grupoavantex.com" required autofocus/>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Contrasena</label>
-        <input class="form-input" type="password" name="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" required/>
-      </div>
-      <button class="btn-login" type="submit">Iniciar sesion</button>
-    </form>
-
-    <div class="divider">o</div>
-
-    <a href="/auth/google" class="btn-google" style="text-decoration:none;">
-      <svg width="18" height="18" viewBox="0 0 24 24">
-        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
-        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-      </svg>
-      Continuar con Google
-    </a>
-
-    <div class="login-footer">
-      Leads Manager &copy; 2026 Grupo Avantex
-    </div>
-
+  <div class="login-left">
+    <div class="login-left-brand"><span>CRM</span>AVANTEX</div>
+    <div class="login-left-sub">Plataforma integral de gestion comercial y customer success para Grupo Avantex</div>
   </div>
+
+  <div class="login-right">
+    <div class="login-card">
+
+      <div class="login-logo">
+        <img src="/static/img/logo.png" alt="Logo" style="width:40px;height:40px;border-radius:8px;object-fit:cover;"/>
+      </div>
+
+      <div class="login-title">Iniciar sesion</div>
+      <div class="login-subtitle">Accede a tu cuenta</div>
+
+      {% if error %}
+      <div class="error-msg">{{ error }}</div>
+      {% endif %}
+
+      <form method="POST" action="/login">
+        <div class="form-group">
+          <label class="form-label">Correo electronico</label>
+          <input class="form-input" type="email" name="correo" placeholder="tu@grupoavantex.com" required autofocus/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Contrasena</label>
+          <input class="form-input" type="password" name="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" required/>
+        </div>
+        <button class="btn-login" type="submit">Iniciar sesion</button>
+      </form>
+
+      <div class="divider">o</div>
+
+      <a href="/auth/google" class="btn-google">
+        <svg width="18" height="18" viewBox="0 0 24 24">
+          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+        </svg>
+        Continuar con Google
+      </a>
+
+      <div class="login-footer">
+        CRM Avantex &copy; 2026 Grupo Avantex
+      </div>
+
+    </div>
+  </div>
+
 </div>
 </body>
 </html>
