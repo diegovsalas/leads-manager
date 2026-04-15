@@ -560,6 +560,7 @@ class CSAccount(db.Model):
     appointments = db.relationship("CSAppointment", backref="account", lazy=True)
     notes = db.relationship("CSNote", backref="account", lazy=True, order_by="CSNote.created_at.desc()")
     tasks = db.relationship("CSTask", backref="account", lazy=True, order_by="CSTask.created_at.desc()")
+    contactos = db.relationship("CSContacto", backref="account", lazy=True, order_by="CSContacto.is_owner.desc()")
 
     def to_dict(self):
         return {
@@ -623,6 +624,29 @@ class CSTask(db.Model):
     fecha_limite = db.Column(db.Date, nullable=True)
     completada = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+
+
+class CSContacto(db.Model):
+    """Contacto de un cliente (cuenta CS)."""
+    __tablename__ = "cs_contactos"
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=False)
+    nombre = db.Column(db.String(200), nullable=False)
+    puesto = db.Column(db.String(200), default="")
+    telefono = db.Column(db.String(30), default="")
+    correo = db.Column(db.String(200), default="")
+    is_owner = db.Column(db.Boolean, default=False)
+    notas = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+
+    def to_dict(self):
+        return {
+            "id": str(self.id), "account_id": str(self.account_id),
+            "nombre": self.nombre, "puesto": self.puesto,
+            "telefono": self.telefono, "correo": self.correo,
+            "is_owner": self.is_owner, "notas": self.notas,
+            "cuenta": self.account.nombre if self.account else "",
+        }
 
 
 class CSOnboardingAccount(db.Model):

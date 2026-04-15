@@ -1,0 +1,151 @@
+{% extends "cs/cs_base.html" %}
+{% block title %}Contactos — CS Avantex{% endblock %}
+
+{% block content %}
+
+<div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-800">Directorio de Contactos</h1>
+        <p class="text-sm text-gray-500">{{ contactos|length }} contactos registrados</p>
+    </div>
+    <div class="flex gap-3">
+        <form method="GET" class="flex gap-2">
+            <input type="text" name="q" value="{{ buscar }}" placeholder="Buscar nombre, correo, puesto..."
+                   class="text-sm border border-gray-300 rounded-lg px-3 py-2 w-64 focus:ring-2 focus:ring-brand-500">
+            <button type="submit" class="px-3 py-2 bg-gray-100 text-gray-600 text-sm rounded-lg hover:bg-gray-200">Buscar</button>
+            {% if buscar %}<a href="/cs/contactos" class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">Limpiar</a>{% endif %}
+        </form>
+        <button onclick="document.getElementById('modal-nuevo-contacto').classList.remove('hidden')"
+                class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 shadow-sm">
+            + Nuevo Contacto
+        </button>
+    </div>
+</div>
+
+<!-- Tabla de contactos -->
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="border-b text-left text-gray-500 text-xs uppercase tracking-wide bg-gray-50">
+                    <th class="px-4 py-3">Nombre</th>
+                    <th class="px-4 py-3">Cliente</th>
+                    <th class="px-4 py-3">Puesto</th>
+                    <th class="px-4 py-3">Telefono</th>
+                    <th class="px-4 py-3">Correo</th>
+                    <th class="px-4 py-3 text-center">Owner</th>
+                    <th class="px-4 py-3">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in contactos %}
+                <tr class="border-b last:border-0 hover:bg-gray-50">
+                    <td class="px-4 py-3">
+                        <div class="flex items-center gap-2">
+                            <div class="w-8 h-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                {{ c.nombre[:2]|upper }}
+                            </div>
+                            <span class="font-medium text-gray-800">{{ c.nombre }}</span>
+                        </div>
+                    </td>
+                    <td class="px-4 py-3">
+                        <a href="/cs/account/{{ c.account_id }}" class="text-brand-600 hover:underline">{{ c.account.nombre }}</a>
+                    </td>
+                    <td class="px-4 py-3 text-gray-600">{{ c.puesto }}</td>
+                    <td class="px-4 py-3 text-gray-600 font-mono text-xs">{{ c.telefono }}</td>
+                    <td class="px-4 py-3">
+                        {% if c.correo %}
+                        <a href="mailto:{{ c.correo }}" class="text-brand-600 hover:underline text-xs">{{ c.correo }}</a>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-center">
+                        {% if c.is_owner %}
+                        <span class="px-2 py-0.5 bg-brand-100 text-brand-700 text-xs font-semibold rounded-full">Owner</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3">
+                        <form action="/cs/contactos/{{ c.id }}/delete" method="POST" class="inline"
+                              onsubmit="return confirm('Eliminar contacto?')">
+                            <button type="submit" class="text-xs text-red-400 hover:text-red-600">Eliminar</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if not contactos %}
+    <div class="text-center py-12">
+        <p class="text-gray-400">Sin contactos registrados.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal: Nuevo contacto -->
+<div id="modal-nuevo-contacto" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-semibold text-gray-800">Nuevo Contacto</h2>
+            <button onclick="document.getElementById('modal-nuevo-contacto').classList.add('hidden')"
+                    class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+
+        <form action="/cs/contactos/crear" method="POST">
+            <div class="space-y-4">
+                <div>
+                    <label class="text-xs text-gray-500 block mb-1">Cliente *</label>
+                    <select name="account_id" required
+                            class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                        <option value="">Seleccionar cuenta</option>
+                        {% for acc in accounts %}
+                        <option value="{{ acc.id }}">{{ acc.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500 block mb-1">Nombre del contacto *</label>
+                    <input type="text" name="nombre" required placeholder="Ej: Rocio Vigueras"
+                           class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500 block mb-1">Puesto</label>
+                    <input type="text" name="puesto" placeholder="Ej: Coordinadora de Marketing"
+                           class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs text-gray-500 block mb-1">Telefono</label>
+                        <input type="text" name="telefono" placeholder="811999199111"
+                               class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500 block mb-1">Correo</label>
+                        <input type="email" name="correo" placeholder="correo@empresa.com"
+                               class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" name="is_owner" id="is_owner_check" class="rounded">
+                    <label for="is_owner_check" class="text-sm text-gray-600">Contacto principal (Owner)</label>
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500 block mb-1">Notas</label>
+                    <textarea name="notas" rows="2" placeholder="Notas adicionales..."
+                              class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 resize-none"></textarea>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6">
+                <button type="button" onclick="document.getElementById('modal-nuevo-contacto').classList.add('hidden')"
+                        class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancelar</button>
+                <button type="submit"
+                        class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700">
+                    Crear Contacto
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

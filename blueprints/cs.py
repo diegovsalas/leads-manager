@@ -9,7 +9,7 @@ from sqlalchemy import func
 from extensions import db
 from models import (
     CSAccount, CSInvoice, CSAppointment, CSNote, CSTask,
-    CSOnboardingAccount, CSOpportunity, UserCRM, RolCRM,
+    CSOnboardingAccount, CSOpportunity, CSContacto, UserCRM, RolCRM,
 )
 from cs_health_score import calcular_health_score, calcular_health_scores_batch
 from cs_alerts import generar_alertas, alertas_por_cuenta
@@ -290,6 +290,7 @@ def account_detail(account_id):
     notes = CSNote.query.filter_by(account_id=account.id).order_by(CSNote.created_at.desc()).all()
     tasks = CSTask.query.filter_by(account_id=account.id).order_by(CSTask.completada, CSTask.fecha_limite).all()
     tareas_pendientes = sum(1 for t in tasks if not t.completada)
+    contactos = CSContacto.query.filter_by(account_id=account.id).order_by(CSContacto.is_owner.desc(), CSContacto.nombre).all()
 
     return render_template(
         "cs_account_detail.html",
@@ -299,6 +300,7 @@ def account_detail(account_id):
         facturas_pendientes=facturas_pendientes,
         appointments=appointments, citas_por_estatus=citas_por_estatus,
         notes=notes, tasks=tasks, tareas_pendientes=tareas_pendientes,
+        contactos=contactos,
         today=date.today(), account_alerts=alertas_por_cuenta(str(account_id)),
         kams=_get_kams(),
         periodo_label=periodo_label, periodo_param=periodo_param,
@@ -563,6 +565,83 @@ def api_operacion_trend():
         "no_realizadas": int(r.no_realizadas or 0),
         "pct_cumplimiento": round(int(r.terminadas or 0) / int(r.total) * 100, 1) if r.total > 0 else 0,
     } for r in rows])
+
+
+# ══════════════════════════════════════════════
+# CONTACTOS — directorio global + CRUD por cuenta
+# ══════════════════════════════════════════════
+@cs_bp.route("/contactos")
+def contactos_directory():
+    """Directorio global de contactos."""
+    q = CSContacto.query
+    buscar = request.args.get("q", "").strip()
+    if buscar:
+        q = q.filter(
+            db.or_(
+                CSContacto.nombre.ilike(f"%{buscar}%"),
+                CSContacto.correo.ilike(f"%{buscar}%"),
+                CSContacto.puesto.ilike(f"%{buscar}%"),
+            )
+        )
+    contactos = q.order_by(CSContacto.is_owner.desc(), CSContacto.nombre).all()
+    accounts = CSAccount.query.order_by(CSAccount.nombre).all()
+    return render_template(
+        "cs_contactos.html",
+        contactos=contactos, accounts=accounts, buscar=buscar, **_ctx(),
+    )
+
+
+@cs_bp.route("/contactos/crear", methods=["POST"])
+def crear_contacto():
+    account_id = request.form.get("account_id", "").strip()
+    if not account_id:
+        return redirect(url_for("cs.contactos_directory"))
+    contacto = CSContacto(
+        account_id=account_id,
+        nombre=request.form.get("nombre", "").strip(),
+        puesto=request.form.get("puesto", "").strip(),
+        telefono=request.form.get("telefono", "").strip(),
+        correo=request.form.get("correo", "").strip(),
+        is_owner=request.form.get("is_owner") == "on",
+        notas=request.form.get("notas", "").strip(),
+    )
+    db.session.add(contacto)
+    db.session.commit()
+    # Redirect back to where they came from
+    referer = request.form.get("redirect", "")
+    if referer:
+        return redirect(referer)
+    return redirect(url_for("cs.contactos_directory"))
+
+
+@cs_bp.route("/contactos/<uuid:contacto_id>/editar", methods=["POST"])
+def editar_contacto(contacto_id):
+    c = db.session.get(CSContacto, contacto_id)
+    if not c:
+        return "No encontrado", 404
+    c.nombre = request.form.get("nombre", c.nombre).strip()
+    c.puesto = request.form.get("puesto", c.puesto).strip()
+    c.telefono = request.form.get("telefono", c.telefono).strip()
+    c.correo = request.form.get("correo", c.correo).strip()
+    c.is_owner = request.form.get("is_owner") == "on"
+    c.notas = request.form.get("notas", c.notas).strip()
+    db.session.commit()
+    referer = request.form.get("redirect", "")
+    if referer:
+        return redirect(referer)
+    return redirect(url_for("cs.contactos_directory"))
+
+
+@cs_bp.route("/contactos/<uuid:contacto_id>/delete", methods=["POST"])
+def eliminar_contacto(contacto_id):
+    c = db.session.get(CSContacto, contacto_id)
+    if c:
+        db.session.delete(c)
+        db.session.commit()
+    referer = request.form.get("redirect", "")
+    if referer:
+        return redirect(referer)
+    return redirect(url_for("cs.contactos_directory"))
 
 
 # ══════════════════════════════════════════════
