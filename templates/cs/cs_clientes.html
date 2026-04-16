@@ -95,7 +95,8 @@
                     <!-- Tier -->
                     <td class="px-4 py-3 text-center">
                         <span class="px-2 py-0.5 rounded-full text-xs font-semibold
-                            {% if acc.tier == 'Gold' %}bg-yellow-100 text-yellow-700
+                            {% if acc.tier == 'Enterprise' %}bg-indigo-100 text-indigo-700
+                            {% elif acc.tier == 'Gold' %}bg-yellow-100 text-yellow-700
                             {% elif acc.tier == 'Silver' %}bg-gray-200 text-gray-600
                             {% elif acc.tier == 'Bronze' %}bg-orange-100 text-orange-700
                             {% else %}bg-gray-100 text-gray-400{% endif %}">
@@ -192,9 +193,10 @@
                 <label class="text-xs text-gray-500 block mb-1">Tier</label>
                 <select name="tier" id="edit-tier" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
                     <option value="">Sin asignar</option>
-                    <option value="Gold">🥇 Gold</option>
-                    <option value="Silver">🥈 Silver</option>
-                    <option value="Bronze">🥉 Bronze</option>
+                    <option value="Enterprise">🏆 Enterprise (&gt;$400K)</option>
+                    <option value="Gold">🥇 Gold ($150K-$400K)</option>
+                    <option value="Silver">🥈 Silver ($80K-$150K)</option>
+                    <option value="Bronze">🥉 Bronze (&lt;$80K)</option>
                 </select>
             </div>
 
