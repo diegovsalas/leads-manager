@@ -990,7 +990,7 @@ def create_note(account_id):
     if contenido:
         db.session.add(CSNote(account_id=account_id, autor=autor, contenido=contenido))
         db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "#notas")
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=notas")
 
 
 @cs_bp.route("/account/<uuid:account_id>/notes/<uuid:note_id>/delete", methods=["POST"])
@@ -999,7 +999,7 @@ def delete_note(account_id, note_id):
     if note:
         db.session.delete(note)
         db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "#notas")
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=notas")
 
 
 @cs_bp.route("/account/<uuid:account_id>/tasks", methods=["POST"])
@@ -1019,7 +1019,7 @@ def create_task(account_id):
             fecha_limite=fecha_limite,
         ))
         db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "#tareas")
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=tareas")
 
 
 @cs_bp.route("/account/<uuid:account_id>/tasks/<uuid:task_id>/toggle", methods=["POST"])
@@ -1028,7 +1028,7 @@ def toggle_task(account_id, task_id):
     if task:
         task.completada = not task.completada
         db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "#tareas")
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=tareas")
 
 
 @cs_bp.route("/account/<uuid:account_id>/tasks/<uuid:task_id>/delete", methods=["POST"])
@@ -1037,4 +1037,4 @@ def delete_task(account_id, task_id):
     if task:
         db.session.delete(task)
         db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "#tareas")
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=tareas")
