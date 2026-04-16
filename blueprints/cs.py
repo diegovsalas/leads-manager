@@ -806,6 +806,7 @@ def cargar_cobros():
     insertados = 0
     no_match = 0
     errores = 0
+    batch = []
 
     for row in reader:
         cliente = row.get("Cliente", "").strip()
@@ -815,30 +816,34 @@ def cargar_cobros():
             continue
 
         try:
-            inv = CSInvoice(
-                account_id=acc_id,
-                folio=row.get("Folio", ""),
-                serie=row.get("Serie de Folio", ""),
-                concepto=row.get("Concepto", ""),
-                uen=row.get("UEN", ""),
-                subtotal=_parse_money(row.get("Monto Subtotal")),
-                impuestos=_parse_money(row.get("Impuestos")),
-                total=_parse_money(row.get("Total")),
-                pendiente=_parse_money(row.get("Pendiente")),
-                pagado=_parse_money(row.get("Pagado")),
-                fecha_cobro=_parse_date_cobros(row.get("Fecha de Cobro")),
-                fecha_vencimiento=_parse_date_cobros(row.get("Fecha de Vencimiento")),
-                fecha_pago=_parse_date_cobros(row.get("Fecha de Pago")),
-                estatus=row.get("Estatus", ""),
-            )
-            db.session.add(inv)
+            batch.append({
+                "account_id": acc_id,
+                "folio": row.get("Folio", ""),
+                "serie": row.get("Serie de Folio", ""),
+                "concepto": row.get("Concepto", ""),
+                "uen": row.get("UEN", ""),
+                "subtotal": _parse_money(row.get("Monto Subtotal")),
+                "impuestos": _parse_money(row.get("Impuestos")),
+                "total": _parse_money(row.get("Total")),
+                "pendiente": _parse_money(row.get("Pendiente")),
+                "pagado": _parse_money(row.get("Pagado")),
+                "fecha_cobro": _parse_date_cobros(row.get("Fecha de Cobro")),
+                "fecha_vencimiento": _parse_date_cobros(row.get("Fecha de Vencimiento")),
+                "fecha_pago": _parse_date_cobros(row.get("Fecha de Pago")),
+                "estatus": row.get("Estatus", ""),
+            })
             insertados += 1
+            if len(batch) >= 500:
+                db.session.execute(CSInvoice.__table__.insert(), batch)
+                db.session.commit()
+                batch = []
         except Exception:
             errores += 1
 
+    if batch:
+        db.session.execute(CSInvoice.__table__.insert(), batch)
     db.session.commit()
 
-    # Actualizar totales en cs_accounts
     _recalcular_facturacion(accounts)
 
     return render_template(
@@ -865,6 +870,7 @@ def cargar_citas():
     insertados = 0
     no_match = 0
     errores = 0
+    batch = []
 
     for row in reader:
         cliente = row.get("Cliente", "").strip()
@@ -874,23 +880,28 @@ def cargar_citas():
             continue
 
         try:
-            apt = CSAppointment(
-                account_id=acc_id,
-                propiedad=row.get("Propiedad", ""),
-                direccion=row.get("Dirección", row.get("Direccion", "")),
-                zona=row.get("Zona", ""),
-                tecnico=row.get("Tecnico", row.get("Técnico", "")),
-                fecha_inicio=_parse_datetime_citas(row.get("Fecha de Inicio")),
-                fecha_terminacion=_parse_datetime_citas(row.get("Fecha de Terminación", row.get("Fecha de Terminacion", ""))),
-                estatus=row.get("Estatus", ""),
-                titulo_servicio=row.get("Titulo Servicio", row.get("Título Servicio", "")),
-                cantidad=int(float(row.get("Cantidad", 1) or 1)),
-            )
-            db.session.add(apt)
+            batch.append({
+                "account_id": acc_id,
+                "propiedad": row.get("Propiedad", ""),
+                "direccion": row.get("Dirección", row.get("Direccion", "")),
+                "zona": row.get("Zona", ""),
+                "tecnico": row.get("Tecnico", row.get("Técnico", "")),
+                "fecha_inicio": _parse_datetime_citas(row.get("Fecha de Inicio")),
+                "fecha_terminacion": _parse_datetime_citas(row.get("Fecha de Terminación", row.get("Fecha de Terminacion", ""))),
+                "estatus": row.get("Estatus", ""),
+                "titulo_servicio": row.get("Titulo Servicio", row.get("Título Servicio", "")),
+                "cantidad": int(float(row.get("Cantidad", 1) or 1)),
+            })
             insertados += 1
+            if len(batch) >= 500:
+                db.session.execute(CSAppointment.__table__.insert(), batch)
+                db.session.commit()
+                batch = []
         except Exception:
             errores += 1
 
+    if batch:
+        db.session.execute(CSAppointment.__table__.insert(), batch)
     db.session.commit()
     return render_template(
         "cs_cargar_resultado.html",
