@@ -48,6 +48,31 @@ def _current_kam_id():
     return None
 
 
+def _parse_adjuntos(form):
+    """Extrae adjuntos del formulario y auto-detecta tipo por URL."""
+    adjuntos = []
+    for i in range(10):
+        url = form.get(f"adj_url_{i}", "").strip()
+        nombre = form.get(f"adj_nombre_{i}", "").strip()
+        if not url:
+            continue
+        url_lower = url.lower()
+        if "drive.google.com/drive/folders" in url_lower:
+            tipo = "folder"
+        elif "docs.google.com/spreadsheets" in url_lower or "sheets" in url_lower:
+            tipo = "sheet"
+        elif "docs.google.com/document" in url_lower:
+            tipo = "doc"
+        elif "docs.google.com/presentation" in url_lower:
+            tipo = "slides"
+        elif url_lower.endswith(".pdf"):
+            tipo = "pdf"
+        else:
+            tipo = "link"
+        adjuntos.append({"nombre": nombre or url[:40], "url": url, "tipo": tipo})
+    return adjuntos
+
+
 def _ctx():
     """Context vars comunes para todos los templates."""
     return {
@@ -925,13 +950,14 @@ def crear_entregable(account_id):
         max_orden = db.session.query(func.coalesce(func.max(CSEntregable.orden), 0)).filter_by(
             account_id=account_id, unidad_negocio=un
         ).scalar()
+        adj = _parse_adjuntos(request.form)
         db.session.add(CSEntregable(
             account_id=account_id,
             unidad_negocio=un,
             descripcion=descripcion,
             fecha_entrega=request.form.get("fecha_entrega", "").strip(),
             responsable=request.form.get("responsable", "").strip(),
-            orden=max_orden + 1,
+            orden=max_orden + 1, adjuntos=adj,
         ))
         db.session.commit()
     return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=entregables#entregables")
@@ -988,7 +1014,8 @@ def create_note(account_id):
     contenido = request.form.get("contenido", "").strip()
     autor = request.form.get("autor", "").strip()
     if contenido:
-        db.session.add(CSNote(account_id=account_id, autor=autor, contenido=contenido))
+        adj = _parse_adjuntos(request.form)
+        db.session.add(CSNote(account_id=account_id, autor=autor, contenido=contenido, adjuntos=adj))
         db.session.commit()
     return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=notas")
 
@@ -1013,10 +1040,11 @@ def create_task(account_id):
                 fecha_limite = datetime.strptime(fecha_str, "%Y-%m-%d").date()
             except ValueError:
                 pass
+        adj = _parse_adjuntos(request.form)
         db.session.add(CSTask(
             account_id=account_id, tipo=request.form.get("tipo", "check-in"),
             descripcion=descripcion, responsable=request.form.get("responsable", ""),
-            fecha_limite=fecha_limite,
+            fecha_limite=fecha_limite, adjuntos=adj,
         ))
         db.session.commit()
     return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=tareas")

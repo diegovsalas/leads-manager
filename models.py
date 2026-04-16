@@ -553,6 +553,7 @@ class CSAccount(db.Model):
     num_facturas_q1 = db.Column(db.Integer, default=0)
     giro = db.Column(db.String(100), default="")
     tier = db.Column(db.String(20), default="")  # Gold, Silver, Bronze
+    adjuntos = db.Column(db.JSON, default=list)  # [{nombre, url, tipo}]
     nps = db.Column(db.Float, nullable=True)
     pulso = db.Column(db.String(20), nullable=True)
     eficiencia_operativa = db.Column(db.Float, nullable=True)
@@ -614,6 +615,7 @@ class CSNote(db.Model):
     account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=False)
     autor = db.Column(db.String(120), default="")
     contenido = db.Column(db.Text, nullable=False)
+    adjuntos = db.Column(db.JSON, default=list)  # [{nombre, url, tipo}]
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
 
 
@@ -626,6 +628,7 @@ class CSTask(db.Model):
     responsable = db.Column(db.String(120), default="")
     fecha_limite = db.Column(db.Date, nullable=True)
     completada = db.Column(db.Boolean, default=False)
+    adjuntos = db.Column(db.JSON, default=list)
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
 
 
@@ -662,6 +665,7 @@ class CSEntregable(db.Model):
     fecha_entrega = db.Column(db.String(100), default="")  # "1 al 5 de cada mes"
     responsable = db.Column(db.String(120), default="")
     orden = db.Column(db.Integer, default=0)
+    adjuntos = db.Column(db.JSON, default=list)
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
 
 
