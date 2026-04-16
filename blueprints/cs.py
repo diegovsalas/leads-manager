@@ -338,6 +338,38 @@ def account_detail(account_id):
     facturas_pagadas = sum(1 for i in invoices if i.estatus == "Pagada")
     facturas_pendientes = sum(1 for i in invoices if i.estatus != "Pagada")
 
+    # Facturación por UN
+    def _classify_uen(uen):
+        uen = (uen or "").upper().strip()
+        if "AROMATEX" in uen:
+            return "AROMATEX"
+        elif "PESTEX" in uen:
+            return "PESTEX"
+        return "OTRO"
+
+    fact_por_un = {"AROMATEX": {"facturado": 0, "pagado": 0, "pendiente": 0, "count": 0},
+                   "PESTEX": {"facturado": 0, "pagado": 0, "pendiente": 0, "count": 0}}
+    invoices_por_un = {"AROMATEX": [], "PESTEX": [], "OTRO": []}
+    for inv in invoices:
+        un = _classify_uen(inv.uen)
+        invoices_por_un.setdefault(un, []).append(inv)
+        if un in fact_por_un:
+            fact_por_un[un]["facturado"] += float(inv.total or 0)
+            fact_por_un[un]["pagado"] += float(inv.pagado or 0)
+            fact_por_un[un]["pendiente"] += float(inv.pendiente or 0)
+            fact_por_un[un]["count"] += 1
+
+    # Citas por UN (Fumigación/Póliza = PESTEX, Aroma* = AROMATEX)
+    def _classify_servicio(titulo):
+        t = (titulo or "").lower()
+        if "fumig" in t or "plaga" in t or "incidencia" not in t and "pestex" in t:
+            return "PESTEX"
+        elif "aroma" in t or "instalacion" in t:
+            return "AROMATEX"
+        elif "fumig" in t or "plaga" in t:
+            return "PESTEX"
+        return "OTRO"
+
     # Citas del periodo
     citas_estatus_rows = (
         db.session.query(CSAppointment.estatus, func.count(CSAppointment.id))
@@ -360,6 +392,15 @@ def account_detail(account_id):
         .order_by(CSAppointment.fecha_inicio.desc()).limit(200).all()
     )
 
+    # Citas agrupadas por UN
+    citas_por_un = {"AROMATEX": {"total": 0, "terminadas": 0}, "PESTEX": {"total": 0, "terminadas": 0}}
+    for apt in appointments:
+        un = _classify_servicio(apt.titulo_servicio)
+        if un in citas_por_un:
+            citas_por_un[un]["total"] += 1
+            if apt.estatus == "Terminada":
+                citas_por_un[un]["terminadas"] += 1
+
     notes = CSNote.query.filter_by(account_id=account.id).order_by(CSNote.created_at.desc()).all()
     tasks = CSTask.query.filter_by(account_id=account.id).order_by(CSTask.completada, CSTask.fecha_limite).all()
     tareas_pendientes = sum(1 for t in tasks if not t.completada)
@@ -377,6 +418,8 @@ def account_detail(account_id):
         total_facturado=total_facturado, total_pagado=total_pagado,
         total_pendiente=total_pendiente, facturas_pagadas=facturas_pagadas,
         facturas_pendientes=facturas_pendientes,
+        fact_por_un=fact_por_un, invoices_por_un=invoices_por_un,
+        citas_por_un=citas_por_un,
         appointments=appointments, citas_por_estatus=citas_por_estatus,
         notes=notes, tasks=tasks, tareas_pendientes=tareas_pendientes,
         contactos=contactos,
@@ -604,6 +647,31 @@ def api_mrr_trend():
         "facturado": float(r[1] or 0),
         "pagado": float(r[2] or 0),
         "pendiente": float(r[3] or 0),
+    } for r in rows])
+
+
+@cs_bp.route("/api/mrr-trend-un")
+def api_mrr_trend_un():
+    """MRR facturado por mes dividido por UN (AROMATEX vs PESTEX)."""
+    from sqlalchemy import case
+    account_id = request.args.get("account_id")
+    q = db.session.query(
+        func.date_trunc("month", CSInvoice.fecha_cobro).label("mes"),
+        func.sum(case((CSInvoice.uen.ilike("%AROMATEX%"), CSInvoice.total), else_=0)).label("aromatex"),
+        func.sum(case((CSInvoice.uen.ilike("%PESTEX%"), CSInvoice.total), else_=0)).label("pestex"),
+        func.sum(CSInvoice.total).label("total"),
+    ).filter(CSInvoice.fecha_cobro.isnot(None))
+
+    if account_id:
+        q = q.filter(CSInvoice.account_id == account_id)
+
+    rows = q.group_by("mes").order_by("mes").all()
+    return jsonify([{
+        "mes": r[0].strftime("%Y-%m") if r[0] else "",
+        "mes_label": r[0].strftime("%b %Y") if r[0] else "",
+        "aromatex": float(r.aromatex or 0),
+        "pestex": float(r.pestex or 0),
+        "total": float(r.total or 0),
     } for r in rows])
 
 

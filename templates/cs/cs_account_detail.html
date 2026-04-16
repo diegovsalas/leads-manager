@@ -283,33 +283,53 @@
                     </form>
                 </div>
 
-                <!-- Mini KPIs de facturación -->
+                <!-- Facturación por UN -->
                 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
                     <h2 class="text-sm font-semibold text-gray-700 mb-4">Facturación — {{ periodo_label }}</h2>
-                    <div class="grid grid-cols-3 gap-4 text-center">
-                        <div>
-                            <p class="text-lg font-bold text-gray-800">${{ "{:,.0f}".format(total_facturado) }}</p>
-                            <p class="text-xs text-gray-500">Facturado</p>
+
+                    {% for un_name, un_data in fact_por_un.items() %}
+                    {% if un_data.facturado > 0 or un_data.count > 0 %}
+                    <div class="{% if not loop.first %}mt-4 pt-4 border-t{% endif %}">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="px-2 py-0.5 rounded-full text-xs font-semibold
+                                {% if un_name == 'AROMATEX' %}bg-purple-100 text-purple-700{% else %}bg-green-100 text-green-700{% endif %}">
+                                {% if un_name == 'AROMATEX' %}🌿{% else %}🛡️{% endif %} {{ un_name }}
+                            </span>
+                            <span class="text-xs text-gray-400">{{ un_data.count }} facturas</span>
                         </div>
-                        <div>
-                            <p class="text-lg font-bold text-green-600">${{ "{:,.0f}".format(total_pagado) }}</p>
-                            <p class="text-xs text-gray-500">Pagado</p>
+                        <div class="grid grid-cols-3 gap-3 text-center">
+                            <div>
+                                <p class="text-sm font-bold text-gray-800">${{ "{:,.0f}".format(un_data.facturado) }}</p>
+                                <p class="text-xs text-gray-400">Facturado</p>
+                            </div>
+                            <div>
+                                <p class="text-sm font-bold text-green-600">${{ "{:,.0f}".format(un_data.pagado) }}</p>
+                                <p class="text-xs text-gray-400">Pagado</p>
+                            </div>
+                            <div>
+                                <p class="text-sm font-bold {% if un_data.pendiente > 0 %}text-red-500{% else %}text-gray-400{% endif %}">${{ "{:,.0f}".format(un_data.pendiente) }}</p>
+                                <p class="text-xs text-gray-400">Pendiente</p>
+                            </div>
                         </div>
-                        <div>
-                            <p class="text-lg font-bold text-red-500">${{ "{:,.0f}".format(total_pendiente) }}</p>
-                            <p class="text-xs text-gray-500">Pendiente</p>
+                        {% set pct_un = (un_data.pagado / un_data.facturado * 100) if un_data.facturado > 0 else 0 %}
+                        <div class="mt-2">
+                            <div class="flex justify-between text-xs text-gray-400 mb-0.5">
+                                <span>Cobranza</span><span>{{ "{:.0f}".format(pct_un) }}%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-1.5">
+                                <div class="h-1.5 rounded-full {% if pct_un >= 70 %}bg-green-500{% elif pct_un >= 40 %}bg-yellow-400{% else %}bg-red-500{% endif %}"
+                                     style="width: {{ pct_un }}%"></div>
+                            </div>
                         </div>
                     </div>
-                    <!-- Barra de progreso de cobranza -->
-                    <div class="mt-4">
-                        {% set pct = (total_pagado / total_facturado * 100) if total_facturado > 0 else 0 %}
-                        <div class="flex justify-between text-xs text-gray-500 mb-1">
-                            <span>Avance de cobranza</span>
-                            <span>{{ "{:.1f}".format(pct) }}%</span>
-                        </div>
-                        <div class="w-full bg-gray-200 rounded-full h-2.5">
-                            <div class="h-2.5 rounded-full {% if pct >= 70 %}bg-green-500{% elif pct >= 40 %}bg-yellow-400{% else %}bg-red-500{% endif %}"
-                                 style="width: {{ pct }}%"></div>
+                    {% endif %}
+                    {% endfor %}
+
+                    <!-- Total -->
+                    <div class="mt-4 pt-3 border-t">
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span class="font-semibold">Total</span>
+                            <span>Facturado: <strong>${{ "{:,.0f}".format(total_facturado) }}</strong> · Pagado: <span class="text-green-600">${{ "{:,.0f}".format(total_pagado) }}</span> · Pendiente: <span class="text-red-500">${{ "{:,.0f}".format(total_pendiente) }}</span></span>
                         </div>
                     </div>
                 </div>
@@ -345,20 +365,28 @@
     <!-- ============================================================ -->
     <div x-show="tab === 'facturacion'" style="display: none;">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
-            <h2 class="text-sm font-semibold text-gray-800 mb-4">Facturación por Mes</h2>
-            <div style="max-height:200px"><canvas id="factTabChart"></canvas></div>
+            <h2 class="text-sm font-semibold text-gray-800 mb-4">Facturación por Mes — AROMATEX vs PESTEX</h2>
+            <div style="max-height:220px"><canvas id="factTabChartUN"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-sm font-semibold text-gray-700">Facturas — {{ periodo_label }}</h2>
-                <div class="flex gap-4 text-xs text-gray-500">
-                    <span class="text-green-600 font-medium">{{ facturas_pagadas }} pagadas</span>
-                    <span class="text-red-500 font-medium">{{ facturas_pendientes }} pendientes</span>
-                </div>
+
+        {% set un_tabs = {'AROMATEX': {'icon': '🌿', 'color': 'purple'}, 'PESTEX': {'icon': '🛡️', 'color': 'green'}} %}
+        <div x-data="{ unTab: 'all' }" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <!-- UN filter tabs -->
+            <div class="flex items-center gap-2 mb-4">
+                <button @click="unTab='all'" :class="unTab==='all' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600'"
+                        class="px-3 py-1 rounded-full text-xs font-medium transition-colors">Todas ({{ invoices|length }})</button>
+                {% for un_key, un_info in un_tabs.items() %}
+                {% set un_invs = invoices_por_un.get(un_key, []) %}
+                {% if un_invs %}
+                <button @click="unTab='{{ un_key }}'" :class="unTab==='{{ un_key }}' ? 'bg-{{ un_info.color }}-600 text-white' : 'bg-{{ un_info.color }}-50 text-{{ un_info.color }}-700'"
+                        class="px-3 py-1 rounded-full text-xs font-medium transition-colors">{{ un_info.icon }} {{ un_key }} ({{ un_invs|length }})</button>
+                {% endif %}
+                {% endfor %}
             </div>
-            <div class="overflow-x-auto">
+
+            <div class="overflow-x-auto max-h-96 overflow-y-auto">
                 <table class="w-full text-sm">
-                    <thead>
+                    <thead class="sticky top-0 bg-white">
                         <tr class="border-b text-left text-gray-500 text-xs uppercase tracking-wide">
                             <th class="pb-2">Folio</th>
                             <th class="pb-2">Concepto</th>
@@ -367,29 +395,29 @@
                             <th class="pb-2 text-right">Pagado</th>
                             <th class="pb-2 text-right">Pendiente</th>
                             <th class="pb-2">F. Cobro</th>
-                            <th class="pb-2">F. Vence</th>
                             <th class="pb-2 text-center">Estatus</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for inv in invoices %}
-                        <tr class="border-b last:border-0 hover:bg-gray-50 text-xs">
+                        {% set inv_un = 'AROMATEX' if 'AROMATEX' in (inv.uen or '')|upper else ('PESTEX' if 'PESTEX' in (inv.uen or '')|upper else 'OTRO') %}
+                        <tr class="border-b last:border-0 hover:bg-gray-50 text-xs"
+                            x-show="unTab === 'all' || unTab === '{{ inv_un }}'">
                             <td class="py-2 font-mono">{{ inv.folio }}</td>
-                            <td class="py-2 max-w-xs truncate" title="{{ inv.concepto }}">{{ inv.concepto[:60] }}</td>
-                            <td class="py-2">{{ inv.uen[:20] }}</td>
+                            <td class="py-2 max-w-xs truncate" title="{{ inv.concepto }}">{{ inv.concepto[:50] }}</td>
+                            <td class="py-2">
+                                <span class="px-1.5 py-0.5 rounded text-xs font-medium
+                                    {% if 'AROMATEX' in (inv.uen or '')|upper %}bg-purple-100 text-purple-700
+                                    {% elif 'PESTEX' in (inv.uen or '')|upper %}bg-green-100 text-green-700
+                                    {% else %}bg-gray-100 text-gray-500{% endif %}">{{ (inv.uen or '-')[:18] }}</span>
+                            </td>
                             <td class="py-2 text-right">${{ "{:,.2f}".format(inv.total) }}</td>
                             <td class="py-2 text-right text-green-600">${{ "{:,.2f}".format(inv.pagado) }}</td>
-                            <td class="py-2 text-right {% if inv.pendiente > 0 %}text-red-500{% else %}text-gray-400{% endif %}">
-                                ${{ "{:,.2f}".format(inv.pendiente) }}
-                            </td>
+                            <td class="py-2 text-right {% if inv.pendiente > 0 %}text-red-500{% else %}text-gray-400{% endif %}">${{ "{:,.2f}".format(inv.pendiente) }}</td>
                             <td class="py-2 text-gray-500">{{ inv.fecha_cobro.strftime('%d/%m/%Y') if inv.fecha_cobro else '-' }}</td>
-                            <td class="py-2 text-gray-500">{{ inv.fecha_vencimiento.strftime('%d/%m/%Y') if inv.fecha_vencimiento else '-' }}</td>
                             <td class="py-2 text-center">
                                 <span class="px-1.5 py-0.5 rounded text-xs font-medium
-                                    {% if inv.estatus == 'Pagada' %}bg-green-100 text-green-700
-                                    {% else %}bg-red-100 text-red-700{% endif %}">
-                                    {{ inv.estatus }}
-                                </span>
+                                    {% if inv.estatus == 'Pagada' %}bg-green-100 text-green-700{% else %}bg-red-100 text-red-700{% endif %}">{{ inv.estatus }}</span>
                             </td>
                         </tr>
                         {% endfor %}
@@ -919,11 +947,37 @@ function buildChart(ctx, data, type) {
 
 fetch('/cs/api/mrr-trend?account_id='+accId).then(r=>r.json()).then(d=>{
     buildChart(document.getElementById('accountMrrChart'),d,'mrr');
-    buildChart(document.getElementById('factTabChart'),d,'mrr');
 });
 fetch('/cs/api/operacion-trend?account_id='+accId).then(r=>r.json()).then(d=>{
     buildChart(document.getElementById('accountOpChart'),d,'op');
     buildChart(document.getElementById('opTabChart'),d,'op');
+});
+
+// Chart split by UN
+fetch('/cs/api/mrr-trend-un?account_id='+accId).then(r=>r.json()).then(data=>{
+    const ctx=document.getElementById('factTabChartUN');
+    if(!ctx||!data.length) return;
+    new Chart(ctx,{
+        type:'bar',
+        data:{
+            labels:data.map(d=>d.mes_label),
+            datasets:[
+                {label:'🌿 AROMATEX',data:data.map(d=>d.aromatex),backgroundColor:'#a855f7',borderRadius:4},
+                {label:'🛡️ PESTEX',data:data.map(d=>d.pestex),backgroundColor:'#22c55e',borderRadius:4},
+            ]
+        },
+        options:{
+            responsive:true,
+            plugins:{
+                legend:{position:'bottom',labels:{boxWidth:12,padding:10,font:{family:'Inter',size:11}}},
+                tooltip:{callbacks:{label:c=>c.dataset.label+': $'+c.parsed.y.toLocaleString('en-US')},backgroundColor:'#1e1b3a',cornerRadius:8}
+            },
+            scales:{
+                x:{stacked:true,grid:{display:false},ticks:{font:{size:10}}},
+                y:{stacked:true,ticks:{callback:v=>'$'+(v/1000).toFixed(0)+'K',font:{size:10}},grid:{color:'#f3f4f6'}}
+            }
+        }
+    });
 });
 </script>
 {% endblock %}
