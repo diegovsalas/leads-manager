@@ -349,7 +349,7 @@ def editar_cliente(account_id):
         kam_id = request.form.get("kam_id", "").strip()
         if kam_id:
             acc.kam_id = kam_id
-    if "logo_url" in request.form and hasattr(acc, "logo_url"):
+    if "logo_url" in request.form:
         acc.logo_url = request.form.get("logo_url", "").strip()
     if "giro" in request.form:
         giros = request.form.getlist("giro")

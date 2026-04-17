@@ -50,7 +50,7 @@
                     <!-- Cliente con logo -->
                     <td class="px-4 py-3">
                         <div class="flex items-center gap-3">
-                            {% if acc.logo_url is defined and acc.logo_url %}
+                            {% if acc.logo_url %}
                             <img src="{{ acc.logo_url }}" alt="{{ acc.nombre }}" class="w-8 h-8 rounded-lg object-contain bg-gray-50 border flex-shrink-0">
                             {% else %}
                             <div class="w-8 h-8 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
@@ -151,7 +151,7 @@
 
                     <!-- Editar -->
                     <td class="px-4 py-3">
-                        <button onclick="openEditModal('{{ acc.id }}','{{ acc.nombre }}','{{ acc.logo_url if acc.logo_url is defined else '' }}','{{ acc.giro }}','{{ acc.tier }}','{{ acc.kam_id }}')"
+                        <button onclick="openEditModal('{{ acc.id }}','{{ acc.nombre }}','{{ acc.logo_url if acc.logo_url else '' }}','{{ acc.giro }}','{{ acc.tier }}','{{ acc.kam_id }}')"
                                 class="text-xs text-brand-600 hover:underline">Editar</button>
                     </td>
                 </tr>
