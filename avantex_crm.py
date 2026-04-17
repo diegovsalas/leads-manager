@@ -50,6 +50,7 @@ def create_app():
     from blueprints.cotizaciones  import cotizaciones_bp
     from blueprints.apikeys       import apikeys_bp
     from blueprints.api_v1        import api_v1_bp
+    from blueprints.api_v2        import api_v2_bp
     from blueprints.cs            import cs_bp
 
     app.register_blueprint(auth_bp)
@@ -63,7 +64,19 @@ def create_app():
     app.register_blueprint(cotizaciones_bp,  url_prefix="/api/cotizaciones")
     app.register_blueprint(apikeys_bp,       url_prefix="/api/keys")
     app.register_blueprint(api_v1_bp,        url_prefix="/api/v1")
+    app.register_blueprint(api_v2_bp,       url_prefix="/api/v2")
     app.register_blueprint(cs_bp,            url_prefix="/cs")
+
+    # Serve React app at /app/
+    import os
+    @app.route("/app/")
+    @app.route("/app/<path:path>")
+    def serve_react(path=""):
+        from flask import send_from_directory
+        static_dir = os.path.join(app.root_path, "static", "app")
+        if path and os.path.exists(os.path.join(static_dir, path)):
+            return send_from_directory(static_dir, path)
+        return send_from_directory(static_dir, "index.html")
 
     # ── Proteger todas las rutas excepto login y webhooks ──
     @app.before_request
