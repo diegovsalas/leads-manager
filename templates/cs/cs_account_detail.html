@@ -942,32 +942,44 @@
                         <span class="text-xs text-gray-300 ml-auto">{{ enc.created_at.strftime('%d/%m/%Y') }}</span>
                     </div>
 
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
+                    <div class="grid grid-cols-3 md:grid-cols-7 gap-1.5 mb-3">
                         <div class="text-center p-1.5 rounded bg-gray-50">
                             <p class="text-[10px] text-gray-400">NPS</p>
-                            <p class="text-sm font-bold {% if enc.nps >= 9 %}text-green-600{% elif enc.nps >= 7 %}text-yellow-500{% else %}text-red-500{% endif %}">{{ enc.nps }}/10</p>
+                            <p class="text-sm font-bold {% if enc.nps >= 9 %}text-green-600{% elif enc.nps >= 7 %}text-yellow-500{% else %}text-red-500{% endif %}">{{ enc.nps }}</p>
                         </div>
                         <div class="text-center p-1.5 rounded bg-gray-50">
                             <p class="text-[10px] text-gray-400">General</p>
-                            <p class="text-sm">{{ "⭐" * (enc.csat or 0) }}</p>
+                            <p class="text-sm font-bold">{{ enc.csat or '—' }}</p>
                         </div>
-                        {% if enc.csat_calidad %}
                         <div class="text-center p-1.5 rounded bg-gray-50">
                             <p class="text-[10px] text-gray-400">Calidad</p>
-                            <p class="text-sm">{{ "⭐" * enc.csat_calidad }}</p>
+                            <p class="text-sm font-bold">{{ enc.csat_calidad or '—' }}</p>
                         </div>
-                        {% endif %}
-                        {% if enc.csat_comunicacion %}
+                        <div class="text-center p-1.5 rounded bg-gray-50">
+                            <p class="text-[10px] text-gray-400">Respuesta</p>
+                            <p class="text-sm font-bold">{{ enc.csat_respuesta or '—' }}</p>
+                        </div>
                         <div class="text-center p-1.5 rounded bg-gray-50">
                             <p class="text-[10px] text-gray-400">Asesor</p>
-                            <p class="text-sm">{{ "⭐" * enc.csat_comunicacion }}</p>
+                            <p class="text-sm font-bold">{{ enc.csat_comunicacion or '—' }}</p>
                         </div>
-                        {% endif %}
+                        <div class="text-center p-1.5 rounded bg-gray-50">
+                            <p class="text-[10px] text-gray-400">Precio</p>
+                            <p class="text-sm font-bold">{{ enc.csat_precio or '—' }}</p>
+                        </div>
+                        <div class="text-center p-1.5 rounded bg-gray-50">
+                            <p class="text-[10px] text-gray-400">Tecnico</p>
+                            <p class="text-sm font-bold">{{ enc.csat_tecnico or '—' }}</p>
+                        </div>
                     </div>
 
-                    {% if enc.comentario %}
-                    <p class="text-xs text-gray-500 italic mt-2 pl-1 border-l-2 border-gray-200">"{{ enc.comentario }}"</p>
-                    {% endif %}
+                    <div class="pl-2 border-l-2 {% if enc.comentario %}border-brand-300{% else %}border-gray-200{% endif %}">
+                        {% if enc.comentario %}
+                        <p class="text-xs text-gray-600 italic">"{{ enc.comentario }}"</p>
+                        {% else %}
+                        <p class="text-xs text-gray-300 italic">Sin comentarios</p>
+                        {% endif %}
+                    </div>
                 </div>
                 {% endfor %}
             </div>
