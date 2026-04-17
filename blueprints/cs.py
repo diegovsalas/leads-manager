@@ -251,10 +251,30 @@ def dashboard():
     alertas = generar_alertas(accounts=accounts, scores_map=scores_map)
     alertas_criticas = [a for a in alertas if a["severidad"] == "critica"]
 
+    # Sucursales por UN (propiedades únicas por tipo de servicio)
+    from sqlalchemy import case, distinct
+    suc_un_rows = (
+        db.session.query(
+            func.count(distinct(case(
+                (CSAppointment.titulo_servicio.ilike("%aroma%"), CSAppointment.propiedad),
+                (CSAppointment.titulo_servicio.ilike("%instalacion%"), CSAppointment.propiedad),
+            ))),
+            func.count(distinct(case(
+                (CSAppointment.titulo_servicio.ilike("%fumig%"), CSAppointment.propiedad),
+                (CSAppointment.titulo_servicio.ilike("%plaga%"), CSAppointment.propiedad),
+            ))),
+        )
+        .filter(CSAppointment.account_id.in_(account_ids))
+        .first()
+    )
+    suc_aromatex = suc_un_rows[0] if suc_un_rows else 0
+    suc_pestex = suc_un_rows[1] if suc_un_rows else 0
+
     return render_template(
         "cs_dashboard.html",
         mrr_total=mrr_total, arr_total=arr_total,
         num_cuentas=len(accounts), total_sucursales=total_sucursales,
+        suc_aromatex=suc_aromatex, suc_pestex=suc_pestex,
         facturado_periodo=facturado_periodo, pagado_periodo=pagado_periodo,
         pendiente_periodo=pendiente_periodo,
         delta_facturado=delta_facturado, delta_pagado=delta_pagado,
@@ -281,13 +301,36 @@ def clientes():
     accounts = q.order_by(CSAccount.nombre).all()
     scores_map = calcular_health_scores_batch(accounts)
 
+    # Sucursales por UN en batch
+    from sqlalchemy import case as sa_case, distinct
+    account_ids = [a.id for a in accounts]
+    suc_un_rows = (
+        db.session.query(
+            CSAppointment.account_id,
+            func.count(distinct(sa_case(
+                (CSAppointment.titulo_servicio.ilike("%aroma%"), CSAppointment.propiedad),
+                (CSAppointment.titulo_servicio.ilike("%instalacion%"), CSAppointment.propiedad),
+            ))),
+            func.count(distinct(sa_case(
+                (CSAppointment.titulo_servicio.ilike("%fumig%"), CSAppointment.propiedad),
+                (CSAppointment.titulo_servicio.ilike("%plaga%"), CSAppointment.propiedad),
+            ))),
+        )
+        .filter(CSAppointment.account_id.in_(account_ids))
+        .group_by(CSAppointment.account_id)
+        .all()
+    ) if account_ids else []
+    suc_un_map = {str(r[0]): {"aromatex": r[1], "pestex": r[2]} for r in suc_un_rows}
+
     clientes_data = []
     for acc in accounts:
         hs = scores_map[str(acc.id)]
         owners = CSContacto.query.filter_by(account_id=acc.id, is_owner=True).all()
+        suc = suc_un_map.get(str(acc.id), {"aromatex": 0, "pestex": 0})
         clientes_data.append({
             "account": acc, "health": hs,
             "owners": owners,
+            "suc_aromatex": suc["aromatex"], "suc_pestex": suc["pestex"],
         })
 
     return render_template(
@@ -392,6 +435,21 @@ def account_detail(account_id):
         .order_by(CSAppointment.fecha_inicio.desc()).limit(200).all()
     )
 
+    # Sucursales por UN para esta cuenta
+    from sqlalchemy import case as sa_case, distinct
+    suc_un = db.session.query(
+        func.count(distinct(sa_case(
+            (CSAppointment.titulo_servicio.ilike("%aroma%"), CSAppointment.propiedad),
+            (CSAppointment.titulo_servicio.ilike("%instalacion%"), CSAppointment.propiedad),
+        ))),
+        func.count(distinct(sa_case(
+            (CSAppointment.titulo_servicio.ilike("%fumig%"), CSAppointment.propiedad),
+            (CSAppointment.titulo_servicio.ilike("%plaga%"), CSAppointment.propiedad),
+        ))),
+    ).filter(CSAppointment.account_id == account.id).first()
+    suc_aromatex = suc_un[0] if suc_un else 0
+    suc_pestex = suc_un[1] if suc_un else 0
+
     # Citas agrupadas por UN
     citas_por_un = {"AROMATEX": {"total": 0, "terminadas": 0}, "PESTEX": {"total": 0, "terminadas": 0}}
     for apt in appointments:
@@ -420,6 +478,7 @@ def account_detail(account_id):
         facturas_pendientes=facturas_pendientes,
         fact_por_un=fact_por_un, invoices_por_un=invoices_por_un,
         citas_por_un=citas_por_un,
+        suc_aromatex=suc_aromatex, suc_pestex=suc_pestex,
         appointments=appointments, citas_por_estatus=citas_por_estatus,
         notes=notes, tasks=tasks, tareas_pendientes=tareas_pendientes,
         contactos=contactos,

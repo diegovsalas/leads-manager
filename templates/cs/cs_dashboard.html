@@ -49,7 +49,7 @@
         ('MRR Total', '${:,.0f}'.format(mrr_total), 'MXN / mes'),
         ('ARR Proyectado', '${:,.0f}'.format(arr_total), 'MXN / año'),
         ('Cuentas', num_cuentas, 'bajo gestión'),
-        ('Sucursales', '{:,}'.format(total_sucursales), 'activas'),
+        ('Sucursales', '{:,}'.format(total_sucursales), '🌿 ' + '{:,}'.format(suc_aromatex) + ' Aromatex · 🛡️ ' + '{:,}'.format(suc_pestex) + ' Pestex'),
     ] %}
     {% set kpis_fact = [
         ('Facturado', '${:,.0f}'.format(facturado_periodo), periodo_label, 'gray'),

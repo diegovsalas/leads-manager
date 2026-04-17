@@ -64,6 +64,8 @@
                                         {% if un.strip() == 'PESTEX' %}bg-green-100 text-green-700{% else %}bg-purple-100 text-purple-700{% endif %}">{{ un.strip() }}</span>
                                     {% endfor %}
                                     · {{ acc.sucursales }} suc.
+                                    {% if item.suc_aromatex > 0 %}<span class="text-purple-600">🌿{{ item.suc_aromatex }}</span>{% endif %}
+                                    {% if item.suc_pestex > 0 %}<span class="text-green-600">🛡️{{ item.suc_pestex }}</span>{% endif %}
                                 </div>
                             </div>
                         </div>

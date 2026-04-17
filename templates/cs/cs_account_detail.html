@@ -59,6 +59,10 @@
                 <div>
                     <p class="text-xs text-gray-500 uppercase">Sucursales</p>
                     <p class="text-lg font-bold text-gray-800">{{ "{:,}".format(account.sucursales) }}</p>
+                    <div class="flex gap-2 mt-0.5">
+                        {% if suc_aromatex > 0 %}<span class="text-xs text-purple-600">🌿 {{ suc_aromatex }}</span>{% endif %}
+                        {% if suc_pestex > 0 %}<span class="text-xs text-green-600">🛡️ {{ suc_pestex }}</span>{% endif %}
+                    </div>
                 </div>
             </div>
             <a href="/cs/account/{{ account.id }}/qbr"
