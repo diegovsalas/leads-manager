@@ -145,6 +145,11 @@
                 class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
             Entregables <span class="ml-1 text-xs text-gray-400">({{ entregables|length }})</span>
         </button>
+        <button @click="tab = 'nps'"
+                :class="tab === 'nps' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
+            NPS / CSAT <span class="ml-1 text-xs text-gray-400">({{ encuestas|length }})</span>
+        </button>
     </div>
 
     <!-- ============================================================ -->
@@ -830,6 +835,105 @@
                 <p class="text-4xl mb-3">🗺️</p>
                 <p class="text-gray-500 text-sm font-medium">Sin procesos definidos</p>
                 <p class="text-gray-400 text-xs mt-1 max-w-sm mx-auto">Define el flujo de servicio paso a paso: que se entrega, cuando y quien es responsable.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- TAB: NPS / CSAT -->
+    <!-- ============================================================ -->
+    <div x-show="tab === 'nps'" style="display: none;">
+
+        <!-- KPIs + Link -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 text-center">
+                <p class="text-xs text-gray-400 uppercase font-semibold mb-1">NPS Promedio</p>
+                <p class="text-3xl font-bold {% if avg_nps and avg_nps >= 9 %}text-green-600{% elif avg_nps and avg_nps >= 7 %}text-yellow-500{% elif avg_nps %}text-red-500{% else %}text-gray-300{% endif %}">
+                    {{ "%.1f"|format(avg_nps) if avg_nps else '—' }}
+                </p>
+                <p class="text-xs text-gray-400 mt-1">
+                    {% if avg_nps and avg_nps >= 9 %}Promotor{% elif avg_nps and avg_nps >= 7 %}Pasivo{% elif avg_nps %}Detractor{% endif %}
+                </p>
+            </div>
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 text-center">
+                <p class="text-xs text-gray-400 uppercase font-semibold mb-1">CSAT Promedio</p>
+                <p class="text-3xl font-bold {% if avg_csat and avg_csat >= 4 %}text-green-600{% elif avg_csat and avg_csat >= 3 %}text-yellow-500{% elif avg_csat %}text-red-500{% else %}text-gray-300{% endif %}">
+                    {{ "%.1f"|format(avg_csat) if avg_csat else '—' }}<span class="text-lg text-gray-400">/5</span>
+                </p>
+                <p class="text-xs text-gray-400 mt-1">{{ "⭐" * (avg_csat|int if avg_csat else 0) }}</p>
+            </div>
+            <div class="bg-white rounded-2xl shadow-sm border border-brand-100 p-5 text-center">
+                <p class="text-xs text-gray-400 uppercase font-semibold mb-1">KPI Satisfaccion</p>
+                <p class="text-3xl font-bold {% if kpi_satisfaccion and kpi_satisfaccion >= 8 %}text-green-600{% elif kpi_satisfaccion and kpi_satisfaccion >= 6 %}text-yellow-500{% elif kpi_satisfaccion %}text-red-500{% else %}text-gray-300{% endif %}">
+                    {{ kpi_satisfaccion if kpi_satisfaccion else '—' }}<span class="text-lg text-gray-400">/10</span>
+                </p>
+                <p class="text-xs text-gray-400 mt-1">Promedio NPS + CSAT</p>
+            </div>
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 text-center">
+                <p class="text-xs text-gray-400 uppercase font-semibold mb-1">Respuestas</p>
+                <p class="text-3xl font-bold text-gray-800">{{ encuestas|length }}</p>
+                <p class="text-xs text-gray-400 mt-1">encuestas recibidas</p>
+            </div>
+        </div>
+
+        <!-- Link público -->
+        {% if survey_link %}
+        <div class="bg-brand-50 border border-brand-200 rounded-xl p-4 mb-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-semibold text-brand-700">Link publico de encuesta</p>
+                    <p class="text-xs text-brand-500 mt-0.5">Comparte este link con los contactos del cliente para recopilar su feedback</p>
+                </div>
+                <button onclick="navigator.clipboard.writeText(window.location.origin+'{{ survey_link }}');this.textContent='Copiado!';setTimeout(()=>this.textContent='Copiar link',2000)"
+                        class="px-3 py-1.5 bg-brand-600 text-white text-xs font-medium rounded-lg hover:bg-brand-700">
+                    Copiar link
+                </button>
+            </div>
+            <div class="mt-2 p-2 bg-white rounded-lg border">
+                <code class="text-xs text-gray-600 break-all">{{ request.host_url.rstrip('/') }}{{ survey_link }}</code>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Respuestas -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <h2 class="text-sm font-semibold text-gray-700 mb-4">Respuestas recibidas</h2>
+
+            {% if encuestas %}
+            <div class="space-y-3">
+                {% for enc in encuestas %}
+                <div class="p-3 rounded-lg border hover:bg-gray-50">
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-3 mb-1">
+                                <span class="text-xs font-medium text-gray-700">{{ enc.nombre_respondente or 'Anonimo' }}</span>
+                                {% if enc.puesto_respondente %}
+                                <span class="text-xs text-gray-400">{{ enc.puesto_respondente }}</span>
+                                {% endif %}
+                                <span class="text-xs text-gray-300">{{ enc.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <span class="text-xs">
+                                    NPS: <strong class="{% if enc.nps >= 9 %}text-green-600{% elif enc.nps >= 7 %}text-yellow-500{% else %}text-red-500{% endif %}">{{ enc.nps }}/10</strong>
+                                    {% if enc.nps >= 9 %}(Promotor){% elif enc.nps >= 7 %}(Pasivo){% else %}(Detractor){% endif %}
+                                </span>
+                                <span class="text-xs">
+                                    CSAT: <strong>{{ "⭐" * enc.csat }}</strong>
+                                </span>
+                            </div>
+                            {% if enc.comentario %}
+                            <p class="text-xs text-gray-500 mt-2 italic">"{{ enc.comentario }}"</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8">
+                <p class="text-3xl mb-2">📊</p>
+                <p class="text-gray-400 text-sm">Sin respuestas aun. Comparte el link de la encuesta con los contactos del cliente.</p>
             </div>
             {% endif %}
         </div>

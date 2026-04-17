@@ -552,6 +552,7 @@ class CSAccount(db.Model):
     pendiente_q1 = db.Column(db.Numeric(14, 2), default=0)
     num_facturas_q1 = db.Column(db.Integer, default=0)
     logo_url = db.Column(db.Text, default="")
+    survey_token = db.Column(db.String(32))
     giro = db.Column(db.String(100), default="")
     tier = db.Column(db.String(20), default="")  # Gold, Silver, Bronze
     adjuntos = db.Column(db.JSON, default=list)  # [{nombre, url, tipo}]
@@ -654,6 +655,20 @@ class CSContacto(db.Model):
             "is_owner": self.is_owner, "notas": self.notas,
             "cuenta": self.account.nombre if self.account else "",
         }
+
+
+class CSEncuesta(db.Model):
+    """Respuesta de encuesta NPS+CSAT por cuenta."""
+    __tablename__ = "cs_encuestas"
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=False)
+    token = db.Column(db.String(32), nullable=False)
+    nombre_respondente = db.Column(db.String(200), default="")
+    puesto_respondente = db.Column(db.String(200), default="")
+    nps = db.Column(db.Integer)  # 0-10
+    csat = db.Column(db.Integer)  # 1-5
+    comentario = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
 
 
 class CSEntregable(db.Model):

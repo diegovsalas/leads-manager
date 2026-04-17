@@ -12,7 +12,7 @@ from extensions import db
 from models import (
     CSAccount, CSInvoice, CSAppointment, CSNote, CSTask,
     CSOnboardingAccount, CSOpportunity, CSContacto, CSEntregable,
-    UserCRM, RolCRM,
+    CSEncuesta, UserCRM, RolCRM,
 )
 from cs_health_score import calcular_health_score, calcular_health_scores_batch
 from cs_alerts import generar_alertas, alertas_por_cuenta
@@ -467,11 +467,27 @@ def account_detail(account_id):
     tareas_pendientes = sum(1 for t in tasks if not t.completada)
     contactos = CSContacto.query.filter_by(account_id=account.id).order_by(CSContacto.is_owner.desc(), CSContacto.nombre).all()
     entregables = CSEntregable.query.filter_by(account_id=account.id).order_by(CSEntregable.unidad_negocio, CSEntregable.orden).all()
-    # Agrupar por UN
     entregables_por_un = {}
     for e in entregables:
         un = e.unidad_negocio or "General"
         entregables_por_un.setdefault(un, []).append(e)
+
+    # Encuestas NPS/CSAT
+    encuestas = CSEncuesta.query.filter_by(account_id=account.id).order_by(CSEncuesta.created_at.desc()).all()
+    survey_link = f"/encuesta/{account.survey_token}" if account.survey_token else None
+
+    # Calcular promedios NPS + CSAT
+    if encuestas:
+        avg_nps = sum(e.nps for e in encuestas if e.nps is not None) / len([e for e in encuestas if e.nps is not None]) if any(e.nps is not None for e in encuestas) else None
+        avg_csat = sum(e.csat for e in encuestas if e.csat is not None) / len([e for e in encuestas if e.csat is not None]) if any(e.csat is not None for e in encuestas) else None
+        # KPI combinado: NPS (0-10) normalizado + CSAT (1-5) normalizado → promedio sobre 10
+        if avg_nps is not None and avg_csat is not None:
+            csat_normalized = (avg_csat - 1) / 4 * 10  # 1-5 → 0-10
+            kpi_satisfaccion = round((avg_nps + csat_normalized) / 2, 1)
+        else:
+            kpi_satisfaccion = round(avg_nps, 1) if avg_nps else None
+    else:
+        avg_nps = avg_csat = kpi_satisfaccion = None
 
     return render_template(
         "cs_account_detail.html",
@@ -486,6 +502,8 @@ def account_detail(account_id):
         notes=notes, tasks=tasks, tareas_pendientes=tareas_pendientes,
         contactos=contactos,
         entregables=entregables, entregables_por_un=entregables_por_un,
+        encuestas=encuestas, survey_link=survey_link,
+        avg_nps=avg_nps, avg_csat=avg_csat, kpi_satisfaccion=kpi_satisfaccion,
         today=date.today(), account_alerts=alertas_por_cuenta(str(account_id)),
         kams=_get_kams(),
         periodo_label=periodo_label, periodo_param=periodo_param,

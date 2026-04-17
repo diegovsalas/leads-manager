@@ -52,6 +52,7 @@ def create_app():
     from blueprints.api_v1        import api_v1_bp
     from blueprints.api_v2        import api_v2_bp
     from blueprints.cs            import cs_bp
+    from blueprints.encuesta      import encuesta_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp,      url_prefix="/webhook")
@@ -66,6 +67,7 @@ def create_app():
     app.register_blueprint(api_v1_bp,        url_prefix="/api/v1")
     app.register_blueprint(api_v2_bp,       url_prefix="/api/v2")
     app.register_blueprint(cs_bp,            url_prefix="/cs")
+    app.register_blueprint(encuesta_bp,      url_prefix="/encuesta")
 
     # Serve React app at /app/
     @app.route("/app/")
@@ -80,7 +82,7 @@ def create_app():
     # ── Proteger todas las rutas excepto login y webhooks ──
     @app.before_request
     def require_login():
-        allowed = ("/login", "/auth/google", "/webhook/", "/static/", "/api/v1/")
+        allowed = ("/login", "/auth/google", "/webhook/", "/static/", "/api/v1/", "/encuesta/")
         if any(request.path.startswith(p) for p in allowed):
             return
         if not session.get("user_id"):
