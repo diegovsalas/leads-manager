@@ -666,9 +666,21 @@ class CSEncuesta(db.Model):
     nombre_respondente = db.Column(db.String(200), default="")
     puesto_respondente = db.Column(db.String(200), default="")
     nps = db.Column(db.Integer)  # 0-10
-    csat = db.Column(db.Integer)  # 1-5
+    csat = db.Column(db.Integer)  # 1-5 Satisfacción general
+    csat_calidad = db.Column(db.Integer)  # 1-5 Calidad del servicio
+    csat_respuesta = db.Column(db.Integer)  # 1-5 Tiempo de respuesta
+    csat_comunicacion = db.Column(db.Integer)  # 1-5 Comunicación con asesor
+    csat_precio = db.Column(db.Integer)  # 1-5 Relación calidad-precio
+    csat_tecnico = db.Column(db.Integer)  # 1-5 Equipo técnico
     comentario = db.Column(db.Text, default="")
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+
+    @property
+    def csat_promedio(self):
+        """Promedio de las 6 dimensiones CSAT."""
+        vals = [v for v in [self.csat, self.csat_calidad, self.csat_respuesta,
+                            self.csat_comunicacion, self.csat_precio, self.csat_tecnico] if v is not None]
+        return round(sum(vals) / len(vals), 1) if vals else None
 
 
 class CSEntregable(db.Model):
