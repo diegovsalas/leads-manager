@@ -356,6 +356,49 @@ app.get("/health", (req, res) => {
   res.json({ ok: true, sessions: status });
 });
 
+// Página visual del QR (para escanear desde el celular)
+app.get("/scan/:sessionId", (req, res) => {
+  const { sessionId } = req.params;
+  res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WhatsApp — ${sessionId}</title>
+<style>*{margin:0;box-sizing:border-box}body{font-family:Inter,system-ui,sans-serif;background:#1e1b3a;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.card{background:#fff;border-radius:16px;padding:40px;text-align:center;max-width:400px;width:90%;color:#333}
+.card h2{font-size:20px;margin-bottom:4px}.card p{font-size:13px;color:#888;margin-bottom:20px}
+#qr-img{width:280px;height:280px;margin:0 auto;border-radius:12px;background:#f5f5f5;display:flex;align-items:center;justify-content:center}
+#qr-img img{width:100%;border-radius:12px}
+.status{margin-top:16px;font-size:14px;font-weight:600}
+.connected{color:#22c55e}.waiting{color:#7c3aed}.error{color:#ef4444}
+</style></head><body><div class="card">
+<h2>${sessionId.toUpperCase()}</h2>
+<p>Escanea el QR desde WhatsApp > Dispositivos vinculados</p>
+<div id="qr-img"><span style="color:#aaa">Cargando...</span></div>
+<div id="status" class="status waiting">Conectando...</div>
+</div>
+<script>
+function poll(){
+  fetch('/api/qr/${sessionId}').then(r=>r.json()).then(d=>{
+    const el=document.getElementById('qr-img');
+    const st=document.getElementById('status');
+    if(d.status==='connected'){
+      el.innerHTML='<div style="font-size:48px">✅</div>';
+      st.textContent='Conectado';st.className='status connected';return;
+    }
+    if(d.qr){
+      el.innerHTML='<img src="'+d.qr+'" alt="QR">';
+      st.textContent='Escanea el QR';st.className='status waiting';
+    } else {
+      st.textContent='Generando QR... ('+d.status+')';st.className='status waiting';
+    }
+    setTimeout(poll,3000);
+  }).catch(()=>{setTimeout(poll,5000);});
+}
+// Auto-start session
+fetch('/api/session/start',{method:'POST',headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({session_id:'${sessionId}',secret:'${BOT_SECRET}'})
+}).then(()=>setTimeout(poll,2000));
+</script></body></html>`);
+});
+
 // Obtener QR y/o pairing code para vincular
 app.get("/api/qr/:sessionId", (req, res) => {
   const { sessionId } = req.params;
