@@ -29,6 +29,7 @@
                 <tr class="border-b text-left text-gray-500 text-xs uppercase tracking-wide bg-gray-50">
                     <th class="px-4 py-3">ID</th>
                     <th class="px-4 py-3">Cliente</th>
+                    <th class="px-4 py-3">KAM</th>
                     <th class="px-4 py-3">Contactos (Owners)</th>
                     <th class="px-4 py-3">Giro</th>
                     <th class="px-4 py-3 text-center">Tier</th>
@@ -69,6 +70,11 @@
                                 </div>
                             </div>
                         </div>
+                    </td>
+
+                    <!-- KAM -->
+                    <td class="px-4 py-3">
+                        <span class="text-xs font-medium text-gray-700">{{ acc.kam.nombre if acc.kam else 'Sin asignar' }}</span>
                     </td>
 
                     <!-- Owners -->
@@ -145,7 +151,7 @@
 
                     <!-- Editar -->
                     <td class="px-4 py-3">
-                        <button onclick="openEditModal('{{ acc.id }}','{{ acc.nombre }}','{{ acc.logo_url if acc.logo_url is defined else '' }}','{{ acc.giro }}','{{ acc.tier }}')"
+                        <button onclick="openEditModal('{{ acc.id }}','{{ acc.nombre }}','{{ acc.logo_url if acc.logo_url is defined else '' }}','{{ acc.giro }}','{{ acc.tier }}','{{ acc.kam_id }}')"
                                 class="text-xs text-brand-600 hover:underline">Editar</button>
                     </td>
                 </tr>
@@ -165,6 +171,18 @@
         </div>
 
         <form id="edit-form" method="POST">
+            <!-- KAM -->
+            {% if not is_kam %}
+            <div class="mb-4">
+                <label class="text-xs text-gray-500 block mb-1">KAM asignado</label>
+                <select name="kam_id" id="edit-kam" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                    {% for k in kams %}
+                    <option value="{{ k.id }}">{{ k.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+
             <!-- Logo URL -->
             <div class="mb-4">
                 <label class="text-xs text-gray-500 block mb-1">Logo (URL de imagen)</label>
@@ -212,11 +230,13 @@
 </div>
 
 <script>
-function openEditModal(id, nombre, logoUrl, giro, tier) {
+function openEditModal(id, nombre, logoUrl, giro, tier, kamId) {
     document.getElementById('edit-title').textContent = 'Editar — ' + nombre;
     document.getElementById('edit-form').action = '/cs/clientes/' + id + '/editar';
     document.getElementById('edit-logo').value = logoUrl || '';
     document.getElementById('edit-tier').value = tier || '';
+    var kamSel = document.getElementById('edit-kam');
+    if (kamSel && kamId) { kamSel.value = kamId; }
 
     // Logo preview
     var preview = document.getElementById('edit-logo-preview');

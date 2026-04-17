@@ -335,7 +335,7 @@ def clientes():
 
     return render_template(
         "cs_clientes.html",
-        clientes=clientes_data,
+        clientes=clientes_data, kams=_get_kams(),
         **_ctx(),
     )
 
@@ -345,10 +345,13 @@ def editar_cliente(account_id):
     acc = db.session.get(CSAccount, account_id)
     if not acc:
         return "No encontrado", 404
+    if "kam_id" in request.form:
+        kam_id = request.form.get("kam_id", "").strip()
+        if kam_id:
+            acc.kam_id = kam_id
     if "logo_url" in request.form and hasattr(acc, "logo_url"):
         acc.logo_url = request.form.get("logo_url", "").strip()
     if "giro" in request.form:
-        # Multi-select: getlist returns multiple values
         giros = request.form.getlist("giro")
         acc.giro = ",".join(g.strip() for g in giros if g.strip())
     if "tier" in request.form:
