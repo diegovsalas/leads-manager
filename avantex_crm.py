@@ -68,7 +68,6 @@ def create_app():
     app.register_blueprint(cs_bp,            url_prefix="/cs")
 
     # Serve React app at /app/
-    import os
     @app.route("/app/")
     @app.route("/app/<path:path>")
     def serve_react(path=""):
