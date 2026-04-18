@@ -1,16 +1,17 @@
 {% extends "cs/cs_base.html" %}
 {% block title %}Dashboard — CS Avantex{% endblock %}
+{% block breadcrumb %}Dashboard{% endblock %}
 
 {% block content %}
-<div class="flex items-center justify-between mb-8">
+
+<!-- Page head -->
+<div class="page-head">
     <div>
-        <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p class="text-sm text-gray-500 mt-0.5">Grupo Avantex — Customer Success · {{ periodo_label }}</p>
+        <h1>Dashboard</h1>
+        <p class="sub">Grupo Avantex · Customer Success · {{ periodo_label }}</p>
     </div>
-    <div class="flex items-center gap-2">
-        <label class="text-xs text-gray-500">Periodo:</label>
-        <select onchange="window.location='/cs/?periodo='+this.value"
-                class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+    <div class="actions">
+        <select onchange="window.location='/cs/?periodo='+this.value" class="btn" style="appearance:auto;padding-right:24px">
             {% for p in periodos %}
             <option value="{{ p.value }}" {% if p.value == periodo_param %}selected{% endif %}>{{ p.label }}</option>
             {% endfor %}
@@ -18,134 +19,135 @@
     </div>
 </div>
 
+<!-- Alert strip -->
 {% if alertas %}
-<div class="bg-white rounded-2xl border border-red-100 shadow-sm p-5 mb-6">
-    <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-2">
-            <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
-            <span class="text-sm font-semibold text-gray-800">{{ alertas|length }} Alertas Activas</span>
-            {% if alertas_criticas %}
-            <span class="px-2.5 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full">{{ alertas_criticas|length }} criticas</span>
-            {% endif %}
-        </div>
-        <a href="/cs/alertas" class="text-xs text-brand-600 hover:text-brand-700 font-semibold">Ver todas &rarr;</a>
+<div class="alert-strip">
+    <div class="a-ico">{{ icon('alert-triangle') }}</div>
+    <div class="a-txt">
+        <b>{{ alertas|length }} alertas activas</b>
+        <span class="sub">{{ alertas_criticas|length }} criticas · {{ alertas|selectattr('severidad','equalto','alta')|list|length }} altas</span>
     </div>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-        {% for alerta in alertas[:6] %}
-        <div class="rounded-xl p-3 border-l-4 bg-gray-50
-                    {% if alerta.severidad == 'critica' %}border-red-500
-                    {% elif alerta.severidad == 'alta' %}border-orange-400
-                    {% else %}border-yellow-400{% endif %}">
-            <a href="/cs/account/{{ alerta.account_id }}" class="text-xs font-semibold text-brand-600 hover:underline">{{ alerta.cuenta }}</a>
-            <p class="text-xs text-gray-500 mt-0.5">{{ alerta.titulo }}</p>
-        </div>
-        {% endfor %}
-    </div>
+    <a href="/cs/alertas" class="btn ghost">Ver todas {{ icon('arrow-right') }}</a>
 </div>
 {% endif %}
 
-<div class="grid grid-cols-2 md:grid-cols-4 gap-5 mb-8">
-    {% set kpis = [
-        ('MRR Total', '${:,.0f}'.format(mrr_total), 'MXN / mes'),
-        ('ARR Proyectado', '${:,.0f}'.format(arr_total), 'MXN / año'),
-        ('Cuentas', num_cuentas, 'bajo gestión'),
-        ('Sucursales', '{:,}'.format(total_sucursales), '🌿 ' + '{:,}'.format(suc_aromatex) + ' Aromatex · 🛡️ ' + '{:,}'.format(suc_pestex) + ' Pestex'),
-    ] %}
-    {% set kpis_fact = [
-        ('Facturado', '${:,.0f}'.format(facturado_periodo), periodo_label, 'gray'),
-        ('Pagado', '${:,.0f}'.format(pagado_periodo), periodo_label, 'green'),
-        ('Pendiente', '${:,.0f}'.format(pendiente_periodo), periodo_label, 'red' if pendiente_periodo > 0 else 'gray'),
-    ] %}
-    {% for label, value, sub in kpis %}
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow">
-        <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-2">{{ label }}</p>
-        <p class="text-2xl font-bold text-gray-900">{{ value }}</p>
-        <p class="text-xs text-gray-400 mt-1">{{ sub }}</p>
+<!-- KPI Row 1 -->
+<div class="grid g-4 mb-4">
+    <div class="kpi primary">
+        <div class="label"><span class="swatch"></span> MRR Total</div>
+        <div class="value">${{ "{:,.0f}".format(mrr_total) }}</div>
+        <div class="foot"><span class="muted">MXN / mes</span></div>
     </div>
-    {% endfor %}
+    <div class="kpi">
+        <div class="label">ARR Proyectado</div>
+        <div class="value">${{ "{:,.0f}".format(arr_total) }}</div>
+        <div class="foot"><span class="muted">MXN anualizado</span></div>
+    </div>
+    <div class="kpi">
+        <div class="label">Cuentas Activas</div>
+        <div class="value">{{ num_cuentas }}</div>
+        <div class="foot"><span class="muted">bajo gestion</span></div>
+    </div>
+    <div class="kpi">
+        <div class="label">Sucursales</div>
+        <div class="value">{{ "{:,}".format(total_sucursales) }}</div>
+        <div class="foot">
+            <span class="tag aromatex">AROMATEX {{ "{:,}".format(suc_aromatex) }}</span>
+            <span class="tag pestex">PESTEX {{ "{:,}".format(suc_pestex) }}</span>
+        </div>
+    </div>
 </div>
 
-<!-- Facturación del periodo -->
-<div class="grid grid-cols-3 gap-5 mb-8">
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-        <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-2">Facturado</p>
-        <p class="text-2xl font-bold text-gray-800">${{ "{:,.0f}".format(facturado_periodo) }}</p>
-        <div class="flex items-center gap-2 mt-1">
-            <p class="text-xs text-gray-400">{{ periodo_label }}</p>
+<!-- Facturacion KPIs -->
+<div class="grid g-3 mb-4">
+    <div class="kpi">
+        <div class="label">Facturado · {{ periodo_label }}</div>
+        <div class="value">${{ "{:,.0f}".format(facturado_periodo) }}</div>
+        <div class="foot">
             {% if delta_facturado is not none %}
-            <span class="text-xs font-semibold {% if delta_facturado >= 0 %}text-green-600{% else %}text-red-500{% endif %}">
-                {{ "+" if delta_facturado >= 0 }}{{ delta_facturado }}% vs anterior
-            </span>
+            <span class="delta {% if delta_facturado >= 0 %}up{% else %}down{% endif %}">{{ icon('trend-up' if delta_facturado >= 0 else 'trend-down', 12) }}{{ "+" if delta_facturado >= 0 }}{{ delta_facturado }}%</span>
+            <span>vs anterior</span>
             {% endif %}
         </div>
     </div>
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-        <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-2">Pagado</p>
-        <p class="text-2xl font-bold text-green-600">${{ "{:,.0f}".format(pagado_periodo) }}</p>
-        <div class="flex items-center gap-2 mt-1">
-            <p class="text-xs text-gray-400">{{ periodo_label }}</p>
-            {% if delta_pagado is not none %}
-            <span class="text-xs font-semibold {% if delta_pagado >= 0 %}text-green-600{% else %}text-red-500{% endif %}">
-                {{ "+" if delta_pagado >= 0 }}{{ delta_pagado }}% vs anterior
-            </span>
-            {% endif %}
-        </div>
+    <div class="kpi">
+        <div class="label">Pagado · {{ periodo_label }}</div>
+        <div class="value" style="color:var(--ok-ink)">${{ "{:,.0f}".format(pagado_periodo) }}</div>
+        <div class="foot">{% if facturado_periodo > 0 %}<span class="muted">{{ "{:.0f}".format(pagado_periodo / facturado_periodo * 100) }}% de cobranza</span>{% endif %}</div>
     </div>
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-        <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-2">Pendiente</p>
-        <p class="text-2xl font-bold {% if pendiente_periodo > 0 %}text-red-500{% else %}text-gray-400{% endif %}">${{ "{:,.0f}".format(pendiente_periodo) }}</p>
-        <div class="flex items-center gap-2 mt-1">
-            <p class="text-xs text-gray-400">{{ periodo_label }}</p>
+    <div class="kpi">
+        <div class="label">Pendiente · {{ periodo_label }}</div>
+        <div class="value" style="color:var(--danger-ink)">${{ "{:,.0f}".format(pendiente_periodo) }}</div>
+        <div class="foot">
             {% if delta_pendiente is not none %}
-            <span class="text-xs font-semibold {% if delta_pendiente <= 0 %}text-green-600{% else %}text-red-500{% endif %}">
-                {{ "+" if delta_pendiente >= 0 }}{{ delta_pendiente }}% vs anterior
-            </span>
+            <span class="delta {% if delta_pendiente <= 0 %}up{% else %}down{% endif %}">{{ icon('trend-down' if delta_pendiente <= 0 else 'trend-up', 12) }}{{ "+" if delta_pendiente >= 0 }}{{ delta_pendiente }}%</span>
             {% endif %}
         </div>
     </div>
 </div>
 
-<!-- Gráficas MRR + Operación -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-        <h2 class="text-sm font-semibold text-gray-800 mb-4">Facturación por Mes</h2>
-        <div style="max-height:220px"><canvas id="mrrTrendChart"></canvas></div>
+<!-- Charts -->
+<div class="grid g-2 mb-4">
+    <div class="card">
+        <div class="card-head"><h3>Facturacion por mes</h3><div class="meta">MXN en miles</div></div>
+        <div class="card-body"><div style="height:220px"><canvas id="mrrTrendChart"></canvas></div>
+            <div class="legend">
+                <span><i style="background:var(--copper)"></i> Facturado</span>
+                <span><i style="background:var(--ok)"></i> Pagado</span>
+                <span><i style="background:var(--danger)"></i> Pendiente</span>
+            </div>
+        </div>
     </div>
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-        <h2 class="text-sm font-semibold text-gray-800 mb-4">Operación por Mes</h2>
-        <div style="max-height:220px"><canvas id="operacionTrendChart"></canvas></div>
+    <div class="card">
+        <div class="card-head"><h3>Operacion por mes</h3><div class="meta">visitas · % cumplimiento</div></div>
+        <div class="card-body"><div style="height:220px"><canvas id="operacionTrendChart"></canvas></div>
+            <div class="legend">
+                <span><i style="background:var(--ok)"></i> Terminadas</span>
+                <span><i style="background:var(--danger)"></i> Canceladas</span>
+                <span><i style="background:var(--warn)"></i> No realizadas</span>
+                <span><i style="background:var(--copper)"></i> % Cumpl.</span>
+            </div>
+        </div>
     </div>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-        <h2 class="text-sm font-semibold text-gray-800 mb-5">Salud del Portafolio</h2>
-        <div class="space-y-4 mb-6">
-            {% for label, rng, count, color in [('Sana','70-100',cat_counts['Sana'],'green'),('Atención','40-69',cat_counts['Atención'],'yellow'),('Riesgo','0-39',cat_counts['Riesgo'],'red')] %}
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2.5">
-                    <span class="w-3 h-3 rounded-full bg-{{ color }}-500"></span>
-                    <span class="text-sm text-gray-600">{{ label }} <span class="text-gray-400">({{ rng }})</span></span>
-                </div>
-                <span class="text-lg font-bold text-{{ color }}-600">{{ count }}</span>
+<!-- Health + Top riesgo -->
+<div class="grid g-1-2 mb-4">
+    <div class="card">
+        <div class="card-head"><h3>Salud del portafolio</h3></div>
+        <div class="card-body">
+            <div class="health-row">
+                <div class="lbl"><span class="dot-color ok"></span>Sana <span class="range">(70-100)</span></div>
+                <div class="val" style="color:var(--ok-ink)">{{ cat_counts['Sana'] }}</div>
             </div>
-            {% endfor %}
+            <div class="health-row">
+                <div class="lbl"><span class="dot-color warn"></span>Atencion <span class="range">(40-69)</span></div>
+                <div class="val" style="color:var(--warn-ink)">{{ cat_counts['Atención'] }}</div>
+            </div>
+            <div class="health-row">
+                <div class="lbl"><span class="dot-color danger"></span>Riesgo <span class="range">(0-39)</span></div>
+                <div class="val" style="color:var(--danger-ink)">{{ cat_counts['Riesgo'] }}</div>
+            </div>
         </div>
-        <div style="max-height:180px"><canvas id="healthDonut"></canvas></div>
     </div>
-
-    <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-        <h2 class="text-sm font-semibold text-gray-800 mb-4">Top 5 Cuentas en Riesgo</h2>
-        <table class="w-full table-clean">
-            <thead><tr><th class="text-left pb-3">Cuenta</th><th class="text-left pb-3">KAM</th><th class="text-right pb-3">MRR</th><th class="text-right pb-3">Score</th><th class="text-center pb-3">Estado</th></tr></thead>
+    <div class="card">
+        <div class="card-head">
+            <h3>Top cuentas en riesgo</h3>
+            <a href="/cs/alertas" class="btn ghost" style="height:26px;padding:0 8px;font-size:11px">Ver todas {{ icon('arrow-right', 12) }}</a>
+        </div>
+        <table class="tbl">
+            <thead><tr><th>Cuenta</th><th>KAM</th><th class="r">MRR</th><th class="c">Score</th><th class="c">Estado</th></tr></thead>
             <tbody>
                 {% for item in top_riesgo %}
+                {% set acc = item.account %}
+                {% set hs = item.health %}
+                {% set st = 'ok' if hs.score >= 70 else 'warn' if hs.score >= 40 else 'danger' %}
                 <tr>
-                    <td><a href="/cs/account/{{ item.account.id }}" class="text-sm font-semibold text-brand-600 hover:text-brand-700">{{ item.account.nombre }}</a></td>
-                    <td class="text-sm text-gray-500">{{ item.account.kam.nombre.split(' ')[0] if item.account.kam else '-' }}</td>
-                    <td class="text-sm text-right text-gray-700 font-medium">${{ "{:,.0f}".format(item.account.mrr|float) }}</td>
-                    <td class="text-right"><span class="text-sm font-bold {% if item.health.score >= 70 %}text-green-600{% elif item.health.score >= 40 %}text-yellow-500{% else %}text-red-600{% endif %}">{{ item.health.score }}</span></td>
-                    <td class="text-center"><span class="inline-block px-3 py-1 rounded-full text-xs font-semibold {% if item.health.color == 'green' %}bg-green-100 text-green-700{% elif item.health.color == 'yellow' %}bg-yellow-100 text-yellow-700{% else %}bg-red-100 text-red-700{% endif %}">{{ item.health.categoria }}</span></td>
+                    <td class="primary"><a href="/cs/account/{{ acc.id }}">{{ acc.nombre }}</a></td>
+                    <td><div class="hstack"><span class="ava">{{ acc.kam.nombre[:2]|upper if acc.kam else '?' }}</span><span class="muted">{{ acc.kam.nombre.split(' ')[0] if acc.kam else '-' }}</span></div></td>
+                    <td class="r">${{ "{:,.0f}".format(acc.mrr|float) }}</td>
+                    <td class="c"><span class="score {{ st }}">{{ hs.score }}</span></td>
+                    <td class="c"><span class="pill {{ st }}"><span class="dot"></span>{{ hs.categoria }}</span></td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -154,22 +156,31 @@
 </div>
 
 {% if not is_kam %}
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-        <h2 class="text-sm font-semibold text-gray-800 mb-4">MRR por KAM</h2>
-        <div style="max-height:220px"><canvas id="kamBarChart"></canvas></div>
+<!-- KAM detail -->
+<div class="grid g-2 mb-4">
+    <div class="card">
+        <div class="card-head"><h3>MRR por KAM</h3></div>
+        <div class="card-body">
+            {% for k in kam_data %}
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                <div style="width:100px;font-size:13px;font-weight:500;color:var(--ink-1)">{{ k.nombre.split(' ')[0] }}</div>
+                <div class="bar" style="flex:1"><span style="width:{{ (k.mrr / (kam_data|map(attribute='mrr')|max or 1) * 100)|int }}%;background:linear-gradient(90deg,var(--copper-soft),var(--copper))"></span></div>
+                <div class="num" style="font-size:12px;font-weight:600;color:var(--ink-1);width:80px;text-align:right">${{ "{:,.0f}".format(k.mrr) }}</div>
+            </div>
+            {% endfor %}
+        </div>
     </div>
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-        <h2 class="text-sm font-semibold text-gray-800 mb-4">Detalle por KAM</h2>
-        <table class="w-full table-clean">
-            <thead><tr><th class="text-left pb-3">KAM</th><th class="text-right pb-3">Cuentas</th><th class="text-right pb-3">Sucursales</th><th class="text-right pb-3">MRR</th></tr></thead>
+    <div class="card">
+        <div class="card-head"><h3>Detalle por KAM</h3></div>
+        <table class="tbl">
+            <thead><tr><th>KAM</th><th class="r">Cuentas</th><th class="r">Sucursales</th><th class="r">MRR</th></tr></thead>
             <tbody>
                 {% for k in kam_data %}
                 <tr>
-                    <td><a href="/cs/kam/{{ k.id }}" class="text-sm font-semibold text-brand-600 hover:text-brand-700">{{ k.nombre }}</a></td>
-                    <td class="text-sm text-right text-gray-600">{{ k.num_cuentas }}</td>
-                    <td class="text-sm text-right text-gray-600">{{ "{:,}".format(k.sucursales) }}</td>
-                    <td class="text-sm text-right font-semibold text-gray-800">${{ "{:,.0f}".format(k.mrr) }}</td>
+                    <td class="primary"><a href="/cs/kam/{{ k.id }}">{{ k.nombre }}</a></td>
+                    <td class="r">{{ k.num_cuentas }}</td>
+                    <td class="r">{{ "{:,}".format(k.sucursales) }}</td>
+                    <td class="r">${{ "{:,.0f}".format(k.mrr) }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -178,97 +189,30 @@
 </div>
 {% endif %}
 
-<div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-8">
-    <h2 class="text-sm font-semibold text-gray-800 mb-4">Todas las Cuentas</h2>
-    <div class="overflow-x-auto">
-        <table class="w-full table-clean">
-            <thead><tr><th class="text-left pb-3">Cuenta</th><th class="text-left pb-3">KAM</th><th class="text-left pb-3">UNs</th><th class="text-right pb-3">Sucursales</th><th class="text-right pb-3">MRR</th><th class="text-right pb-3">Score</th><th class="text-center pb-3">Estado</th></tr></thead>
-            <tbody>
-                {% for item in account_scores|sort(attribute='health.score') %}
-                <tr>
-                    <td><a href="/cs/account/{{ item.account.id }}" class="text-sm font-semibold text-brand-600 hover:text-brand-700">{{ item.account.nombre }}</a></td>
-                    <td class="text-sm text-gray-500">{{ item.account.kam.nombre.split(' ')[0] if item.account.kam else '-' }}</td>
-                    <td>
-                        {% for un in (item.account.unidades_contratadas or '').split(',') if un.strip() %}
-                        <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium mr-1 {% if un.strip() == 'PESTEX' %}bg-green-100 text-green-700{% else %}bg-purple-100 text-purple-700{% endif %}">{{ un.strip() }}</span>
-                        {% endfor %}
-                    </td>
-                    <td class="text-sm text-right text-gray-600">{{ "{:,}".format(item.account.sucursales) }}</td>
-                    <td class="text-sm text-right font-medium text-gray-800">${{ "{:,.0f}".format(item.account.mrr|float) }}</td>
-                    <td class="text-right"><span class="text-sm font-bold {% if item.health.score >= 70 %}text-green-600{% elif item.health.score >= 40 %}text-yellow-500{% else %}text-red-600{% endif %}">{{ item.health.score }}</span></td>
-                    <td class="text-center"><span class="inline-block w-3 h-3 rounded-full {% if item.health.color == 'green' %}bg-green-500{% elif item.health.color == 'yellow' %}bg-yellow-400{% else %}bg-red-500{% endif %}"></span></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-new Chart(document.getElementById('healthDonut'),{type:'doughnut',data:{labels:['Sana','Atención','Riesgo'],datasets:[{data:[{{cat_counts['Sana']}},{{cat_counts['Atención']}},{{cat_counts['Riesgo']}}],backgroundColor:['#22c55e','#eab308','#ef4444'],borderWidth:0,spacing:2}]},options:{cutout:'70%',plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:16,font:{family:'Inter',size:11}}}}}});
-
-{% if not is_kam and kam_data %}
-new Chart(document.getElementById('kamBarChart'),{type:'bar',data:{labels:[{% for k in kam_data %}'{{k.nombre.split(" ")[0]}}'{% if not loop.last %},{% endif %}{% endfor %}],datasets:[{label:'MRR',data:[{% for k in kam_data %}{{k.mrr|round(0)}}{% if not loop.last %},{% endif %}{% endfor %}],backgroundColor:['#7c3aed','#a855f7','#06b6d4','#f59e0b'],borderRadius:8,barThickness:28}]},options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{callback:function(v){return '$'+(v/1000).toFixed(0)+'K'},font:{family:'Inter',size:11}}},y:{ticks:{font:{family:'Inter',size:12}}}}}});
-{% endif %}
-
-// MRR Trend Chart
+// MRR Trend
 fetch('/cs/api/mrr-trend').then(r=>r.json()).then(data=>{
     const ctx=document.getElementById('mrrTrendChart');
-    if(!ctx||!data.length) return;
-    new Chart(ctx,{
-        type:'bar',
-        data:{
-            labels:data.map(d=>d.mes_label),
-            datasets:[
-                {label:'Pagado',data:data.map(d=>d.pagado),backgroundColor:'#22c55e',borderRadius:4,order:2},
-                {label:'Pendiente',data:data.map(d=>d.pendiente),backgroundColor:'#ef4444',borderRadius:4,order:2},
-                {label:'Facturado',data:data.map(d=>d.facturado),type:'line',borderColor:'#7c3aed',backgroundColor:'transparent',borderWidth:2,pointRadius:4,pointBackgroundColor:'#7c3aed',tension:.3,order:1},
-            ]
-        },
-        options:{
-            responsive:true,
-            plugins:{
-                legend:{position:'bottom',labels:{boxWidth:12,padding:12,font:{family:'Inter',size:11}}},
-                tooltip:{callbacks:{label:function(c){return c.dataset.label+': $'+c.parsed.y.toLocaleString('en-US')}},backgroundColor:'#1e1b3a',cornerRadius:8}
-            },
-            scales:{
-                x:{stacked:true,grid:{display:false},ticks:{font:{family:'Inter',size:11}}},
-                y:{stacked:true,ticks:{callback:function(v){return '$'+(v/1000).toFixed(0)+'K'},font:{family:'Inter',size:11}},grid:{color:'#f3f4f6'}}
-            }
-        }
-    });
+    if(!ctx||!data.length)return;
+    new Chart(ctx,{type:'bar',data:{labels:data.map(d=>d.mes_label),datasets:[
+        {label:'Pagado',data:data.map(d=>d.pagado),backgroundColor:'#659E6B',borderRadius:3,order:2},
+        {label:'Pendiente',data:data.map(d=>d.pendiente),backgroundColor:'#B8423E',borderRadius:3,order:2},
+        {label:'Facturado',data:data.map(d=>d.facturado),type:'line',borderColor:'#B97647',backgroundColor:'transparent',borderWidth:2,pointRadius:3,pointBackgroundColor:'#B97647',tension:.3,order:1},
+    ]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label+': $'+c.parsed.y.toLocaleString('en-US')}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,ticks:{callback:v=>'$'+(v/1000).toFixed(0)+'K'},grid:{color:'#F0ECE7'}}}}});
 });
-
-// Operación Trend Chart
+// Ops Trend
 fetch('/cs/api/operacion-trend').then(r=>r.json()).then(data=>{
     const ctx=document.getElementById('operacionTrendChart');
-    if(!ctx||!data.length) return;
-    new Chart(ctx,{
-        type:'bar',
-        data:{
-            labels:data.map(d=>d.mes_label),
-            datasets:[
-                {label:'Terminadas',data:data.map(d=>d.terminadas),backgroundColor:'#22c55e',borderRadius:4},
-                {label:'Canceladas',data:data.map(d=>d.canceladas),backgroundColor:'#ef4444',borderRadius:4},
-                {label:'No Realizadas',data:data.map(d=>d.no_realizadas),backgroundColor:'#f59e0b',borderRadius:4},
-                {label:'% Cumplimiento',data:data.map(d=>d.pct_cumplimiento),type:'line',borderColor:'#7c3aed',backgroundColor:'transparent',borderWidth:2,pointRadius:4,pointBackgroundColor:'#7c3aed',tension:.3,yAxisID:'y1'},
-            ]
-        },
-        options:{
-            responsive:true,
-            plugins:{
-                legend:{position:'bottom',labels:{boxWidth:12,padding:12,font:{family:'Inter',size:11}}},
-                tooltip:{backgroundColor:'#1e1b3a',cornerRadius:8}
-            },
-            scales:{
-                x:{stacked:true,grid:{display:false},ticks:{font:{family:'Inter',size:11}}},
-                y:{stacked:true,ticks:{font:{family:'Inter',size:11}},grid:{color:'#f3f4f6'}},
-                y1:{position:'right',min:0,max:100,ticks:{callback:function(v){return v+'%'},font:{family:'Inter',size:11}},grid:{display:false}}
-            }
-        }
-    });
+    if(!ctx||!data.length)return;
+    new Chart(ctx,{type:'bar',data:{labels:data.map(d=>d.mes_label),datasets:[
+        {label:'Terminadas',data:data.map(d=>d.terminadas),backgroundColor:'#659E6B',borderRadius:3},
+        {label:'Canceladas',data:data.map(d=>d.canceladas),backgroundColor:'#B8423E',borderRadius:3},
+        {label:'No Realizadas',data:data.map(d=>d.no_realizadas),backgroundColor:'#C79A5A',borderRadius:3},
+        {label:'% Cumpl.',data:data.map(d=>d.pct_cumplimiento),type:'line',borderColor:'#B97647',backgroundColor:'transparent',borderWidth:2,pointRadius:3,pointBackgroundColor:'#B97647',tension:.3,yAxisID:'y1'},
+    ]},options:{plugins:{legend:{display:false}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,grid:{color:'#F0ECE7'}},y1:{position:'right',min:0,max:100,ticks:{callback:v=>v+'%'},grid:{display:false}}}}});
 });
 </script>
 {% endblock %}

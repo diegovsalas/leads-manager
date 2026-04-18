@@ -1,111 +1,115 @@
 {% extends "cs/cs_base.html" %}
 {% block title %}Clientes — CS Avantex{% endblock %}
+{% block breadcrumb %}Clientes{% endblock %}
 
 {% block content %}
 
-<div class="flex items-center justify-between mb-6">
+<!-- Page head -->
+<div class="page-head">
     <div>
-        <h1 class="text-2xl font-bold text-gray-800">Clientes</h1>
-        <p class="text-sm text-gray-500">{{ clientes|length }} cuentas bajo gestion</p>
+        <h1>Clientes</h1>
+        <p class="sub">{{ clientes|length }} cuentas bajo gestion</p>
+    </div>
+    <div class="actions">
+        <div class="search-box">
+            {{ icon('search') }}
+            <input type="text" id="search-clientes" placeholder="Buscar cuenta..." oninput="filterTable(this.value)">
+        </div>
     </div>
 </div>
 
-{% set GIROS = {
-    'Retail': '🛍️', 'Hospitalidad': '🏨', 'Salud': '🏥', 'Educacion': '🎓',
-    'Automotriz': '🚗', 'Alianza Comercial': '🤝', 'Banca': '🏦',
-    'Food Services': '🍽️', 'Servicios / Entretenimiento': '🎭',
-} %}
-
-<!-- Tabla compacta -->
-<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-    <div class="overflow-x-auto">
-        <table class="w-full text-sm" style="min-width:900px">
+<!-- Table -->
+<div class="card" style="overflow:hidden">
+    <div style="overflow-x:auto">
+        <table class="tbl" id="tbl-clientes">
             <thead>
-                <tr class="border-b text-left text-gray-500 text-xs uppercase tracking-wide bg-gray-50">
-                    <th class="px-3 py-3" style="width:280px">Cliente</th>
-                    <th class="px-3 py-3" style="width:110px">KAM</th>
-                    <th class="px-3 py-3" style="width:130px">Owner</th>
-                    <th class="px-3 py-3 text-center" style="width:80px">Tier</th>
-                    <th class="px-3 py-3 text-center" style="width:60px">Score</th>
-                    <th class="px-3 py-3 text-right" style="width:100px">MRR</th>
-                    <th class="px-3 py-3 text-center" style="width:50px"></th>
+                <tr>
+                    <th style="width:260px">Cuenta</th>
+                    <th style="width:110px">KAM</th>
+                    <th style="width:130px">Owner</th>
+                    <th style="width:140px">Giro</th>
+                    <th class="c" style="width:90px">Tier</th>
+                    <th class="c" style="width:70px">Score</th>
+                    <th class="r" style="width:100px">MRR</th>
+                    <th class="c" style="width:50px"></th>
                 </tr>
             </thead>
             <tbody>
                 {% for item in clientes %}
                 {% set acc = item.account %}
                 {% set hs = item.health %}
-                <tr class="border-b last:border-0 hover:bg-gray-50">
-                    <!-- Cliente -->
-                    <td class="px-3 py-2.5">
-                        <div class="flex items-center gap-2.5">
+                <tr data-search="{{ acc.nombre|lower }}">
+                    <!-- Cuenta -->
+                    <td class="primary">
+                        <div class="hstack">
                             {% if acc.logo_url %}
-                            <img src="{{ acc.logo_url }}" alt="" class="w-9 h-9 rounded-lg object-contain bg-white border flex-shrink-0 p-0.5">
+                            <img src="{{ acc.logo_url }}" alt="" style="width:32px;height:32px;border-radius:var(--r-sm);object-fit:contain;border:1px solid var(--border);background:var(--bg-surface);padding:2px;flex-shrink:0">
                             {% else %}
-                            <div class="w-9 h-9 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                                {{ acc.nombre[:2]|upper }}
-                            </div>
+                            <div class="ava" style="width:32px;height:32px;border-radius:var(--r-sm);font-size:11px">{{ acc.nombre[:2]|upper }}</div>
                             {% endif %}
-                            <div class="min-w-0">
-                                <a href="/cs/account/{{ acc.id }}" class="text-sm font-semibold text-brand-600 hover:underline block truncate">{{ acc.nombre }}</a>
-                                <div class="flex items-center gap-1 mt-0.5 flex-wrap">
+                            <div style="min-width:0">
+                                <a href="/cs/account/{{ acc.id }}" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ acc.nombre }}</a>
+                                <div class="hstack" style="margin-top:2px;flex-wrap:wrap">
                                     {% for un in (acc.unidades_contratadas or '').split(',') if un.strip() %}
-                                    <span class="px-1.5 py-0 rounded text-[10px] font-medium {% if un.strip() == 'PESTEX' %}bg-green-100 text-green-700{% else %}bg-purple-100 text-purple-700{% endif %}">{{ un.strip() }}</span>
+                                    <span class="tag {% if un.strip() == 'PESTEX' %}pestex{% else %}aromatex{% endif %}">{{ un.strip() }}</span>
                                     {% endfor %}
-                                    <span class="text-[10px] text-gray-400">{{ acc.sucursales }} suc</span>
-                                    {% for g in (acc.giro or '').split(',') if g.strip() %}
-                                    <span class="text-[10px]">{{ GIROS.get(g.strip(), '') }}</span>
-                                    {% endfor %}
+                                    <span class="muted" style="font-size:10px">{{ acc.sucursales }} suc</span>
                                 </div>
                             </div>
                         </div>
                     </td>
 
                     <!-- KAM -->
-                    <td class="px-3 py-2.5">
-                        <span class="text-xs text-gray-700">{{ acc.kam.nombre.split(' ')[0] if acc.kam else '—' }}</span>
-                    </td>
+                    <td>{{ acc.kam.nombre.split(' ')[0] if acc.kam else '—' }}</td>
 
                     <!-- Owner -->
-                    <td class="px-3 py-2.5">
+                    <td>
                         {% if item.owners %}
-                        <div class="text-xs text-gray-700 truncate" style="max-width:120px">{{ item.owners[0].nombre }}</div>
-                        {% if item.owners|length > 1 %}<div class="text-[10px] text-gray-400">+{{ item.owners|length - 1 }} mas</div>{% endif %}
+                        <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">{{ item.owners[0].nombre }}</span>
+                        {% if item.owners|length > 1 %}<span class="muted" style="font-size:10px">+{{ item.owners|length - 1 }} mas</span>{% endif %}
                         {% else %}
-                        <span class="text-[10px] text-gray-300">—</span>
+                        <span class="muted">—</span>
                         {% endif %}
                     </td>
 
+                    <!-- Giro -->
+                    <td>
+                        {% for g in (acc.giro or '').split(',') if g.strip() %}
+                        <span class="tag">{{ g.strip() }}</span>
+                        {% else %}
+                        <span class="muted">—</span>
+                        {% endfor %}
+                    </td>
+
                     <!-- Tier -->
-                    <td class="px-3 py-2.5 text-center">
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold
-                            {% if acc.tier == 'Enterprise' %}bg-indigo-100 text-indigo-700
-                            {% elif acc.tier == 'Gold' %}bg-yellow-100 text-yellow-700
-                            {% elif acc.tier == 'Silver' %}bg-gray-200 text-gray-600
-                            {% elif acc.tier == 'Bronze' %}bg-orange-100 text-orange-700
-                            {% else %}bg-gray-100 text-gray-400{% endif %}">
-                            {{ acc.tier or '—' }}
-                        </span>
+                    <td class="c">
+                        {% if acc.tier == 'Enterprise' %}
+                        <span class="pill info">{{ acc.tier }}</span>
+                        {% elif acc.tier == 'Gold' %}
+                        <span class="pill warn">{{ acc.tier }}</span>
+                        {% elif acc.tier == 'Silver' %}
+                        <span class="pill neutral">{{ acc.tier }}</span>
+                        {% elif acc.tier == 'Bronze' %}
+                        <span class="pill danger">{{ acc.tier }}</span>
+                        {% else %}
+                        <span class="muted">—</span>
+                        {% endif %}
                     </td>
 
                     <!-- Score -->
-                    <td class="px-3 py-2.5 text-center">
-                        <div class="inline-flex items-center gap-1">
-                            <span class="w-2 h-2 rounded-full {% if hs.color == 'green' %}bg-green-500{% elif hs.color == 'yellow' %}bg-yellow-400{% else %}bg-red-500{% endif %}"></span>
-                            <span class="text-xs font-bold {% if hs.score >= 70 %}text-green-600{% elif hs.score >= 40 %}text-yellow-500{% else %}text-red-600{% endif %}">{{ hs.score }}</span>
-                        </div>
+                    <td class="c">
+                        <span class="score {% if hs.score >= 70 %}ok{% elif hs.score >= 40 %}warn{% else %}danger{% endif %}">{{ hs.score }}</span>
                     </td>
 
                     <!-- MRR -->
-                    <td class="px-3 py-2.5 text-right">
-                        <span class="text-xs font-semibold text-gray-800">${{ "{:,.0f}".format(acc.mrr|float) }}</span>
-                    </td>
+                    <td class="r">${{ "{:,.0f}".format(acc.mrr|float) }}</td>
 
-                    <!-- Editar -->
-                    <td class="px-3 py-2.5 text-center">
+                    <!-- Edit -->
+                    <td class="c">
                         {% if not is_kam %}
-                        <button onclick="openEditModal('{{ acc.id }}','{{ acc.nombre }}','{{ acc.logo_url or "" }}','{{ acc.giro }}','{{ acc.tier }}','{{ acc.kam_id }}')"
-                                class="text-xs text-brand-500 hover:text-brand-700">✏️</button>
+                        <button class="btn ghost" style="padding:4px 6px;height:auto"
+                                onclick="openEditModal('{{ acc.id }}','{{ acc.nombre }}','{{ acc.logo_url or "" }}','{{ acc.giro }}','{{ acc.tier }}','{{ acc.kam_id }}')"
+                                title="Editar">{{ icon('activity', 13) }}</button>
                         {% endif %}
                     </td>
                 </tr>
@@ -116,70 +120,75 @@
 </div>
 
 <!-- Modal Editar Cliente -->
-<div id="modal-edit-cliente" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-    <div class="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 mx-4 max-h-[90vh] overflow-y-auto">
-        <div class="flex justify-between items-center mb-4">
-            <h2 class="text-lg font-semibold text-gray-800" id="edit-title">Editar Cliente</h2>
-            <button onclick="document.getElementById('modal-edit-cliente').classList.add('hidden')"
-                    class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+<div id="modal-edit-cliente" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;place-items:center" onclick="if(event.target===this)this.style.display='none'">
+    <div class="card" style="width:100%;max-width:520px;margin:24px;max-height:90vh;overflow-y:auto">
+        <div class="card-head">
+            <h3 id="edit-title">Editar Cliente</h3>
+            <button class="btn ghost" onclick="document.getElementById('modal-edit-cliente').style.display='none'" style="padding:4px 8px;height:auto">&times;</button>
         </div>
-
-        <form id="edit-form" method="POST">
-            <!-- KAM -->
-            {% if not is_kam %}
-            <div class="mb-4">
-                <label class="text-xs text-gray-500 block mb-1">KAM asignado</label>
-                <select name="kam_id" id="edit-kam" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                    {% for k in kams %}
-                    <option value="{{ k.id }}">{{ k.nombre }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            {% endif %}
-
-            <!-- Logo URL -->
-            <div class="mb-4">
-                <label class="text-xs text-gray-500 block mb-1">Logo (URL de imagen)</label>
-                <div class="flex gap-2 items-center">
-                    <img id="edit-logo-preview" src="" alt="" class="w-10 h-10 rounded-lg object-contain bg-gray-50 border hidden">
-                    <input type="text" name="logo_url" id="edit-logo" placeholder="https://logo.clearbit.com/empresa.com"
-                           class="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2"
-                           oninput="var p=document.getElementById('edit-logo-preview');if(this.value){p.src=this.value;p.classList.remove('hidden')}else{p.classList.add('hidden')}">
+        <div class="card-body">
+            <form id="edit-form" method="POST">
+                <!-- KAM -->
+                {% if not is_kam %}
+                <div style="margin-bottom:14px">
+                    <label style="display:block;font-size:11px;font-weight:600;color:var(--ink-3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.08em">KAM asignado</label>
+                    <div class="field-wrap" style="width:100%">
+                        <select name="kam_id" id="edit-kam" style="width:100%">
+                            {% for k in kams %}
+                            <option value="{{ k.id }}">{{ k.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                 </div>
-                <p class="text-xs text-gray-400 mt-1">Pega el URL de la imagen del logo</p>
-            </div>
+                {% endif %}
 
-            <!-- Giro -->
-            <div class="mb-4">
-                <label class="text-xs text-gray-500 block mb-2">Giro</label>
-                <div class="grid grid-cols-2 gap-1.5" id="giro-checkboxes">
-                    {% for giro_name, giro_icon in GIROS.items() %}
-                    <label class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors giro-label text-xs">
-                        <input type="checkbox" name="giro" value="{{ giro_name }}" class="rounded text-brand-600 giro-check">
-                        <span>{{ giro_icon }} {{ giro_name }}</span>
-                    </label>
-                    {% endfor %}
+                <!-- Logo URL -->
+                <div style="margin-bottom:14px">
+                    <label style="display:block;font-size:11px;font-weight:600;color:var(--ink-3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.08em">Logo (URL de imagen)</label>
+                    <div class="hstack" style="gap:10px">
+                        <img id="edit-logo-preview" src="" alt="" style="width:36px;height:36px;border-radius:var(--r-sm);object-fit:contain;border:1px solid var(--border);background:var(--bg-sunken);display:none">
+                        <div class="field-wrap" style="flex:1">
+                            <input type="text" name="logo_url" id="edit-logo" placeholder="https://logo.clearbit.com/empresa.com"
+                                   style="border:0;background:transparent;outline:none;font-family:inherit;font-size:12.5px;color:var(--ink-1);width:100%"
+                                   oninput="var p=document.getElementById('edit-logo-preview');if(this.value){p.src=this.value;p.style.display='block'}else{p.style.display='none'}">
+                        </div>
+                    </div>
+                    <p class="muted" style="font-size:11px;margin:4px 0 0">Pega el URL de la imagen del logo</p>
                 </div>
-            </div>
 
-            <!-- Tier -->
-            <div class="mb-4">
-                <label class="text-xs text-gray-500 block mb-1">Tier</label>
-                <select name="tier" id="edit-tier" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                    <option value="">Sin asignar</option>
-                    <option value="Enterprise">🏆 Enterprise (>$400K)</option>
-                    <option value="Gold">🥇 Gold ($150K-$400K)</option>
-                    <option value="Silver">🥈 Silver ($80K-$150K)</option>
-                    <option value="Bronze">🥉 Bronze (<$80K)</option>
-                </select>
-            </div>
+                <!-- Giro -->
+                <div style="margin-bottom:14px">
+                    <label style="display:block;font-size:11px;font-weight:600;color:var(--ink-3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em">Giro</label>
+                    <div class="grid g-2" style="gap:6px" id="giro-checkboxes">
+                        {% for giro_name, giro_icon in GIROS.items() %}
+                        <label class="field-wrap giro-label" style="cursor:pointer;gap:8px;height:auto;padding:7px 10px">
+                            <input type="checkbox" name="giro" value="{{ giro_name }}" class="giro-check" style="accent-color:var(--copper)">
+                            <span style="font-size:12px">{{ giro_name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
 
-            <div class="flex justify-end gap-3 mt-5">
-                <button type="button" onclick="document.getElementById('modal-edit-cliente').classList.add('hidden')"
-                        class="px-4 py-2 text-sm text-gray-600">Cancelar</button>
-                <button type="submit" class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700">Guardar</button>
-            </div>
-        </form>
+                <!-- Tier -->
+                <div style="margin-bottom:14px">
+                    <label style="display:block;font-size:11px;font-weight:600;color:var(--ink-3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.08em">Tier</label>
+                    <div class="field-wrap" style="width:100%">
+                        <select name="tier" id="edit-tier" style="width:100%">
+                            <option value="">Sin asignar</option>
+                            <option value="Enterprise">Enterprise (>$400K)</option>
+                            <option value="Gold">Gold ($150K-$400K)</option>
+                            <option value="Silver">Silver ($80K-$150K)</option>
+                            <option value="Bronze">Bronze (<$80K)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px">
+                    <button type="button" class="btn ghost" onclick="document.getElementById('modal-edit-cliente').style.display='none'">Cancelar</button>
+                    <button type="submit" class="btn primary">Guardar</button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -193,27 +202,36 @@ function openEditModal(id, nombre, logoUrl, giro, tier, kamId) {
     if (kamSel && kamId) { kamSel.value = kamId; }
 
     var preview = document.getElementById('edit-logo-preview');
-    if (logoUrl) { preview.src = logoUrl; preview.classList.remove('hidden'); }
-    else { preview.classList.add('hidden'); }
+    if (logoUrl) { preview.src = logoUrl; preview.style.display = 'block'; }
+    else { preview.style.display = 'none'; }
 
     var giros = giro ? giro.split(',') : [];
     document.querySelectorAll('.giro-check').forEach(function(cb) {
         cb.checked = giros.indexOf(cb.value) !== -1;
         var label = cb.closest('.giro-label');
-        if (cb.checked) { label.classList.add('bg-brand-50', 'border-brand-300'); }
-        else { label.classList.remove('bg-brand-50', 'border-brand-300'); }
+        if (cb.checked) { label.style.borderColor = 'var(--copper)'; label.style.background = 'var(--copper-soft)'; }
+        else { label.style.borderColor = ''; label.style.background = ''; }
     });
 
-    document.getElementById('modal-edit-cliente').classList.remove('hidden');
+    var modal = document.getElementById('modal-edit-cliente');
+    modal.style.display = 'grid';
 }
 
 document.querySelectorAll('.giro-check').forEach(function(cb) {
     cb.addEventListener('change', function() {
         var label = this.closest('.giro-label');
-        if (this.checked) { label.classList.add('bg-brand-50', 'border-brand-300'); }
-        else { label.classList.remove('bg-brand-50', 'border-brand-300'); }
+        if (this.checked) { label.style.borderColor = 'var(--copper)'; label.style.background = 'var(--copper-soft)'; }
+        else { label.style.borderColor = ''; label.style.background = ''; }
     });
 });
+
+function filterTable(query) {
+    var rows = document.querySelectorAll('#tbl-clientes tbody tr');
+    var q = query.toLowerCase();
+    rows.forEach(function(row) {
+        row.style.display = row.getAttribute('data-search').indexOf(q) !== -1 ? '' : 'none';
+    });
+}
 </script>
 
 {% endblock %}
