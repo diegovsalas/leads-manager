@@ -374,7 +374,7 @@
     <!-- ============================================================ -->
     <!-- TAB: FACTURACIÓN -->
     <!-- ============================================================ -->
-    <div x-show="tab === 'facturacion'" style="display: none;">
+    <div x-cloak x-show="tab === 'facturacion'">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
             <h2 class="text-sm font-semibold text-gray-800 mb-4">Facturación por Mes — AROMATEX vs PESTEX</h2>
             <div style="max-height:220px"><canvas id="factTabChartUN"></canvas></div>
@@ -441,7 +441,7 @@
     <!-- ============================================================ -->
     <!-- TAB: OPERACIÓN -->
     <!-- ============================================================ -->
-    <div x-show="tab === 'operacion'" style="display: none;">
+    <div x-cloak x-show="tab === 'operacion'">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
             <h2 class="text-sm font-semibold text-gray-800 mb-4">Operación por Mes</h2>
             <div style="max-height:200px"><canvas id="opTabChart"></canvas></div>
@@ -508,7 +508,7 @@
     <!-- ============================================================ -->
     <!-- TAB: NOTAS -->
     <!-- ============================================================ -->
-    <div x-show="tab === 'notas'" style="display: none;" id="notas">
+    <div x-cloak x-show="tab === 'notas'" id="notas">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <h2 class="text-sm font-semibold text-gray-700 mb-4">Bitácora</h2>
 
@@ -568,7 +568,7 @@
     <!-- ============================================================ -->
     <!-- TAB: TAREAS -->
     <!-- ============================================================ -->
-    <div x-show="tab === 'tareas'" style="display: none;" id="tareas">
+    <div x-cloak x-show="tab === 'tareas'" id="tareas">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <h2 class="text-sm font-semibold text-gray-700 mb-4">Tareas / Playbooks</h2>
 
@@ -669,7 +669,7 @@
     <!-- ============================================================ -->
     <!-- TAB: CONTACTOS -->
     <!-- ============================================================ -->
-    <div x-show="tab === 'contactos'" style="display: none;" id="contactos">
+    <div x-cloak x-show="tab === 'contactos'" id="contactos">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-sm font-semibold text-gray-700">Contactos del Cliente</h2>
@@ -720,7 +720,7 @@
     <!-- ============================================================ -->
     <!-- TAB: ENTREGABLES -->
     <!-- ============================================================ -->
-    <div x-show="tab === 'entregables'" style="display: none;" id="entregables">
+    <div x-cloak x-show="tab === 'entregables'" id="entregables">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
             <div class="flex justify-between items-center mb-5">
                 <div>
@@ -811,7 +811,7 @@
     <!-- ============================================================ -->
     <!-- TAB: NPS / CSAT -->
     <!-- ============================================================ -->
-    <div x-show="tab === 'nps'" style="display: none;">
+    <div x-cloak x-show="tab === 'nps'">
 
         <!-- KPIs + Link -->
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
@@ -963,7 +963,7 @@
     <!-- ============================================================ -->
     <!-- TAB: INCIDENCIAS -->
     <!-- ============================================================ -->
-    <div x-show="tab === 'incidencias'" style="display: none;" id="incidencias">
+    <div x-cloak x-show="tab === 'incidencias'" id="incidencias">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
             <div class="flex justify-between items-center mb-4">
                 <div>
