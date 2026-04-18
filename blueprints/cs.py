@@ -147,13 +147,25 @@ def _periodos_disponibles():
 
 
 def _calc_facturacion_periodo(account_ids, inicio, fin):
-    """Calcula facturación del periodo desde cs_invoices (no campos estáticos)."""
+    """Calcula facturación del periodo. Separa pendiente vencido vs por cobrar (en plazo de crédito)."""
+    from sqlalchemy import case
+    hoy = date.today()
     rows = (
         db.session.query(
             CSInvoice.account_id,
             func.coalesce(func.sum(CSInvoice.total), 0),
             func.coalesce(func.sum(CSInvoice.pagado), 0),
             func.coalesce(func.sum(CSInvoice.pendiente), 0),
+            # Vencido: pendiente de facturas cuya fecha_vencimiento ya pasó
+            func.coalesce(func.sum(case(
+                (db.and_(CSInvoice.pendiente > 0, CSInvoice.fecha_vencimiento < hoy), CSInvoice.pendiente),
+                else_=0,
+            )), 0),
+            # Por cobrar: pendiente de facturas aún en plazo
+            func.coalesce(func.sum(case(
+                (db.and_(CSInvoice.pendiente > 0, db.or_(CSInvoice.fecha_vencimiento >= hoy, CSInvoice.fecha_vencimiento.is_(None))), CSInvoice.pendiente),
+                else_=0,
+            )), 0),
             func.count(CSInvoice.id),
         )
         .filter(
@@ -165,10 +177,13 @@ def _calc_facturacion_periodo(account_ids, inicio, fin):
         .all()
     )
     result = {}
-    for acc_id, total, pagado, pendiente, num in rows:
+    for acc_id, total, pagado, pendiente, vencido, por_cobrar, num in rows:
         result[str(acc_id)] = {
             "facturado": float(total), "pagado": float(pagado),
-            "pendiente": float(pendiente), "num_facturas": num,
+            "pendiente": float(pendiente),
+            "vencido": float(vencido),
+            "por_cobrar": float(por_cobrar),
+            "num_facturas": num,
         }
     return result
 
@@ -200,6 +215,8 @@ def dashboard():
     facturado_periodo = sum(f["facturado"] for f in fact_periodo.values())
     pagado_periodo = sum(f["pagado"] for f in fact_periodo.values())
     pendiente_periodo = sum(f["pendiente"] for f in fact_periodo.values())
+    vencido_periodo = sum(f.get("vencido", 0) for f in fact_periodo.values())
+    por_cobrar_periodo = sum(f.get("por_cobrar", 0) for f in fact_periodo.values())
 
     # Comparación con periodo anterior (solo si es mes individual)
     delta_facturado = delta_pagado = delta_pendiente = None
@@ -277,6 +294,7 @@ def dashboard():
         suc_aromatex=suc_aromatex, suc_pestex=suc_pestex,
         facturado_periodo=facturado_periodo, pagado_periodo=pagado_periodo,
         pendiente_periodo=pendiente_periodo,
+        vencido_periodo=vencido_periodo, por_cobrar_periodo=por_cobrar_periodo,
         delta_facturado=delta_facturado, delta_pagado=delta_pagado,
         delta_pendiente=delta_pendiente,
         top_riesgo=top_riesgo, cat_counts=cat_counts,

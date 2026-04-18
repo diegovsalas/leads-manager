@@ -3,7 +3,7 @@
 from datetime import datetime, date, timedelta
 from sqlalchemy import func, case
 from extensions import db
-from models import CSAccount, CSTask, CSAppointment
+from models import CSAccount, CSTask, CSAppointment, CSInvoice
 from cs_health_score import calcular_health_scores_batch
 
 
@@ -68,6 +68,23 @@ def generar_alertas(accounts=None, scores_map=None) -> list[dict]:
     )
     qbr_completados = {str(r[0]) for r in qbr_rows}
 
+    # Batch 4: vencido real por cuenta (facturas que pasaron fecha_vencimiento)
+    hoy = date.today()
+    vencido_rows = (
+        db.session.query(
+            CSInvoice.account_id,
+            func.coalesce(func.sum(CSInvoice.pendiente), 0),
+        )
+        .filter(
+            CSInvoice.account_id.in_(account_ids),
+            CSInvoice.pendiente > 0,
+            CSInvoice.fecha_vencimiento < hoy,
+        )
+        .group_by(CSInvoice.account_id)
+        .all()
+    )
+    vencido_by_acc = {str(r[0]): float(r[1]) for r in vencido_rows}
+
     alertas = []
 
     for acc in accounts:
@@ -88,18 +105,20 @@ def generar_alertas(accounts=None, scores_map=None) -> list[dict]:
                 "severidad": "alta", "accion": "Agendar QBR",
             })
 
-        # Regla 2: >30% pendiente cobranza
+        # Regla 2: >30% VENCIDO de cobranza (solo facturas que pasaron fecha de vencimiento)
         facturacion = float(acc.facturacion_q1 or 0)
         pendiente = float(acc.pendiente_q1 or 0)
-        if facturacion > 0:
-            pct_pendiente = pendiente / facturacion
-            if pct_pendiente > 0.30:
+        # Calcular solo vencido real (pasó fecha_vencimiento)
+        vencido = vencido_by_acc.get(key, 0)
+        if facturacion > 0 and vencido > 0:
+            pct_vencido = vencido / facturacion
+            if pct_vencido > 0.30:
                 alertas.append({
                     "cuenta": acc.nombre, "account_id": key, "kam": kam_nombre,
                     "tipo": "cobranza_alta",
-                    "titulo": f"{pct_pendiente:.0%} pendiente de cobranza",
-                    "detalle": f"${pendiente:,.0f} pendiente de ${facturacion:,.0f}.",
-                    "severidad": "critica" if pct_pendiente > 0.60 else "alta",
+                    "titulo": f"{pct_vencido:.0%} vencido de cobranza",
+                    "detalle": f"${vencido:,.0f} vencido de ${facturacion:,.0f} (excluye facturas en plazo de credito).",
+                    "severidad": "critica" if pct_vencido > 0.60 else "alta",
                     "accion": "Seguimiento de cobranza",
                 })
 
@@ -131,15 +150,15 @@ def generar_alertas(accounts=None, scores_map=None) -> list[dict]:
                 "severidad": "critica", "accion": "Crear plan de acción",
             })
 
-        # Regla 5: Pre-riesgo
-        if categoria == "Atención" and facturacion > 0:
-            pct_pend = pendiente / facturacion
-            if pct_pend > 0.50:
+        # Regla 5: Pre-riesgo (solo si hay vencido real, no por cobrar en plazo)
+        if categoria == "Atención" and facturacion > 0 and vencido > 0:
+            pct_vencido = vencido / facturacion
+            if pct_vencido > 0.30:
                 alertas.append({
                     "cuenta": acc.nombre, "account_id": key, "kam": kam_nombre,
                     "tipo": "pre_riesgo",
                     "titulo": f"Riesgo de caer a rojo (score {score})",
-                    "detalle": f"{pct_pend:.0%} pendiente.",
+                    "detalle": f"{pct_vencido:.0%} vencido (excluye facturas en plazo).",
                     "severidad": "alta", "accion": "Intervención preventiva",
                 })
 

@@ -59,10 +59,10 @@
 </div>
 
 <!-- Facturacion KPIs -->
-<div class="grid g-3 mb-4">
+<div class="grid g-4 mb-4">
     <div class="kpi">
         <div class="label">Facturado · {{ periodo_label }}</div>
-        <div class="value">${{ "{:,.0f}".format(facturado_periodo) }}</div>
+        <div class="value" style="font-size:26px">${{ "{:,.0f}".format(facturado_periodo) }}</div>
         <div class="foot">
             {% if delta_facturado is not none %}
             <span class="delta {% if delta_facturado >= 0 %}up{% else %}down{% endif %}">{{ icon('trend-up' if delta_facturado >= 0 else 'trend-down', 12) }}{{ "+" if delta_facturado >= 0 }}{{ delta_facturado }}%</span>
@@ -72,16 +72,20 @@
     </div>
     <div class="kpi">
         <div class="label">Pagado · {{ periodo_label }}</div>
-        <div class="value" style="color:var(--ok-ink)">${{ "{:,.0f}".format(pagado_periodo) }}</div>
+        <div class="value" style="font-size:26px;color:var(--ok-ink)">${{ "{:,.0f}".format(pagado_periodo) }}</div>
         <div class="foot">{% if facturado_periodo > 0 %}<span class="muted">{{ "{:.0f}".format(pagado_periodo / facturado_periodo * 100) }}% de cobranza</span>{% endif %}</div>
     </div>
     <div class="kpi">
-        <div class="label">Pendiente · {{ periodo_label }}</div>
-        <div class="value" style="color:var(--danger-ink)">${{ "{:,.0f}".format(pendiente_periodo) }}</div>
+        <div class="label">Por Cobrar · en plazo</div>
+        <div class="value" style="font-size:26px;color:var(--warn-ink)">${{ "{:,.0f}".format(por_cobrar_periodo) }}</div>
+        <div class="foot"><span class="muted">Dentro del credito (30 dias)</span></div>
+    </div>
+    <div class="kpi" {% if vencido_periodo > 0 %}style="border-left:3px solid var(--danger)"{% endif %}>
+        <div class="label">Vencido</div>
+        <div class="value" style="font-size:26px;color:{% if vencido_periodo > 0 %}var(--danger-ink){% else %}var(--ok-ink){% endif %}">${{ "{:,.0f}".format(vencido_periodo) }}</div>
         <div class="foot">
-            {% if delta_pendiente is not none %}
-            <span class="delta {% if delta_pendiente <= 0 %}up{% else %}down{% endif %}">{{ icon('trend-down' if delta_pendiente <= 0 else 'trend-up', 12) }}{{ "+" if delta_pendiente >= 0 }}{{ delta_pendiente }}%</span>
-            {% endif %}
+            {% if vencido_periodo > 0 %}<span class="delta down">{{ icon('alert-circle', 12) }} Requiere seguimiento</span>
+            {% else %}<span class="muted">Sin facturas vencidas</span>{% endif %}
         </div>
     </div>
 </div>
