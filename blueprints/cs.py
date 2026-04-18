@@ -12,7 +12,7 @@ from extensions import db
 from models import (
     CSAccount, CSInvoice, CSAppointment, CSNote, CSTask,
     CSOnboardingAccount, CSOpportunity, CSContacto, CSEntregable,
-    CSEncuesta, UserCRM, RolCRM,
+    CSEncuesta, CSIncidencia, CSPropiedad, UserCRM, RolCRM,
 )
 from cs_health_score import calcular_health_score, calcular_health_scores_batch
 from cs_alerts import generar_alertas, alertas_por_cuenta
@@ -490,6 +490,10 @@ def account_detail(account_id):
         un = e.unidad_negocio or "General"
         entregables_por_un.setdefault(un, []).append(e)
 
+    # Incidencias
+    incidencias = CSIncidencia.query.filter_by(account_id=account.id).order_by(CSIncidencia.created_at.desc()).limit(100).all()
+    propiedades = CSPropiedad.query.filter_by(account_id=account.id).order_by(CSPropiedad.nombre).all()
+
     # Encuestas NPS/CSAT
     encuestas = CSEncuesta.query.filter_by(account_id=account.id).order_by(CSEncuesta.created_at.desc()).all()
     survey_link = f"/encuesta/{account.survey_token}" if account.survey_token else None
@@ -531,6 +535,7 @@ def account_detail(account_id):
         notes=notes, tasks=tasks, tareas_pendientes=tareas_pendientes,
         contactos=contactos,
         entregables=entregables, entregables_por_un=entregables_por_un,
+        incidencias=incidencias, propiedades=propiedades,
         encuestas=encuestas, survey_link=survey_link,
         avg_nps=avg_nps, avg_csat=avg_csat, kpi_satisfaccion=kpi_satisfaccion,
         csat_dims=csat_dims,
@@ -1125,6 +1130,90 @@ def eliminar_contacto(contacto_id):
     if referer:
         return redirect(referer)
     return redirect(url_for("cs.contactos_directory"))
+
+
+# ══════════════════════════════════════════════
+# INCIDENCIAS — Registro de incidencias por cuenta
+# ══════════════════════════════════════════════
+@cs_bp.route("/account/<uuid:account_id>/incidencias", methods=["POST"])
+def crear_incidencia(account_id):
+    tipo = request.form.get("tipo", "").strip()
+    if not tipo:
+        return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=incidencias")
+
+    propiedad_id = request.form.get("propiedad_id", "").strip() or None
+    propiedad_nombre = ""
+    if propiedad_id:
+        prop = db.session.get(CSPropiedad, propiedad_id)
+        propiedad_nombre = prop.nombre if prop else ""
+
+    fecha_str = request.form.get("fecha_incidencia", "").strip()
+    fecha_inc = None
+    if fecha_str:
+        try:
+            fecha_inc = datetime.strptime(fecha_str, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+
+    fecha_comp_str = request.form.get("fecha_compromiso", "").strip()
+    fecha_comp = None
+    if fecha_comp_str:
+        try:
+            fecha_comp = datetime.strptime(fecha_comp_str, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+
+    inc = CSIncidencia(
+        account_id=account_id,
+        propiedad_id=propiedad_id,
+        propiedad_nombre=propiedad_nombre,
+        servicio=request.form.get("servicio", "Aroma"),
+        tipo=tipo,
+        detalle=request.form.get("detalle", "").strip(),
+        status="Abierta",
+        zona=request.form.get("zona", "").strip(),
+        quien_reporta=request.form.get("quien_reporta", "").strip(),
+        contacto_cliente=request.form.get("contacto_cliente", "").strip(),
+        responsable=request.form.get("responsable", "").strip(),
+        fecha_incidencia=fecha_inc or date.today(),
+        fecha_compromiso=fecha_comp,
+        created_by=session.get("user_nombre", ""),
+    )
+    db.session.add(inc)
+    db.session.commit()
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=incidencias")
+
+
+@cs_bp.route("/account/<uuid:account_id>/incidencias/<uuid:inc_id>/status", methods=["POST"])
+def cambiar_status_incidencia(account_id, inc_id):
+    inc = db.session.get(CSIncidencia, inc_id)
+    if inc:
+        nuevo = request.form.get("status", "")
+        if nuevo in ("Abierta", "En proceso", "Resuelta"):
+            inc.status = nuevo
+            if nuevo == "Resuelta" and not inc.fecha_solucion:
+                inc.fecha_solucion = date.today()
+                if inc.fecha_incidencia:
+                    inc.tiempo_respuesta = (date.today() - inc.fecha_incidencia).days
+        comentario = request.form.get("comentarios", "").strip()
+        if comentario:
+            inc.comentarios_operaciones = comentario
+        db.session.commit()
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=incidencias")
+
+
+@cs_bp.route("/api/propiedades/<uuid:account_id>")
+def api_propiedades(account_id):
+    """API JSON de propiedades por cuenta (para search dinámico)."""
+    q = request.args.get("q", "").strip()
+    query = CSPropiedad.query.filter_by(account_id=account_id)
+    if q:
+        query = query.filter(CSPropiedad.nombre.ilike(f"%{q}%"))
+    props = query.order_by(CSPropiedad.nombre).limit(50).all()
+    return jsonify([{
+        "id": str(p.id), "nombre": p.nombre,
+        "zona": p.zona, "unidad_negocio": p.unidad_negocio,
+    } for p in props])
 
 
 # ══════════════════════════════════════════════

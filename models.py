@@ -683,6 +683,46 @@ class CSEncuesta(db.Model):
         return round(sum(vals) / len(vals), 1) if vals else None
 
 
+class CSPropiedad(db.Model):
+    """Propiedad/sucursal de un cliente."""
+    __tablename__ = "cs_propiedades"
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=False)
+    nombre = db.Column(db.String(300), nullable=False)
+    direccion = db.Column(db.String(500), default="")
+    zona = db.Column(db.String(100), default="")
+    unidad_negocio = db.Column(db.String(30), default="")
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+
+
+class CSIncidencia(db.Model):
+    """Incidencia de servicio reportada por KAM."""
+    __tablename__ = "cs_incidencias"
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=False)
+    propiedad_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_propiedades.id"), nullable=True)
+    propiedad_nombre = db.Column(db.String(300), default="")
+    servicio = db.Column(db.String(30), nullable=False, default="Aroma")  # Aroma / Fumigación
+    tipo = db.Column(db.String(100), nullable=False)
+    detalle = db.Column(db.Text, default="")
+    status = db.Column(db.String(30), default="Abierta")  # Abierta / En proceso / Resuelta
+    zona = db.Column(db.String(100), default="")
+    quien_reporta = db.Column(db.String(200), default="")
+    contacto_cliente = db.Column(db.String(200), default="")
+    responsable = db.Column(db.String(200), default="")
+    fecha_incidencia = db.Column(db.Date, nullable=True)
+    fecha_compromiso = db.Column(db.Date, nullable=True)
+    fecha_solucion = db.Column(db.Date, nullable=True)
+    comentarios_operaciones = db.Column(db.Text, default="")
+    evidencia = db.Column(db.Text, default="")
+    tiempo_respuesta = db.Column(db.Integer, nullable=True)
+    created_by = db.Column(db.String(200), default="")
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+
+    account = db.relationship("CSAccount", backref="incidencias")
+    propiedad = db.relationship("CSPropiedad")
+
+
 class CSEntregable(db.Model):
     """Entregable/flujo de servicio recurrente por cuenta."""
     __tablename__ = "cs_entregables"

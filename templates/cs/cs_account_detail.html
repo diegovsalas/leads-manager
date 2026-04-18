@@ -145,6 +145,11 @@
                 class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
             Entregables <span class="ml-1 text-xs text-gray-400">({{ entregables|length }})</span>
         </button>
+        <button @click="tab = 'incidencias'"
+                :class="tab === 'incidencias' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
+            Incidencias <span class="ml-1 text-xs text-gray-400">({{ incidencias|length }})</span>
+        </button>
         <button @click="tab = 'nps'"
                 :class="tab === 'nps' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
                 class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
@@ -992,6 +997,208 @@
         </div>
     </div>
 
+    <!-- ============================================================ -->
+    <!-- TAB: INCIDENCIAS -->
+    <!-- ============================================================ -->
+    <div x-show="tab === 'incidencias'" style="display: none;" id="incidencias">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h2 class="text-sm font-semibold text-gray-700">Incidencias — {{ account.nombre }}</h2>
+                    <p class="text-xs text-gray-400 mt-0.5">
+                        {% set abiertas = incidencias|selectattr('status','equalto','Abierta')|list|length %}
+                        {% set en_proceso = incidencias|selectattr('status','equalto','En proceso')|list|length %}
+                        {{ abiertas }} abiertas · {{ en_proceso }} en proceso · {{ incidencias|length }} total
+                    </p>
+                </div>
+                <button onclick="document.getElementById('modal-add-incidencia').style.display='grid'"
+                        class="px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700">
+                    + Nueva Incidencia
+                </button>
+            </div>
+
+            {% if incidencias %}
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b text-left text-gray-500 text-xs uppercase tracking-wide bg-gray-50">
+                            <th class="px-3 py-2">Fecha</th>
+                            <th class="px-3 py-2">Servicio</th>
+                            <th class="px-3 py-2">Tipo</th>
+                            <th class="px-3 py-2">Propiedad</th>
+                            <th class="px-3 py-2 text-center">Status</th>
+                            <th class="px-3 py-2">Responsable</th>
+                            <th class="px-3 py-2">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for inc in incidencias %}
+                        <tr class="border-b last:border-0 hover:bg-gray-50">
+                            <td class="px-3 py-2 text-xs text-gray-500">{{ inc.fecha_incidencia.strftime('%d/%m/%Y') if inc.fecha_incidencia else '-' }}</td>
+                            <td class="px-3 py-2">
+                                <span class="px-1.5 py-0.5 rounded text-xs font-medium {% if inc.servicio == 'Aroma' %}bg-purple-100 text-purple-700{% else %}bg-green-100 text-green-700{% endif %}">{{ inc.servicio }}</span>
+                            </td>
+                            <td class="px-3 py-2 text-xs text-gray-700">{{ inc.tipo }}</td>
+                            <td class="px-3 py-2 text-xs text-gray-500">{{ inc.propiedad_nombre[:30] if inc.propiedad_nombre else '-' }}</td>
+                            <td class="px-3 py-2 text-center">
+                                <span class="px-2 py-0.5 rounded-full text-xs font-semibold
+                                    {% if inc.status == 'Abierta' %}bg-red-100 text-red-700
+                                    {% elif inc.status == 'En proceso' %}bg-yellow-100 text-yellow-700
+                                    {% else %}bg-green-100 text-green-700{% endif %}">{{ inc.status }}</span>
+                            </td>
+                            <td class="px-3 py-2 text-xs text-gray-500">{{ inc.responsable or '-' }}</td>
+                            <td class="px-3 py-2">
+                                {% if inc.status != 'Resuelta' %}
+                                <form action="/cs/account/{{ account.id }}/incidencias/{{ inc.id }}/status" method="POST" class="inline">
+                                    {% if inc.status == 'Abierta' %}
+                                    <input type="hidden" name="status" value="En proceso">
+                                    <button type="submit" class="text-xs text-yellow-600 hover:underline">En proceso</button>
+                                    {% endif %}
+                                </form>
+                                <form action="/cs/account/{{ account.id }}/incidencias/{{ inc.id }}/status" method="POST" class="inline ml-2">
+                                    <input type="hidden" name="status" value="Resuelta">
+                                    <button type="submit" class="text-xs text-green-600 hover:underline">Resolver</button>
+                                </form>
+                                {% else %}
+                                <span class="text-xs text-gray-400">{{ inc.tiempo_respuesta }}d</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% if inc.detalle %}
+                        <tr class="border-b bg-gray-50"><td colspan="7" class="px-3 py-1.5 text-xs text-gray-500 italic">{{ inc.detalle[:150] }}</td></tr>
+                        {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-10">
+                <p class="text-3xl mb-2">📋</p>
+                <p class="text-gray-400 text-sm">Sin incidencias registradas</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+<!-- Modal: Nueva Incidencia -->
+<div id="modal-add-incidencia" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;place-items:center">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-semibold text-gray-800">Nueva Incidencia — {{ account.nombre }}</h2>
+            <button onclick="document.getElementById('modal-add-incidencia').style.display='none'" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+        <form action="/cs/account/{{ account.id }}/incidencias" method="POST">
+            <div style="display:flex;flex-direction:column;gap:10px">
+                <!-- Servicio + Tipo -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                    <div>
+                        <label style="font-size:11px;color:#787774;display:block;margin-bottom:3px">Servicio *</label>
+                        <select name="servicio" required style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
+                            <option value="Aroma">Aroma</option>
+                            <option value="Fumigacion">Fumigacion</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:11px;color:#787774;display:block;margin-bottom:3px">Tipo de incidencia *</label>
+                        <select name="tipo" required style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
+                            <optgroup label="Aroma">
+                                <option value="Equipo no huele">Equipo no huele</option>
+                                <option value="Equipo apagado">Equipo apagado</option>
+                                <option value="Derrame de aroma">Derrame de aroma</option>
+                                <option value="Ruidos en equipo">Ruidos en equipo</option>
+                                <option value="Equipo desprendido">Equipo desprendido</option>
+                                <option value="Robo/Extravio equipo">Robo/Extravio equipo</option>
+                                <option value="Reubicacion equipo">Reubicacion equipo</option>
+                                <option value="Incumplimiento visita">Incumplimiento visita</option>
+                                <option value="Mantenimiento equipo">Mantenimiento equipo</option>
+                            </optgroup>
+                            <optgroup label="Fumigacion">
+                                <option value="Roedores">Roedores</option>
+                                <option value="Cucarachas">Cucarachas</option>
+                                <option value="Moscas/Mosquitos">Moscas/Mosquitos</option>
+                                <option value="Alacranes">Alacranes</option>
+                                <option value="Termitas">Termitas</option>
+                                <option value="Chinches">Chinches</option>
+                                <option value="Aves">Aves</option>
+                                <option value="Otro insecto">Otro insecto</option>
+                                <option value="Garantia fumigacion">Garantia fumigacion</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Propiedad (search) -->
+                <div x-data="{ query: '', results: [], selected: null, selectedName: '' }">
+                    <label style="font-size:11px;color:#787774;display:block;margin-bottom:3px">Propiedad / Sucursal</label>
+                    <input type="hidden" name="propiedad_id" :value="selected">
+                    <input type="text" x-model="query" :placeholder="selectedName || 'Buscar propiedad...'"
+                           @input.debounce.300ms="if(query.length>1){fetch('/cs/api/propiedades/{{ account.id }}?q='+query).then(r=>r.json()).then(d=>results=d)}else{results=[]}"
+                           style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
+                    <div x-show="results.length>0" style="border:1px solid #e3e2e0;border-radius:7px;max-height:150px;overflow-y:auto;margin-top:4px">
+                        <template x-for="p in results" :key="p.id">
+                            <div @click="selected=p.id;selectedName=p.nombre;query='';results=[]"
+                                 style="padding:6px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid #f0f0f0"
+                                 class="hover:bg-gray-50">
+                                <span x-text="p.nombre" style="font-weight:500"></span>
+                                <span x-show="p.zona" x-text="' · '+p.zona" style="color:#999;font-size:11px"></span>
+                                <span x-show="p.unidad_negocio" x-text="' · '+p.unidad_negocio" style="color:#999;font-size:11px"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Detalle -->
+                <div>
+                    <label style="font-size:11px;color:#787774;display:block;margin-bottom:3px">Detalle de la incidencia</label>
+                    <textarea name="detalle" rows="3" placeholder="Describe la incidencia..." style="width:100%;border:1px solid #e3e2e0;border-radius:7px;padding:8px 10px;font-size:13px;resize:none;font-family:inherit"></textarea>
+                </div>
+
+                <!-- Fechas -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                    <div>
+                        <label style="font-size:11px;color:#787774;display:block;margin-bottom:3px">Fecha incidencia</label>
+                        <input type="date" name="fecha_incidencia" style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
+                    </div>
+                    <div>
+                        <label style="font-size:11px;color:#787774;display:block;margin-bottom:3px">Fecha compromiso</label>
+                        <input type="date" name="fecha_compromiso" style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
+                    </div>
+                </div>
+
+                <!-- Quien reporta + Responsable -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                    <div>
+                        <label style="font-size:11px;color:#787774;display:block;margin-bottom:3px">Quien reporta</label>
+                        <input type="text" name="quien_reporta" placeholder="Nombre" style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
+                    </div>
+                    <div>
+                        <label style="font-size:11px;color:#787774;display:block;margin-bottom:3px">Responsable</label>
+                        <input type="text" name="responsable" placeholder="Quien atiende" style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
+                    </div>
+                </div>
+
+                <div>
+                    <label style="font-size:11px;color:#787774;display:block;margin-bottom:3px">Zona</label>
+                    <select name="zona" style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
+                        <option value="">Seleccionar</option>
+                        <option value="Matriz">Matriz</option>
+                        <option value="Centro">Centro</option>
+                        <option value="Bajio">Bajio</option>
+                        <option value="Sur">Sur</option>
+                        <option value="Noreste / Noroeste">Noreste / Noroeste</option>
+                        <option value="Pacifico">Pacifico</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+                <button type="button" onclick="document.getElementById('modal-add-incidencia').style.display='none'" class="px-4 py-2 text-sm text-gray-600">Cancelar</button>
+                <button type="submit" class="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700">Registrar</button>
+            </div>
+        </form>
+    </div>
 </div>
 
 <!-- Modal: Agregar paso al proceso -->
