@@ -17,7 +17,7 @@
             <button type="submit" class="btn">Buscar</button>
             {% if buscar %}<a href="/cs/contactos" class="btn ghost">Limpiar</a>{% endif %}
         </form>
-        <button onclick="document.getElementById('modal-nuevo-contacto').classList.remove('hidden')" class="btn primary">{{ icon('plus') }} Nuevo Contacto</button>
+        <button onclick="document.getElementById('modal-nuevo-contacto').style.display='grid'" class="btn primary">{{ icon('plus') }} Nuevo Contacto</button>
     </div>
 </div>
 
@@ -44,11 +44,11 @@
 </div>
 
 <!-- Modal nuevo contacto -->
-<div id="modal-nuevo-contacto" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;display:flex;align-items:center;justify-content:center">
+<div id="modal-nuevo-contacto" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;place-items:center">
     <div class="card" style="width:100%;max-width:440px;padding:24px;margin:16px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
             <h3 style="margin:0;font-size:16px;font-weight:600;color:var(--ink-1)">Nuevo Contacto</h3>
-            <button onclick="document.getElementById('modal-nuevo-contacto').classList.add('hidden')" class="iconbtn" style="width:28px;height:28px">&times;</button>
+            <button onclick="document.getElementById('modal-nuevo-contacto').style.display='none'" class="iconbtn" style="width:28px;height:28px">&times;</button>
         </div>
         <form action="/cs/contactos/crear" method="POST">
             <div style="display:flex;flex-direction:column;gap:12px">
@@ -62,7 +62,7 @@
                 <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-2)"><input type="checkbox" name="is_owner"> Contacto principal (Owner)</label>
             </div>
             <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
-                <button type="button" onclick="document.getElementById('modal-nuevo-contacto').classList.add('hidden')" class="btn ghost">Cancelar</button>
+                <button type="button" onclick="document.getElementById('modal-nuevo-contacto').style.display='none'" class="btn ghost">Cancelar</button>
                 <button type="submit" class="btn primary">Crear Contacto</button>
             </div>
         </form>

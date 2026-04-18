@@ -9,7 +9,7 @@
         <p class="sub">Pipeline de ventas — upsell, expansion y nuevos servicios</p>
     </div>
     <div class="actions">
-        <button onclick="document.getElementById('modal-nueva-opp').classList.remove('hidden')" class="btn primary">{{ icon('plus') }} Nueva Oportunidad</button>
+        <button onclick="document.getElementById('modal-nueva-opp').style.display='grid'" class="btn primary">{{ icon('plus') }} Nueva Oportunidad</button>
     </div>
 </div>
 
@@ -52,9 +52,9 @@
 </div>
 
 <!-- Modal -->
-<div id="modal-nueva-opp" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;display:flex;align-items:center;justify-content:center">
+<div id="modal-nueva-opp" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;place-items:center">
     <div class="card" style="width:100%;max-width:480px;padding:24px;margin:16px">
-        <div style="display:flex;justify-content:space-between;margin-bottom:16px"><h3 style="margin:0;font-size:16px;font-weight:600">Nueva Oportunidad</h3><button onclick="document.getElementById('modal-nueva-opp').classList.add('hidden')" class="iconbtn" style="width:28px;height:28px">&times;</button></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:16px"><h3 style="margin:0;font-size:16px;font-weight:600">Nueva Oportunidad</h3><button onclick="document.getElementById('modal-nueva-opp').style.display='none'" class="iconbtn" style="width:28px;height:28px">&times;</button></div>
         <form action="/cs/oportunidades/crear" method="POST">
             <div style="display:flex;flex-direction:column;gap:10px">
                 <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cuenta existente</label><select name="account_id" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"><option value="">Prospecto nuevo</option>{% for acc in accounts %}<option value="{{ acc.id }}">{{ acc.nombre }}</option>{% endfor %}</select></div>
@@ -65,7 +65,7 @@
                 </div>
                 <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">KAM</label><select name="kam_id" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"><option value="">Sin asignar</option>{% for k in kams %}<option value="{{ k.id }}">{{ k.nombre }}</option>{% endfor %}</select></div>
             </div>
-            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button type="button" onclick="document.getElementById('modal-nueva-opp').classList.add('hidden')" class="btn ghost">Cancelar</button><button type="submit" class="btn primary">Crear</button></div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button type="button" onclick="document.getElementById('modal-nueva-opp').style.display='none'" class="btn ghost">Cancelar</button><button type="submit" class="btn primary">Crear</button></div>
         </form>
     </div>
 </div>
