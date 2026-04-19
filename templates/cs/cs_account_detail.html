@@ -103,55 +103,44 @@
 </div>
 {% endif %}
 
-<!-- Tabs con Alpine.js -->
-<div x-data="{ tab: new URLSearchParams(window.location.search).get('tab') || 'resumen' }"
-     x-init="$watch('tab', v => { const u = new URL(window.location); u.searchParams.set('tab', v); history.replaceState(null, '', u); })"
->
+<!-- Tabs (vanilla JS — no Alpine) -->
+<div id="tabs-root">
 
     <!-- Tab buttons -->
-    <div class="flex border-b mb-6 overflow-x-auto">
-        <button @click="tab = 'resumen'"
-                :class="tab === 'resumen' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+    <div class="flex border-b mb-6 overflow-x-auto" id="tab-bar">
+        <button onclick="switchTab('resumen')" data-tab-btn="resumen" data-tab-active
                 class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
             Resumen
         </button>
-        <button @click="tab = 'facturacion'"
-                :class="tab === 'facturacion' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+        <button onclick="switchTab('facturacion')" data-tab-btn="facturacion"
                 class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
             Facturación <span class="ml-1 text-xs text-gray-400">({{ invoices|length }})</span>
         </button>
-        <button @click="tab = 'operacion'"
-                :class="tab === 'operacion' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+        <button onclick="switchTab('operacion')" data-tab-btn="operacion"
                 class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
             Operación <span class="ml-1 text-xs text-gray-400">({{ appointments|length }})</span>
         </button>
-        <button @click="tab = 'notas'"
-                :class="tab === 'notas' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+        <button onclick="switchTab('notas')" data-tab-btn="notas"
                 class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
             Notas <span class="ml-1 text-xs text-gray-400">({{ notes|length }})</span>
         </button>
-        <button @click="tab = 'tareas'"
-                :class="tab === 'tareas' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+        <button onclick="switchTab('tareas')" data-tab-btn="tareas"
                 class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
             Tareas <span class="ml-1 text-xs text-gray-400">({{ tareas_pendientes }} pend.)</span>
         </button>
-        <button @click="tab = 'contactos'"
-                :class="tab === 'contactos' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+        <button onclick="switchTab('contactos')" data-tab-btn="contactos"
                 class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
             Contactos <span class="ml-1 text-xs text-gray-400">({{ contactos|length }})</span>
         </button>
-        <button @click="tab = 'entregables'"
-                :class="tab === 'entregables' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+        <button onclick="switchTab('entregables')" data-tab-btn="entregables"
                 class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
             Entregables <span class="ml-1 text-xs text-gray-400">({{ entregables|length }})</span>
         </button>
-        <button @click="tab = 'incidencias'"
-                :class="tab === 'incidencias' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+        <button onclick="switchTab('incidencias')" data-tab-btn="incidencias"
                 class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
             Incidencias <span class="ml-1 text-xs text-gray-400">({{ incidencias|length }})</span>
         </button>
-        <button @click="tab = 'nps'"
-                :class="tab === 'nps' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+        <button onclick="switchTab('nps')" data-tab-btn="nps"
                 class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
             NPS / CSAT <span class="ml-1 text-xs text-gray-400">({{ encuestas|length }})</span>
         </button>
@@ -160,7 +149,7 @@
     <!-- ============================================================ -->
     <!-- TAB: RESUMEN (gráficas fijas aquí) -->
     <!-- ============================================================ -->
-    <div :class="tab !== 'resumen' && 'hidden'">
+    <div data-tab-panel data-tab-active id="panel-resumen">
         <!-- Gráficas en Resumen -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
@@ -374,7 +363,7 @@
     <!-- ============================================================ -->
     <!-- TAB: FACTURACIÓN -->
     <!-- ============================================================ -->
-    <div :class="tab !== 'facturacion' && 'hidden'">
+    <div data-tab-panel id="panel-facturacion">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
             <h2 class="text-sm font-semibold text-gray-800 mb-4">Facturación por Mes — AROMATEX vs PESTEX</h2>
             <div style="max-height:220px"><canvas id="factTabChartUN"></canvas></div>
@@ -441,7 +430,7 @@
     <!-- ============================================================ -->
     <!-- TAB: OPERACIÓN -->
     <!-- ============================================================ -->
-    <div :class="tab !== 'operacion' && 'hidden'">
+    <div data-tab-panel id="panel-operacion">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
             <h2 class="text-sm font-semibold text-gray-800 mb-4">Operación por Mes</h2>
             <div style="max-height:200px"><canvas id="opTabChart"></canvas></div>
@@ -508,7 +497,7 @@
     <!-- ============================================================ -->
     <!-- TAB: NOTAS -->
     <!-- ============================================================ -->
-    <div :class="tab !== 'notas' && 'hidden'" id="notas">
+    <div data-tab-panel id="panel-notas">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <h2 class="text-sm font-semibold text-gray-700 mb-4">Bitácora</h2>
 
@@ -568,7 +557,7 @@
     <!-- ============================================================ -->
     <!-- TAB: TAREAS -->
     <!-- ============================================================ -->
-    <div :class="tab !== 'tareas' && 'hidden'" id="tareas">
+    <div data-tab-panel id="panel-tareas">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <h2 class="text-sm font-semibold text-gray-700 mb-4">Tareas / Playbooks</h2>
 
@@ -669,7 +658,7 @@
     <!-- ============================================================ -->
     <!-- TAB: CONTACTOS -->
     <!-- ============================================================ -->
-    <div :class="tab !== 'contactos' && 'hidden'" id="contactos">
+    <div data-tab-panel id="panel-contactos">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-sm font-semibold text-gray-700">Contactos del Cliente</h2>
@@ -720,7 +709,7 @@
     <!-- ============================================================ -->
     <!-- TAB: ENTREGABLES -->
     <!-- ============================================================ -->
-    <div :class="tab !== 'entregables' && 'hidden'" id="entregables">
+    <div data-tab-panel id="panel-entregables">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
             <div class="flex justify-between items-center mb-5">
                 <div>
@@ -811,7 +800,7 @@
     <!-- ============================================================ -->
     <!-- TAB: NPS / CSAT -->
     <!-- ============================================================ -->
-    <div :class="tab !== 'nps' && 'hidden'">
+    <div data-tab-panel id="panel-nps">
 
         <!-- KPIs + Link -->
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
@@ -963,7 +952,7 @@
     <!-- ============================================================ -->
     <!-- TAB: INCIDENCIAS -->
     <!-- ============================================================ -->
-    <div :class="tab !== 'incidencias' && 'hidden'" id="incidencias">
+    <div data-tab-panel id="panel-incidencias">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
             <div class="flex justify-between items-center mb-4">
                 <div>
@@ -1280,6 +1269,12 @@
 
 {% block scripts %}
 <script>
+/* Init tab from URL param */
+(function(){
+    var initial = new URLSearchParams(window.location.search).get('tab') || 'resumen';
+    switchTab(initial);
+})();
+
 const accId = '{{ account.id }}';
 
 function buildChart(ctx, data, type) {

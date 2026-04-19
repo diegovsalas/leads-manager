@@ -8,10 +8,30 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>tailwind.config={theme:{extend:{colors:{brand:{50:'#f3f0ff',100:'#e9e3ff',400:'#9171f5',500:'#7c3aed',600:'#6d28d9',700:'#5b21b6'}}}}}</script>
-    <style>[x-cloak]{display:none!important}</style>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+    <style>
+[x-cloak]{display:none!important}
+[data-tab-panel]{display:none!important}
+[data-tab-panel][data-tab-active]{display:block!important}
+[data-tab-btn]{border-color:transparent;color:#6b7280;cursor:pointer}
+[data-tab-btn][data-tab-active]{border-color:#7c3aed!important;color:#6d28d9!important}
+</style>
+<script>
+function switchTab(name){
+    var panels=document.querySelectorAll('[data-tab-panel]');
+    for(var i=0;i<panels.length;i++){panels[i].removeAttribute('data-tab-active')}
+    var t=document.getElementById('panel-'+name);
+    if(t)t.setAttribute('data-tab-active','');
+    var btns=document.querySelectorAll('[data-tab-btn]');
+    for(var i=0;i<btns.length;i++){
+        if(btns[i].getAttribute('data-tab-btn')===name){btns[i].setAttribute('data-tab-active','')}
+        else{btns[i].removeAttribute('data-tab-active')}
+    }
+    var u=new URL(window.location);u.searchParams.set('tab',name);history.replaceState(null,'',u);
+}
+</script>
     <link rel="stylesheet" href="/static/css/avantex_cs.css"/>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded',()=>{
             if(window.Chart){
