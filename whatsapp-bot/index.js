@@ -325,29 +325,54 @@ async function handleBot(sessionId, jid, contenido, pushName) {
 // Webhook a Flask
 // ══════════════════════════════════════════════
 async function sendWebhook(sessionId, telefono, pushName, contenido, leadData) {
-  try {
-    const payload = {
-      secret: BOT_SECRET,
-      session_id: sessionId,
-      telefono: `+${telefono}`,
-      nombre: pushName || (leadData && leadData.nombre) || "",
-      contenido,
-      lead_data: leadData,
-      timestamp: new Date().toISOString(),
-    };
+  const payload = {
+    secret: BOT_SECRET,
+    session_id: sessionId,
+    telefono: `+${telefono}`,
+    nombre: pushName || (leadData && leadData.nombre) || "",
+    contenido,
+    lead_data: leadData,
+    timestamp: new Date().toISOString(),
+  };
 
-    const resp = await fetch(CRM_WEBHOOK_URL, {
+  logger.info(`Enviando webhook: lead=${pushName}, tel=${telefono}, completed=${!!leadData}`);
+
+  // Usar https nativo (no depende de fetch/node-fetch)
+  const https = require("https");
+  const url = new URL(CRM_WEBHOOK_URL);
+  const body = JSON.stringify(payload);
+
+  return new Promise((resolve) => {
+    const req = https.request({
+      hostname: url.hostname,
+      port: 443,
+      path: url.pathname,
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body),
+      },
+    }, (res) => {
+      let data = "";
+      res.on("data", (chunk) => data += chunk);
+      res.on("end", () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          logger.info(`Webhook OK: ${res.statusCode}`);
+        } else {
+          logger.error(`Webhook failed: ${res.statusCode} ${data}`);
+        }
+        resolve();
+      });
     });
 
-    if (!resp.ok) {
-      logger.error(`Webhook failed: ${resp.status} ${await resp.text()}`);
-    }
-  } catch (err) {
-    logger.error(`Webhook error: ${err.message}`);
-  }
+    req.on("error", (err) => {
+      logger.error(`Webhook error: ${err.message}`);
+      resolve();
+    });
+
+    req.write(body);
+    req.end();
+  });
 }
 
 // ══════════════════════════════════════════════

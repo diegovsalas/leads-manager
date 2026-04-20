@@ -409,8 +409,8 @@ def recibir_mensaje_baileys():
                 "marca_interes": marca,
             })
             # Guardar datos de calificación
-            lead.empresa = lead_data.get("empresa", "")
-            lead.icp_sucursales = lead_data.get("sucursales", "")
+            lead.tipo_cliente = lead_data.get("empresa", "")
+            lead.num_sucursales = int(lead_data.get("sucursales", "0") or "0") if str(lead_data.get("sucursales", "")).strip().isdigit() else 0
             db.session.commit()
 
             logger.info(f"Lead Baileys calificado: {lead.nombre} → {lead.usuario_asignado.nombre if lead.usuario_asignado else 'Sin asignar'}")
