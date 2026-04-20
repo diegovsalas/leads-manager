@@ -1,0 +1,36 @@
+services:
+  # Flask CRM (ya existente)
+  - type: web
+    name: leads-manager-avantex
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -k eventlet -w 1 --timeout 120 "avantex_crm:create_app()"
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: BOT_SECRET
+        sync: false
+      - key: BAILEYS_URL
+        sync: false
+
+  # WhatsApp Baileys Bot
+  - type: web
+    name: avantex-whatsapp-bot
+    runtime: node
+    rootDir: whatsapp-bot
+    buildCommand: npm install
+    startCommand: node index.js
+    plan: free
+    envVars:
+      - key: CRM_WEBHOOK_URL
+        value: https://leads-manager-avantex.onrender.com/webhook/baileys
+      - key: BOT_SECRET
+        sync: false
+      - key: NODE_ENV
+        value: production
