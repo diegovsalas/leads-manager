@@ -115,6 +115,8 @@ class Usuario(db.Model):
             "especialidad_marca": self.especialidad_marca or [],
             "ultimo_lead_asignado": self.ultimo_lead_asignado.isoformat() if self.ultimo_lead_asignado else None,
             "en_turno": self.en_turno,
+            "baileys_session": self.baileys_session,
+            "zona_cobertura": self.zona_cobertura or [],
         }
 
 

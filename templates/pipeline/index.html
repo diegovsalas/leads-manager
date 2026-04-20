@@ -7,10 +7,10 @@
 <link rel="icon" type="image/x-icon" href="/static/img/favicon.ico"/>
 <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet"/>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <style>
-:root{--bg:#f5f5f9;--bg-sidebar:#1e1b3a;--bg-hover:rgba(255,255,255,.08);--bg-active:rgba(255,255,255,.12);--bg-card:#fff;--bg-input:#fff;--bg-tag:#f1f1ef;--border:#e3e2e0;--border-light:#ebebea;--text:#37352f;--text2:#787774;--text3:#b4b4b0;--accent:#7c3aed;--red:#eb5757;--red-bg:#fbe4e4;--orange:#e07c1a;--orange-bg:#faebdd;--green:#0f7b6c;--green-bg:#dbeddb;--blue:#2eaadc;--blue-bg:#d3e5ef;--purple:#9065b0;--purple-bg:#e8deee;--pink:#d44c7c;--pink-bg:#f5e0e9;--yellow:#cb912f;--yellow-bg:#fdecc8;--font:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;--mono:"SFMono-Regular",Menlo,Consolas,monospace;--r:6px;--r2:8px;--shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);--shadow-lg:0 4px 12px rgba(0,0,0,.1);}
+:root{--bg:#f8f6f3;--bg-sidebar:#f5f2ee;--bg-hover:rgba(0,0,0,.04);--bg-active:rgba(0,0,0,.06);--bg-card:#fff;--bg-input:#fff;--bg-tag:#f1f1ef;--border:#e3ddd5;--border-light:#ece7e0;--text:#2a241f;--text2:#787774;--text3:#b4b4b0;--accent:#8b5e3c;--copper:#8b5e3c;--copper-soft:rgba(139,94,60,.08);--red:#c4412b;--red-bg:#fbe4e4;--orange:#e07c1a;--orange-bg:#faebdd;--green:#2d7a4f;--green-bg:#dbeddb;--blue:#2eaadc;--blue-bg:#d3e5ef;--purple:#7c3aed;--purple-bg:#e8deee;--pink:#d44c7c;--pink-bg:#f5e0e9;--yellow:#cb912f;--yellow-bg:#fdecc8;--font:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;--font-display:'Fraunces',Georgia,serif;--mono:"SFMono-Regular",Menlo,Consolas,monospace;--r:7px;--r2:8px;--shadow:0 1px 2px rgba(60,40,20,.05);--shadow-lg:0 4px 12px rgba(60,40,20,.08);}
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;overflow:hidden;-webkit-font-smoothing:antialiased;}
 ::selection{background:rgba(46,170,220,.2);}
@@ -19,27 +19,36 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px;}
 
 .shell{display:grid;grid-template-columns:220px 1fr;height:100vh;}
-.sidebar{background:#1e1b3a;display:flex;flex-direction:column;overflow:hidden;padding-top:12px;box-shadow:2px 0 8px rgba(0,0,0,.15);}
+.sidebar{background:var(--bg-sidebar);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;position:sticky;top:0;height:100vh;}
 .content{overflow:hidden;display:flex;flex-direction:column;background:var(--bg);}
-.sidebar-brand{padding:4px 14px 20px;font-size:16px;font-weight:800;color:#fff;letter-spacing:-.3px;}
-.sidebar-brand .hl{color:#9171f5;}
-.sidebar-section{padding:16px 14px 6px;font-size:11px;font-weight:500;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.5px;}
-.slink{display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:var(--r);cursor:pointer;color:rgba(255,255,255,.6);transition:all 120ms;font-size:13px;margin:1px 4px;line-height:1.5;user-select:none;text-decoration:none;}
-.slink:hover{background:rgba(255,255,255,.08);color:rgba(255,255,255,.9);}
-.slink.active{background:rgba(255,255,255,.12);color:#c4b5fd;font-weight:500;}
-.slink[data-marca].active{background:rgba(203,145,47,.15);color:#fbbf24;font-weight:500;}
-.slink-badge{margin-left:auto;font-size:11px;color:rgba(255,255,255,.35);}
-.sidebar-divider{height:1px;background:rgba(255,255,255,.08);margin:8px 14px;}
-.sidebar-bottom{margin-top:auto;padding:12px;border-top:1px solid rgba(255,255,255,.08);}
-.ws-status{display:flex;align-items:center;gap:4px;font-size:11px;color:rgba(255,255,255,.35);}
-.ws-dot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.3);}
+.sidebar-brand{padding:14px 16px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:1px;line-height:1;}
+.sidebar-brand .wm-row{display:flex;align-items:baseline;gap:0;}
+.sidebar-brand .wm-steel{font-size:15px;font-weight:700;color:#43566B;letter-spacing:-.3px;}
+.sidebar-brand .wm-x{font-size:15px;font-weight:700;color:#2DB4D6;}
+.sidebar-brand .tag-grupo{font-size:8px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#2DB4D6;margin-bottom:2px;}
+.sidebar-brand small{font-size:9px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:3px;}
+.sidebar-section{padding:16px 14px 6px;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.12em;}
+.slink{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:var(--r);cursor:pointer;color:var(--text2);transition:all 120ms;font-size:13px;font-weight:450;margin:1px 6px;line-height:1.5;user-select:none;text-decoration:none;position:relative;}
+.slink:hover{background:rgba(0,0,0,.04);color:var(--text);}
+.slink.active{background:#fff;color:var(--accent);font-weight:550;box-shadow:var(--shadow);}
+.slink.active::before{content:'';position:absolute;left:0;top:6px;bottom:6px;width:2.5px;border-radius:2px;background:var(--accent);}
+.slink[data-marca].active{background:rgba(139,94,60,.06);color:var(--accent);}
+.slink-badge{margin-left:auto;font-size:11px;color:var(--text3);font-weight:500;}
+.sidebar-divider{height:1px;background:var(--border);margin:8px 14px;}
+.sidebar-bottom{margin-top:auto;padding:10px 12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:9px;}
+.sidebar-bottom .avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#8b5e3c,#b87333);color:#fff;display:grid;place-items:center;font-size:11px;font-weight:600;flex-shrink:0;}
+.sidebar-bottom .meta{flex:1;min-width:0;}
+.sidebar-bottom .meta .name{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sidebar-bottom .meta .role{font-size:10px;color:var(--text3);}
+.ws-status{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text3);}
+.ws-dot{width:5px;height:5px;border-radius:50%;background:var(--text3);}
 .ws-dot.live{background:#22c55e;}
 
 .view{display:none;flex:1;overflow:hidden;flex-direction:column;}
 .view.active{display:flex;}
 .page-header{padding:24px 48px 0;flex-shrink:0;}
 .page-emoji{font-size:32px;margin-bottom:4px;}
-.page-title{font-size:24px;font-weight:700;color:var(--text);letter-spacing:-.3px;line-height:1.2;}
+.page-title{font-family:var(--font-display);font-size:26px;font-weight:500;color:var(--text);letter-spacing:-.02em;line-height:1.15;}
 .page-desc{font-size:13px;color:var(--text2);margin-top:4px;}
 
 .toolbar{display:flex;align-items:center;gap:6px;padding:10px 48px;border-bottom:1px solid var(--border-light);flex-shrink:0;flex-wrap:wrap;}
@@ -48,12 +57,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .btn{padding:4px 10px;border-radius:var(--r);font-size:13px;font-weight:400;cursor:pointer;border:none;transition:background 80ms;font-family:var(--font);color:var(--text2);background:transparent;display:inline-flex;align-items:center;gap:4px;}
 .btn:hover{background:var(--bg-hover);color:var(--text);}
 .btn-blue{color:var(--accent);background:var(--blue-bg);}
-.btn-filled{background:#7c3aed;color:#fff;font-weight:500;padding:6px 12px;border-radius:var(--r);}
-.btn-filled:hover{background:#6d28d9;}
+.btn-filled{background:var(--accent);color:#fff;font-weight:500;padding:6px 12px;border-radius:var(--r);}
+.btn-filled:hover{background:#7a5230;}
 
 /* Metrics */
 .metrics-row{display:flex;gap:12px;padding:16px 48px 0;flex-shrink:0;}
-.metric-card{flex:1;padding:14px 16px;border-radius:12px;border:1px solid var(--border-light);background:var(--bg-card);box-shadow:var(--shadow);}
+.metric-card{flex:1;padding:14px 16px;border-radius:14px;border:1px solid var(--border);background:var(--bg-card);box-shadow:var(--shadow);}
 .metric-label{font-size:12px;color:var(--text2);margin-bottom:6px;}
 .metric-value{font-size:26px;font-weight:700;letter-spacing:-.5px;}
 .metric-sub{font-size:12px;color:var(--text2);margin-top:4px;}
@@ -65,7 +74,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 
 /* Dash */
 .dash-grid{display:grid;grid-template-columns:1fr 340px;gap:16px;padding:16px 48px;min-height:0;}
-.dash-card{border:1px solid var(--border-light);border-radius:12px;padding:16px;overflow-y:auto;background:var(--bg-card);box-shadow:var(--shadow);}
+.dash-card{border:1px solid var(--border);border-radius:14px;padding:16px;overflow-y:auto;background:var(--bg-card);box-shadow:var(--shadow);}
 .dash-card-title{font-size:14px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;}
 .kpi-row{display:flex;gap:14px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-light);}
 .kpi{font-size:13px;color:var(--text2);}
@@ -73,7 +82,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .toggle-group{display:inline-flex;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;}
 .toggle-btn{padding:3px 10px;font-size:12px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-family:var(--font);transition:all 80ms;}
 .toggle-btn:not(:last-child){border-right:1px solid var(--border);}
-.toggle-btn.active{background:#7c3aed;color:#fff;}
+.toggle-btn.active{background:var(--accent);color:#fff;}
 .gasto-item{display:flex;align-items:center;gap:10px;padding:8px;border-radius:var(--r);transition:background 80ms;}
 .gasto-item:hover{background:var(--bg-hover);}
 
@@ -87,10 +96,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .k-count{font-size:12px;color:var(--text3);}
 .k-col-valor{font-size:13px;font-weight:600;color:var(--text2);font-family:var(--mono);}
 .k-cards{display:flex;flex-direction:column;gap:6px;overflow-y:auto;flex:1;padding:2px;}
-.k-card{background:var(--bg-card);border:1px solid var(--border-light);border-radius:10px;padding:10px 12px;cursor:pointer;transition:box-shadow 120ms,border-color 120ms,transform 120ms;user-select:none;box-shadow:0 1px 2px rgba(0,0,0,.04);}
-.k-card:hover{box-shadow:var(--shadow-lg);border-color:var(--border);transform:translateY(-1px);}
+.k-card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:10px 12px;cursor:pointer;transition:box-shadow 120ms,border-color 120ms,transform 120ms;user-select:none;box-shadow:var(--shadow);}
+.k-card:hover{box-shadow:var(--shadow-lg);border-color:#d0c8be;transform:translateY(-1px);}
 .k-card.dragging{opacity:.4;}
-.k-col.drag-over{background:rgba(124,58,237,.06);border-radius:10px;}
+.k-col.drag-over{background:var(--copper-soft);border-radius:14px;}
 .k-card-name{font-size:14px;font-weight:500;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .k-card-phone{font-size:12px;color:var(--text3);font-family:var(--mono);}
 .k-card-detail{font-size:12px;color:var(--text2);margin-top:4px;}
@@ -147,7 +156,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .msg-time{font-size:10px;margin-top:3px;opacity:.5;text-align:right;}
 .chat-input-area{padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0;background:#fff;}
 .chat-input{flex:1;padding:8px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r2);color:var(--text);font-size:13px;font-family:var(--font);outline:none;}
-.chat-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(46,170,220,.15);}
+.chat-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(139,94,60,.1);}
 .chat-input::placeholder{color:var(--text3);}
 .send-btn{width:36px;height:36px;border-radius:var(--r2);background:var(--accent);border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .send-btn:hover{opacity:.85;}
@@ -172,7 +181,7 @@ tbody td{padding:8px 12px;font-size:14px;}
 .form-group{margin-bottom:14px;}
 .form-label{font-size:12px;font-weight:400;color:var(--text2);margin-bottom:4px;display:block;}
 .form-input,.form-select{width:100%;padding:7px 10px;background:#fff;border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:14px;font-family:var(--font);outline:none;}
-.form-input:focus,.form-select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(46,170,220,.15);}
+.form-input:focus,.form-select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(139,94,60,.1);}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border-light);}
 
@@ -250,7 +259,7 @@ tbody td{padding:8px 12px;font-size:14px;}
 .note-text{font-size:14px;margin-top:3px;line-height:1.6;}
 .note-input-row{display:flex;gap:8px;margin-top:8px;}
 .note-input{flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:var(--r2);font-size:14px;font-family:var(--font);color:var(--text);outline:none;}
-.note-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(46,170,220,.15);}
+.note-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(139,94,60,.1);}
 .note-input::placeholder{color:var(--text3);}
 
 /* Toast */
@@ -269,33 +278,44 @@ tbody td{padding:8px 12px;font-size:14px;}
 
 <!-- ===== SIDEBAR ===== -->
 <aside class="sidebar">
-  <div class="sidebar-brand"><span class="hl">CRM</span>AVANTEX</div>
+  <div class="sidebar-brand">
+    <div class="tag-grupo">GRUPO</div>
+    <div class="wm-row"><span class="wm-steel">AVANTE</span><span class="wm-x">X</span></div>
+    <small>CRM Pipeline</small>
+  </div>
 
-  <div class="slink active" onclick="showView('dashboard',this)">&#128202; Dashboard</div>
-  <div class="slink" onclick="showView('mihoy',this)">&#127919; Mi dia <span class="slink-badge" style="color:#ef4444;font-weight:600;" id="mihoy-badge"></span></div>
-  <div class="slink" onclick="showView('pipeline',this)">&#128203; Pipeline</div>
-  <div class="slink" onclick="showView('leads',this)">&#128101; Leads</div>
-  <div class="slink admin-only" onclick="showView('vendedores',this)">&#128100; Vendedores</div>
-  <div class="slink" onclick="showView('proyecto',this)">&#128221; Proyecto</div>
-  <a href="/cs/" class="slink admin-only">&#127961; CS Dashboard</a>
+  <nav style="flex:1;overflow-y:auto;padding:8px 0;">
+    <div class="sidebar-section">Navegacion</div>
+    <div class="slink active" onclick="showView('dashboard',this)">&#128202; Dashboard</div>
+    <div class="slink" onclick="showView('mihoy',this)">&#127919; Mi dia <span class="slink-badge" style="color:var(--red);font-weight:600;" id="mihoy-badge"></span></div>
+    <div class="slink" onclick="showView('pipeline',this)">&#128203; Pipeline</div>
+    <div class="slink" onclick="showView('leads',this)">&#128101; Leads</div>
+    <div class="slink admin-only" onclick="showView('vendedores',this)">&#128100; Vendedores</div>
+    <div class="slink" onclick="showView('proyecto',this)">&#128221; Proyecto</div>
 
-  <div class="sidebar-divider"></div>
-  <div class="sidebar-section">Unidades de negocio</div>
-  <div class="slink" data-marca="Aromatex Home" onclick="setFiltroMarca('Aromatex Home',this)">&#127810; Aromatex Home</div>
-  <div class="slink" data-marca="Aromatex" onclick="setFiltroMarca('Aromatex',this)">&#127811; Aromatex</div>
-  <div class="slink" data-marca="Pestex" onclick="setFiltroMarca('Pestex',this)">&#128027; Pestex</div>
-  <div class="slink" data-marca="Weldex" onclick="setFiltroMarca('Weldex',this)">&#128293; Weldex</div>
-  <div class="slink" data-marca="Nexo" onclick="setFiltroMarca('Nexo',this)">&#128279; Nexo</div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">Unidades de negocio</div>
+    <div class="slink" data-marca="Aromatex Home" onclick="setFiltroMarca('Aromatex Home',this)">&#127810; Aromatex Home</div>
+    <div class="slink" data-marca="Aromatex" onclick="setFiltroMarca('Aromatex',this)">&#127811; Aromatex</div>
+    <div class="slink" data-marca="Pestex" onclick="setFiltroMarca('Pestex',this)">&#128027; Pestex</div>
+    <div class="slink" data-marca="Weldex" onclick="setFiltroMarca('Weldex',this)">&#128293; Weldex</div>
+    <div class="slink" data-marca="Nexo" onclick="setFiltroMarca('Nexo',this)">&#128279; Nexo</div>
+
+    <div class="sidebar-divider admin-only"></div>
+    <div class="sidebar-section admin-only">Administracion</div>
+    <a href="/cs/" class="slink admin-only">&#127961; CS Dashboard</a>
+    <div class="slink admin-only" onclick="showView('integraciones',this)">&#128268; Integraciones</div>
+  </nav>
 
   <div class="sidebar-bottom">
-    <div style="display:flex;align-items:center;gap:8px;padding:4px 0 8px;">
-      <div style="width:26px;height:26px;border-radius:50%;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;">{{ user_nombre[:2]|upper }}</div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:12px;font-weight:500;color:rgba(255,255,255,.85);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ user_nombre }}</div>
-        <div style="font-size:11px;color:rgba(255,255,255,.4);">{{ user_rol }}</div>
-      </div>
-      <a href="/logout" style="font-size:11px;color:rgba(255,255,255,.35);text-decoration:none;">&#9211;</a>
+    <div class="avatar">{{ user_nombre[:2]|upper }}</div>
+    <div class="meta">
+      <div class="name">{{ user_nombre }}</div>
+      <div class="role">{{ user_rol }}</div>
     </div>
+    <a href="/logout" style="color:var(--text3);text-decoration:none;font-size:14px;" title="Salir">&#9211;</a>
+  </div>
+  <div style="padding:4px 12px 10px;">
     <div class="ws-status"><div class="ws-dot" id="ws-dot"></div><span id="ws-label">Conectando...</span></div>
   </div>
 </aside>
@@ -865,6 +885,54 @@ tbody td{padding:8px 12px;font-size:14px;}
   </div>
 </div>
 
+<!-- ===== INTEGRACIONES ===== -->
+<div class="view" id="view-integraciones" style="overflow-y:auto;">
+  <div class="page-header"><div class="page-title">Integraciones</div><div class="page-desc">Estado de conexiones WhatsApp y servicios externos</div></div>
+  <div style="padding:20px 48px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+
+    <!-- WhatsApp Cloud API -->
+    <div class="dash-card">
+      <div class="dash-card-title">WhatsApp Cloud API (Meta)</div>
+      <div style="display:flex;flex-direction:column;gap:10px;font-size:13px;">
+        <div style="display:flex;justify-content:space-between;"><span style="color:var(--text2);">WHATSAPP_PHONE_ID</span><span style="font-family:var(--mono);font-size:11px;" id="int-phone-id">—</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:var(--text2);">WHATSAPP_TOKEN</span><span id="int-wa-token">—</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:var(--text2);">META_VERIFY_TOKEN</span><span id="int-verify">—</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:var(--text2);">Webhook URL</span><span style="font-family:var(--mono);font-size:11px;color:var(--accent);">/webhook/whatsapp</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px solid var(--border);"><span style="font-weight:600;">Estado</span><span id="int-cloud-status" style="display:inline-flex;align-items:center;gap:4px;">Verificando...</span></div>
+      </div>
+    </div>
+
+    <!-- Baileys Bot -->
+    <div class="dash-card">
+      <div class="dash-card-title">WhatsApp Baileys Bot</div>
+      <div style="display:flex;flex-direction:column;gap:10px;font-size:13px;">
+        <div style="display:flex;justify-content:space-between;"><span style="color:var(--text2);">BAILEYS_URL</span><span style="font-family:var(--mono);font-size:11px;" id="int-baileys-url">—</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--text2);">Estado del servicio</span><span id="int-baileys-status">Verificando...</span></div>
+        <div id="int-baileys-sessions" style="padding-top:8px;border-top:1px solid var(--border);"></div>
+        <div style="padding-top:8px;border-top:1px solid var(--border);">
+          <span style="font-size:12px;font-weight:600;">Vincular nuevo numero</span>
+          <div style="display:flex;gap:8px;margin-top:6px;">
+            <input class="form-input" id="int-scan-session" placeholder="Nombre sesion (ej: janeth)" style="flex:1;font-size:12px;padding:6px 10px;"/>
+            <button class="btn btn-filled" onclick="openScanPage()" style="font-size:12px;">Escanear QR</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vendedores Baileys -->
+    <div class="dash-card" style="grid-column:1/-1;">
+      <div class="dash-card-title">Vendedores — Sesiones WhatsApp</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Vendedor</th><th>Sesion Baileys</th><th>Zona Cobertura</th><th>En Turno</th><th>Estado Conexion</th></tr></thead>
+          <tbody id="int-vendedores-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 </main>
 </div>
 
@@ -1128,6 +1196,7 @@ function showView(name,el){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name)?.classList.add('active');
   if(el){document.querySelectorAll('.sidebar .slink:not([data-marca])').forEach(s=>s.classList.remove('active'));el.classList.add('active');}
+  if(name==='integraciones')loadIntegraciones();
 }
 
 // UN filter
@@ -2067,6 +2136,57 @@ function applyRoleVisibility(){
   if(IS_ADMIN)return;
   // Hide elements for vendedor role
   document.querySelectorAll('.admin-only').forEach(el=>el.style.display='none');
+}
+
+// ── Integraciones ──
+async function loadIntegraciones(){
+  // Cloud API status
+  const phoneId='{{ config.WHATSAPP_PHONE_ID or "" }}';
+  const hasToken='{{ "Configurado" if config.WHATSAPP_TOKEN else "No configurado" }}';
+  const verifyToken='{{ config.META_VERIFY_TOKEN or "" }}';
+  document.getElementById('int-phone-id').textContent=phoneId||'No configurado';
+  document.getElementById('int-wa-token').innerHTML=hasToken==='Configurado'?'<span style="color:var(--green);">Configurado</span>':'<span style="color:var(--red);">No configurado</span>';
+  document.getElementById('int-verify').textContent=verifyToken||'No configurado';
+  document.getElementById('int-cloud-status').innerHTML=(phoneId&&hasToken==='Configurado')?'<span style="color:var(--green);font-weight:600;">Activo</span>':'<span style="color:var(--red);font-weight:600;">Incompleto</span>';
+
+  // Baileys status
+  const baileysUrl='{{ config.get("BAILEYS_URL","") if config is defined else "" }}';
+  document.getElementById('int-baileys-url').textContent=baileysUrl||'No configurado';
+  if(baileysUrl){
+    try{
+      const r=await fetch(baileysUrl+'/health');const d=await r.json();
+      document.getElementById('int-baileys-status').innerHTML='<span style="color:var(--green);font-weight:600;">En linea</span>';
+      const sessDiv=document.getElementById('int-baileys-sessions');
+      sessDiv.innerHTML='<div style="font-size:12px;font-weight:600;margin-bottom:6px;">Sesiones activas</div>';
+      for(const[id,status]of Object.entries(d.sessions||{})){
+        const color=status==='connected'?'var(--green)':status==='qr_ready'?'var(--yellow)':'var(--text3)';
+        sessDiv.innerHTML+=`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px;"><span>${id}</span><span style="color:${color};font-weight:600;">${status}</span></div>`;
+      }
+    }catch(e){
+      document.getElementById('int-baileys-status').innerHTML='<span style="color:var(--red);font-weight:600;">Desconectado</span>';
+    }
+  }else{
+    document.getElementById('int-baileys-status').innerHTML='<span style="color:var(--text3);">No configurado</span>';
+  }
+
+  // Vendedores + sesiones
+  try{
+    const r=await fetch('/api/vendedores/');const vendedores=await r.json();
+    const tb=document.getElementById('int-vendedores-tbody');tb.innerHTML='';
+    vendedores.forEach(v=>{
+      const turno=v.en_turno?'<span style="color:var(--green);">Si</span>':'<span style="color:var(--red);">No</span>';
+      const sess=v.baileys_session||'—';
+      const zona=(v.zona_cobertura||[]).join(', ')||'—';
+      tb.innerHTML+=`<tr><td style="font-weight:500;">${v.nombre}</td><td style="font-family:var(--mono);font-size:12px;">${sess}</td><td style="font-size:12px;">${zona}</td><td>${turno}</td><td id="int-v-status-${sess}">—</td></tr>`;
+    });
+  }catch(e){}
+}
+function openScanPage(){
+  const s=document.getElementById('int-scan-session').value.trim().toLowerCase().replace(/\s/g,'_');
+  if(!s){alert('Ingresa un nombre de sesion');return;}
+  const url='{{ config.get("BAILEYS_URL","") if config is defined else "" }}';
+  if(!url){alert('BAILEYS_URL no configurado');return;}
+  window.open(url+'/scan/'+s,'_blank');
 }
 
 // Init
