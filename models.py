@@ -159,6 +159,7 @@ class Lead(db.Model):
     tipo_industria = db.Column(db.Text, nullable=True)
     tamano_empresa = db.Column(db.Text, nullable=True)
     estado_cliente = db.Column(db.String(100), nullable=True)  # Estado normalizado (ej: "Nuevo León")
+    empresa_nombre = db.Column(db.String(200), nullable=True)  # Nombre de la empresa (del bot)
 
     # FK → usuarios
     usuario_asignado_id = db.Column(

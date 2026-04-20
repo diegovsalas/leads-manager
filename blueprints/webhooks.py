@@ -257,7 +257,7 @@ def _handle_bot_step(lead, contenido, telefono_wa):
         _save_bot_msg(lead, resp)
 
     elif step == "waiting_empresa":
-        lead.tipo_cliente = texto  # guardar empresa
+        lead.empresa_nombre = texto
         lead.bot_step = "waiting_sucursales"
         db.session.commit()
         resp = "¿Cuántas sucursales tienen?"
@@ -420,7 +420,7 @@ def recibir_mensaje_baileys():
                 "estado": lead_data.get("estado", ""),
             })
             # Guardar datos de calificación
-            lead.tipo_cliente = lead_data.get("empresa", "")
+            lead.empresa_nombre = lead_data.get("empresa", "")
             suc = lead_data.get("sucursales", "0") or "0"
             lead.num_sucursales = int("".join(c for c in str(suc) if c.isdigit()) or "0")
             db.session.commit()
