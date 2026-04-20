@@ -471,14 +471,23 @@ def account_detail(account_id):
     suc_aromatex = suc_un[0] if suc_un else 0
     suc_pestex = suc_un[1] if suc_un else 0
 
-    # Citas agrupadas por UN
-    citas_por_un = {"AROMATEX": {"total": 0, "terminadas": 0}, "PESTEX": {"total": 0, "terminadas": 0}}
-    for apt in appointments:
-        un = _classify_servicio(apt.titulo_servicio)
-        if un in citas_por_un:
-            citas_por_un[un]["total"] += 1
-            if apt.estatus == "Terminada":
-                citas_por_un[un]["terminadas"] += 1
+    # Citas agrupadas por UN (query aggregate, sin limit)
+    _is_aro = db.or_(CSAppointment.titulo_servicio.ilike("%aroma%"), CSAppointment.titulo_servicio.ilike("%instalacion%"))
+    _is_pest = db.or_(CSAppointment.titulo_servicio.ilike("%fumig%"), CSAppointment.titulo_servicio.ilike("%plaga%"), CSAppointment.titulo_servicio.ilike("%pestex%"))
+    citas_un_row = db.session.query(
+        func.sum(sa_case((_is_aro, 1), else_=0)),
+        func.sum(sa_case((db.and_(_is_aro, CSAppointment.estatus == "Terminada"), 1), else_=0)),
+        func.sum(sa_case((_is_pest, 1), else_=0)),
+        func.sum(sa_case((db.and_(_is_pest, CSAppointment.estatus == "Terminada"), 1), else_=0)),
+    ).filter(
+        CSAppointment.account_id == account.id,
+        CSAppointment.fecha_inicio >= inicio,
+        CSAppointment.fecha_inicio < fin,
+    ).first()
+    citas_por_un = {
+        "AROMATEX": {"total": int(citas_un_row[0] or 0), "terminadas": int(citas_un_row[1] or 0)},
+        "PESTEX": {"total": int(citas_un_row[2] or 0), "terminadas": int(citas_un_row[3] or 0)},
+    }
 
     notes = CSNote.query.filter_by(account_id=account.id).order_by(CSNote.created_at.desc()).all()
     tasks = CSTask.query.filter_by(account_id=account.id).order_by(CSTask.completada, CSTask.fecha_limite).all()
