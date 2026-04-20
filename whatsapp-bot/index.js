@@ -18,6 +18,7 @@ const {
   makeCacheableSignalKeyStore,
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
+const QRCode = require("qrcode");
 const fs = require("fs");
 const path = require("path");
 
@@ -145,7 +146,12 @@ async function connectSession(sessionId) {
 
     if (qr) {
       sessions[sessionId].qrAttempts = (sessions[sessionId].qrAttempts || 0) + 1;
-      sessions[sessionId].qr = qr;
+      try {
+        sessions[sessionId].qr = await QRCode.toString(qr, { type: "svg", margin: 2 });
+      } catch (e) {
+        sessions[sessionId].qr = null;
+        logger.warn(`[${sessionId}] Error SVG: ${e.message}`);
+      }
       sessions[sessionId].status = "qr_ready";
       logger.info(`[${sessionId}] QR #${sessions[sessionId].qrAttempts} generado`);
 
@@ -366,59 +372,46 @@ app.get("/scan/:sessionId", (req, res) => {
   const { sessionId } = req.params;
   res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>WhatsApp — ${sessionId}</title>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"><\/script>
-<style>*{margin:0;box-sizing:border-box}body{font-family:Inter,system-ui,sans-serif;background:#1e1b3a;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh}
+<style>*{margin:0;box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#1e1b3a;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh}
 .card{background:#fff;border-radius:16px;padding:40px;text-align:center;max-width:400px;width:90%;color:#333}
 .card h2{font-size:20px;margin-bottom:4px}.card p{font-size:13px;color:#888;margin-bottom:20px}
 #qr-box{width:280px;height:280px;margin:0 auto;border-radius:12px;background:#f5f5f5;display:flex;align-items:center;justify-content:center;overflow:hidden}
-#qr-box canvas{width:100%!important;height:100%!important;border-radius:12px}
+#qr-box img{width:100%;height:100%}
 .status{margin-top:16px;font-size:14px;font-weight:600}
-.connected{color:#22c55e}.waiting{color:#7c3aed}.error{color:#ef4444}
-#pairing{margin-top:12px;font-size:24px;letter-spacing:4px;font-weight:700;color:#7c3aed;display:none}
+.ok{color:#22c55e}.wait{color:#7c3aed}
 </style></head><body><div class="card">
 <h2>${sessionId.toUpperCase()}</h2>
 <p>Escanea el QR desde WhatsApp &gt; Dispositivos vinculados</p>
 <div id="qr-box"><span style="color:#aaa">Cargando...</span></div>
-<div id="pairing"></div>
-<div id="status" class="status waiting">Conectando...</div>
+<div id="status" class="status wait">Conectando...</div>
 </div>
 <script>
-var lastQr='';
+var sid='${sessionId}',sec='${BOT_SECRET}';
+function startSession(){
+  return fetch('/api/session/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:sid,secret:sec})});
+}
 function poll(){
-  fetch('/api/qr/${sessionId}').then(function(r){return r.json()}).then(function(d){
+  fetch('/api/qr/'+sid).then(function(r){return r.json()}).then(function(d){
     var box=document.getElementById('qr-box');
     var st=document.getElementById('status');
-    var pc=document.getElementById('pairing');
     if(d.status==='connected'){
-      box.innerHTML='<div style="font-size:48px">\\u2705</div>';
-      st.textContent='Conectado exitosamente';st.className='status connected';
-      pc.style.display='none';return;
+      box.innerHTML='<div style="font-size:64px">\\u2705</div>';
+      st.textContent='Conectado';st.className='status ok';return;
     }
-    if(d.status==='qr_expired'){
-      box.innerHTML='<span style="color:#888">QR expirado</span>';
-      st.textContent='Reconectando...';st.className='status waiting';
-      fetch('/api/session/start',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({session_id:'${sessionId}',secret:'${BOT_SECRET}'})
-      });
+    if(d.status==='qr_expired'||d.status==='not_started'){
+      st.textContent='Generando nuevo QR...';startSession();
       setTimeout(poll,3000);return;
     }
-    if(d.qr && d.qr!==lastQr){
-      lastQr=d.qr;
-      box.innerHTML='<canvas id="qr-canvas"></canvas>';
-      QRCode.toCanvas(document.getElementById('qr-canvas'),d.qr,{width:280,margin:2},function(err){
-        if(err) box.innerHTML='<span style="color:red">Error QR</span>';
-      });
-      st.textContent='Escanea el QR';st.className='status waiting';
-    } else if(!d.qr){
-      st.textContent='Generando QR...';st.className='status waiting';
+    if(d.qr){
+      box.innerHTML='<img src="/api/qr/'+sid+'/image?t='+Date.now()+'">';
+      st.textContent='Escanea el QR';st.className='status wait';
+    } else {
+      st.textContent='Generando QR...';
     }
-    if(d.pairing_code){pc.textContent=d.pairing_code;pc.style.display='block'}
     setTimeout(poll,2000);
   }).catch(function(){setTimeout(poll,4000)});
 }
-fetch('/api/session/start',{method:'POST',headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({session_id:'${sessionId}',secret:'${BOT_SECRET}'})
-}).then(function(){setTimeout(poll,2500)});
+startSession().then(function(){setTimeout(poll,2500)});
 <\/script></body></html>`);
 });
 
@@ -426,14 +419,24 @@ fetch('/api/session/start',{method:'POST',headers:{'Content-Type':'application/j
 app.get("/api/qr/:sessionId", (req, res) => {
   const { sessionId } = req.params;
   const session = sessions[sessionId];
-  if (!session) return res.status(404).json({ error: "Sesión no encontrada" });
+  if (!session) return res.status(404).json({ error: "Sesión no encontrada", status: "not_started" });
   if (session.status === "connected")
     return res.json({ status: "connected", qr: null, pairing_code: null });
   res.json({
     status: session.status,
-    qr: session.qr || null,
+    qr: session.qr ? true : false,
     pairing_code: session.pairingCode || null,
   });
+});
+
+// Servir QR como imagen SVG
+app.get("/api/qr/:sessionId/image", (req, res) => {
+  const { sessionId } = req.params;
+  const session = sessions[sessionId];
+  if (!session || !session.qr) return res.status(404).send("No QR");
+  res.setHeader("Content-Type", "image/svg+xml");
+  res.setHeader("Cache-Control", "no-cache");
+  res.send(session.qr);
 });
 
 // Estado de una sesión
