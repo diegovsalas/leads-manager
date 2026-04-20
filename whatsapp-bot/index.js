@@ -18,7 +18,6 @@ const {
   makeCacheableSignalKeyStore,
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
-const QRCode = require("qrcode");
 const fs = require("fs");
 const path = require("path");
 
@@ -143,14 +142,8 @@ async function connectSession(sessionId) {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      // Generar QR como SVG (no requiere node-canvas)
-      try {
-        const svg = await QRCode.toString(qr, { type: "svg", width: 280 });
-        sessions[sessionId].qr = "data:image/svg+xml;base64," + Buffer.from(svg).toString("base64");
-      } catch (e) {
-        logger.warn(`[${sessionId}] QR toSVG falló, usando fallback: ${e.message}`);
-        sessions[sessionId].qr = null;
-      }
+      // Guardar QR raw — se renderiza en el cliente via CDN
+      sessions[sessionId].qr = qr;
       sessions[sessionId].status = "qr_ready";
       logger.info(`[${sessionId}] QR generado — escanea desde el CRM`);
 
@@ -367,42 +360,50 @@ app.get("/scan/:sessionId", (req, res) => {
   const { sessionId } = req.params;
   res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>WhatsApp — ${sessionId}</title>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"><\/script>
 <style>*{margin:0;box-sizing:border-box}body{font-family:Inter,system-ui,sans-serif;background:#1e1b3a;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh}
 .card{background:#fff;border-radius:16px;padding:40px;text-align:center;max-width:400px;width:90%;color:#333}
 .card h2{font-size:20px;margin-bottom:4px}.card p{font-size:13px;color:#888;margin-bottom:20px}
-#qr-img{width:280px;height:280px;margin:0 auto;border-radius:12px;background:#f5f5f5;display:flex;align-items:center;justify-content:center}
-#qr-img img{width:100%;border-radius:12px}
+#qr-box{width:280px;height:280px;margin:0 auto;border-radius:12px;background:#f5f5f5;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#qr-box canvas{width:100%!important;height:100%!important;border-radius:12px}
 .status{margin-top:16px;font-size:14px;font-weight:600}
 .connected{color:#22c55e}.waiting{color:#7c3aed}.error{color:#ef4444}
+#pairing{margin-top:12px;font-size:24px;letter-spacing:4px;font-weight:700;color:#7c3aed;display:none}
 </style></head><body><div class="card">
 <h2>${sessionId.toUpperCase()}</h2>
-<p>Escanea el QR desde WhatsApp > Dispositivos vinculados</p>
-<div id="qr-img"><span style="color:#aaa">Cargando...</span></div>
+<p>Escanea el QR desde WhatsApp &gt; Dispositivos vinculados</p>
+<div id="qr-box"><span style="color:#aaa">Cargando...</span></div>
+<div id="pairing"></div>
 <div id="status" class="status waiting">Conectando...</div>
 </div>
 <script>
+var lastQr='';
 function poll(){
-  fetch('/api/qr/${sessionId}').then(r=>r.json()).then(d=>{
-    const el=document.getElementById('qr-img');
-    const st=document.getElementById('status');
+  fetch('/api/qr/${sessionId}').then(function(r){return r.json()}).then(function(d){
+    var box=document.getElementById('qr-box');
+    var st=document.getElementById('status');
+    var pc=document.getElementById('pairing');
     if(d.status==='connected'){
-      el.innerHTML='<div style="font-size:48px">✅</div>';
-      st.textContent='Conectado';st.className='status connected';return;
+      box.innerHTML='<div style="font-size:48px">\\u2705</div>';
+      st.textContent='Conectado';st.className='status connected';
+      pc.style.display='none';return;
     }
-    if(d.qr){
-      el.innerHTML='<img src="'+d.qr+'" alt="QR">';
+    if(d.qr && d.qr!==lastQr){
+      lastQr=d.qr;
+      box.innerHTML='<canvas id="qr-canvas"></canvas>';
+      QRCode.toCanvas(document.getElementById('qr-canvas'),d.qr,{width:280,margin:2},function(err){
+        if(err) box.innerHTML='<span style="color:red">Error QR</span>';
+      });
       st.textContent='Escanea el QR';st.className='status waiting';
-    } else {
-      st.textContent='Generando QR... ('+d.status+')';st.className='status waiting';
     }
+    if(d.pairing_code){pc.textContent=d.pairing_code;pc.style.display='block'}
     setTimeout(poll,3000);
-  }).catch(()=>{setTimeout(poll,5000);});
+  }).catch(function(){setTimeout(poll,5000)});
 }
-// Auto-start session
 fetch('/api/session/start',{method:'POST',headers:{'Content-Type':'application/json'},
   body:JSON.stringify({session_id:'${sessionId}',secret:'${BOT_SECRET}'})
-}).then(()=>setTimeout(poll,2000));
-</script></body></html>`);
+}).then(function(){setTimeout(poll,2000)});
+<\/script></body></html>`);
 });
 
 // Obtener QR y/o pairing code para vincular
