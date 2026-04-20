@@ -96,6 +96,7 @@ class Usuario(db.Model):
     ultimo_lead_asignado = db.Column(db.DateTime(timezone=True), nullable=True)
     en_turno = db.Column(db.Boolean, default=True, nullable=False)
     baileys_session = db.Column(db.String(50), nullable=True)  # ej: "janeth", "azael" — para /scan/{session}
+    zona_cobertura = db.Column(ARRAY(db.String(80)), nullable=False, default=list, server_default="{}")  # ej: {"Nuevo León", "Tamaulipas"}
 
     # Relaciones
     leads = db.relationship("Lead", back_populates="usuario_asignado", lazy="dynamic")
@@ -157,6 +158,7 @@ class Lead(db.Model):
     num_sucursales = db.Column(db.Integer, nullable=True)
     tipo_industria = db.Column(db.Text, nullable=True)
     tamano_empresa = db.Column(db.Text, nullable=True)
+    estado_cliente = db.Column(db.String(100), nullable=True)  # Estado normalizado (ej: "Nuevo León")
 
     # FK → usuarios
     usuario_asignado_id = db.Column(

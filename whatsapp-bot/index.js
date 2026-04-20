@@ -283,6 +283,13 @@ async function handleBot(sessionId, jid, contenido, pushName) {
 
     case "waiting_sucursales":
       state.sucursales = contenido.trim();
+      state.step = "waiting_estado";
+      return {
+        message: `¿En qué estado o ciudad se encuentran?`,
+      };
+
+    case "waiting_estado":
+      state.estado = contenido.trim();
       state.step = "waiting_servicio";
       const opciones = un.servicios
         .map((s, i) => `${i + 1}. ${s}`)
@@ -303,6 +310,7 @@ async function handleBot(sessionId, jid, contenido, pushName) {
         nombre: state.nombre,
         empresa: state.empresa,
         sucursales: state.sucursales,
+        estado: state.estado,
         servicio: state.servicio,
         marca: un.nombre,
         sessionId,

@@ -269,6 +269,15 @@ def _handle_bot_step(lead, contenido, telefono_wa):
             lead.num_sucursales = int("".join(c for c in texto if c.isdigit()) or "0")
         except Exception:
             lead.num_sucursales = 0
+        lead.bot_step = "waiting_estado"
+        db.session.commit()
+        resp = "¿En qué estado o ciudad se encuentran?"
+        _bot_send(telefono_wa, resp)
+        _save_bot_msg(lead, resp)
+
+    elif step == "waiting_estado":
+        from asignacion import normalizar_estado
+        lead.estado_cliente = normalizar_estado(texto)
         lead.bot_step = "waiting_servicio"
         db.session.commit()
         resp = ("¿Qué servicio le interesa?\n\n"
@@ -408,10 +417,12 @@ def recibir_mensaje_baileys():
                 "nombre": lead_data.get("nombre", nombre),
                 "origen": OrigenLead.WHATSAPP_ORGANICO.value,
                 "marca_interes": marca,
+                "estado": lead_data.get("estado", ""),
             })
             # Guardar datos de calificación
             lead.tipo_cliente = lead_data.get("empresa", "")
-            lead.num_sucursales = int(lead_data.get("sucursales", "0") or "0") if str(lead_data.get("sucursales", "")).strip().isdigit() else 0
+            suc = lead_data.get("sucursales", "0") or "0"
+            lead.num_sucursales = int("".join(c for c in str(suc) if c.isdigit()) or "0")
             db.session.commit()
 
             logger.info(f"Lead Baileys calificado: {lead.nombre} → {lead.usuario_asignado.nombre if lead.usuario_asignado else 'Sin asignar'}")
