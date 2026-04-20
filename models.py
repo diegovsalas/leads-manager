@@ -95,6 +95,7 @@ class Usuario(db.Model):
     )
     ultimo_lead_asignado = db.Column(db.DateTime(timezone=True), nullable=True)
     en_turno = db.Column(db.Boolean, default=True, nullable=False)
+    baileys_session = db.Column(db.String(50), nullable=True)  # ej: "janeth", "azael" — para /scan/{session}
 
     # Relaciones
     leads = db.relationship("Lead", back_populates="usuario_asignado", lazy="dynamic")

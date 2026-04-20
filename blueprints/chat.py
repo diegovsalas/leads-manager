@@ -45,16 +45,21 @@ def enviar_mensaje(lead_id):
     enviado = False
     wa_message_id = None
 
-    # ── Intentar enviar vía Baileys ─────────────
+    # ── Intentar enviar vía Baileys (sesión personal del vendedor) ─────────────
     baileys_url = os.getenv("BAILEYS_URL", "")
     bot_secret = os.getenv("BOT_SECRET", "avantex-bot-2026")
-    # Determinar sesión por marca del lead
-    session_map = {
-        "Aromatex": "aromatex", "Pestex": "pestex",
-        "Weldex": "weldex", "Nexo": "nexo",
-        "Aromatex Home": "aromatex_home",
-    }
-    session_id = session_map.get(lead.marca_interes, "aromatex")
+    # Usar sesión personal del vendedor asignado (si tiene Baileys configurado)
+    session_id = None
+    if lead.usuario_asignado and lead.usuario_asignado.baileys_session:
+        session_id = lead.usuario_asignado.baileys_session
+    else:
+        # Fallback: sesión por marca
+        session_map = {
+            "Aromatex": "aromatex", "Pestex": "pestex",
+            "Weldex": "weldex", "Nexo": "nexo",
+            "Aromatex Home": "aromatex_home",
+        }
+        session_id = session_map.get(lead.marca_interes, "aromatex")
 
     if baileys_url:
         try:
