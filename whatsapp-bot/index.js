@@ -127,12 +127,14 @@ async function connectSession(sessionId) {
     browser: ["Ubuntu", "Chrome", "20.0.04"],
   });
 
+  const prev = sessions[sessionId] || {};
   sessions[sessionId] = {
     sock,
     qr: null,
     pairingCode: null,
     status: "connecting",
-    phoneNumber: null,
+    phoneNumber: prev.phoneNumber || null,
+    qrAttempts: 0,
   };
 
   // ── Eventos de conexión ──
@@ -142,10 +144,10 @@ async function connectSession(sessionId) {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      // Guardar QR raw — se renderiza en el cliente via CDN
+      sessions[sessionId].qrAttempts = (sessions[sessionId].qrAttempts || 0) + 1;
       sessions[sessionId].qr = qr;
       sessions[sessionId].status = "qr_ready";
-      logger.info(`[${sessionId}] QR generado — escanea desde el CRM`);
+      logger.info(`[${sessionId}] QR #${sessions[sessionId].qrAttempts} generado`);
 
       // Si hay número registrado, generar pairing code también
       const phone = sessions[sessionId].phoneNumber;
@@ -163,23 +165,27 @@ async function connectSession(sessionId) {
     if (connection === "open") {
       sessions[sessionId].qr = null;
       sessions[sessionId].pairingCode = null;
+      sessions[sessionId].qrAttempts = 0;
       sessions[sessionId].status = "connected";
       logger.info(`[${sessionId}] ✅ Conectado a WhatsApp`);
     }
 
     if (connection === "close") {
       const code = lastDisconnect?.error?.output?.statusCode;
-      const shouldReconnect = code !== DisconnectReason.loggedOut;
-      logger.warn(
-        `[${sessionId}] Desconectado (code=${code}). Reconectar: ${shouldReconnect}`
-      );
+      logger.warn(`[${sessionId}] Desconectado (code=${code})`);
 
-      if (shouldReconnect) {
-        sessions[sessionId].status = "reconnecting";
-        setTimeout(() => connectSession(sessionId), 5000);
-      } else {
+      if (code === DisconnectReason.loggedOut) {
         sessions[sessionId].status = "logged_out";
         fs.rmSync(authDir, { recursive: true, force: true });
+      } else if (code === 408) {
+        // QR expiró sin escanear — NO reconectar automáticamente, esperar que el usuario pida otro
+        sessions[sessionId].status = "qr_expired";
+        sessions[sessionId].qr = null;
+        logger.info(`[${sessionId}] QR expirado. Visita /scan/${sessionId} para reintentar.`);
+      } else {
+        // Desconexión real — reconectar
+        sessions[sessionId].status = "reconnecting";
+        setTimeout(() => connectSession(sessionId), 5000);
       }
     }
   });
@@ -385,8 +391,16 @@ function poll(){
     var pc=document.getElementById('pairing');
     if(d.status==='connected'){
       box.innerHTML='<div style="font-size:48px">\\u2705</div>';
-      st.textContent='Conectado';st.className='status connected';
+      st.textContent='Conectado exitosamente';st.className='status connected';
       pc.style.display='none';return;
+    }
+    if(d.status==='qr_expired'){
+      box.innerHTML='<span style="color:#888">QR expirado</span>';
+      st.textContent='Reconectando...';st.className='status waiting';
+      fetch('/api/session/start',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({session_id:'${sessionId}',secret:'${BOT_SECRET}'})
+      });
+      setTimeout(poll,3000);return;
     }
     if(d.qr && d.qr!==lastQr){
       lastQr=d.qr;
@@ -395,14 +409,16 @@ function poll(){
         if(err) box.innerHTML='<span style="color:red">Error QR</span>';
       });
       st.textContent='Escanea el QR';st.className='status waiting';
+    } else if(!d.qr){
+      st.textContent='Generando QR...';st.className='status waiting';
     }
     if(d.pairing_code){pc.textContent=d.pairing_code;pc.style.display='block'}
-    setTimeout(poll,3000);
-  }).catch(function(){setTimeout(poll,5000)});
+    setTimeout(poll,2000);
+  }).catch(function(){setTimeout(poll,4000)});
 }
 fetch('/api/session/start',{method:'POST',headers:{'Content-Type':'application/json'},
   body:JSON.stringify({session_id:'${sessionId}',secret:'${BOT_SECRET}'})
-}).then(function(){setTimeout(poll,2000)});
+}).then(function(){setTimeout(poll,2500)});
 <\/script></body></html>`);
 });
 
