@@ -143,8 +143,14 @@ async function connectSession(sessionId) {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      // Generar QR como imagen base64
-      sessions[sessionId].qr = await QRCode.toDataURL(qr);
+      // Generar QR como SVG (no requiere node-canvas)
+      try {
+        const svg = await QRCode.toString(qr, { type: "svg", width: 280 });
+        sessions[sessionId].qr = "data:image/svg+xml;base64," + Buffer.from(svg).toString("base64");
+      } catch (e) {
+        logger.warn(`[${sessionId}] QR toSVG falló, usando fallback: ${e.message}`);
+        sessions[sessionId].qr = null;
+      }
       sessions[sessionId].status = "qr_ready";
       logger.info(`[${sessionId}] QR generado — escanea desde el CRM`);
 
