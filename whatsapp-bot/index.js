@@ -229,17 +229,16 @@ async function connectSession(sessionId) {
         `[${sessionId}] Mensaje de ${telefono} (${pushName}): ${contenido}`
       );
 
-      // ── Bot de calificación ──
+      // ── Siempre enviar mensaje del cliente al CRM ──
       const botResponse = await handleBot(sessionId, jid, contenido, pushName);
+      await sendWebhook(sessionId, telefono, pushName, contenido,
+        botResponse && botResponse.completed ? botResponse.leadData : null);
+
+      // ── Si el bot tiene respuesta, enviarla por WhatsApp y al CRM ──
       if (botResponse) {
         await sock.sendMessage(jid, { text: botResponse.message });
-        // Si el bot completó la calificación, enviar webhook
-        if (botResponse.completed) {
-          await sendWebhook(sessionId, telefono, pushName, contenido, botResponse.leadData);
-        }
-      } else {
-        // Bot inactivo — pasar mensaje directo al CRM
-        await sendWebhook(sessionId, telefono, pushName, contenido, null);
+        // Guardar respuesta del bot en CRM
+        await sendWebhook(sessionId, telefono, "BOT", botResponse.message, null, "bot");
       }
     }
   });
@@ -324,7 +323,7 @@ async function handleBot(sessionId, jid, contenido, pushName) {
 // ══════════════════════════════════════════════
 // Webhook a Flask
 // ══════════════════════════════════════════════
-async function sendWebhook(sessionId, telefono, pushName, contenido, leadData) {
+async function sendWebhook(sessionId, telefono, pushName, contenido, leadData, direccion) {
   const payload = {
     secret: BOT_SECRET,
     session_id: sessionId,
@@ -332,6 +331,7 @@ async function sendWebhook(sessionId, telefono, pushName, contenido, leadData) {
     nombre: pushName || (leadData && leadData.nombre) || "",
     contenido,
     lead_data: leadData,
+    direccion: direccion || "entrante",
     timestamp: new Date().toISOString(),
   };
 

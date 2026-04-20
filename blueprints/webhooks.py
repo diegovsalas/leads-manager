@@ -389,6 +389,7 @@ def recibir_mensaje_baileys():
     contenido = data.get("contenido", "")
     session_id = data.get("session_id", "")
     lead_data = data.get("lead_data")
+    direccion = data.get("direccion", "entrante")
 
     if not telefono:
         return jsonify({"error": "telefono requerido"}), 400
@@ -441,15 +442,17 @@ def recibir_mensaje_baileys():
         db.session.flush()
 
     # ── Guardar mensaje ──
+    msg_dir = DireccionMensaje.SALIENTE_BOT if direccion == "bot" else DireccionMensaje.ENTRANTE
     nuevo_mensaje = MensajeWhatsapp(
         lead_id=lead.id,
-        direccion=DireccionMensaje.ENTRANTE,
+        direccion=msg_dir,
         contenido=contenido,
     )
 
     from datetime import datetime, timezone as tz
-    lead.respondio_ultimo_contacto = True
-    lead.fecha_ultimo_contacto = datetime.now(tz.utc)
+    if direccion != "bot":
+        lead.respondio_ultimo_contacto = True
+        lead.fecha_ultimo_contacto = datetime.now(tz.utc)
 
     db.session.add(nuevo_mensaje)
     db.session.commit()
