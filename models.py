@@ -169,6 +169,9 @@ class Lead(db.Model):
     meta_ad_id = db.Column(db.String(100), nullable=True)
     meta_campaign = db.Column(db.String(200), nullable=True)
 
+    # Bot presales
+    bot_step = db.Column(db.String(30), nullable=True)  # waiting_name, waiting_empresa, waiting_sucursales, waiting_servicio, transferred, None
+
     # Timestamps
     fecha_creacion = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
     fecha_actualizacion = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)

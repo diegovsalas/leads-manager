@@ -158,10 +158,11 @@ def recibir_mensaje_whatsapp():
 
 def _procesar_mensaje_whatsapp(value: dict):
     """
-    Guarda el mensaje en la BD y emite evento SocketIO hacia el frontend.
-    Si el contacto no existe como Lead, lo crea con asignación Round-Robin.
+    Guarda el mensaje en la BD, ejecuta bot presales si aplica,
+    y emite evento SocketIO hacia el frontend.
     """
     from asignacion import asignar_lead_comercial
+    from datetime import datetime, timezone as tz
 
     mensajes_wa = value.get("messages", [])
     contactos   = {c["wa_id"]: c for c in value.get("contacts", [])}
@@ -179,28 +180,20 @@ def _procesar_mensaje_whatsapp(value: dict):
 
         # ── Buscar o crear el Lead ──────────────
         lead = Lead.query.filter_by(telefono=telefono).first()
+        is_new = lead is None
         if not lead:
             contacto  = contactos.get(telefono_wa, {})
             nombre_wa = contacto.get("profile", {}).get("name", telefono)
 
-            try:
-                lead = asignar_lead_comercial({
-                    "telefono":      telefono,
-                    "nombre":        nombre_wa,
-                    "origen":        OrigenLead.WHATSAPP_ORGANICO.value,
-                    "marca_interes": "",
-                })
-            except ValueError:
-                # Sin vendedores disponibles — crear sin asignar
-                lead = Lead(
-                    nombre         = nombre_wa,
-                    telefono       = telefono,
-                    origen         = OrigenLead.WHATSAPP_ORGANICO,
-                    etapa_pipeline = EtapaPipeline.NUEVO_LEAD,
-                )
-                db.session.add(lead)
-                db.session.flush()
-
+            lead = Lead(
+                nombre         = nombre_wa,
+                telefono       = telefono,
+                origen         = OrigenLead.WHATSAPP_ORGANICO,
+                etapa_pipeline = EtapaPipeline.NUEVO_LEAD,
+                bot_step       = "waiting_name",
+            )
+            db.session.add(lead)
+            db.session.flush()
             logger.info(f"Lead creado desde WhatsApp: {lead.nombre} ({telefono})")
 
         # ── Extraer contenido según el tipo ────
@@ -213,15 +206,12 @@ def _procesar_mensaje_whatsapp(value: dict):
             direccion       = DireccionMensaje.ENTRANTE,
             contenido       = contenido,
         )
-        # ── Registrar respuesta (detiene cadencia) ──
-        from datetime import datetime, timezone as tz
         lead.respondio_ultimo_contacto = True
         lead.fecha_ultimo_contacto = datetime.now(tz.utc)
-
         db.session.add(nuevo_mensaje)
         db.session.commit()
 
-        logger.info(f"Mensaje WA guardado: lead={lead.id}, tipo={tipo}, cadencia detenida")
+        logger.info(f"Mensaje WA guardado: lead={lead.id}, tipo={tipo}")
 
         # ── Emitir evento SocketIO al frontend ──
         socketio.emit("nuevo_mensaje", {
@@ -234,6 +224,140 @@ def _procesar_mensaje_whatsapp(value: dict):
             "lead_nombre": lead.nombre,
             "preview":     contenido[:80],
         })
+
+        # ── Bot presales automático ──
+        if is_new:
+            # Primer mensaje — enviar bienvenida
+            _bot_send(telefono_wa, "Hola! Bienvenido a *Grupo Avantex*.\nSomos especialistas en servicios para tu negocio.\n\n¿Con quién tengo el gusto?")
+            _save_bot_msg(lead, "Hola! Bienvenido a *Grupo Avantex*.\nSomos especialistas en servicios para tu negocio.\n\n¿Con quién tengo el gusto?")
+        elif lead.bot_step and lead.bot_step != "transferred":
+            _handle_bot_step(lead, contenido, telefono_wa)
+
+
+def _handle_bot_step(lead, contenido, telefono_wa):
+    """Maneja el flujo del bot presales paso a paso."""
+    from asignacion import asignar_lead_comercial
+
+    step = lead.bot_step
+    texto = contenido.strip()
+
+    if step == "waiting_name":
+        lead.nombre = texto
+        lead.bot_step = "waiting_empresa"
+        db.session.commit()
+        resp = f"Mucho gusto *{texto}*. ¿De qué empresa nos contacta?"
+        _bot_send(telefono_wa, resp)
+        _save_bot_msg(lead, resp)
+
+    elif step == "waiting_empresa":
+        lead.tipo_cliente = texto  # guardar empresa
+        lead.bot_step = "waiting_sucursales"
+        db.session.commit()
+        resp = "¿Cuántas sucursales tienen?"
+        _bot_send(telefono_wa, resp)
+        _save_bot_msg(lead, resp)
+
+    elif step == "waiting_sucursales":
+        try:
+            lead.num_sucursales = int("".join(c for c in texto if c.isdigit()) or "0")
+        except Exception:
+            lead.num_sucursales = 0
+        lead.bot_step = "waiting_servicio"
+        db.session.commit()
+        resp = ("¿Qué servicio le interesa?\n\n"
+                "1. Aromatización de espacios\n"
+                "2. Control de plagas\n"
+                "3. Limpieza y desinfección\n"
+                "4. Soldadura industrial\n"
+                "5. Marketing digital\n"
+                "6. Otro")
+        _bot_send(telefono_wa, resp)
+        _save_bot_msg(lead, resp)
+
+    elif step == "waiting_servicio":
+        servicios_map = {
+            "1": ("Aromatización de espacios", "Aromatex"),
+            "2": ("Control de plagas", "Pestex"),
+            "3": ("Limpieza y desinfección", "Pestex"),
+            "4": ("Soldadura industrial", "Weldex"),
+            "5": ("Marketing digital", "Nexo"),
+            "6": (texto, ""),
+        }
+        servicio, marca = servicios_map.get(texto, (texto, ""))
+        lead.marca_interes = marca
+        lead.bot_step = "transferred"
+
+        # Asignar vendedor por Round-Robin
+        try:
+            from models import Usuario
+            candidatos = (
+                Usuario.query.filter(
+                    Usuario.en_turno.is_(True),
+                    db.or_(
+                        Usuario.especialidad_marca.any(marca),
+                        Usuario.especialidad_marca.any("Todas"),
+                    ),
+                ).order_by(Usuario.ultimo_lead_asignado.asc().nullsfirst()).all()
+            )
+            if candidatos:
+                from datetime import datetime, timezone
+                vendedor = candidatos[0]
+                lead.usuario_asignado_id = vendedor.id
+                vendedor.ultimo_lead_asignado = datetime.now(timezone.utc)
+                nombre_vendedor = vendedor.nombre.split(" ")[0]
+            else:
+                nombre_vendedor = "un asesor"
+        except Exception as e:
+            logger.error(f"Error asignando vendedor: {e}")
+            nombre_vendedor = "un asesor"
+
+        db.session.commit()
+
+        resp = f"Gracias! *{nombre_vendedor}* será tu asesor y te contactará en los próximos minutos por este mismo chat."
+        _bot_send(telefono_wa, resp)
+        _save_bot_msg(lead, resp)
+
+        logger.info(f"Bot completó calificación: lead={lead.id}, marca={marca}, vendedor={nombre_vendedor}")
+
+
+def _bot_send(telefono_wa, text):
+    """Envía un mensaje de WhatsApp vía Cloud API."""
+    import requests, os
+    wa_token = os.getenv("WHATSAPP_TOKEN", "")
+    phone_id = os.getenv("WHATSAPP_PHONE_ID", "")
+    if not wa_token or not phone_id:
+        logger.warning("WHATSAPP_TOKEN o WHATSAPP_PHONE_ID no configurados")
+        return
+    url = f"https://graph.facebook.com/v25.0/{phone_id}/messages"
+    try:
+        resp = requests.post(url, json={
+            "messaging_product": "whatsapp",
+            "to": telefono_wa,
+            "type": "text",
+            "text": {"body": text},
+        }, headers={
+            "Authorization": f"Bearer {wa_token}",
+            "Content-Type": "application/json",
+        }, timeout=10)
+        if not resp.ok:
+            logger.error(f"Error enviando bot msg: {resp.status_code} {resp.text}")
+    except Exception as e:
+        logger.error(f"Error enviando bot msg: {e}")
+
+
+def _save_bot_msg(lead, text):
+    """Guarda mensaje del bot en la BD y emite SocketIO."""
+    msg = MensajeWhatsapp(
+        lead_id=lead.id,
+        direccion=DireccionMensaje.SALIENTE_BOT,
+        contenido=text,
+    )
+    db.session.add(msg)
+    db.session.commit()
+    socketio.emit("nuevo_mensaje", {
+        "mensaje": msg.to_dict(),
+        "lead": lead.to_dict(),
+    }, room=f"lead_{lead.id}")
 
 
 

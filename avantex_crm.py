@@ -112,14 +112,17 @@ def create_app():
 
     @app.route("/")
     def index():
-        # 1 query en lugar de 10
         from sqlalchemy.orm import joinedload
-        all_leads = (
-            Lead.query
-            .options(joinedload(Lead.usuario_asignado))
-            .order_by(Lead.fecha_actualizacion.desc())
-            .all()
-        )
+        q = Lead.query.options(joinedload(Lead.usuario_asignado))
+
+        # Vendedores solo ven sus leads, Super Admin ve todo
+        user_rol = session.get("user_rol", "")
+        if user_rol.upper() == "VENDEDOR":
+            usuario_id = session.get("usuario_id")
+            if usuario_id:
+                q = q.filter(Lead.usuario_asignado_id == usuario_id)
+
+        all_leads = q.order_by(Lead.fecha_actualizacion.desc()).all()
         leads_by_etapa = {}
         for lead in all_leads:
             leads_by_etapa.setdefault(lead.etapa_pipeline, []).append(lead)
