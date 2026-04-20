@@ -226,10 +226,13 @@ def _procesar_mensaje_whatsapp(value: dict):
         })
 
         # ── Bot presales automático ──
-        if is_new:
-            # Primer mensaje — enviar bienvenida
-            _bot_send(telefono_wa, "Hola! Bienvenido a *Grupo Avantex*.\nSomos especialistas en servicios para tu negocio.\n\n¿Con quién tengo el gusto?")
-            _save_bot_msg(lead, "Hola! Bienvenido a *Grupo Avantex*.\nSomos especialistas en servicios para tu negocio.\n\n¿Con quién tengo el gusto?")
+        if is_new or (lead.bot_step is None and lead.usuario_asignado_id is None):
+            # Lead nuevo o existente sin calificar — iniciar bot
+            lead.bot_step = "waiting_name"
+            db.session.commit()
+            bienvenida = "Hola! Bienvenido a *Grupo Avantex*.\nSomos especialistas en servicios para tu negocio.\n\n¿Con quién tengo el gusto?"
+            _bot_send(telefono_wa, bienvenida)
+            _save_bot_msg(lead, bienvenida)
         elif lead.bot_step and lead.bot_step != "transferred":
             _handle_bot_step(lead, contenido, telefono_wa)
 
