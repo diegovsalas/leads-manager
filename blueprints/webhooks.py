@@ -226,15 +226,18 @@ def _procesar_mensaje_whatsapp(value: dict):
         })
 
         # ── Bot presales automático ──
-        if is_new or (lead.bot_step is None and lead.usuario_asignado_id is None):
-            # Lead nuevo o existente sin calificar — iniciar bot
-            lead.bot_step = "waiting_name"
-            db.session.commit()
-            bienvenida = "Hola! Bienvenido a *Grupo Avantex*.\nSomos especialistas en servicios para tu negocio.\n\n¿Con quién tengo el gusto?"
-            _bot_send(telefono_wa, bienvenida)
-            _save_bot_msg(lead, bienvenida)
-        elif lead.bot_step and lead.bot_step != "transferred":
-            _handle_bot_step(lead, contenido, telefono_wa)
+        try:
+            db.session.refresh(lead)  # re-leer estado actual del bot
+            if is_new or (lead.bot_step is None and lead.usuario_asignado_id is None):
+                lead.bot_step = "waiting_name"
+                db.session.commit()
+                bienvenida = "Hola! Bienvenido a *Grupo Avantex*.\nSomos especialistas en servicios para tu negocio.\n\n¿Con quién tengo el gusto?"
+                _bot_send(telefono_wa, bienvenida)
+                _save_bot_msg(lead, bienvenida)
+            elif lead.bot_step and lead.bot_step != "transferred":
+                _handle_bot_step(lead, contenido, telefono_wa)
+        except Exception as e:
+            logger.exception(f"Error en bot presales: {e}")
 
 
 def _handle_bot_step(lead, contenido, telefono_wa):
@@ -243,6 +246,7 @@ def _handle_bot_step(lead, contenido, telefono_wa):
 
     step = lead.bot_step
     texto = contenido.strip()
+    logger.info(f"Bot step={step} para lead={lead.id}, contenido={texto[:50]}")
 
     if step == "waiting_name":
         lead.nombre = texto
