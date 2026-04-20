@@ -32,7 +32,7 @@ def create_app():
     # Variables de Meta/WhatsApp accesibles en toda la app
     app.config["WHATSAPP_TOKEN"]    = os.getenv("WHATSAPP_TOKEN", "")
     app.config["WHATSAPP_PHONE_ID"] = os.getenv("WHATSAPP_PHONE_ID", "")
-    app.config["META_VERIFY_TOKEN"] = os.getenv("META_VERIFY_TOKEN", "mi_token_secreto")
+    app.config["META_VERIFY_TOKEN"] = os.getenv("META_VERIFY_TOKEN", "avantex-verify-2026")
 
     # ── Extensiones ────────────────────────────
     db.init_app(app)
