@@ -117,7 +117,15 @@ async function connectSession(sessionId) {
   const authDir = path.join(__dirname, "auth_sessions", sessionId);
   if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
 
-  const { state, saveCreds } = await useMultiFileAuthState(authDir);
+  let state, saveCreds;
+  try {
+    ({ state, saveCreds } = await useMultiFileAuthState(authDir));
+  } catch (e) {
+    logger.error(`[${sessionId}] Error cargando auth: ${e.message}`);
+    fs.rmSync(authDir, { recursive: true, force: true });
+    fs.mkdirSync(authDir, { recursive: true });
+    ({ state, saveCreds } = await useMultiFileAuthState(authDir));
+  }
 
   const sock = makeWASocket({
     auth: {
@@ -125,7 +133,9 @@ async function connectSession(sessionId) {
       keys: makeCacheableSignalKeyStore(state.keys, logger),
     },
     logger: pino({ level: "silent" }),
-    browser: ["Ubuntu", "Chrome", "20.0.04"],
+    browser: ["Avantex", "Chrome", "22.0"],
+    connectTimeoutMs: 30000,
+    retryRequestDelayMs: 2000,
   });
 
   const prev = sessions[sessionId] || {};
@@ -142,57 +152,61 @@ async function connectSession(sessionId) {
   sock.ev.on("creds.update", saveCreds);
 
   sock.ev.on("connection.update", async (update) => {
-    const { connection, lastDisconnect, qr } = update;
+    try {
+      const { connection, lastDisconnect, qr } = update;
 
-    if (qr) {
-      sessions[sessionId].qrAttempts = (sessions[sessionId].qrAttempts || 0) + 1;
-      try {
-        sessions[sessionId].qr = await QRCode.toString(qr, { type: "svg", margin: 2 });
-      } catch (e) {
-        sessions[sessionId].qr = null;
-        logger.warn(`[${sessionId}] Error SVG: ${e.message}`);
-      }
-      sessions[sessionId].status = "qr_ready";
-      logger.info(`[${sessionId}] QR #${sessions[sessionId].qrAttempts} generado`);
-
-      // Si hay número registrado, generar pairing code también
-      const phone = sessions[sessionId].phoneNumber;
-      if (phone && !state.creds.registered) {
+      if (qr) {
+        sessions[sessionId].qrAttempts = (sessions[sessionId].qrAttempts || 0) + 1;
         try {
-          const code = await sock.requestPairingCode(phone);
-          sessions[sessionId].pairingCode = code;
-          logger.info(`[${sessionId}] Pairing code: ${code}`);
+          sessions[sessionId].qr = await QRCode.toString(qr, { type: "svg", margin: 2 });
         } catch (e) {
-          logger.warn(`[${sessionId}] No se pudo generar pairing code: ${e.message}`);
+          sessions[sessionId].qr = null;
+          logger.warn(`[${sessionId}] Error SVG: ${e.message}`);
+        }
+        sessions[sessionId].status = "qr_ready";
+        logger.info(`[${sessionId}] QR #${sessions[sessionId].qrAttempts} generado`);
+
+        // Si hay número registrado, generar pairing code también
+        const phone = sessions[sessionId].phoneNumber;
+        if (phone && !state.creds.registered) {
+          try {
+            const code = await sock.requestPairingCode(phone);
+            sessions[sessionId].pairingCode = code;
+            logger.info(`[${sessionId}] Pairing code: ${code}`);
+          } catch (e) {
+            logger.warn(`[${sessionId}] No se pudo generar pairing code: ${e.message}`);
+          }
         }
       }
-    }
 
-    if (connection === "open") {
-      sessions[sessionId].qr = null;
-      sessions[sessionId].pairingCode = null;
-      sessions[sessionId].qrAttempts = 0;
-      sessions[sessionId].status = "connected";
-      logger.info(`[${sessionId}] ✅ Conectado a WhatsApp`);
-    }
-
-    if (connection === "close") {
-      const code = lastDisconnect?.error?.output?.statusCode;
-      logger.warn(`[${sessionId}] Desconectado (code=${code})`);
-
-      if (code === DisconnectReason.loggedOut) {
-        sessions[sessionId].status = "logged_out";
-        fs.rmSync(authDir, { recursive: true, force: true });
-      } else if (code === 408) {
-        // QR expiró sin escanear — NO reconectar automáticamente, esperar que el usuario pida otro
-        sessions[sessionId].status = "qr_expired";
+      if (connection === "open") {
         sessions[sessionId].qr = null;
-        logger.info(`[${sessionId}] QR expirado. Visita /scan/${sessionId} para reintentar.`);
-      } else {
-        // Desconexión real — reconectar
-        sessions[sessionId].status = "reconnecting";
-        setTimeout(() => connectSession(sessionId), 5000);
+        sessions[sessionId].pairingCode = null;
+        sessions[sessionId].qrAttempts = 0;
+        sessions[sessionId].status = "connected";
+        logger.info(`[${sessionId}] ✅ Conectado a WhatsApp`);
       }
+
+      if (connection === "close") {
+        const code = lastDisconnect?.error?.output?.statusCode;
+        logger.warn(`[${sessionId}] Desconectado (code=${code})`);
+
+        if (code === DisconnectReason.loggedOut) {
+          sessions[sessionId].status = "logged_out";
+          try { fs.rmSync(authDir, { recursive: true, force: true }); } catch (e) {}
+        } else if (code === 408) {
+          sessions[sessionId].status = "qr_expired";
+          sessions[sessionId].qr = null;
+          logger.info(`[${sessionId}] QR expirado.`);
+        } else {
+          sessions[sessionId].status = "reconnecting";
+          setTimeout(() => connectSession(sessionId).catch((e) =>
+            logger.error(`[${sessionId}] Reconnect error: ${e.message}`)
+          ), 5000);
+        }
+      }
+    } catch (err) {
+      logger.error(`[${sessionId}] connection.update error: ${err.message}`);
     }
   });
 
@@ -538,19 +552,28 @@ app.get("/api/unidades", (req, res) => {
 // ══════════════════════════════════════════════
 // Arranque
 // ══════════════════════════════════════════════
+// Capturar errores no manejados para evitar crash
+process.on("uncaughtException", (err) => {
+  logger.error(`Uncaught exception: ${err.message}`);
+  logger.error(err.stack);
+});
+process.on("unhandledRejection", (err) => {
+  logger.error(`Unhandled rejection: ${err && err.message ? err.message : err}`);
+});
+
 app.listen(PORT, () => {
   logger.info(`🤖 WhatsApp Bot Avantex corriendo en puerto ${PORT}`);
 
   // Auto-conectar sesiones que ya tengan auth guardado
-  const authDir = path.join(__dirname, "auth_sessions");
-  if (fs.existsSync(authDir)) {
-    const dirs = fs.readdirSync(authDir);
+  const authBase = path.join(__dirname, "auth_sessions");
+  if (fs.existsSync(authBase)) {
+    const dirs = fs.readdirSync(authBase).filter((d) => {
+      try { return fs.existsSync(path.join(authBase, d, "creds.json")); }
+      catch (e) { return false; }
+    });
     for (const d of dirs) {
-      const credFile = path.join(authDir, d, "creds.json");
-      if (fs.existsSync(credFile)) {
-        logger.info(`Auto-conectando sesión: ${d}`);
-        connectSession(d);
-      }
+      logger.info(`Auto-conectando sesión: ${d}`);
+      connectSession(d).catch((e) => logger.error(`Error auto-connect ${d}: ${e.message}`));
     }
   }
 });
