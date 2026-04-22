@@ -45,7 +45,7 @@
         <div style="margin-top:12px;padding:10px;background:var(--bg-sunken);border-radius:7px">
             <div style="font-size:11px;font-weight:600;color:var(--ink-2);margin-bottom:6px">Columnas esperadas:</div>
             <div style="display:flex;flex-wrap:wrap;gap:3px">
-                {% for col in ['Cliente','Folio','Total','Pagado','Pendiente','Fecha de Cobro','Estatus','UEN'] %}
+                {% for col in ['ID','Cliente','Folio','Total','Pagado','Pendiente','Fecha de Cobro','Estatus','UEN'] %}
                 <span class="tag">{{ col }}</span>
                 {% endfor %}
             </div>
@@ -70,7 +70,7 @@
         <div style="margin-top:12px;padding:10px;background:var(--bg-sunken);border-radius:7px">
             <div style="font-size:11px;font-weight:600;color:var(--ink-2);margin-bottom:6px">Columnas esperadas:</div>
             <div style="display:flex;flex-wrap:wrap;gap:3px">
-                {% for col in ['Cliente','Propiedad','Zona','Tecnico','Fecha de Inicio','Estatus','Titulo Servicio'] %}
+                {% for col in ['ID','Cliente','Propiedad','Zona','Tecnico','Fecha de Inicio','Estatus','Titulo Servicio'] %}
                 <span class="tag">{{ col }}</span>
                 {% endfor %}
             </div>
@@ -81,9 +81,9 @@
 <!-- Cuentas -->
 <div class="card" style="padding:18px">
     <h3 style="margin:0 0 8px;font-size:13px;font-weight:600;color:var(--ink-1)">Cuentas registradas ({{ accounts|length }})</h3>
-    <p class="muted" style="font-size:11px;margin:0 0 10px">El campo "Cliente" del CSV se matchea con estos nombres.</p>
+    <p class="muted" style="font-size:11px;margin:0 0 10px">Usa la columna "ID" o "Cliente" en tu CSV para vincular registros. Si ambas existen, "ID" tiene prioridad.</p>
     <div style="display:flex;flex-wrap:wrap;gap:4px">
-        {% for acc in accounts %}<span class="tag">{{ acc.nombre }}</span>{% endfor %}
+        {% for acc in accounts %}<span class="tag">{% if acc.client_id %}<strong style="color:var(--copper)">{{ acc.client_id }}</strong> {% endif %}{{ acc.nombre }}</span>{% endfor %}
     </div>
 </div>
 {% endblock %}

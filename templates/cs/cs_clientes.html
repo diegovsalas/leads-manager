@@ -111,7 +111,7 @@
                     <td class="c">
                         {% if not is_kam %}
                         <button class="btn ghost" style="padding:4px 6px;height:auto"
-                                onclick="openEditModal('{{ acc.id }}','{{ acc.nombre }}','{{ acc.logo_url or "" }}','{{ acc.giro }}','{{ acc.tier }}','{{ acc.kam_id }}')"
+                                onclick="openEditModal('{{ acc.id }}','{{ acc.nombre }}','{{ acc.logo_url or "" }}','{{ acc.giro }}','{{ acc.tier }}','{{ acc.kam_id }}','{{ acc.client_id or "" }}')"
                                 title="Editar">{{ icon('activity', 13) }}</button>
                         {% endif %}
                     </td>
@@ -131,6 +131,16 @@
         </div>
         <div class="card-body">
             <form id="edit-form" method="POST">
+                <!-- Client ID -->
+                <div style="margin-bottom:14px">
+                    <label style="display:block;font-size:11px;font-weight:600;color:var(--ink-3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.08em">ID del Cliente</label>
+                    <div class="field-wrap" style="width:100%">
+                        <input type="text" name="client_id" id="edit-client-id" placeholder="AX-0001" maxlength="10"
+                               style="border:0;background:transparent;outline:none;font-family:inherit;font-size:13px;font-weight:700;color:var(--ink-1);width:100%;letter-spacing:1px">
+                    </div>
+                    <p class="muted" style="font-size:11px;margin:4px 0 0">Identificador unico del cliente (ej: AX-0001)</p>
+                </div>
+
                 <!-- KAM -->
                 {% if not is_kam %}
                 <div style="margin-bottom:14px">
@@ -197,9 +207,10 @@
 </div>
 
 <script>
-function openEditModal(id, nombre, logoUrl, giro, tier, kamId) {
+function openEditModal(id, nombre, logoUrl, giro, tier, kamId, clientId) {
     document.getElementById('edit-title').textContent = 'Editar — ' + nombre;
     document.getElementById('edit-form').action = '/cs/clientes/' + id + '/editar';
+    document.getElementById('edit-client-id').value = clientId || '';
     document.getElementById('edit-logo').value = logoUrl || '';
     document.getElementById('edit-tier').value = tier || '';
     var kamSel = document.getElementById('edit-kam');

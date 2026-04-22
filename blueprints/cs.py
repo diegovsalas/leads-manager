@@ -375,6 +375,12 @@ def editar_cliente(account_id):
     acc = db.session.get(CSAccount, account_id)
     if not acc:
         return "No encontrado", 404
+    if "client_id" in request.form:
+        new_cid = request.form.get("client_id", "").strip().upper()
+        if new_cid and new_cid != acc.client_id:
+            existing = CSAccount.query.filter(CSAccount.client_id == new_cid, CSAccount.id != acc.id).first()
+            if not existing:
+                acc.client_id = new_cid
     if "kam_id" in request.form:
         kam_id = request.form.get("kam_id", "").strip()
         if kam_id:
@@ -900,11 +906,17 @@ def _parse_datetime_citas(val):
     return None
 
 
-def _match_account(cliente_nombre, accounts_map):
-    """Busca la cuenta por nombre parcial (case-insensitive)."""
+def _match_account(cliente_nombre, accounts_map, client_id_map=None):
+    """Busca la cuenta por client_id exacto o nombre parcial (case-insensitive)."""
     if not cliente_nombre:
         return None
-    nombre_lower = str(cliente_nombre).lower()
+    nombre_lower = str(cliente_nombre).strip().lower()
+    # Primero intentar match exacto por client_id (AX-0001, etc.)
+    if client_id_map:
+        cid_upper = str(cliente_nombre).strip().upper()
+        if cid_upper in client_id_map:
+            return client_id_map[cid_upper]
+    # Fallback: match por nombre
     for acc_nombre, acc_id in accounts_map.items():
         if acc_nombre.lower() in nombre_lower or nombre_lower in acc_nombre.lower():
             return acc_id
@@ -932,9 +944,10 @@ def cargar_cobros():
     if not file or not file.filename.endswith(".csv"):
         return redirect(url_for("cs.cargar_datos"))
 
-    # Build account name map
+    # Build account name + client_id maps
     accounts = CSAccount.query.all()
     accounts_map = {a.nombre: str(a.id) for a in accounts}
+    client_id_map = {a.client_id.upper(): str(a.id) for a in accounts if a.client_id}
 
     content = file.read().decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(content))
@@ -945,8 +958,10 @@ def cargar_cobros():
     batch = []
 
     for row in reader:
+        # Primero intentar por columna ID, luego por Cliente
+        id_val = row.get("ID", "").strip()
         cliente = row.get("Cliente", "").strip()
-        acc_id = _match_account(cliente, accounts_map)
+        acc_id = _match_account(id_val or cliente, accounts_map, client_id_map)
         if not acc_id:
             no_match += 1
             continue
@@ -999,6 +1014,7 @@ def cargar_citas():
 
     accounts = CSAccount.query.all()
     accounts_map = {a.nombre: str(a.id) for a in accounts}
+    client_id_map = {a.client_id.upper(): str(a.id) for a in accounts if a.client_id}
 
     content = file.read().decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(content))
@@ -1009,8 +1025,9 @@ def cargar_citas():
     batch = []
 
     for row in reader:
+        id_val = row.get("ID", "").strip()
         cliente = row.get("Cliente", "").strip()
-        acc_id = _match_account(cliente, accounts_map)
+        acc_id = _match_account(id_val or cliente, accounts_map, client_id_map)
         if not acc_id:
             no_match += 1
             continue
