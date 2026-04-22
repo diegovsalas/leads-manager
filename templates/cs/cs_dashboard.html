@@ -147,7 +147,7 @@
                 {% set hs = item.health %}
                 {% set st = 'ok' if hs.score >= 70 else 'warn' if hs.score >= 40 else 'danger' %}
                 <tr>
-                    <td class="primary"><a href="/cs/account/{{ acc.id }}">{{ acc.nombre }}</a></td>
+                    <td class="primary"><a href="/cs/account/{{ acc.id }}">{% if acc.client_id %}<span style="font-size:10px;font-weight:700;color:var(--copper);margin-right:4px">{{ acc.client_id }}</span>{% endif %}{{ acc.nombre }}</a></td>
                     <td><div class="hstack"><span class="ava">{{ acc.kam.nombre[:2]|upper if acc.kam else '?' }}</span><span class="muted">{{ acc.kam.nombre.split(' ')[0] if acc.kam else '-' }}</span></div></td>
                     <td class="r">${{ "{:,.0f}".format(acc.mrr|float) }}</td>
                     <td class="c"><span class="score {{ st }}">{{ hs.score }}</span></td>

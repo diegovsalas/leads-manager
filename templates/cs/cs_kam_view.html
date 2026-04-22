@@ -46,6 +46,7 @@
             <div style="display:flex;align-items:start;justify-content:space-between">
                 <div style="flex:1">
                     <div class="hstack" style="margin-bottom:4px">
+                        {% if item.account.client_id %}<span class="pill info" style="font-size:10px;font-weight:700;margin-right:4px">{{ item.account.client_id }}</span>{% endif %}
                         <a href="/cs/account/{{ item.account.id }}" style="font-size:15px;font-weight:600;color:var(--ink-1);border-bottom:1px dotted var(--border-strong)">{{ item.account.nombre }}</a>
                         {% if item.account.es_cuenta_nueva %}<span class="pill info">NUEVA</span>{% endif %}
                         <span class="score {% if item.health.score >= 70 %}ok{% elif item.health.score >= 40 %}warn{% else %}danger{% endif %}">{{ item.health.score }}</span>

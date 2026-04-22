@@ -549,6 +549,7 @@ class CSAccount(db.Model):
     __tablename__ = "cs_accounts"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    client_id = db.Column(db.String(10), unique=True, nullable=True)  # AX-0001, AX-0002, ...
     nombre = db.Column(db.String(200), nullable=False, unique=True)
     kam_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users_crm.id"), nullable=False)
     es_cuenta_nueva = db.Column(db.Boolean, default=False)
@@ -579,11 +580,26 @@ class CSAccount(db.Model):
 
     def to_dict(self):
         return {
-            "id": str(self.id), "nombre": self.nombre,
+            "id": str(self.id), "client_id": self.client_id or "",
+            "nombre": self.nombre,
             "kam_id": str(self.kam_id), "mrr": float(self.mrr or 0),
             "sucursales": self.sucursales,
             "unidades_contratadas": self.unidades_contratadas,
         }
+
+
+@db.event.listens_for(CSAccount, "before_insert")
+def _auto_client_id(mapper, connection, target):
+    """Auto-asigna client_id secuencial si no se proporcionó."""
+    if not target.client_id:
+        result = connection.execute(
+            db.text("SELECT MAX(client_id) FROM cs_accounts WHERE client_id IS NOT NULL")
+        ).scalar()
+        if result:
+            num = int(result.split("-")[1]) + 1
+        else:
+            num = 1
+        target.client_id = f"AX-{num:04d}"
 
 
 class CSInvoice(db.Model):

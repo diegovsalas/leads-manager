@@ -24,6 +24,7 @@
         <table class="tbl" id="tbl-clientes">
             <thead>
                 <tr>
+                    <th style="width:80px">ID</th>
                     <th style="width:260px">Cuenta</th>
                     <th style="width:110px">KAM</th>
                     <th style="width:130px">Owner</th>
@@ -38,7 +39,9 @@
                 {% for item in clientes %}
                 {% set acc = item.account %}
                 {% set hs = item.health %}
-                <tr data-search="{{ acc.nombre|lower }}">
+                <tr data-search="{{ acc.nombre|lower }} {{ acc.client_id or '' }}">
+                    <!-- ID -->
+                    <td><span class="pill info" style="font-weight:700;font-size:11px">{{ acc.client_id or '—' }}</span></td>
                     <!-- Cuenta -->
                     <td class="primary">
                         <div class="hstack">

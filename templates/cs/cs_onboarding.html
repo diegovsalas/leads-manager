@@ -16,7 +16,7 @@
     <div class="card" style="padding:18px">
         <div style="display:flex;align-items:start;justify-content:space-between;margin-bottom:10px">
             <div>
-                <a href="/cs/account/{{ item.account.id }}" style="font-size:15px;font-weight:600;color:var(--ink-1);border-bottom:1px dotted var(--border-strong)">{{ item.account.nombre }}</a>
+                {% if item.account.client_id %}<span class="pill info" style="font-size:10px;font-weight:700;margin-right:4px">{{ item.account.client_id }}</span>{% endif %}<a href="/cs/account/{{ item.account.id }}" style="font-size:15px;font-weight:600;color:var(--ink-1);border-bottom:1px dotted var(--border-strong)">{{ item.account.nombre }}</a>
                 <div class="muted" style="font-size:12px;margin-top:2px">KAM: {{ item.account.kam.nombre if item.account.kam else '-' }} · {{ item.account.unidades_contratadas }}</div>
             </div>
             <span class="score {% if item.health.color == 'green' %}ok{% elif item.health.color == 'yellow' %}warn{% else %}danger{% endif %}">{{ item.health.score }}</span>

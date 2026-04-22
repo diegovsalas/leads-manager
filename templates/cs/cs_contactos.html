@@ -28,7 +28,7 @@
             {% for c in contactos %}
             <tr>
                 <td class="primary"><div class="hstack"><span class="ava">{{ c.nombre[:2]|upper }}</span><a href="#">{{ c.nombre }}</a></div></td>
-                <td><a href="/cs/account/{{ c.account_id }}" style="color:var(--ink-1);font-weight:500">{{ c.account.nombre }}</a></td>
+                <td><a href="/cs/account/{{ c.account_id }}" style="color:var(--ink-1);font-weight:500">{% if c.account.client_id %}<span style="font-size:10px;font-weight:700;color:var(--copper);margin-right:3px">{{ c.account.client_id }}</span>{% endif %}{{ c.account.nombre }}</a></td>
                 <td class="muted">{{ c.puesto }}</td>
                 <td class="muted" style="font-size:12px;font-variant-numeric:tabular-nums">{{ c.telefono }}</td>
                 <td class="muted" style="font-size:12px">{{ c.correo }}</td>

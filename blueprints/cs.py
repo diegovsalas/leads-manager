@@ -82,6 +82,18 @@ def _ctx():
     }
 
 
+def _generate_client_id():
+    """Genera el siguiente client_id secuencial (AX-0001, AX-0002, ...)."""
+    result = db.session.execute(
+        db.text("SELECT MAX(client_id) FROM cs_accounts WHERE client_id IS NOT NULL")
+    ).scalar()
+    if result:
+        num = int(result.split("-")[1]) + 1
+    else:
+        num = 1
+    return f"AX-{num:04d}"
+
+
 def _get_periodo():
     """
     Retorna (inicio, fin, label, periodo_param) según ?periodo= en query string.
