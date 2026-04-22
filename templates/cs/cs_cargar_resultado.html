@@ -26,6 +26,11 @@
             <a href="/cs/cargar-datos" class="btn">Cargar mas datos</a>
             <a href="/cs/" class="btn primary">Ver Dashboard</a>
         </div>
+        {% if debug_info %}
+        <div style="margin-top:16px;padding:12px;background:#f5f5f5;border-radius:8px;text-align:left;font-size:11px;word-break:break-all;color:#666">
+            <strong>Debug:</strong> {{ debug_info }}
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

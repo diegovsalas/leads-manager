@@ -949,6 +949,10 @@ def cargar_cobros():
     accounts_map = {a.nombre: str(a.id) for a in accounts}
     client_id_map = {a.client_id.upper(): str(a.id) for a in accounts if a.client_id}
 
+    import logging
+    logging.warning(f"[COBROS DEBUG] client_id_map keys (first 20): {list(client_id_map.keys())[:20]}")
+    logging.warning(f"[COBROS DEBUG] accounts_map keys (first 20): {list(accounts_map.keys())[:20]}")
+
     content = file.read().decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(content))
 
@@ -956,6 +960,7 @@ def cargar_cobros():
     no_match = 0
     errores = 0
     batch = []
+    debug_no_match = []
 
     for row in reader:
         # Intentar por columna ID, luego Contrato, luego Cliente
@@ -968,6 +973,8 @@ def cargar_cobros():
         acc_id = _match_account(id_val or contrato or cliente, accounts_map, client_id_map)
         if not acc_id:
             no_match += 1
+            if len(debug_no_match) < 10:
+                debug_no_match.append(f"ID='{id_val}' Contrato='{contrato}' Cliente='{cliente}'")
             continue
 
         try:
@@ -1001,10 +1008,14 @@ def cargar_cobros():
 
     _recalcular_facturacion(accounts)
 
+    logging.warning(f"[COBROS DEBUG] no_match samples: {debug_no_match}")
+    logging.warning(f"[COBROS DEBUG] CSV columns: {reader.fieldnames}")
+
     return render_template(
         "cs_cargar_resultado.html",
         tipo="Cobros", insertados=insertados, no_match=no_match,
         errores=errores, total=insertados + no_match + errores,
+        debug_info=f"client_id_map keys: {list(client_id_map.keys())[:20]} | no_match samples: {debug_no_match}",
         **_ctx(),
     )
 
