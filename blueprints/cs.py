@@ -958,10 +958,14 @@ def cargar_cobros():
     batch = []
 
     for row in reader:
-        # Primero intentar por columna ID, luego por Cliente
+        # Intentar por columna ID, luego Contrato, luego Cliente
         id_val = row.get("ID", "").strip()
+        contrato = row.get("Contrato", "").strip()
         cliente = row.get("Cliente", "").strip()
-        acc_id = _match_account(id_val or cliente, accounts_map, client_id_map)
+        # Ignorar "-" como valor de ID
+        if id_val == "-":
+            id_val = ""
+        acc_id = _match_account(id_val or contrato or cliente, accounts_map, client_id_map)
         if not acc_id:
             no_match += 1
             continue
