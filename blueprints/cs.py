@@ -937,6 +937,18 @@ def cargar_datos():
     )
 
 
+@cs_bp.route("/cargar-datos/plantilla-cobros")
+def plantilla_cobros():
+    """Descarga la plantilla CSV para cobros."""
+    content = "ID,Cliente,Folio,Total,Pagado,Pendiente,Fecha de Cobro,Estatus,UN\n"
+    return send_file(
+        io.BytesIO(content.encode("utf-8-sig")),
+        as_attachment=True,
+        download_name="plantilla_cobros.csv",
+        mimetype="text/csv",
+    )
+
+
 @cs_bp.route("/cargar-datos/cobros", methods=["POST"])
 def cargar_cobros():
     """Procesa CSV de cobros/facturas."""
@@ -983,7 +995,7 @@ def cargar_cobros():
                 "folio": row.get("Folio", ""),
                 "serie": row.get("Serie de Folio", ""),
                 "concepto": row.get("Concepto", ""),
-                "uen": row.get("UEN", ""),
+                "uen": row.get("UEN", "") or row.get("UN", ""),
                 "subtotal": _parse_money(row.get("Monto Subtotal")),
                 "impuestos": _parse_money(row.get("Impuestos")),
                 "total": _parse_money(row.get("Total")),

@@ -43,9 +43,12 @@
             <button type="submit" class="btn primary" style="width:100%;margin-top:12px;justify-content:center">Cargar Cobros</button>
         </form>
         <div style="margin-top:12px;padding:10px;background:var(--bg-sunken);border-radius:7px">
-            <div style="font-size:11px;font-weight:600;color:var(--ink-2);margin-bottom:6px">Columnas esperadas:</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                <div style="font-size:11px;font-weight:600;color:var(--ink-2)">Columnas esperadas:</div>
+                <a href="/cs/cargar-datos/plantilla-cobros" download class="btn ghost" style="font-size:11px;padding:3px 8px;display:inline-flex;align-items:center;gap:4px">{{ icon('download', 13) }} Plantilla CSV</a>
+            </div>
             <div style="display:flex;flex-wrap:wrap;gap:3px">
-                {% for col in ['ID','Cliente','Folio','Total','Pagado','Pendiente','Fecha de Cobro','Estatus','UEN'] %}
+                {% for col in ['ID','Cliente','Folio','Total','Pagado','Pendiente','Fecha de Cobro','Estatus','UN'] %}
                 <span class="tag">{{ col }}</span>
                 {% endfor %}
             </div>
