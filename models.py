@@ -822,3 +822,130 @@ class ActividadLog(db.Model):
             "detalle": self.detalle,
             "fecha": self.fecha.isoformat(),
         }
+
+
+# ──────────────────────────────────────────────
+# SAVIO — Sincronización de cobranza y suscripciones
+# Solo lectura desde la API de Savio. Nunca escribimos a Savio.
+# Fuente de verdad para MRR del grupo.
+# ──────────────────────────────────────────────
+
+class SavioCustomer(db.Model):
+    __tablename__ = "savio_customers"
+
+    customer_id = db.Column(db.String(64), primary_key=True)  # ID nativo de Savio
+    name = db.Column(db.String(255), nullable=True)
+    legal_name = db.Column(db.String(255), nullable=True)
+    tax_id = db.Column(db.String(20), nullable=True, index=True)  # RFC
+    city = db.Column(db.String(120), nullable=True)
+    state = db.Column(db.String(120), nullable=True)
+    current_state = db.Column(db.String(60), nullable=True)  # active, paused, cancelled
+    unit = db.Column(db.String(40), nullable=True)  # aromatex, pestex, weldex, weldu
+    raw_data = db.Column(db.JSON, nullable=True)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "customer_id": self.customer_id,
+            "name": self.name,
+            "legal_name": self.legal_name,
+            "tax_id": self.tax_id,
+            "city": self.city,
+            "state": self.state,
+            "current_state": self.current_state,
+            "unit": self.unit,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class SavioSubscription(db.Model):
+    __tablename__ = "savio_subscriptions"
+
+    id = db.Column(db.String(64), primary_key=True)  # ID nativo de Savio
+    customer_id = db.Column(db.String(64), db.ForeignKey("savio_customers.customer_id"), nullable=True, index=True)
+    description = db.Column(db.Text, nullable=True)
+    mrr = db.Column(db.Numeric(14, 2), nullable=True)  # PRE-IVA. Fuente de verdad para MRR.
+    amount = db.Column(db.Numeric(14, 2), nullable=True)
+    status = db.Column(db.String(40), nullable=True)
+    start_date = db.Column(db.Date, nullable=True)
+    contract_end_date = db.Column(db.Date, nullable=True)
+    uen = db.Column(db.String(120), nullable=True)  # UEN crudo de Savio (ej. "AROMATEX RECURRENTE")
+    unit = db.Column(db.String(40), nullable=True, index=True)  # clasificado: aromatex/pestex/weldex/weldu
+    type = db.Column(db.String(40), nullable=True)  # recurrente, eventual, poliza, refacturacion
+    sum_mrr = db.Column(db.Boolean, default=False, nullable=False)  # ¿este registro suma al MRR?
+    raw_data = db.Column(db.JSON, nullable=True)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    customer = db.relationship("SavioCustomer", backref="subscriptions", lazy="joined")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "customer_id": self.customer_id,
+            "description": self.description,
+            "mrr": float(self.mrr) if self.mrr else 0,
+            "amount": float(self.amount) if self.amount else 0,
+            "status": self.status,
+            "start_date": self.start_date.isoformat() if self.start_date else None,
+            "contract_end_date": self.contract_end_date.isoformat() if self.contract_end_date else None,
+            "uen": self.uen,
+            "unit": self.unit,
+            "type": self.type,
+            "sum_mrr": self.sum_mrr,
+        }
+
+
+class SavioInvoice(db.Model):
+    __tablename__ = "savio_invoices"
+
+    id = db.Column(db.String(64), primary_key=True)
+    customer_id = db.Column(db.String(64), db.ForeignKey("savio_customers.customer_id"), nullable=True, index=True)
+    customer_name = db.Column(db.String(255), nullable=True)
+    invoice_number = db.Column(db.String(80), nullable=True)
+    amount = db.Column(db.Numeric(14, 2), nullable=True)  # CON IVA. NO usar para MRR.
+    status = db.Column(db.String(40), nullable=True)
+    date = db.Column(db.Date, nullable=True, index=True)
+    uen = db.Column(db.String(120), nullable=True)
+    unit = db.Column(db.String(40), nullable=True, index=True)
+    type = db.Column(db.String(40), nullable=True)
+    sum_mrr = db.Column(db.Boolean, default=False, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    raw_data = db.Column(db.JSON, nullable=True)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "customer_id": self.customer_id,
+            "customer_name": self.customer_name,
+            "invoice_number": self.invoice_number,
+            "amount": float(self.amount) if self.amount else 0,
+            "status": self.status,
+            "date": self.date.isoformat() if self.date else None,
+            "uen": self.uen,
+            "unit": self.unit,
+            "type": self.type,
+        }
+
+
+class SavioPayment(db.Model):
+    __tablename__ = "savio_payments"
+
+    id = db.Column(db.String(64), primary_key=True)
+    invoice_id = db.Column(db.String(64), db.ForeignKey("savio_invoices.id"), nullable=True, index=True)
+    customer_id = db.Column(db.String(64), db.ForeignKey("savio_customers.customer_id"), nullable=True, index=True)
+    amount = db.Column(db.Numeric(14, 2), nullable=True)
+    date = db.Column(db.Date, nullable=True, index=True)
+    method = db.Column(db.String(60), nullable=True)
+    raw_data = db.Column(db.JSON, nullable=True)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "invoice_id": self.invoice_id,
+            "customer_id": self.customer_id,
+            "amount": float(self.amount) if self.amount else 0,
+            "date": self.date.isoformat() if self.date else None,
+            "method": self.method,
+        }
