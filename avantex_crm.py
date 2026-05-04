@@ -53,6 +53,7 @@ def create_app():
     from blueprints.api_v2        import api_v2_bp
     from blueprints.cs            import cs_bp
     from blueprints.encuesta      import encuesta_bp
+    from blueprints.savio         import savio_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp,      url_prefix="/webhook")
@@ -68,6 +69,7 @@ def create_app():
     app.register_blueprint(api_v2_bp,       url_prefix="/api/v2")
     app.register_blueprint(cs_bp,            url_prefix="/cs")
     app.register_blueprint(encuesta_bp,      url_prefix="/encuesta")
+    app.register_blueprint(savio_bp,         url_prefix="/api/savio")
 
     # Serve React app at /app/
     @app.route("/app/")
