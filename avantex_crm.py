@@ -176,6 +176,34 @@ def _start_scheduler(app):
                 from backups import ejecutar_backup
                 ejecutar_backup()
 
+        def _run_savio_invoices_payments():
+            with app.app_context():
+                import savio_sync
+                try:
+                    savio_sync.sync_invoices()
+                    savio_sync.sync_payments()
+                except Exception as e:
+                    app.logger.warning(f"savio hourly: {e}")
+
+        def _run_savio_customers_subs():
+            with app.app_context():
+                import savio_sync
+                try:
+                    savio_sync.sync_subscriptions()
+                    savio_sync.sync_customers()
+                    savio_sync.bridge_savio_to_cs_mrr()
+                except Exception as e:
+                    app.logger.warning(f"savio 6h: {e}")
+
+        def _run_savio_boot():
+            """Sync inicial 30s después del boot (todo)."""
+            with app.app_context():
+                import savio_sync
+                try:
+                    savio_sync.sync_all()
+                except Exception as e:
+                    app.logger.warning(f"savio boot sync: {e}")
+
         scheduler = BackgroundScheduler(daemon=True)
         scheduler.add_job(_run_cadencia, "interval", minutes=15, id="cadencia_followup")
         # Notificaciones diarias a las 9:00 AM CST (UTC-6 = 15:00 UTC)
@@ -190,6 +218,19 @@ def _start_scheduler(app):
             hour=9, minute=0,  # 09:00 UTC = 3:00 AM CST
             id="backup_diario",
         )
+        # Savio: solo si la API key está configurada
+        if os.getenv("SAVIO_API_KEY"):
+            from datetime import datetime, timedelta
+            scheduler.add_job(
+                _run_savio_boot, "date",
+                run_date=datetime.now() + timedelta(seconds=30),
+                id="savio_boot_sync",
+            )
+            scheduler.add_job(_run_savio_invoices_payments, "interval", hours=1, id="savio_hourly")
+            scheduler.add_job(_run_savio_customers_subs, "interval", hours=6, id="savio_6h")
+            app.logger.info("Savio scheduler activo (boot+30s, hourly inv+pay, 6h cust+subs)")
+        else:
+            app.logger.info("SAVIO_API_KEY no configurada — scheduler Savio desactivado")
         scheduler.start()
         app.logger.info("Scheduler iniciado: cadencia (15 min) + notificaciones (9am) + backup (3am)")
     except Exception as e:

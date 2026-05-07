@@ -37,3 +37,7 @@ whatsapp-bot/auth_sessions/
 # Frontend
 frontend/node_modules/
 frontend/dist/
+
+# Legacy code dump (vendedores.cloud) — contiene secrets, NO subir
+_legacy/
+_rsync_legacy.sh

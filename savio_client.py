@@ -1,13 +1,15 @@
 """
 Cliente HTTP para la API de Savio.
 
-Solo lectura. Devuelve dicts crudos (sin mapear a modelos) — el mapeo
-a SavioCustomer/SavioSubscription/SavioInvoice/SavioPayment vive en
-el sync (paso 3), no acá.
+Solo lectura. Devuelve dicts crudos — el mapeo a modelos vive en savio_sync.py.
 
 Auth: header `Authorization: <API_KEY>` (token plano, sin "Bearer").
-Paginación: `?page=N&per_page=M`. Iteramos hasta que la página vuelva
-con menos de `per_page` registros.
+
+Paginación (cada endpoint la maneja distinto, port directo de savio.js legacy):
+  /customer            → lista plana, sin paginación
+  /subscription/search → page-based: response.next_page, items en `subscriptions`
+  /invoice             → cursor-based: response.nextCursor, items en `invoices`
+  /payment             → cursor-based: response.nextCursor, items en `payments`
 """
 
 import os
@@ -17,169 +19,149 @@ from typing import Iterator, Optional
 import requests
 
 SAVIO_BASE_URL = os.getenv("SAVIO_BASE_URL", "https://api.savio.mx/api/v1")
-SAVIO_API_KEY = os.getenv("SAVIO_API_KEY", "")
 
-DEFAULT_PER_PAGE = 100
+DEFAULT_LIMIT = 100
 DEFAULT_TIMEOUT = 30
+MAX_PAGES = 500
 
 
 class SavioError(Exception):
     """Error genérico hablando con la API de Savio."""
 
 
-def _headers() -> dict:
-    if not SAVIO_API_KEY:
+def _api_key() -> str:
+    key = os.getenv("SAVIO_API_KEY", "")
+    if not key:
         raise SavioError("SAVIO_API_KEY no configurada en .env")
-    return {
-        "Authorization": SAVIO_API_KEY,
-        "Accept": "application/json",
-    }
+    return key
+
+
+def _headers() -> dict:
+    return {"Authorization": _api_key(), "Accept": "application/json"}
 
 
 def _get(path: str, params: Optional[dict] = None) -> dict:
-    url = f"{SAVIO_BASE_URL}{path}"
+    clean = {k: v for k, v in (params or {}).items() if v not in (None, "", [])}
     resp = requests.get(
-        url,
+        f"{SAVIO_BASE_URL}{path}",
         headers=_headers(),
-        params=params or {},
+        params=clean,
         timeout=DEFAULT_TIMEOUT,
     )
     if resp.status_code >= 400:
-        raise SavioError(
-            f"GET {path} -> {resp.status_code}: {resp.text[:300]}"
-        )
+        raise SavioError(f"GET {path} -> {resp.status_code}: {resp.text[:300]}")
     try:
         return resp.json()
     except ValueError:
-        raise SavioError(f"GET {path} -> respuesta no es JSON: {resp.text[:200]}")
+        raise SavioError(f"GET {path}: respuesta no JSON: {resp.text[:200]}")
 
 
-def _extract_records(data) -> list:
-    """Saca la lista de registros de la respuesta. Soporta lista plana o
-    los wrappers comunes (data/results/items/records)."""
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict):
-        for key in ("data", "results", "items", "records"):
-            value = data.get(key)
-            if isinstance(value, list):
-                return value
-    return []
+def _paginate_cursor(path: str, params: dict, items_key: str) -> Iterator[dict]:
+    cursor = None
+    for _ in range(MAX_PAGES):
+        page_params = dict(params)
+        if cursor:
+            page_params["cursor"] = cursor
+        resp = _get(path, page_params)
+        items = resp.get(items_key) or []
+        for item in items:
+            yield item
+        cursor = resp.get("nextCursor")
+        if not cursor:
+            return
+    raise SavioError(f"{path}: superó {MAX_PAGES} páginas (cursor)")
 
 
-def _paginate(
-    path: str,
-    params: Optional[dict] = None,
-    per_page: int = DEFAULT_PER_PAGE,
-) -> Iterator[dict]:
-    """Recorre todas las páginas y yielda un registro a la vez."""
+def _paginate_page(path: str, params: dict, items_key: str) -> Iterator[dict]:
     page = 1
-    base_params = dict(params or {})
-    while True:
-        page_params = {**base_params, "page": page, "per_page": per_page}
-        data = _get(path, page_params)
-        records = _extract_records(data)
-        if not records:
+    for _ in range(MAX_PAGES):
+        page_params = dict(params)
+        page_params["page"] = page
+        resp = _get(path, page_params)
+        items = resp.get(items_key) or []
+        for item in items:
+            yield item
+        nxt = resp.get("next_page")
+        if not nxt:
             return
-        for r in records:
-            yield r
-        if len(records) < per_page:
-            return
-        page += 1
-
-
-def _list(
-    path: str,
-    customer: Optional[str] = None,
-    un: Optional[str] = None,
-    per_page: int = DEFAULT_PER_PAGE,
-    extra_params: Optional[dict] = None,
-) -> Iterator[dict]:
-    params: dict = {}
-    if customer:
-        params["customer"] = customer
-    # NOTE: el nombre del parámetro UN está asumido como `un`.
-    # Si Savio lo expone con otro nombre, cambiar acá.
-    if un:
-        params["un"] = un
-    if extra_params:
-        params.update(extra_params)
-    return _paginate(path, params=params, per_page=per_page)
+        page = nxt
+    raise SavioError(f"{path}: superó {MAX_PAGES} páginas (page)")
 
 
 # ── Endpoints públicos ──────────────────────────────────────────────
 
 
-def list_customers(
-    customer: Optional[str] = None,
-    un: Optional[str] = None,
-    per_page: int = DEFAULT_PER_PAGE,
-) -> Iterator[dict]:
-    return _list("/customer", customer=customer, un=un, per_page=per_page)
+def list_customers() -> list:
+    """GET /customer — devuelve lista completa de clientes (sin paginación)."""
+    data = _get("/customer")
+    if isinstance(data, list):
+        return data
+    raise SavioError(f"/customer: esperaba lista, llegó {type(data).__name__}")
 
 
-def list_subscriptions(
-    customer: Optional[str] = None,
-    un: Optional[str] = None,
-    per_page: int = DEFAULT_PER_PAGE,
-) -> Iterator[dict]:
-    return _list("/subscription", customer=customer, un=un, per_page=per_page)
+def list_subscriptions(limit: int = DEFAULT_LIMIT) -> Iterator[dict]:
+    """GET /subscription/search — page-based, yields cada subscription."""
+    return _paginate_page("/subscription/search", {"limit": limit}, "subscriptions")
 
 
 def list_invoices(
-    customer: Optional[str] = None,
-    un: Optional[str] = None,
-    per_page: int = DEFAULT_PER_PAGE,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: int = DEFAULT_LIMIT,
 ) -> Iterator[dict]:
-    return _list("/invoice", customer=customer, un=un, per_page=per_page)
+    """GET /invoice — cursor-based, soporta filtro por fecha (YYYY-MM-DD)."""
+    return _paginate_cursor(
+        "/invoice",
+        {"limit": limit, "start_date": start_date, "end_date": end_date},
+        "invoices",
+    )
 
 
 def list_payments(
-    customer: Optional[str] = None,
-    un: Optional[str] = None,
-    per_page: int = DEFAULT_PER_PAGE,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: int = DEFAULT_LIMIT,
 ) -> Iterator[dict]:
-    return _list("/payment", customer=customer, un=un, per_page=per_page)
+    """GET /payment — cursor-based, soporta filtro por fecha (YYYY-MM-DD)."""
+    return _paginate_cursor(
+        "/payment",
+        {"limit": limit, "start_date": start_date, "end_date": end_date},
+        "payments",
+    )
 
 
 def ping() -> dict:
-    """Sanity check. Pide 1 customer; si auth funciona, vuelve un dict."""
-    return _get("/customer", {"page": 1, "per_page": 1})
+    """Sanity check de auth. Pide la lista de customers (truncada al primer item)."""
+    data = _get("/customer")
+    if isinstance(data, list):
+        return data[0] if data else {}
+    return data
 
 
-# ── Modo CLI para inspección manual ─────────────────────────────────
-# Uso: python savio_client.py ping
-#      python savio_client.py customers
-#      python savio_client.py subscriptions
-#      python savio_client.py invoices
-#      python savio_client.py payments
 if __name__ == "__main__":
     import json
 
     cmd = sys.argv[1] if len(sys.argv) > 1 else "ping"
+
+    def _dump_first(it, n=3):
+        for i, r in enumerate(it):
+            print(json.dumps(r, indent=2, ensure_ascii=False))
+            if i + 1 >= n:
+                break
+
     try:
         if cmd == "ping":
             print(json.dumps(ping(), indent=2, ensure_ascii=False))
         elif cmd == "customers":
-            for i, r in enumerate(list_customers(per_page=5)):
-                print(json.dumps(r, indent=2, ensure_ascii=False))
-                if i >= 4:
-                    break
+            data = list_customers()
+            print(f"[savio] total customers: {len(data)}")
+            _dump_first(iter(data))
         elif cmd == "subscriptions":
-            for i, r in enumerate(list_subscriptions(per_page=5)):
-                print(json.dumps(r, indent=2, ensure_ascii=False))
-                if i >= 4:
-                    break
+            _dump_first(list_subscriptions())
         elif cmd == "invoices":
-            for i, r in enumerate(list_invoices(per_page=5)):
-                print(json.dumps(r, indent=2, ensure_ascii=False))
-                if i >= 4:
-                    break
+            _dump_first(list_invoices())
         elif cmd == "payments":
-            for i, r in enumerate(list_payments(per_page=5)):
-                print(json.dumps(r, indent=2, ensure_ascii=False))
-                if i >= 4:
-                    break
+            _dump_first(list_payments())
         else:
             print(f"comando desconocido: {cmd}", file=sys.stderr)
             sys.exit(2)

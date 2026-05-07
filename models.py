@@ -909,6 +909,7 @@ class SavioInvoice(db.Model):
     unit = db.Column(db.String(40), nullable=True, index=True)
     type = db.Column(db.String(40), nullable=True)
     sum_mrr = db.Column(db.Boolean, default=False, nullable=False)
+    sub = db.Column(db.String(40), nullable=True)  # intendencia / weldex_recurrente / weldex_eventual
     description = db.Column(db.Text, nullable=True)
     raw_data = db.Column(db.JSON, nullable=True)
     updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
@@ -925,6 +926,7 @@ class SavioInvoice(db.Model):
             "uen": self.uen,
             "unit": self.unit,
             "type": self.type,
+            "sub": self.sub,
         }
 
 
@@ -948,4 +950,52 @@ class SavioPayment(db.Model):
             "amount": float(self.amount) if self.amount else 0,
             "date": self.date.isoformat() if self.date else None,
             "method": self.method,
+        }
+
+
+# ──────────────────────────────────────────────
+# CUSTOMER MASTER — agrupa múltiples RFCs/customers (Savio + Zoho) bajo una
+# misma entidad comercial. Foundation para el bridge Savio→CSAccount.
+# ──────────────────────────────────────────────
+
+class CustomerMaster(db.Model):
+    __tablename__ = "customer_master"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    master_name = db.Column(db.String(255), nullable=True)
+    zoho_account_id = db.Column(db.String(64), nullable=True)
+    savio_customer_ids = db.Column(db.Text, nullable=True)  # CSV de IDs (legacy compat)
+    cs_account_id = db.Column(UUID(as_uuid=True), nullable=True)  # link al sistema CS local
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    rfcs = db.relationship("CustomerRfc", backref="master", lazy="joined", cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "master_name": self.master_name,
+            "zoho_account_id": self.zoho_account_id,
+            "savio_customer_ids": self.savio_customer_ids,
+            "cs_account_id": str(self.cs_account_id) if self.cs_account_id else None,
+            "rfcs": [r.to_dict() for r in self.rfcs],
+        }
+
+
+class CustomerRfc(db.Model):
+    __tablename__ = "customer_rfcs"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    master_id = db.Column(db.Integer, db.ForeignKey("customer_master.id", ondelete="CASCADE"), nullable=False, index=True)
+    rfc = db.Column(db.String(20), unique=True, nullable=False, index=True)
+    legal_name = db.Column(db.String(255), nullable=True)
+    savio_customer_id = db.Column(db.String(64), nullable=True, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "master_id": self.master_id,
+            "rfc": self.rfc,
+            "legal_name": self.legal_name,
+            "savio_customer_id": self.savio_customer_id,
         }

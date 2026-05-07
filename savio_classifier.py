@@ -19,7 +19,7 @@ SAVIO_UEN_MAP = {
     "PLAN RESCATE":              {"unit": "aromatex",         "type": "recurrente",     "sum_mrr": True},
     "PESTEX RECURRENTE":         {"unit": "pestex",           "type": "recurrente",     "sum_mrr": True},
     "PESTEX RECURRENTE NUEVO":   {"unit": "pestex",           "type": "recurrente",     "sum_mrr": True},
-    "QTB":                       {"unit": "weldex",           "type": "recurrente",     "sum_mrr": True},
+    "QTB":                       {"unit": "weldex",           "type": "recurrente",     "sum_mrr": True, "sub": "intendencia"},
     "AROMATEX EVENTUAL":         {"unit": "aromatex",         "type": "eventual",       "sum_mrr": False},
     "AROMATEX POLIZAS":          {"unit": "aromatex",         "type": "poliza",         "sum_mrr": False},
     "ECOMMERCE":                 {"unit": "aromatex",         "type": "eventual",       "sum_mrr": False},
@@ -90,9 +90,10 @@ def should_subtract_aa_ref(uen, amount):
 def classify_subscription(uen, description=None, amount=None):
     """Clasificación completa aplicando todas las reglas en orden.
 
-    Devuelve dict con: unit, type, sum_mrr, effective_amount_sign, uen_normalized.
+    Devuelve dict con: unit, type, sum_mrr, effective_amount_sign, uen_normalized, sub.
     effective_amount_sign por default es 1; el sync lo usa para decidir si
     invertir el signo del monto al sumar al MRR.
+    sub: subcategoría dentro de la unidad (intendencia/weldex_recurrente/weldex_eventual).
     """
     uen_normalized = _normalize(uen)
     base = classify_uen(uen)
@@ -103,13 +104,18 @@ def classify_subscription(uen, description=None, amount=None):
         "sum_mrr": base["sum_mrr"],
         "effective_amount_sign": 1,
         "uen_normalized": uen_normalized,
+        "sub": base.get("sub"),
     }
 
-    # Override Weldex eventual → recurrente cuando description lo indica.
-    if uen_normalized == "WELDEX" and is_weldex_recurrente(description):
-        result["unit"] = "weldex"
-        result["type"] = "recurrente"
-        result["sum_mrr"] = True
+    # WELDEX: split en weldex_recurrente vs weldex_eventual según description.
+    if uen_normalized == "WELDEX":
+        if is_weldex_recurrente(description):
+            result["unit"] = "weldex"
+            result["type"] = "recurrente"
+            result["sum_mrr"] = True
+            result["sub"] = "weldex_recurrente"
+        else:
+            result["sub"] = "weldex_eventual"
 
     # AA/REF con monto negativo: marcar como resta sin tocar sum_mrr.
     if should_subtract_aa_ref(uen, amount):
