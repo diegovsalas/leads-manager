@@ -999,3 +999,340 @@ class CustomerRfc(db.Model):
             "legal_name": self.legal_name,
             "savio_customer_id": self.savio_customer_id,
         }
+
+
+# ──────────────────────────────────────────────
+# SDR — Sales Development Representative
+# Port directo de vendedores.cloud (sdr*.js + sdr_*/sdr_dir_* tables).
+# Dos sub-sistemas: SDR clásico (sdr_results) y SDR Directivo (sdr_dir_*).
+# ──────────────────────────────────────────────
+
+
+class SdrResult(db.Model):
+    """Resultados scrapeados de Meta Ads / Google Maps. Cola de leads
+    pre-asignación a vendedor. Status: nuevo/asignado/descartado/corporativo."""
+    __tablename__ = "sdr_results"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    business_name = db.Column(db.Text, nullable=False)
+    instagram_handle = db.Column(db.Text, default="", nullable=True)
+    whatsapp = db.Column(db.Text, default="", nullable=True)
+    address = db.Column(db.Text, default="", nullable=True)
+    state = db.Column(db.String(120), default="", nullable=True)
+    city = db.Column(db.String(120), default="", nullable=True)
+    rating = db.Column(db.Float, nullable=True)
+    reviews = db.Column(db.Integer, default=0, nullable=False)
+    branches = db.Column(db.Integer, default=1, nullable=False)
+    source = db.Column(db.String(60), default="", nullable=True)
+    unit = db.Column(db.String(40), nullable=False, index=True)
+    status = db.Column(db.String(40), default="nuevo", nullable=False, index=True)  # nuevo/asignado/descartado/corporativo
+    assigned_to = db.Column(db.Integer, nullable=True, index=True)  # ref to legacy users.id (int) — no FK to leads-manager Usuario (UUID)
+    assigned_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    meta_ad_url = db.Column(db.Text, default="", nullable=True)
+    facebook_url = db.Column(db.Text, default="", nullable=True)
+    website = db.Column(db.Text, default="", nullable=True)
+    maps_url = db.Column(db.Text, default="", nullable=True)
+    wa_source = db.Column(db.Text, default="", nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id, "business_name": self.business_name,
+            "instagram_handle": self.instagram_handle, "whatsapp": self.whatsapp,
+            "address": self.address, "state": self.state, "city": self.city,
+            "rating": self.rating, "reviews": self.reviews, "branches": self.branches,
+            "source": self.source, "unit": self.unit, "status": self.status,
+            "assigned_to": self.assigned_to,
+            "assigned_at": self.assigned_at.isoformat() if self.assigned_at else None,
+            "meta_ad_url": self.meta_ad_url, "facebook_url": self.facebook_url,
+            "website": self.website, "maps_url": self.maps_url, "wa_source": self.wa_source,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class SdrDirMasterCompany(db.Model):
+    """Lista maestra de target accounts del SDR Directivo. El engine las procesa
+    en priority_order. Apollo query es la base de búsqueda; Lusha enriquece
+    contactos. tam = A/B/C (TAM tier)."""
+    __tablename__ = "sdr_dir_master_companies"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    priority_order = db.Column(db.Integer, nullable=False)
+    company_name = db.Column(db.Text, nullable=False)
+    apollo_query = db.Column(db.Text, nullable=False)
+    sector = db.Column(db.Text, nullable=False)
+    tam = db.Column(db.String(10), nullable=True)  # A / B / C
+    origen = db.Column(db.String(60), nullable=True)
+    sucursales = db.Column(db.Integer, nullable=True)
+    estados = db.Column(db.Text, nullable=True)  # CSV de estados
+    seniorities = db.Column(db.Text, nullable=True)  # CSV
+    departments = db.Column(db.Text, nullable=True)  # CSV
+    priority_titles = db.Column(db.Text, nullable=True)  # CSV
+    requires_manual = db.Column(db.Boolean, default=False, nullable=False)
+    notes = db.Column(db.Text, nullable=True)
+    unit = db.Column(db.String(40), default="aromatex", nullable=False, index=True)
+    status = db.Column(db.String(40), default="pending", nullable=False, index=True)
+    contacts_found = db.Column(db.Integer, default=0, nullable=False)
+    lusha_credits_used = db.Column(db.Integer, default=0, nullable=False)
+    last_attempt_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    processed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    skip_reason = db.Column(db.Text, nullable=True)
+    apollo_alt_queries = db.Column(db.Text, nullable=True)
+    apollo_industry = db.Column(db.Text, nullable=True)
+    country = db.Column(db.String(40), default="Mexico", nullable=True)
+    exclude_keywords = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    __table_args__ = (
+        db.Index("idx_sdr_master_status_priority", "status", "priority_order"),
+        db.Index("idx_sdr_master_unit_status", "unit", "status"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id, "priority_order": self.priority_order,
+            "company_name": self.company_name, "apollo_query": self.apollo_query,
+            "sector": self.sector, "tam": self.tam, "origen": self.origen,
+            "sucursales": self.sucursales, "estados": self.estados,
+            "seniorities": self.seniorities, "departments": self.departments,
+            "priority_titles": self.priority_titles,
+            "requires_manual": self.requires_manual, "notes": self.notes,
+            "unit": self.unit, "status": self.status,
+            "contacts_found": self.contacts_found,
+            "lusha_credits_used": self.lusha_credits_used,
+            "last_attempt_at": self.last_attempt_at.isoformat() if self.last_attempt_at else None,
+            "processed_at": self.processed_at.isoformat() if self.processed_at else None,
+            "skip_reason": self.skip_reason,
+            "apollo_alt_queries": self.apollo_alt_queries,
+            "apollo_industry": self.apollo_industry, "country": self.country,
+            "exclude_keywords": self.exclude_keywords,
+        }
+
+
+class SdrDirSuggestion(db.Model):
+    """Sugerencias de empresas/contactos al directivo (pre-secuencia)."""
+    __tablename__ = "sdr_dir_suggestions"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    company_name = db.Column(db.Text, nullable=True)
+    company_domain = db.Column(db.Text, nullable=True)
+    company_industry = db.Column(db.Text, nullable=True)
+    company_size = db.Column(db.String(40), nullable=True)
+    company_country = db.Column(db.String(40), default="Mexico", nullable=True)
+    unit = db.Column(db.String(40), nullable=True, index=True)
+    suggested_to = db.Column(db.Integer, nullable=True, index=True)  # legacy users.id
+    suggested_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+    status = db.Column(db.String(40), default="pendiente", nullable=False, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id, "company_name": self.company_name,
+            "company_domain": self.company_domain,
+            "company_industry": self.company_industry,
+            "company_size": self.company_size,
+            "company_country": self.company_country, "unit": self.unit,
+            "suggested_to": self.suggested_to,
+            "suggested_at": self.suggested_at.isoformat() if self.suggested_at else None,
+            "status": self.status,
+        }
+
+
+class SdrDirSequence(db.Model):
+    """Secuencia de cold outreach activa. 1 contacto = 1 secuencia.
+    Sincronizada con Lemlist (lemlist_campaign_id, lemlist_lead_id)."""
+    __tablename__ = "sdr_dir_sequences"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    company_name = db.Column(db.Text, nullable=True, index=True)
+    company_domain = db.Column(db.Text, nullable=True)
+    contact_name = db.Column(db.Text, nullable=True)
+    contact_title = db.Column(db.Text, nullable=True)
+    contact_email = db.Column(db.Text, nullable=True, index=True)
+    contact_phone = db.Column(db.Text, nullable=True)
+    contact_linkedin = db.Column(db.Text, nullable=True)
+    whatsapp_verified = db.Column(db.Boolean, default=False, nullable=False)
+    whatsapp_link = db.Column(db.Text, nullable=True)
+    unit = db.Column(db.String(40), nullable=True, index=True)
+    assigned_to = db.Column(db.Integer, nullable=True, index=True)
+    status = db.Column(db.String(40), default="activa", nullable=False, index=True)
+    current_step = db.Column(db.Integer, default=0, nullable=False)
+    first_channel = db.Column(db.String(40), default="email", nullable=False)
+    lemlist_campaign_id = db.Column(db.Text, nullable=True)
+    lemlist_lead_id = db.Column(db.Text, nullable=True)
+    last_action_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    next_action_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    paused_reason = db.Column(db.Text, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    lead_state = db.Column(db.String(60), default="sin_respuesta", nullable=False, index=True)
+    state_reason = db.Column(db.Text, nullable=True)
+    state_changed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    master_company_id = db.Column(db.Integer, db.ForeignKey("sdr_dir_master_companies.id"), nullable=True, index=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    history = db.relationship("SdrDirHistory", backref="sequence", lazy="dynamic", cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id, "company_name": self.company_name,
+            "company_domain": self.company_domain,
+            "contact_name": self.contact_name, "contact_title": self.contact_title,
+            "contact_email": self.contact_email, "contact_phone": self.contact_phone,
+            "contact_linkedin": self.contact_linkedin,
+            "whatsapp_verified": self.whatsapp_verified,
+            "whatsapp_link": self.whatsapp_link,
+            "unit": self.unit, "assigned_to": self.assigned_to,
+            "status": self.status, "current_step": self.current_step,
+            "first_channel": self.first_channel,
+            "lemlist_campaign_id": self.lemlist_campaign_id,
+            "lemlist_lead_id": self.lemlist_lead_id,
+            "last_action_at": self.last_action_at.isoformat() if self.last_action_at else None,
+            "next_action_at": self.next_action_at.isoformat() if self.next_action_at else None,
+            "paused_reason": self.paused_reason, "notes": self.notes,
+            "lead_state": self.lead_state, "state_reason": self.state_reason,
+            "state_changed_at": self.state_changed_at.isoformat() if self.state_changed_at else None,
+            "master_company_id": self.master_company_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class SdrDirHistory(db.Model):
+    """Per-step history de cada secuencia (envíos)."""
+    __tablename__ = "sdr_dir_history"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    sequence_id = db.Column(db.Integer, db.ForeignKey("sdr_dir_sequences.id", ondelete="CASCADE"), nullable=True, index=True)
+    step_number = db.Column(db.Integer, nullable=True)
+    channel = db.Column(db.String(40), nullable=True)
+    message_preview = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(40), default="enviado", nullable=False)
+    sent_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id, "sequence_id": self.sequence_id,
+            "step_number": self.step_number, "channel": self.channel,
+            "message_preview": self.message_preview, "status": self.status,
+            "sent_at": self.sent_at.isoformat() if self.sent_at else None,
+        }
+
+
+class SdrDirEngineConfig(db.Model):
+    """Config del engine SDR por unidad de negocio. PK = unit."""
+    __tablename__ = "sdr_dir_engine_config"
+
+    unit = db.Column(db.String(40), primary_key=True)
+    enabled = db.Column(db.Boolean, default=False, nullable=False)
+    max_companies_per_day = db.Column(db.Integer, default=10, nullable=False)
+    max_contacts_per_company = db.Column(db.Integer, default=2, nullable=False)
+    max_lusha_credits_per_day = db.Column(db.Integer, default=25, nullable=False)
+    min_lusha_balance_alert = db.Column(db.Integer, default=50, nullable=False)
+    lemlist_master_campaign_id = db.Column(db.Text, nullable=True)
+    cron_hour = db.Column(db.Integer, default=9, nullable=False)
+    cron_minute = db.Column(db.Integer, default=0, nullable=False)
+    last_run_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    last_run_summary = db.Column(db.Text, nullable=True)
+    # TAM-aware enrichment policies
+    tam_a_enrich_phone = db.Column(db.Boolean, default=True, nullable=False)
+    tam_bc_enrich_phone = db.Column(db.Boolean, default=False, nullable=False)
+    tam_a_phones_per_company = db.Column(db.Integer, default=2, nullable=False)
+    tam_bc_phones_per_company = db.Column(db.Integer, default=0, nullable=False)
+    # Lusha credit budget
+    lusha_monthly_limit = db.Column(db.Integer, default=600, nullable=False)
+    lusha_hard_cap = db.Column(db.Boolean, default=True, nullable=False)
+    lusha_alert_threshold = db.Column(db.Float, default=0.8, nullable=False)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "unit": self.unit, "enabled": self.enabled,
+            "max_companies_per_day": self.max_companies_per_day,
+            "max_contacts_per_company": self.max_contacts_per_company,
+            "max_lusha_credits_per_day": self.max_lusha_credits_per_day,
+            "min_lusha_balance_alert": self.min_lusha_balance_alert,
+            "lemlist_master_campaign_id": self.lemlist_master_campaign_id,
+            "cron_hour": self.cron_hour, "cron_minute": self.cron_minute,
+            "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
+            "last_run_summary": self.last_run_summary,
+            "tam_a_enrich_phone": self.tam_a_enrich_phone,
+            "tam_bc_enrich_phone": self.tam_bc_enrich_phone,
+            "tam_a_phones_per_company": self.tam_a_phones_per_company,
+            "tam_bc_phones_per_company": self.tam_bc_phones_per_company,
+            "lusha_monthly_limit": self.lusha_monthly_limit,
+            "lusha_hard_cap": self.lusha_hard_cap,
+            "lusha_alert_threshold": self.lusha_alert_threshold,
+        }
+
+
+class SdrDirEngineRun(db.Model):
+    """Una fila por corrida del engine. Trackea resultados y errores."""
+    __tablename__ = "sdr_dir_engine_runs"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    unit = db.Column(db.String(40), nullable=False, index=True)
+    started_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+    finished_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    status = db.Column(db.String(40), nullable=True)
+    companies_attempted = db.Column(db.Integer, default=0, nullable=False)
+    companies_processed = db.Column(db.Integer, default=0, nullable=False)
+    companies_no_contacts = db.Column(db.Integer, default=0, nullable=False)
+    contacts_pushed_to_lemlist = db.Column(db.Integer, default=0, nullable=False)
+    lusha_credits_used = db.Column(db.Integer, default=0, nullable=False)
+    apollo_calls = db.Column(db.Integer, default=0, nullable=False)
+    total_cost_usd = db.Column(db.Float, default=0, nullable=False)
+    error_log = db.Column(db.Text, nullable=True)
+    details_json = db.Column(db.JSON, nullable=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id, "unit": self.unit,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "finished_at": self.finished_at.isoformat() if self.finished_at else None,
+            "status": self.status,
+            "companies_attempted": self.companies_attempted,
+            "companies_processed": self.companies_processed,
+            "companies_no_contacts": self.companies_no_contacts,
+            "contacts_pushed_to_lemlist": self.contacts_pushed_to_lemlist,
+            "lusha_credits_used": self.lusha_credits_used,
+            "apollo_calls": self.apollo_calls,
+            "total_cost_usd": self.total_cost_usd,
+            "error_log": self.error_log,
+        }
+
+
+class SdrDirCreditsMonthly(db.Model):
+    """Monthly bucket de créditos consumidos por servicio (Lusha/Apollo).
+    PK compuesta vía UNIQUE(unit, service, year_month)."""
+    __tablename__ = "sdr_dir_credits_monthly"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    unit = db.Column(db.String(40), nullable=False)
+    service = db.Column(db.String(40), nullable=False)  # lusha / apollo / anthropic
+    year_month = db.Column(db.String(7), nullable=False)  # YYYY-MM
+    credits_used = db.Column(db.Integer, default=0, nullable=False)
+    credits_limit = db.Column(db.Integer, nullable=False)
+    hard_cap = db.Column(db.Boolean, default=True, nullable=False)
+    alert_threshold = db.Column(db.Float, default=0.8, nullable=False)
+    alerted_80 = db.Column(db.Boolean, default=False, nullable=False)
+    alerted_95 = db.Column(db.Boolean, default=False, nullable=False)
+    alerted_100 = db.Column(db.Boolean, default=False, nullable=False)
+    last_sync_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    details_json = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("unit", "service", "year_month", name="uq_sdr_credits_unit_service_month"),
+        db.Index("idx_sdr_credits_unit_service_month", "unit", "service", "year_month"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id, "unit": self.unit, "service": self.service,
+            "year_month": self.year_month, "credits_used": self.credits_used,
+            "credits_limit": self.credits_limit, "hard_cap": self.hard_cap,
+            "alert_threshold": self.alert_threshold,
+            "alerted_80": self.alerted_80, "alerted_95": self.alerted_95,
+            "alerted_100": self.alerted_100,
+            "last_sync_at": self.last_sync_at.isoformat() if self.last_sync_at else None,
+        }
