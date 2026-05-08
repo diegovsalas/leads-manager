@@ -24,6 +24,10 @@ services:
         sync: false
       - key: SAVIO_WEBHOOK_SECRET
         sync: false
+      - key: GOOGLE_PLACES_API_KEY
+        sync: false
+      - key: META_ACCESS_TOKEN
+        sync: false
 
   # WhatsApp Baileys Bot
   - type: web
