@@ -1,6 +1,6 @@
 # avantex_crm.py
-import eventlet
-eventlet.monkey_patch()
+from gevent import monkey
+monkey.patch_all()
 
 import os
 from dotenv import load_dotenv
@@ -36,7 +36,7 @@ def create_app():
 
     # ── Extensiones ────────────────────────────
     db.init_app(app)
-    socketio.init_app(app, cors_allowed_origins="*", async_mode="eventlet")
+    socketio.init_app(app, cors_allowed_origins="*", async_mode="gevent")
 
     # ── Blueprints ─────────────────────────────
     from blueprints.auth       import auth_bp
@@ -242,5 +242,5 @@ def _start_scheduler(app):
 # ──────────────────────────────────────────────
 if __name__ == "__main__":
     app = create_app()
-    # Producción: gunicorn -k eventlet -w 1 "avantex_crm:create_app()"
+    # Producción: gunicorn -k gevent -w 1 "avantex_crm:create_app()"
     socketio.run(app, host="0.0.0.0", port=5000, debug=True)
