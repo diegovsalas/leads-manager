@@ -863,7 +863,7 @@ class SavioSubscription(db.Model):
     __tablename__ = "savio_subscriptions"
 
     id = db.Column(db.String(64), primary_key=True)  # ID nativo de Savio
-    customer_id = db.Column(db.String(64), db.ForeignKey("savio_customers.customer_id"), nullable=True, index=True)
+    customer_id = db.Column(db.String(64), nullable=True, index=True)  # sin FK: Savio mirror, ver SavioPayment
     description = db.Column(db.Text, nullable=True)
     mrr = db.Column(db.Numeric(14, 2), nullable=True)  # PRE-IVA. Fuente de verdad para MRR.
     amount = db.Column(db.Numeric(14, 2), nullable=True)
@@ -877,7 +877,15 @@ class SavioSubscription(db.Model):
     raw_data = db.Column(db.JSON, nullable=True)
     updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
 
-    customer = db.relationship("SavioCustomer", backref="subscriptions", lazy="joined")
+    # Sin FK de DB pero relationship explicit para queries (customer.subscriptions, etc).
+    customer = db.relationship(
+        "SavioCustomer",
+        primaryjoin="SavioSubscription.customer_id == SavioCustomer.customer_id",
+        foreign_keys="SavioSubscription.customer_id",
+        backref="subscriptions",
+        lazy="joined",
+        viewonly=True,
+    )
 
     def to_dict(self):
         return {
@@ -900,7 +908,7 @@ class SavioInvoice(db.Model):
     __tablename__ = "savio_invoices"
 
     id = db.Column(db.String(64), primary_key=True)
-    customer_id = db.Column(db.String(64), db.ForeignKey("savio_customers.customer_id"), nullable=True, index=True)
+    customer_id = db.Column(db.String(64), nullable=True, index=True)  # sin FK: Savio mirror
     customer_name = db.Column(db.String(255), nullable=True)
     invoice_number = db.Column(db.String(80), nullable=True)
     amount = db.Column(db.Numeric(14, 2), nullable=True)  # CON IVA. NO usar para MRR.
@@ -935,8 +943,10 @@ class SavioPayment(db.Model):
     __tablename__ = "savio_payments"
 
     id = db.Column(db.String(64), primary_key=True)
-    invoice_id = db.Column(db.String(64), db.ForeignKey("savio_invoices.id"), nullable=True, index=True)
-    customer_id = db.Column(db.String(64), db.ForeignKey("savio_customers.customer_id"), nullable=True, index=True)
+    # No FKs: Savio es source of truth, solo importamos slices (90d) — no garantizar
+    # integridad referencial local. invoice_id/customer_id quedan indexed para joins.
+    invoice_id = db.Column(db.String(64), nullable=True, index=True)
+    customer_id = db.Column(db.String(64), nullable=True, index=True)
     amount = db.Column(db.Numeric(14, 2), nullable=True)
     date = db.Column(db.Date, nullable=True, index=True)
     method = db.Column(db.String(60), nullable=True)
