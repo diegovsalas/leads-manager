@@ -327,8 +327,21 @@ def enrich_phone(first_name: str, last_name: str, company: str) -> Optional[str]
     phones = data.get("phoneNumbers") or []
     mobile = next((p for p in phones if p.get("type") == "mobile"), phones[0] if phones else None)
     if not mobile:
+        _track_cost_safe(service="lusha_api", action="sdr_enrich",
+                         cost_usd=0, metadata={"found": False})
         return None
+    _track_cost_safe(service="lusha_api", action="sdr_enrich",
+                     cost_usd=0.087, metadata={"found": True})
     return mobile.get("internationalNumber") or mobile.get("localizedNumber")
+
+
+def _track_cost_safe(**kwargs):
+    """Wrapper que no rompe si api_costs falla / no está disponible."""
+    try:
+        from api_costs import track_cost
+        track_cost(**kwargs)
+    except Exception:
+        pass
 
 
 def enrich_lusha(person: dict, want_email: bool = True, want_phone: bool = True) -> dict:
@@ -376,6 +389,15 @@ def enrich_lusha(person: dict, want_email: bool = True, want_phone: bool = True)
         out["phones"] = [p.get("internationalNumber") or p.get("localizedNumber") for p in api_phones if p.get("internationalNumber") or p.get("localizedNumber")]
         out["credits"] += 1
     out["ok"] = bool(out["email"] or out["phone"])
+    _track_cost_safe(
+        service="lusha_api", action="sdr_enrich_granular",
+        cost_usd=(out["credits"] or 0) * 0.087,
+        metadata={
+            "want_email": want_email, "want_phone": want_phone,
+            "got_email": bool(out["email"]), "got_phone": bool(out["phone"]),
+            "credits": out["credits"],
+        },
+    )
     return out
 
 

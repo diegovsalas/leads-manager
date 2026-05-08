@@ -63,6 +63,7 @@ def create_app():
     from blueprints.sdr           import sdr_bp
     from blueprints.sdr_directivo import sdr_directivo_bp, lemlist_webhook_bp
     from blueprints.sales         import sales_bp, clients_bp
+    from blueprints.costs         import costs_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp,      url_prefix="/webhook")
@@ -84,6 +85,7 @@ def create_app():
     app.register_blueprint(lemlist_webhook_bp, url_prefix="/api/webhooks")
     app.register_blueprint(sales_bp,         url_prefix="/api/sales")
     app.register_blueprint(clients_bp,       url_prefix="/api/clients")
+    app.register_blueprint(costs_bp,         url_prefix="/api/costs")
 
     # Serve React app at /app/
     @app.route("/app/")

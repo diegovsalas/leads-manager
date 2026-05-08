@@ -1300,6 +1300,36 @@ class SdrDirEngineRun(db.Model):
         }
 
 
+class ApiCost(db.Model):
+    """Una fila por llamada a API externa con costo. Power para reportes
+    de spend por servicio/unidad/día."""
+    __tablename__ = "api_costs"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    service = db.Column(db.String(60), nullable=False, index=True)  # google_places_api/apollo_api/lusha_api/claude_api/etc.
+    action = db.Column(db.String(80), nullable=True, index=True)
+    unit = db.Column(db.String(40), nullable=True, index=True)  # aromatex/pestex/weldex
+    user_id = db.Column(UUID(as_uuid=True), nullable=True)  # opcional, no FK estricto
+    tokens_input = db.Column(db.Integer, default=0, nullable=False)
+    tokens_output = db.Column(db.Integer, default=0, nullable=False)
+    cost_usd = db.Column(db.Numeric(12, 6), default=0, nullable=False)
+    cost_mxn = db.Column(db.Numeric(12, 4), default=0, nullable=False)
+    api_metadata = db.Column(db.JSON, nullable=True)  # 'metadata' es palabra reservada de SQLAlchemy
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id, "service": self.service, "action": self.action,
+            "unit": self.unit,
+            "user_id": str(self.user_id) if self.user_id else None,
+            "tokens_input": self.tokens_input, "tokens_output": self.tokens_output,
+            "cost_usd": float(self.cost_usd or 0),
+            "cost_mxn": float(self.cost_mxn or 0),
+            "metadata": self.api_metadata,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class Sale(db.Model):
     """Venta cerrada con cálculo de comisión.
     sale_type: suscripcion_nueva | servicio_unico | upsell

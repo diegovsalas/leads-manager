@@ -328,6 +328,11 @@ def search_google_maps(state: str, giro: str, limit: int) -> list[dict]:
     if not GOOGLE_PLACES_API_KEY:
         log.warning("GOOGLE_PLACES_API_KEY no configurada")
         return []
+    try:
+        from api_costs import track_cost
+        track_cost(service="google_places_api", action="places_search", cost_usd=0.032)
+    except Exception:
+        pass
     url = "https://places.googleapis.com/v1/places:searchText"
     headers = {
         "Content-Type": "application/json",
