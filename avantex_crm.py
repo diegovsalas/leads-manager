@@ -196,11 +196,12 @@ def _start_scheduler(app):
                     app.logger.warning(f"savio 6h: {e}")
 
         def _run_savio_boot():
-            """Sync inicial 30s después del boot (todo)."""
+            """Sync ligero inicial 60s post-boot. Solo customers (rápido).
+            invoices+payments salen del job horario; subscriptions del 6h."""
             with app.app_context():
                 import savio_sync
                 try:
-                    savio_sync.sync_all()
+                    savio_sync.sync_customers()
                 except Exception as e:
                     app.logger.warning(f"savio boot sync: {e}")
 
@@ -223,7 +224,7 @@ def _start_scheduler(app):
             from datetime import datetime, timedelta
             scheduler.add_job(
                 _run_savio_boot, "date",
-                run_date=datetime.now() + timedelta(seconds=30),
+                run_date=datetime.now() + timedelta(seconds=60),
                 id="savio_boot_sync",
             )
             scheduler.add_job(_run_savio_invoices_payments, "interval", hours=1, id="savio_hourly")
