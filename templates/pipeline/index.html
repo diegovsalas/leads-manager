@@ -302,6 +302,14 @@ tbody td{padding:8px 12px;font-size:14px;}
     <div class="slink" data-marca="Nexo" onclick="setFiltroMarca('Nexo',this)">&#128279; Nexo</div>
 
     <div class="sidebar-divider admin-only"></div>
+    <div class="sidebar-section admin-only">Avantex</div>
+    <div class="slink admin-only" onclick="showView('savio',this)">&#128176; Savio MRR</div>
+    <div class="slink admin-only" onclick="showView('sdrprospect',this)">&#128269; SDR Prospector</div>
+    <div class="slink admin-only" onclick="showView('sdrdir',this)">&#127919; SDR Directivo</div>
+    <div class="slink admin-only" onclick="showView('ventas',this)">&#128200; Ventas</div>
+    <div class="slink admin-only" onclick="showView('costos',this)">&#128181; Costos APIs</div>
+
+    <div class="sidebar-divider admin-only"></div>
     <div class="sidebar-section admin-only">Administracion</div>
     <a href="/cs/" class="slink admin-only">&#127961; CS Dashboard</a>
     <div class="slink admin-only" onclick="showView('integraciones',this)">&#128268; Integraciones</div>
@@ -933,6 +941,194 @@ tbody td{padding:8px 12px;font-size:14px;}
   </div>
 </div>
 
+<!-- ===== SAVIO MRR ===== -->
+<div class="view" id="view-savio" style="overflow-y:auto;">
+  <div class="page-header">
+    <div class="page-emoji">&#128176;</div>
+    <div class="page-title">Savio</div>
+    <div class="page-desc">MRR pre-IVA por unidad + clientes activos + facturacion del mes</div>
+  </div>
+  <div style="padding:20px 48px;display:flex;gap:10px;align-items:center;">
+    <input class="form-input" id="savio-month" placeholder="YYYY-MM (vacio = ultimos 30d)" style="max-width:240px;font-size:13px;"/>
+    <button class="btn btn-filled" onclick="loadSavio()" style="font-size:13px;">Actualizar</button>
+    <button class="btn" onclick="triggerSavioSync()" style="font-size:13px;">Forzar sync ahora</button>
+    <span id="savio-status" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
+  </div>
+  <div style="padding:0 48px 20px;display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">
+    <div class="dash-card"><div class="dash-card-title">MRR Total</div><div style="font-size:24px;font-weight:600;" id="savio-mrr-total">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">MRR Nuevo (mes)</div><div style="font-size:24px;font-weight:600;color:var(--green);" id="savio-mrr-nuevo">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">MRR Upsell</div><div style="font-size:24px;font-weight:600;color:var(--blue);" id="savio-mrr-upsell">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">Clientes activos</div><div style="font-size:24px;font-weight:600;" id="savio-clientes">—</div></div>
+  </div>
+  <div style="padding:0 48px 20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div class="dash-card">
+      <div class="dash-card-title">MRR por unidad</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Unidad</th><th style="text-align:right;">MRR</th><th style="text-align:right;">Nuevo</th><th style="text-align:right;">Upsell</th><th style="text-align:right;">Existente</th></tr></thead>
+        <tbody id="savio-mrr-tbody"></tbody>
+      </table></div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-card-title">Total facturado del mes (con IVA)</div>
+      <div style="font-size:22px;font-weight:600;margin-bottom:4px;" id="savio-fac-total">—</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;" id="savio-fac-sin-iva">—</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Concepto</th><th style="text-align:right;">Monto</th></tr></thead>
+        <tbody id="savio-fac-tbody"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SDR PROSPECTOR ===== -->
+<div class="view" id="view-sdrprospect" style="overflow-y:auto;">
+  <div class="page-header">
+    <div class="page-emoji">&#128269;</div>
+    <div class="page-title">SDR Prospector</div>
+    <div class="page-desc">Buscar prospectos en Meta Ads + Google Maps + Instagram, asignar como Lead</div>
+  </div>
+  <div style="padding:20px 48px;display:grid;grid-template-columns:1fr 1fr 1fr 100px 100px;gap:8px;align-items:center;">
+    <input class="form-input" id="sdrp-state" placeholder="Estado" value="Nuevo Leon" style="font-size:13px;"/>
+    <input class="form-input" id="sdrp-giro" placeholder="Giro (ej: restaurantes)" value="restaurantes" style="font-size:13px;"/>
+    <select class="form-input" id="sdrp-unit" style="font-size:13px;">
+      <option value="aromatex">Aromatex</option><option value="pestex">Pestex</option><option value="weldex">Weldex</option>
+    </select>
+    <input class="form-input" id="sdrp-limit" type="number" value="10" min="1" max="50" style="font-size:13px;"/>
+    <button class="btn btn-filled" onclick="loadSdrProspect()" style="font-size:13px;">Buscar</button>
+  </div>
+  <div style="padding:0 48px 20px;">
+    <div id="sdrp-status" style="font-size:12px;color:var(--text2);margin-bottom:8px;"></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Negocio</th><th>Ciudad</th><th>WhatsApp</th><th>Reviews</th><th>Sucursales</th><th>Fuente</th><th>Acciones</th></tr></thead>
+      <tbody id="sdrp-tbody"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- ===== SDR DIRECTIVO ===== -->
+<div class="view" id="view-sdrdir" style="overflow-y:auto;">
+  <div class="page-header">
+    <div class="page-emoji">&#127919;</div>
+    <div class="page-title">SDR Directivo</div>
+    <div class="page-desc">Outreach a tomadores de decision con Apollo + Lusha + Lemlist</div>
+  </div>
+  <div style="padding:20px 48px;display:flex;gap:10px;align-items:center;">
+    <select class="form-input" id="sdrdir-unit" onchange="loadSdrDir()" style="max-width:200px;font-size:13px;">
+      <option value="aromatex">Aromatex</option><option value="pestex">Pestex</option><option value="weldex">Weldex</option>
+    </select>
+    <button class="btn btn-filled" onclick="sdrDirRunNow(false)" style="font-size:13px;">Run engine ahora</button>
+    <button class="btn" onclick="sdrDirRunNow(true)" style="font-size:13px;">Dry-run</button>
+    <span id="sdrdir-status" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
+  </div>
+  <div style="padding:0 48px 20px;display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">
+    <div class="dash-card"><div class="dash-card-title">Secuencias activas</div><div style="font-size:24px;font-weight:600;" id="sdrdir-seq-active">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">Respondidas</div><div style="font-size:24px;font-weight:600;color:var(--green);" id="sdrdir-seq-resp">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">Lusha balance</div><div style="font-size:24px;font-weight:600;" id="sdrdir-lusha-bal">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">Engine</div><div style="font-size:18px;font-weight:600;" id="sdrdir-engine-state">—</div></div>
+  </div>
+  <div style="padding:0 48px 20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div class="dash-card">
+      <div class="dash-card-title">Master companies (status)</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th style="text-align:right;">Empresas</th></tr></thead>
+        <tbody id="sdrdir-master-tbody"></tbody>
+      </table></div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-card-title">Creditos del mes</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Servicio</th><th style="text-align:right;">Usados</th><th style="text-align:right;">Limite</th><th style="text-align:right;">%</th></tr></thead>
+        <tbody id="sdrdir-credits-tbody"></tbody>
+      </table></div>
+    </div>
+  </div>
+  <div style="padding:0 48px 20px;">
+    <div class="dash-card">
+      <div class="dash-card-title">Secuencias recientes</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Empresa</th><th>Contacto</th><th>Email</th><th>Status</th><th>Step</th><th>Lead state</th></tr></thead>
+        <tbody id="sdrdir-seq-tbody"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== VENTAS ===== -->
+<div class="view" id="view-ventas" style="overflow-y:auto;">
+  <div class="page-header">
+    <div class="page-emoji">&#128200;</div>
+    <div class="page-title">Ventas y comisiones</div>
+    <div class="page-desc">Cierres de venta y status de comisiones</div>
+  </div>
+  <div style="padding:20px 48px;display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+    <div class="dash-card"><div class="dash-card-title">Comisiones pendientes</div><div style="font-size:22px;font-weight:600;color:var(--orange);" id="ventas-com-pendiente">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">Comisiones pagadas</div><div style="font-size:22px;font-weight:600;color:var(--green);" id="ventas-com-pagada">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">MRR contratado</div><div style="font-size:22px;font-weight:600;" id="ventas-mrr">—</div></div>
+  </div>
+  <div style="padding:0 48px 20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div class="dash-card">
+      <div class="dash-card-title">Por unidad</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Unidad</th><th style="text-align:right;">Ventas</th><th style="text-align:right;">Comision</th><th style="text-align:right;">MRR</th></tr></thead>
+        <tbody id="ventas-unit-tbody"></tbody>
+      </table></div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-card-title">Por status comision</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th style="text-align:right;">Cantidad</th><th style="text-align:right;">Monto</th></tr></thead>
+        <tbody id="ventas-status-tbody"></tbody>
+      </table></div>
+    </div>
+  </div>
+  <div style="padding:0 48px 20px;">
+    <div class="dash-card">
+      <div class="dash-card-title">Ventas recientes</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Unidad</th><th>Tipo</th><th style="text-align:right;">Monthly</th><th style="text-align:right;">Total</th><th style="text-align:right;">Comision</th><th>Status</th></tr></thead>
+        <tbody id="ventas-tbody"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== COSTOS APIs ===== -->
+<div class="view" id="view-costos" style="overflow-y:auto;">
+  <div class="page-header">
+    <div class="page-emoji">&#128181;</div>
+    <div class="page-title">Costos de APIs externas</div>
+    <div class="page-desc">Spend en Apollo, Lusha, Google Places, Claude, etc.</div>
+  </div>
+  <div style="padding:20px 48px;display:flex;gap:10px;align-items:center;">
+    <select class="form-input" id="costos-period" onchange="loadCostos()" style="max-width:180px;font-size:13px;">
+      <option value="today">Hoy</option><option value="week">Ultima semana</option>
+      <option value="month" selected>Mes actual</option><option value="">Todo</option>
+    </select>
+  </div>
+  <div style="padding:0 48px 20px;display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">
+    <div class="dash-card"><div class="dash-card-title">Total USD</div><div style="font-size:22px;font-weight:600;" id="costos-total-usd">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">Total MXN</div><div style="font-size:22px;font-weight:600;" id="costos-total-mxn">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">Hoy MXN</div><div style="font-size:22px;font-weight:600;color:var(--blue);" id="costos-hoy-mxn">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">Mes MXN</div><div style="font-size:22px;font-weight:600;" id="costos-mes-mxn">—</div></div>
+  </div>
+  <div style="padding:0 48px 20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div class="dash-card">
+      <div class="dash-card-title">Por servicio</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Servicio</th><th style="text-align:right;">USD</th><th style="text-align:right;">MXN</th><th style="text-align:right;">Calls</th></tr></thead>
+        <tbody id="costos-service-tbody"></tbody>
+      </table></div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-card-title">Por unidad</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Unidad</th><th style="text-align:right;">USD</th><th style="text-align:right;">MXN</th><th style="text-align:right;">Calls</th></tr></thead>
+        <tbody id="costos-unit-tbody"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
 </main>
 </div>
 
@@ -1197,6 +1393,181 @@ function showView(name,el){
   document.getElementById('view-'+name)?.classList.add('active');
   if(el){document.querySelectorAll('.sidebar .slink:not([data-marca])').forEach(s=>s.classList.remove('active'));el.classList.add('active');}
   if(name==='integraciones')loadIntegraciones();
+  if(name==='savio')loadSavio();
+  if(name==='sdrprospect')document.getElementById('sdrp-tbody').innerHTML='<tr><td colspan="7" style="color:var(--text2);text-align:center;padding:20px;">Llena los filtros y dale a Buscar</td></tr>';
+  if(name==='sdrdir')loadSdrDir();
+  if(name==='ventas')loadVentas();
+  if(name==='costos')loadCostos();
+}
+
+// ──────────────────────────────────────────────
+// Avantex modules: data loaders
+// ──────────────────────────────────────────────
+const _fmtMxn = n => '$' + (Number(n)||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
+const _fmtNum = n => (Number(n)||0).toLocaleString('es-MX');
+
+async function _api(path){
+  try{const r=await fetch(path);if(!r.ok)return null;return await r.json();}
+  catch(e){console.error('api',path,e);return null;}
+}
+
+// ── Savio ──
+async function loadSavio(){
+  const month=document.getElementById('savio-month').value.trim();
+  const url='/api/savio/mrr'+(month?('?month='+encodeURIComponent(month)):'');
+  const d=await _api(url);
+  if(!d){document.getElementById('savio-status').textContent='Error cargando MRR';return;}
+  document.getElementById('savio-status').textContent='Rango: '+(d.range?.start_date||'')+' a '+(d.range?.end_date||'');
+  document.getElementById('savio-mrr-total').textContent=_fmtMxn(d.mrr_total);
+  document.getElementById('savio-mrr-nuevo').textContent=_fmtMxn(d.mrr_nuevo);
+  document.getElementById('savio-mrr-upsell').textContent=_fmtMxn(d.mrr_upsell);
+  document.getElementById('savio-clientes').textContent=_fmtNum(d.total_active_clients);
+  const tbody=document.getElementById('savio-mrr-tbody');tbody.innerHTML='';
+  for(const[unit,des]of Object.entries(d.desglose_por_un||{})){
+    tbody.innerHTML+=`<tr><td><strong>${unit}</strong></td><td style="text-align:right;">${_fmtMxn(des.mrr_total)}</td><td style="text-align:right;color:var(--green);">${_fmtMxn(des.mrr_nuevos)}</td><td style="text-align:right;color:var(--blue);">${_fmtMxn(des.mrr_upsell)}</td><td style="text-align:right;color:var(--text2);">${_fmtMxn(des.mrr_existente)}</td></tr>`;
+  }
+  if(!tbody.innerHTML)tbody.innerHTML='<tr><td colspan="5" style="color:var(--text2);text-align:center;padding:12px;">Sin datos en este rango</td></tr>';
+  const fac=d.total_facturado_del_mes||{};
+  document.getElementById('savio-fac-total').textContent=_fmtMxn(fac.total);
+  document.getElementById('savio-fac-sin-iva').textContent='Sin IVA: '+_fmtMxn(fac.total_sin_iva);
+  const fbody=document.getElementById('savio-fac-tbody');fbody.innerHTML='';
+  for(const[k,v]of Object.entries(fac.desglose||{})){
+    if(v===0)continue;
+    fbody.innerHTML+=`<tr><td>${k.replace(/_/g,' ')}</td><td style="text-align:right;">${_fmtMxn(v)}</td></tr>`;
+  }
+}
+async function triggerSavioSync(){
+  document.getElementById('savio-status').textContent='Sincronizando…';
+  try{const r=await fetch('/api/savio/sync',{method:'POST'});const d=await r.json();
+    document.getElementById('savio-status').textContent='Sync: '+(d.elapsed_seconds||0).toFixed(1)+'s';
+    loadSavio();
+  }catch(e){document.getElementById('savio-status').textContent='Error: '+e.message;}
+}
+
+// ── SDR Prospector ──
+async function loadSdrProspect(){
+  const state=document.getElementById('sdrp-state').value;
+  const giro=document.getElementById('sdrp-giro').value;
+  const unit=document.getElementById('sdrp-unit').value;
+  const limit=document.getElementById('sdrp-limit').value;
+  document.getElementById('sdrp-status').textContent='Buscando…';
+  const d=await _api(`/api/sdr/search?state=${encodeURIComponent(state)}&giro=${encodeURIComponent(giro)}&unit=${unit}&limit=${limit}`);
+  if(!d){document.getElementById('sdrp-status').textContent='Error de busqueda';return;}
+  document.getElementById('sdrp-status').textContent=`${d.results?.length||0} prospectos | corporativos filtrados: ${d.corporates_filtered||0} (guardados: ${d.corporates_saved||0})`;
+  const tbody=document.getElementById('sdrp-tbody');tbody.innerHTML='';
+  for(const r of(d.results||[])){
+    const dup=r.duplicate?' <span style="color:var(--orange);font-size:10px;">DUP</span>':'';
+    tbody.innerHTML+=`<tr>
+      <td><strong>${r.name||''}</strong>${dup}</td>
+      <td>${r.city||''}</td>
+      <td style="font-family:var(--mono);font-size:11px;">${r.whatsapp||''}</td>
+      <td style="text-align:right;">${r.reviews||0}</td>
+      <td style="text-align:right;">${r.branches||1}</td>
+      <td style="font-size:11px;color:var(--text2);">${r.source||''}</td>
+      <td>
+        <button class="btn" onclick='sdrAssign(${JSON.stringify({...r,unit,state}).replace(/'/g,"&apos;")})' style="font-size:11px;padding:4px 8px;">Asignar</button>
+        ${r.sdr_id?`<button class="btn" onclick='sdrDiscard(${r.sdr_id})' style="font-size:11px;padding:4px 8px;">Descartar</button>`:''}
+      </td>
+    </tr>`;
+  }
+  if(!tbody.innerHTML)tbody.innerHTML='<tr><td colspan="7" style="color:var(--text2);text-align:center;padding:12px;">Sin resultados</td></tr>';
+}
+async function sdrAssign(p){
+  try{await fetch('/api/sdr/assign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdr_id:p.sdr_id,business_name:p.name,whatsapp:p.whatsapp,address:p.address,state:p.state,city:p.city,unit:p.unit,instagram_handle:p.instagram_handle})});
+    document.getElementById('sdrp-status').textContent='Lead creado para '+p.name;loadSdrProspect();}
+  catch(e){alert('Error: '+e.message);}
+}
+async function sdrDiscard(sdrId){
+  await fetch('/api/sdr/discard',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdr_id:sdrId})});
+  loadSdrProspect();
+}
+
+// ── SDR Directivo ──
+async function loadSdrDir(){
+  const unit=document.getElementById('sdrdir-unit').value;
+  const [stats,status,seqs]=await Promise.all([
+    _api('/api/sdr-directivo/stats'),
+    _api('/api/sdr-directivo/engine/status?unit='+unit),
+    _api('/api/sdr-directivo/sequences?unit='+unit),
+  ]);
+  if(stats){
+    document.getElementById('sdrdir-seq-active').textContent=_fmtNum(stats.active);
+    document.getElementById('sdrdir-seq-resp').textContent=_fmtNum(stats.responded);
+  }
+  if(status){
+    document.getElementById('sdrdir-lusha-bal').textContent=status.lushaBalance!=null?_fmtNum(status.lushaBalance):'—';
+    document.getElementById('sdrdir-engine-state').textContent=status.config?.enabled?'ACTIVO':'PAUSADO';
+    const mb=document.getElementById('sdrdir-master-tbody');mb.innerHTML='';
+    for(const m of(status.masterStats||[]))mb.innerHTML+=`<tr><td>${m.status}</td><td style="text-align:right;">${m.c}</td></tr>`;
+    if(!mb.innerHTML)mb.innerHTML='<tr><td colspan="2" style="color:var(--text2);text-align:center;padding:12px;">Sin master companies</td></tr>';
+    const cb=document.getElementById('sdrdir-credits-tbody');cb.innerHTML='';
+    for(const c of(status.monthlyCredits||[])){
+      const pct=c.credits_limit?Math.round(c.credits_used/c.credits_limit*100):0;
+      const color=pct>=95?'var(--red)':pct>=80?'var(--orange)':'var(--text)';
+      cb.innerHTML+=`<tr><td>${c.service}</td><td style="text-align:right;">${_fmtNum(c.credits_used)}</td><td style="text-align:right;">${_fmtNum(c.credits_limit)}</td><td style="text-align:right;color:${color};font-weight:600;">${pct}%</td></tr>`;
+    }
+    if(!cb.innerHTML)cb.innerHTML='<tr><td colspan="4" style="color:var(--text2);text-align:center;padding:12px;">Sin creditos registrados</td></tr>';
+  }
+  const sbody=document.getElementById('sdrdir-seq-tbody');sbody.innerHTML='';
+  for(const s of(seqs||[]).slice(0,30)){
+    sbody.innerHTML+=`<tr><td>${s.company_name||''}</td><td>${s.contact_name||''}</td><td style="font-size:11px;font-family:var(--mono);">${s.contact_email||''}</td><td>${s.status}</td><td style="text-align:center;">${s.current_step}</td><td>${s.lead_state||''}</td></tr>`;
+  }
+  if(!sbody.innerHTML)sbody.innerHTML='<tr><td colspan="6" style="color:var(--text2);text-align:center;padding:12px;">Sin secuencias</td></tr>';
+}
+async function sdrDirRunNow(dryRun){
+  const unit=document.getElementById('sdrdir-unit').value;
+  document.getElementById('sdrdir-status').textContent=dryRun?'Dry-run en curso…':'Engine corriendo…';
+  try{const r=await fetch('/api/sdr-directivo/engine/run-now',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unit,dry_run:dryRun})});
+    const d=await r.json();
+    document.getElementById('sdrdir-status').textContent=`Run ${d.run_id||''}: ${d.totals?.contacts_pushed||0} pushed, ${d.totals?.lusha_used||0} creditos`;
+    loadSdrDir();
+  }catch(e){document.getElementById('sdrdir-status').textContent='Error: '+e.message;}
+}
+
+// ── Ventas ──
+async function loadVentas(){
+  const [stats,sales]=await Promise.all([_api('/api/sales/stats'),_api('/api/sales/')]);
+  if(stats){
+    let pendiente=0,pagada=0;
+    for(const s of(stats.by_commission_status||[])){
+      if(s.status==='pendiente')pendiente=s.amount;
+      if(s.status==='pagada')pagada=s.amount;
+    }
+    document.getElementById('ventas-com-pendiente').textContent=_fmtMxn(pendiente);
+    document.getElementById('ventas-com-pagada').textContent=_fmtMxn(pagada);
+    let mrrTotal=0;for(const u of(stats.by_unit||[]))mrrTotal+=u.monthly_total||0;
+    document.getElementById('ventas-mrr').textContent=_fmtMxn(mrrTotal);
+    const ub=document.getElementById('ventas-unit-tbody');ub.innerHTML='';
+    for(const u of(stats.by_unit||[]))ub.innerHTML+=`<tr><td><strong>${u.unit}</strong></td><td style="text-align:right;">${u.count}</td><td style="text-align:right;">${_fmtMxn(u.commission_total)}</td><td style="text-align:right;">${_fmtMxn(u.monthly_total)}</td></tr>`;
+    if(!ub.innerHTML)ub.innerHTML='<tr><td colspan="4" style="color:var(--text2);text-align:center;padding:12px;">Sin ventas</td></tr>';
+    const sb=document.getElementById('ventas-status-tbody');sb.innerHTML='';
+    for(const s of(stats.by_commission_status||[]))sb.innerHTML+=`<tr><td>${s.status}</td><td style="text-align:right;">${s.count}</td><td style="text-align:right;">${_fmtMxn(s.amount)}</td></tr>`;
+    if(!sb.innerHTML)sb.innerHTML='<tr><td colspan="3" style="color:var(--text2);text-align:center;padding:12px;">Sin comisiones</td></tr>';
+  }
+  const tb=document.getElementById('ventas-tbody');tb.innerHTML='';
+  for(const s of(sales||[]).slice(0,30)){
+    const d=s.closed_at?s.closed_at.slice(0,10):'';
+    tb.innerHTML+=`<tr><td>${d}</td><td>${s.unit}</td><td>${s.sale_type||''}</td><td style="text-align:right;">${_fmtMxn(s.monthly_amount)}</td><td style="text-align:right;">${_fmtMxn(s.total_amount)}</td><td style="text-align:right;">${_fmtMxn(s.commission_amount)}</td><td>${s.commission_status}</td></tr>`;
+  }
+  if(!tb.innerHTML)tb.innerHTML='<tr><td colspan="7" style="color:var(--text2);text-align:center;padding:12px;">Sin ventas</td></tr>';
+}
+
+// ── Costos APIs ──
+async function loadCostos(){
+  const period=document.getElementById('costos-period').value;
+  const url='/api/costs/summary'+(period?('?period='+period):'');
+  const d=await _api(url);
+  if(!d)return;
+  document.getElementById('costos-total-usd').textContent='$'+(d.total_usd||0).toFixed(2);
+  document.getElementById('costos-total-mxn').textContent=_fmtMxn(d.total_mxn);
+  document.getElementById('costos-hoy-mxn').textContent=_fmtMxn(d.todayMxn);
+  document.getElementById('costos-mes-mxn').textContent=_fmtMxn(d.monthMxn);
+  const sb=document.getElementById('costos-service-tbody');sb.innerHTML='';
+  for(const s of(d.byService||[]))sb.innerHTML+=`<tr><td>${s.service}</td><td style="text-align:right;">$${(s.total_usd||0).toFixed(2)}</td><td style="text-align:right;">${_fmtMxn(s.total_mxn)}</td><td style="text-align:right;">${s.count}</td></tr>`;
+  if(!sb.innerHTML)sb.innerHTML='<tr><td colspan="4" style="color:var(--text2);text-align:center;padding:12px;">Sin costos registrados</td></tr>';
+  const ub=document.getElementById('costos-unit-tbody');ub.innerHTML='';
+  for(const u of(d.byUnit||[]))ub.innerHTML+=`<tr><td>${u.unit}</td><td style="text-align:right;">$${(u.total_usd||0).toFixed(2)}</td><td style="text-align:right;">${_fmtMxn(u.total_mxn)}</td><td style="text-align:right;">${u.count}</td></tr>`;
+  if(!ub.innerHTML)ub.innerHTML='<tr><td colspan="4" style="color:var(--text2);text-align:center;padding:12px;">Sin costos por unidad</td></tr>';
 }
 
 // UN filter
