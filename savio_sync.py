@@ -30,7 +30,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from extensions import db
 from models import (
     SavioCustomer, SavioSubscription, SavioInvoice, SavioPayment,
-    CustomerMaster, CustomerRfc, CSAccount,
+    CustomerMaster, CustomerRfc, CSAccount, CSInvoice,
 )
 import savio_client
 from savio_classifier import classify_subscription
@@ -363,6 +363,140 @@ def bridge_savio_to_cs_mrr() -> dict:
             matched += 1
     db.session.commit()
     return {"matched": matched, "unmatched": unmatched}
+
+
+def sync_savio_to_cs_invoices(account_id: Optional[str] = None) -> dict:
+    """Por cada CSAccount, busca su CustomerMaster (link cs_account_id),
+    sus CustomerRfc, y de cada SavioCustomer asociado pulla TODAS las
+    SavioInvoices y las upserta como CSInvoice. Idempotente por
+    savio_invoice_id. Al final recalcula facturacion_q1/pagado_q1/
+    pendiente_q1/num_facturas_q1 de los accounts tocados.
+
+    Si account_id viene, solo procesa esa cuenta. Si no, procesa todas.
+    """
+    from decimal import Decimal as _D
+
+    accounts_q = CSAccount.query
+    if account_id:
+        accounts_q = accounts_q.filter(CSAccount.id == account_id)
+    accounts = accounts_q.all()
+
+    summary = {
+        "accounts_total": len(accounts),
+        "accounts_synced": 0,
+        "accounts_no_master": 0,
+        "accounts_no_rfcs": 0,
+        "invoices_inserted": 0,
+        "invoices_updated": 0,
+        "details": [],
+    }
+    touched_accounts = []
+    for acc in accounts:
+        master = CustomerMaster.query.filter_by(cs_account_id=acc.id).first()
+        if not master:
+            summary["accounts_no_master"] += 1
+            summary["details"].append({"account": acc.nombre, "status": "no_master"})
+            continue
+        rfcs = CustomerRfc.query.filter_by(master_id=master.id).all()
+        if not rfcs:
+            summary["accounts_no_rfcs"] += 1
+            summary["details"].append({"account": acc.nombre, "status": "no_rfcs"})
+            continue
+        savio_cids = [r.savio_customer_id for r in rfcs if r.savio_customer_id]
+        if not savio_cids:
+            summary["accounts_no_rfcs"] += 1
+            summary["details"].append({"account": acc.nombre, "status": "no_savio_customer_ids"})
+            continue
+
+        # Pull todas las SavioInvoice locales para esos customers
+        savio_invs = (
+            SavioInvoice.query
+            .filter(SavioInvoice.customer_id.in_(savio_cids))
+            .all()
+        )
+
+        ins, upd = 0, 0
+        for sv in savio_invs:
+            try:
+                sv_id = int(sv.id)
+            except (ValueError, TypeError):
+                continue
+            existing = CSInvoice.query.filter_by(savio_invoice_id=sv_id).first()
+            total = _D(str(float(sv.amount or 0)))
+            # SavioInvoice no tiene amount_paid/remaining persistido, lo tomamos
+            # del raw_data si existe (vino del API). Fallback: pagado=0.
+            raw = sv.raw_data or {}
+            pagado_v = raw.get("amount_paid")
+            pend_v = raw.get("amount_remaining")
+            pagado = _D(str(float(pagado_v))) if pagado_v is not None else _D("0")
+            pendiente = _D(str(float(pend_v))) if pend_v is not None else (total - pagado)
+            subtotal = (total / _D("1.16")).quantize(_D("0.01")) if total else _D("0")
+            impuestos = total - subtotal
+            settled = raw.get("settled_date")
+            settled_d = _parse_date(settled[:10]) if settled else None
+            due = raw.get("date_due")
+            due_d = _parse_date(due) if due else None
+            series = raw.get("series") or ""
+            estatus = (raw.get("status") or sv.status or "").strip()
+
+            if existing:
+                existing.account_id = acc.id
+                existing.folio = sv.invoice_number or ""
+                existing.serie = series
+                existing.concepto = (sv.description or "")[:300]
+                existing.uen = (sv.uen or "")[:50]
+                existing.subtotal = subtotal
+                existing.impuestos = impuestos
+                existing.total = total
+                existing.pagado = pagado
+                existing.pendiente = pendiente
+                existing.fecha_cobro = sv.date
+                existing.fecha_vencimiento = due_d
+                existing.fecha_pago = settled_d
+                existing.estatus = estatus[:30]
+                upd += 1
+            else:
+                new_row = CSInvoice(
+                    account_id=acc.id, folio=sv.invoice_number or "",
+                    serie=series, concepto=(sv.description or "")[:300],
+                    uen=(sv.uen or "")[:50],
+                    subtotal=subtotal, impuestos=impuestos, total=total,
+                    pagado=pagado, pendiente=pendiente,
+                    fecha_cobro=sv.date, fecha_vencimiento=due_d,
+                    fecha_pago=settled_d, estatus=estatus[:30],
+                    savio_invoice_id=sv_id,
+                )
+                db.session.add(new_row)
+                ins += 1
+        db.session.commit()
+
+        summary["invoices_inserted"] += ins
+        summary["invoices_updated"] += upd
+        summary["accounts_synced"] += 1
+        summary["details"].append({
+            "account": acc.nombre, "status": "ok",
+            "savio_customers": len(savio_cids), "ins": ins, "upd": upd,
+        })
+        touched_accounts.append(acc)
+
+    # Recalcular rollups en accounts tocadas
+    if touched_accounts:
+        for acc in touched_accounts:
+            totals = (
+                db.session.query(
+                    db.func.coalesce(db.func.sum(CSInvoice.total), 0),
+                    db.func.coalesce(db.func.sum(CSInvoice.pagado), 0),
+                    db.func.coalesce(db.func.sum(CSInvoice.pendiente), 0),
+                    db.func.count(CSInvoice.id),
+                ).filter(CSInvoice.account_id == acc.id).first()
+            )
+            acc.facturacion_q1 = float(totals[0] or 0)
+            acc.pagado_q1 = float(totals[1] or 0)
+            acc.pendiente_q1 = float(totals[2] or 0)
+            acc.num_facturas_q1 = int(totals[3] or 0)
+        db.session.commit()
+
+    return summary
 
 
 def sync_all(month: Optional[str] = None) -> dict:

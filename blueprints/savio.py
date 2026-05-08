@@ -231,6 +231,130 @@ def merge_masters(master_id):
     return jsonify(survivor.to_dict())
 
 
+# ── Vinculación CS ↔ Savio + sync de facturación ───────────────────
+
+
+@savio_bp.route("/cs-accounts", methods=["GET"])
+def list_cs_accounts_with_links():
+    """Devuelve las cuentas CS con su vínculo Savio actual (master + RFCs +
+    rollups). Para la UI de vinculación."""
+    from models import CSAccount as _CSA
+    accounts = _CSA.query.order_by(_CSA.nombre.asc()).all()
+    out = []
+    for acc in accounts:
+        master = CustomerMaster.query.filter_by(cs_account_id=acc.id).first()
+        rfcs = master.rfcs if master else []
+        out.append({
+            "id": str(acc.id), "client_id": acc.client_id or "",
+            "nombre": acc.nombre,
+            "facturacion_q1": float(acc.facturacion_q1 or 0),
+            "pagado_q1": float(acc.pagado_q1 or 0),
+            "pendiente_q1": float(acc.pendiente_q1 or 0),
+            "num_facturas_q1": int(acc.num_facturas_q1 or 0),
+            "master_id": master.id if master else None,
+            "rfcs": [r.to_dict() for r in rfcs],
+        })
+    return jsonify(out)
+
+
+@savio_bp.route("/customers/search", methods=["GET"])
+def search_customers():
+    """GET /api/savio/customers/search?q=texto — devuelve hasta 30 SavioCustomers
+    matching name, legal_name o tax_id (case-insensitive). Para el modal de
+    vinculación de RFCs."""
+    q = (request.args.get("q") or "").strip()
+    if len(q) < 2:
+        return jsonify([])
+    like = f"%{q}%"
+    rows = (
+        SavioCustomer.query
+        .filter(or_(
+            SavioCustomer.name.ilike(like),
+            SavioCustomer.legal_name.ilike(like),
+            SavioCustomer.tax_id.ilike(like),
+        ))
+        .order_by(SavioCustomer.name.asc()).limit(30).all()
+    )
+    return jsonify([{
+        "customer_id": c.customer_id,
+        "name": c.name, "legal_name": c.legal_name,
+        "tax_id": c.tax_id, "city": c.city,
+        "current_state": c.current_state,
+    } for c in rows])
+
+
+@savio_bp.route("/customers/master/link", methods=["POST"])
+def link_master_to_cs():
+    """POST body {cs_account_id, savio_customer_ids: []}
+    Crea/actualiza un CustomerMaster vinculado al CSAccount, y sincroniza
+    los CustomerRfc para que coincidan exactamente con la lista enviada
+    (agrega los nuevos, conserva existentes, no borra los que estén)."""
+    from models import CSAccount as _CSA
+    data = request.get_json() or {}
+    cs_account_id = data.get("cs_account_id")
+    savio_ids = data.get("savio_customer_ids") or []
+    if not cs_account_id:
+        return jsonify({"error": "cs_account_id requerido"}), 400
+
+    acc = db.session.get(_CSA, cs_account_id)
+    if not acc:
+        return jsonify({"error": "CSAccount no existe"}), 404
+
+    # Buscar master existente vinculado a esa CSAccount
+    master = CustomerMaster.query.filter_by(cs_account_id=acc.id).first()
+    if not master:
+        master = CustomerMaster(master_name=acc.nombre, cs_account_id=acc.id)
+        db.session.add(master)
+        db.session.flush()
+
+    # Para cada savio_customer_id, asegurar un CustomerRfc bajo este master
+    added = 0
+    skipped = 0
+    not_found = []
+    for cid in savio_ids:
+        sc = db.session.get(SavioCustomer, str(cid))
+        if not sc or not sc.tax_id:
+            not_found.append(cid)
+            continue
+        existing = CustomerRfc.query.filter_by(rfc=sc.tax_id).first()
+        if existing:
+            # Si está bajo otro master, lo movemos a este
+            if existing.master_id != master.id:
+                existing.master_id = master.id
+                existing.savio_customer_id = sc.customer_id
+                added += 1
+            else:
+                skipped += 1
+        else:
+            db.session.add(CustomerRfc(
+                master_id=master.id, rfc=sc.tax_id,
+                legal_name=sc.legal_name or sc.name or "",
+                savio_customer_id=sc.customer_id,
+            ))
+            added += 1
+    db.session.commit()
+    return jsonify({
+        "master_id": master.id,
+        "cs_account_id": str(acc.id),
+        "added_or_moved": added, "already_linked": skipped,
+        "not_found": not_found,
+        "current_rfcs": [r.to_dict() for r in master.rfcs],
+    })
+
+
+@savio_bp.route("/cs-sync", methods=["POST"])
+def trigger_cs_sync():
+    """POST {account_id} (opcional). Sin account_id sincroniza las 25 cuentas.
+    Pulla SavioInvoices vía CustomerMaster→CustomerRfc y upserta CSInvoice."""
+    data = request.get_json(silent=True) or {}
+    account_id = data.get("account_id")
+    try:
+        return jsonify(savio_sync.sync_savio_to_cs_invoices(account_id=account_id))
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Webhook receiver ───────────────────────────────────────────────
 
 

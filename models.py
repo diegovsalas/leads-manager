@@ -619,6 +619,7 @@ class CSInvoice(db.Model):
     fecha_vencimiento = db.Column(db.Date, nullable=True)
     fecha_pago = db.Column(db.Date, nullable=True)
     estatus = db.Column(db.String(30), default="")
+    savio_invoice_id = db.Column(db.Integer, nullable=True, index=True, unique=False)  # link cuando viene de Savio
 
 
 class CSAppointment(db.Model):

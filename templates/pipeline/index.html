@@ -308,6 +308,7 @@ tbody td{padding:8px 12px;font-size:14px;}
     <div class="slink admin-only" onclick="showView('sdrdir',this)">&#127919; SDR Directivo</div>
     <div class="slink admin-only" onclick="showView('ventas',this)">&#128200; Ventas</div>
     <div class="slink admin-only" onclick="showView('costos',this)">&#128181; Costos APIs</div>
+    <div class="slink admin-only" onclick="showView('vincular',this)">&#128279; Vincular Savio&#8594;CS</div>
 
     <div class="sidebar-divider admin-only"></div>
     <div class="sidebar-section admin-only">Administracion</div>
@@ -1092,6 +1093,61 @@ tbody td{padding:8px 12px;font-size:14px;}
   </div>
 </div>
 
+<!-- ===== VINCULAR SAVIO -> CS ===== -->
+<div class="view" id="view-vincular" style="overflow-y:auto;">
+  <div class="page-header">
+    <div class="page-emoji">&#128279;</div>
+    <div class="page-title">Vincular Savio &rarr; CS</div>
+    <div class="page-desc">Asocia las razones sociales de Savio con cada cuenta CS y sincroniza facturacion automaticamente</div>
+  </div>
+  <div style="padding:20px 48px;display:flex;gap:10px;align-items:center;">
+    <button class="btn btn-filled" onclick="loadVincular()" style="font-size:13px;">Refrescar</button>
+    <button class="btn" onclick="syncAllCs()" style="font-size:13px;">Sincronizar TODAS las cuentas</button>
+    <span id="vinc-status" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
+  </div>
+  <div style="padding:0 48px 20px;">
+    <div class="dash-card">
+      <div class="dash-card-title">Cuentas CS bajo gestion</div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Cuenta</th><th>RFCs vinculados</th><th style="text-align:right;">Facturado</th>
+          <th style="text-align:right;">Pagado</th><th style="text-align:right;">Pendiente</th>
+          <th style="text-align:right;"># facturas</th><th>Acciones</th>
+        </tr></thead>
+        <tbody id="vinc-tbody"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de vinculacion -->
+<div id="vinc-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:var(--bg-card);border-radius:var(--r2);padding:20px;max-width:780px;width:92%;max-height:85vh;display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <div>
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;">Cuenta CS</div>
+        <div id="vinc-modal-account" style="font-size:18px;font-weight:600;"></div>
+      </div>
+      <button class="btn" onclick="closeVincModal()" style="font-size:13px;">Cerrar</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;flex:1;min-height:0;">
+      <div style="display:flex;flex-direction:column;min-height:0;">
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px;">RFCs ya vinculados</div>
+        <div id="vinc-current" style="overflow-y:auto;border:1px solid var(--border);border-radius:var(--r);padding:8px;flex:1;background:var(--bg-sidebar);"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;min-height:0;">
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px;">Buscar en Savio (nombre o RFC)</div>
+        <input class="form-input" id="vinc-search-input" placeholder="ej: Sante Pilates" oninput="searchSavioDebounced()" style="font-size:13px;margin-bottom:6px;"/>
+        <div id="vinc-search-results" style="overflow-y:auto;border:1px solid var(--border);border-radius:var(--r);padding:8px;flex:1;"></div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+      <button class="btn" onclick="closeVincModal()" style="font-size:13px;">Cancelar</button>
+      <button class="btn btn-filled" id="vinc-save-btn" onclick="saveVinculacion()" style="font-size:13px;" disabled>Guardar 0 nuevos</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== COSTOS APIs ===== -->
 <div class="view" id="view-costos" style="overflow-y:auto;">
   <div class="page-header">
@@ -1398,6 +1454,7 @@ function showView(name,el){
   if(name==='sdrdir')loadSdrDir();
   if(name==='ventas')loadVentas();
   if(name==='costos')loadCostos();
+  if(name==='vincular')loadVincular();
 }
 
 // ──────────────────────────────────────────────
@@ -1550,6 +1607,112 @@ async function loadVentas(){
     tb.innerHTML+=`<tr><td>${d}</td><td>${s.unit}</td><td>${s.sale_type||''}</td><td style="text-align:right;">${_fmtMxn(s.monthly_amount)}</td><td style="text-align:right;">${_fmtMxn(s.total_amount)}</td><td style="text-align:right;">${_fmtMxn(s.commission_amount)}</td><td>${s.commission_status}</td></tr>`;
   }
   if(!tb.innerHTML)tb.innerHTML='<tr><td colspan="7" style="color:var(--text2);text-align:center;padding:12px;">Sin ventas</td></tr>';
+}
+
+// ── Vincular Savio → CS ──
+let _vincState = {accountId:null, accountName:'', currentRfcs:[], pendingAdd:[]};
+async function loadVincular(){
+  const data=await _api('/api/savio/cs-accounts');
+  const tb=document.getElementById('vinc-tbody');tb.innerHTML='';
+  if(!data){tb.innerHTML='<tr><td colspan="7" style="color:var(--red);text-align:center;padding:12px;">Error cargando</td></tr>';return;}
+  for(const a of data){
+    const rfcsTxt=a.rfcs.length?a.rfcs.map(r=>`<span style="font-family:var(--mono);font-size:11px;background:var(--bg-tag);padding:2px 6px;border-radius:4px;margin-right:4px;">${r.rfc}</span>`).join(''):'<span style="color:var(--text3);font-size:11px;">— sin vincular —</span>';
+    tb.innerHTML+=`<tr>
+      <td><strong>${a.nombre}</strong> <span style="font-family:var(--mono);font-size:10px;color:var(--text3);">${a.client_id||''}</span></td>
+      <td>${rfcsTxt}</td>
+      <td style="text-align:right;">${_fmtMxn(a.facturacion_q1)}</td>
+      <td style="text-align:right;color:var(--green);">${_fmtMxn(a.pagado_q1)}</td>
+      <td style="text-align:right;color:var(--orange);">${_fmtMxn(a.pendiente_q1)}</td>
+      <td style="text-align:right;">${a.num_facturas_q1}</td>
+      <td>
+        <button class="btn" onclick='openVincModal(${JSON.stringify({id:a.id,nombre:a.nombre,rfcs:a.rfcs}).replace(/'/g,"&apos;")})' style="font-size:11px;padding:4px 8px;">Vincular RFCs</button>
+        <button class="btn" onclick='syncOneCs("${a.id}","${a.nombre}")' style="font-size:11px;padding:4px 8px;">Sync</button>
+      </td>
+    </tr>`;
+  }
+  if(!tb.innerHTML)tb.innerHTML='<tr><td colspan="7" style="color:var(--text2);text-align:center;padding:12px;">Sin cuentas CS</td></tr>';
+}
+function openVincModal(acc){
+  _vincState.accountId=acc.id;_vincState.accountName=acc.nombre;
+  _vincState.currentRfcs=acc.rfcs||[];_vincState.pendingAdd=[];
+  document.getElementById('vinc-modal-account').textContent=acc.nombre;
+  renderVincCurrent();
+  document.getElementById('vinc-search-input').value='';
+  document.getElementById('vinc-search-results').innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:20px;">Escribe nombre o RFC para buscar</div>';
+  updateVincSaveBtn();
+  document.getElementById('vinc-modal').style.display='flex';
+}
+function closeVincModal(){document.getElementById('vinc-modal').style.display='none';}
+function renderVincCurrent(){
+  const el=document.getElementById('vinc-current');
+  if(!_vincState.currentRfcs.length){el.innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:20px;">Aun no hay RFCs vinculados</div>';return;}
+  el.innerHTML=_vincState.currentRfcs.map(r=>`<div style="padding:6px 0;border-bottom:1px solid var(--border-light);font-size:12px;">
+    <div style="font-family:var(--mono);font-weight:600;">${r.rfc}</div>
+    <div style="color:var(--text2);font-size:11px;">${r.legal_name||''}</div>
+  </div>`).join('');
+}
+let _searchTimer=null;
+function searchSavioDebounced(){clearTimeout(_searchTimer);_searchTimer=setTimeout(searchSavio,300);}
+async function searchSavio(){
+  const q=document.getElementById('vinc-search-input').value.trim();
+  if(q.length<2){document.getElementById('vinc-search-results').innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:20px;">Min 2 caracteres</div>';return;}
+  const results=await _api('/api/savio/customers/search?q='+encodeURIComponent(q));
+  const el=document.getElementById('vinc-search-results');
+  if(!results||!results.length){el.innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:20px;">Sin resultados</div>';return;}
+  const linkedIds=new Set(_vincState.currentRfcs.map(r=>String(r.savio_customer_id)));
+  const pendingIds=new Set(_vincState.pendingAdd.map(p=>String(p.customer_id)));
+  el.innerHTML=results.map(r=>{
+    const cid=String(r.customer_id);
+    const isLinked=linkedIds.has(cid);
+    const isPending=pendingIds.has(cid);
+    const cb=isLinked?'<span style="color:var(--green);font-size:11px;">✓ Vinculado</span>':
+      `<input type="checkbox" ${isPending?'checked':''} onchange='togglePending(${JSON.stringify(r).replace(/'/g,"&apos;")})'/>`;
+    return `<div style="padding:6px 0;border-bottom:1px solid var(--border-light);font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;">${r.name||r.legal_name||''}</div>
+        <div style="color:var(--text2);font-size:11px;font-family:var(--mono);">${r.tax_id||'sin RFC'} • ${r.city||''} • ${r.current_state||''}</div>
+      </div>
+      <div>${cb}</div>
+    </div>`;
+  }).join('');
+}
+function togglePending(r){
+  const cid=String(r.customer_id);
+  const idx=_vincState.pendingAdd.findIndex(p=>String(p.customer_id)===cid);
+  if(idx>=0)_vincState.pendingAdd.splice(idx,1);else _vincState.pendingAdd.push(r);
+  updateVincSaveBtn();
+}
+function updateVincSaveBtn(){
+  const btn=document.getElementById('vinc-save-btn');
+  const n=_vincState.pendingAdd.length;
+  btn.textContent=`Guardar ${n} nuevos`;btn.disabled=n===0;
+}
+async function saveVinculacion(){
+  if(!_vincState.pendingAdd.length)return;
+  const ids=_vincState.pendingAdd.map(p=>p.customer_id);
+  try{
+    const r=await fetch('/api/savio/customers/master/link',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({cs_account_id:_vincState.accountId,savio_customer_ids:ids})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'error');
+    closeVincModal();loadVincular();
+  }catch(e){alert('Error: '+e.message);}
+}
+async function syncOneCs(accId,nombre){
+  document.getElementById('vinc-status').textContent=`Sincronizando ${nombre}...`;
+  try{const r=await fetch('/api/savio/cs-sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account_id:accId})});
+    const d=await r.json();
+    document.getElementById('vinc-status').textContent=`${nombre}: +${d.invoices_inserted} ins, ~${d.invoices_updated} upd`;
+    loadVincular();
+  }catch(e){document.getElementById('vinc-status').textContent='Error: '+e.message;}
+}
+async function syncAllCs(){
+  document.getElementById('vinc-status').textContent='Sincronizando todas las cuentas...';
+  try{const r=await fetch('/api/savio/cs-sync',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const d=await r.json();
+    document.getElementById('vinc-status').textContent=`${d.accounts_synced}/${d.accounts_total} sincronizadas | +${d.invoices_inserted} facturas | ${d.accounts_no_master+d.accounts_no_rfcs} sin vincular`;
+    loadVincular();
+  }catch(e){document.getElementById('vinc-status').textContent='Error: '+e.message;}
 }
 
 // ── Costos APIs ──

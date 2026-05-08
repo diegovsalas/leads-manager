@@ -208,6 +208,7 @@ def _start_scheduler(app):
                     savio_sync.sync_subscriptions()
                     savio_sync.sync_customers()
                     savio_sync.bridge_savio_to_cs_mrr()
+                    savio_sync.sync_savio_to_cs_invoices()
                 except Exception as e:
                     app.logger.warning(f"savio 6h: {e}")
 
