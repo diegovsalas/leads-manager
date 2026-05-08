@@ -2,6 +2,12 @@
 from gevent import monkey
 monkey.patch_all()
 
+# psycopg2 es bloqueante por default y mata al worker bajo gevent.
+# psycogreen hace que sus queries cedan al loop. CRÍTICO antes de
+# importar SQLAlchemy/psycopg2.
+from psycogreen.gevent import patch_psycopg
+patch_psycopg()
+
 import os
 from dotenv import load_dotenv
 

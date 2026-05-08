@@ -6,6 +6,7 @@ python-dotenv>=1.0
 requests>=2.31
 gevent>=23.0
 gevent-websocket>=0.10
+psycogreen>=1.0.2
 gunicorn[gevent]>=21.2
 apscheduler>=3.10
 resend>=2.0
