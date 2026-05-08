@@ -28,6 +28,14 @@ services:
         sync: false
       - key: META_ACCESS_TOKEN
         sync: false
+      - key: APOLLO_API_KEY
+        sync: false
+      - key: LUSHA_API_KEY
+        sync: false
+      - key: LEMLIST_API_KEY
+        sync: false
+      - key: DOMAIN
+        value: https://leads-manager-avantex.onrender.com
 
   # WhatsApp Baileys Bot
   - type: web

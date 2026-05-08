@@ -61,6 +61,7 @@ def create_app():
     from blueprints.encuesta      import encuesta_bp
     from blueprints.savio         import savio_bp
     from blueprints.sdr           import sdr_bp
+    from blueprints.sdr_directivo import sdr_directivo_bp, lemlist_webhook_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp,      url_prefix="/webhook")
@@ -78,6 +79,8 @@ def create_app():
     app.register_blueprint(encuesta_bp,      url_prefix="/encuesta")
     app.register_blueprint(savio_bp,         url_prefix="/api/savio")
     app.register_blueprint(sdr_bp,           url_prefix="/api/sdr")
+    app.register_blueprint(sdr_directivo_bp, url_prefix="/api/sdr-directivo")
+    app.register_blueprint(lemlist_webhook_bp, url_prefix="/api/webhooks")
 
     # Serve React app at /app/
     @app.route("/app/")
