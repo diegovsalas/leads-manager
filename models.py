@@ -1300,6 +1300,106 @@ class SdrDirEngineRun(db.Model):
         }
 
 
+class Sale(db.Model):
+    """Venta cerrada con cálculo de comisión.
+    sale_type: suscripcion_nueva | servicio_unico | upsell
+    commission_type: autogenerado (rate=1.0) | lead_otorgado (rate=0.5)
+    Comisión: subs/upsell → monthly_amount * rate; servicio único → total_amount * 0.08
+    """
+    __tablename__ = "sales"
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    lead_id = db.Column(UUID(as_uuid=True), db.ForeignKey("leads.id"), nullable=True, index=True)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=True, index=True)  # vendedor
+    unit = db.Column(db.String(40), nullable=False, index=True)  # aromatex/pestex/weldex
+    sale_type = db.Column(db.String(40), nullable=False)  # suscripcion_nueva/servicio_unico/upsell
+    sale_category = db.Column(db.String(40), default="recurrente", nullable=False)  # recurrente/eventual
+    uen = db.Column(db.String(120), nullable=True)
+    lead_source = db.Column(db.String(120), nullable=True)  # snapshot para reporteo
+    monthly_amount = db.Column(db.Numeric(14, 2), default=0, nullable=False)
+    total_amount = db.Column(db.Numeric(14, 2), default=0, nullable=False)
+    closed_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+    contract_signed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    first_payment_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    service_start_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    commission_type = db.Column(db.String(40), nullable=True)  # autogenerado/lead_otorgado
+    commission_rate = db.Column(db.Numeric(4, 2), nullable=True)  # 0.5 o 1.0
+    commission_amount = db.Column(db.Numeric(14, 2), default=0, nullable=False)
+    commission_status = db.Column(db.String(40), default="pendiente", nullable=False)  # pendiente/pagada/cancelada
+    commission_pay_date = db.Column(db.DateTime(timezone=True), nullable=True)
+    status = db.Column(db.String(40), default="activa", nullable=False)  # activa/cancelada
+    canceled_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    cancel_reason = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "lead_id": str(self.lead_id) if self.lead_id else None,
+            "user_id": str(self.user_id) if self.user_id else None,
+            "unit": self.unit, "sale_type": self.sale_type,
+            "sale_category": self.sale_category, "uen": self.uen,
+            "lead_source": self.lead_source,
+            "monthly_amount": float(self.monthly_amount or 0),
+            "total_amount": float(self.total_amount or 0),
+            "closed_at": self.closed_at.isoformat() if self.closed_at else None,
+            "contract_signed_at": self.contract_signed_at.isoformat() if self.contract_signed_at else None,
+            "first_payment_at": self.first_payment_at.isoformat() if self.first_payment_at else None,
+            "service_start_at": self.service_start_at.isoformat() if self.service_start_at else None,
+            "commission_type": self.commission_type,
+            "commission_rate": float(self.commission_rate) if self.commission_rate else None,
+            "commission_amount": float(self.commission_amount or 0),
+            "commission_status": self.commission_status,
+            "commission_pay_date": self.commission_pay_date.isoformat() if self.commission_pay_date else None,
+            "status": self.status,
+            "canceled_at": self.canceled_at.isoformat() if self.canceled_at else None,
+            "cancel_reason": self.cancel_reason,
+        }
+
+
+class Client(db.Model):
+    """Cliente post-venta. Se crea cuando una Sale cierra. Tracks NPS y churn."""
+    __tablename__ = "clients"
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    sale_id = db.Column(UUID(as_uuid=True), db.ForeignKey("sales.id"), nullable=True, index=True)
+    company = db.Column(db.String(255), nullable=False)
+    trade_name = db.Column(db.String(255), nullable=True)
+    rfc = db.Column(db.String(20), nullable=True, index=True)
+    service_address = db.Column(db.Text, nullable=True)
+    city = db.Column(db.String(120), nullable=True)
+    unit = db.Column(db.String(40), nullable=False, index=True)
+    service = db.Column(db.Text, nullable=True)  # descripción del servicio contratado
+    frequency = db.Column(db.String(60), nullable=True)
+    monthly_amount = db.Column(db.Numeric(14, 2), nullable=True)
+    contract_start = db.Column(db.Date, nullable=True)
+    contract_end = db.Column(db.Date, nullable=True)
+    assigned_to = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=True, index=True)
+    nps_score = db.Column(db.Integer, nullable=True)
+    nps_date = db.Column(db.DateTime(timezone=True), nullable=True)
+    status = db.Column(db.String(40), default="activo", nullable=False)  # activo/en_riesgo/cancelado
+    cancel_reason = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "sale_id": str(self.sale_id) if self.sale_id else None,
+            "company": self.company, "trade_name": self.trade_name,
+            "rfc": self.rfc, "service_address": self.service_address,
+            "city": self.city, "unit": self.unit, "service": self.service,
+            "frequency": self.frequency,
+            "monthly_amount": float(self.monthly_amount) if self.monthly_amount else None,
+            "contract_start": self.contract_start.isoformat() if self.contract_start else None,
+            "contract_end": self.contract_end.isoformat() if self.contract_end else None,
+            "assigned_to": str(self.assigned_to) if self.assigned_to else None,
+            "nps_score": self.nps_score,
+            "nps_date": self.nps_date.isoformat() if self.nps_date else None,
+            "status": self.status, "cancel_reason": self.cancel_reason,
+        }
+
+
 class SdrDirCreditsMonthly(db.Model):
     """Monthly bucket de créditos consumidos por servicio (Lusha/Apollo).
     PK compuesta vía UNIQUE(unit, service, year_month)."""
