@@ -216,6 +216,14 @@ def _start_scheduler(app):
                 except Exception as e:
                     app.logger.warning(f"savio boot sync: {e}")
 
+        def _run_sdr_engine_for_unit(unit: str):
+            with app.app_context():
+                import sdr_directivo_engine as engine
+                try:
+                    engine.engine_run_daily_batch(unit=unit)
+                except Exception as e:
+                    app.logger.warning(f"sdr engine ({unit}): {e}")
+
         scheduler = BackgroundScheduler(daemon=True)
         scheduler.add_job(_run_cadencia, "interval", minutes=15, id="cadencia_followup")
         # Notificaciones diarias a las 9:00 AM CST (UTC-6 = 15:00 UTC)
@@ -243,6 +251,27 @@ def _start_scheduler(app):
             app.logger.info("Savio scheduler activo (boot+30s, hourly inv+pay, 6h cust+subs)")
         else:
             app.logger.info("SAVIO_API_KEY no configurada — scheduler Savio desactivado")
+
+        # SDR Directivo Engine: cron diario por unidad. Lee cron_hour/cron_minute
+        # de sdr_dir_engine_config en cada boot. Solo arma jobs para unidades con config.
+        try:
+            with app.app_context():
+                from models import SdrDirEngineConfig
+                for cfg in SdrDirEngineConfig.query.all():
+                    scheduler.add_job(
+                        _run_sdr_engine_for_unit, "cron",
+                        hour=cfg.cron_hour or 9,
+                        minute=cfg.cron_minute or 0,
+                        args=[cfg.unit],
+                        id=f"sdr_engine_{cfg.unit}",
+                        replace_existing=True,
+                    )
+                    app.logger.info(
+                        f"SDR engine cron registrado: {cfg.unit} @ "
+                        f"{cfg.cron_hour:02d}:{cfg.cron_minute:02d} UTC"
+                    )
+        except Exception as e:
+            app.logger.warning(f"SDR engine scheduler setup: {e}")
         scheduler.start()
         app.logger.info("Scheduler iniciado: cadencia (15 min) + notificaciones (9am) + backup (3am)")
     except Exception as e:

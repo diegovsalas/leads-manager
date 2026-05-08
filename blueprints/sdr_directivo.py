@@ -14,9 +14,11 @@ from sqlalchemy import func
 from extensions import db
 from models import (
     SdrDirSequence, SdrDirHistory, SdrDirSuggestion, SdrDirMasterCompany,
+    SdrDirEngineConfig, SdrDirEngineRun, SdrDirCreditsMonthly,
     Lead, OrigenLead, EtapaPipeline,
 )
 import sdr_directivo as sdrdir
+import sdr_directivo_engine as engine
 
 sdr_directivo_bp = Blueprint("sdr_directivo", __name__)
 lemlist_webhook_bp = Blueprint("lemlist_webhook", __name__)
@@ -369,12 +371,28 @@ def delete_master(master_id: int):
 
 @sdr_directivo_bp.route("/master/import", methods=["POST"])
 def import_master_json():
-    """Acepta JSON {rows: [...]}. CSV body se cubre en Round 2d."""
+    """Acepta:
+      - Content-Type text/csv (CSV crudo en body)
+      - Content-Type application/json con {csv: "..."} o {rows: [...]}
+    """
     unit = (request.args.get("unit") or "aromatex").lower()
+
+    # Caso 1: CSV crudo en body
+    ct = (request.content_type or "").lower()
+    if ct.startswith("text/csv") or ct.startswith("text/plain"):
+        csv_text = request.get_data(as_text=True)
+        if not csv_text:
+            return jsonify({"error": "empty CSV body"}), 400
+        return jsonify(engine.import_master_csv(csv_text, unit))
+
+    # Caso 2: JSON con csv string
     payload = request.get_json(silent=True) or {}
+    if isinstance(payload.get("csv"), str) and payload["csv"]:
+        return jsonify(engine.import_master_csv(payload["csv"], unit))
+
     rows = payload.get("rows")
     if not isinstance(rows, list):
-        return jsonify({"error": "Send JSON {rows:[...]}"}), 400
+        return jsonify({"error": "Send text/csv body, JSON {csv:'...'} or {rows:[...]}"}), 400
 
     imported, skipped, errors = 0, 0, 0
     error_rows = []
@@ -473,3 +491,266 @@ def lemlist_webhook():
             seq.next_action_at = None
         db.session.commit()
     return jsonify({"ok": True})
+
+
+# ── Engine control ─────────────────────────────────────────────────
+
+
+@sdr_directivo_bp.route("/engine/status", methods=["GET"])
+def engine_status():
+    unit = (request.args.get("unit") or "aromatex").lower()
+    config = SdrDirEngineConfig.query.filter_by(unit=unit).first()
+    last_run = (
+        SdrDirEngineRun.query.filter_by(unit=unit)
+        .order_by(SdrDirEngineRun.id.desc()).first()
+    )
+    master_stats_rows = (
+        db.session.query(SdrDirMasterCompany.status, func.count())
+        .filter(SdrDirMasterCompany.unit == unit)
+        .group_by(SdrDirMasterCompany.status).all()
+    )
+    seq_in_lemlist = (
+        SdrDirSequence.query.filter_by(unit=unit)
+        .filter(SdrDirSequence.lemlist_campaign_id.isnot(None))
+        .filter(SdrDirSequence.master_company_id.isnot(None)).count()
+    )
+    last_30d_credits = (
+        db.session.query(func.coalesce(func.sum(SdrDirEngineRun.lusha_credits_used), 0))
+        .filter(SdrDirEngineRun.unit == unit)
+        .filter(SdrDirEngineRun.started_at >= datetime.now(timezone.utc) - timedelta(days=30))
+        .scalar() or 0
+    )
+    lusha_balance = None
+    try:
+        lusha_balance = sdrdir.get_lusha_balance().get("balance")
+    except Exception:
+        pass
+    for svc in ("lusha", "apollo"):
+        try:
+            engine.ensure_monthly_row(unit, svc)
+        except Exception:
+            pass
+    try:
+        engine.sync_lusha_credits_from_api(unit)
+    except Exception:
+        pass
+    ym = engine.current_year_month()
+    monthly = (
+        SdrDirCreditsMonthly.query.filter_by(unit=unit, year_month=ym)
+        .order_by(SdrDirCreditsMonthly.service).all()
+    )
+    return jsonify({
+        "config": config.to_dict() if config else None,
+        "lastRun": last_run.to_dict() if last_run else None,
+        "masterStats": [{"status": s, "c": c} for s, c in master_stats_rows],
+        "seqInLemlist": seq_in_lemlist,
+        "last30dCredits": int(last_30d_credits or 0),
+        "lushaBalance": lusha_balance,
+        "monthlyCredits": [r.to_dict() for r in monthly],
+        "year_month": ym,
+    })
+
+
+@sdr_directivo_bp.route("/engine/runs", methods=["GET"])
+def engine_runs():
+    unit = (request.args.get("unit") or "aromatex").lower()
+    try:
+        limit = min(int(request.args.get("limit") or 30), 100)
+    except ValueError:
+        limit = 30
+    rows = (
+        SdrDirEngineRun.query.filter_by(unit=unit)
+        .order_by(SdrDirEngineRun.id.desc()).limit(limit).all()
+    )
+    return jsonify([r.to_dict() for r in rows])
+
+
+@sdr_directivo_bp.route("/engine/config", methods=["PUT"])
+def engine_config_put():
+    data = request.get_json() or {}
+    unit = (data.get("unit") or "aromatex").lower()
+    config = SdrDirEngineConfig.query.filter_by(unit=unit).first()
+    if not config:
+        config = SdrDirEngineConfig(unit=unit, credits_limit=600 if unit else None) if False else SdrDirEngineConfig(unit=unit)
+        db.session.add(config)
+
+    allowed = ("enabled", "max_companies_per_day", "max_contacts_per_company",
+               "max_lusha_credits_per_day", "min_lusha_balance_alert",
+               "lemlist_master_campaign_id", "cron_hour", "cron_minute",
+               "tam_a_enrich_phone", "tam_bc_enrich_phone",
+               "tam_a_phones_per_company", "tam_bc_phones_per_company",
+               "lusha_monthly_limit", "lusha_hard_cap", "lusha_alert_threshold")
+    bool_fields = {"enabled", "tam_a_enrich_phone", "tam_bc_enrich_phone", "lusha_hard_cap"}
+    touched = False
+    for k in allowed:
+        if k in data:
+            v = bool(data[k]) if k in bool_fields else data[k]
+            setattr(config, k, v)
+            touched = True
+    if not touched:
+        return jsonify({"error": "No fields"}), 400
+    db.session.commit()
+
+    # Propagar cambios de límites Lusha al row del mes actual
+    if any(k in data for k in ("lusha_monthly_limit", "lusha_hard_cap", "lusha_alert_threshold")):
+        ym = engine.current_year_month()
+        row = SdrDirCreditsMonthly.query.filter_by(unit=unit, service="lusha", year_month=ym).first()
+        if row:
+            if "lusha_monthly_limit" in data:
+                row.credits_limit = int(data["lusha_monthly_limit"]) or 600
+            if "lusha_hard_cap" in data:
+                row.hard_cap = bool(data["lusha_hard_cap"])
+            if "lusha_alert_threshold" in data:
+                row.alert_threshold = float(data["lusha_alert_threshold"]) or 0.8
+            row.updated_at = datetime.now(timezone.utc)
+            db.session.commit()
+
+    return jsonify(config.to_dict())
+
+
+@sdr_directivo_bp.route("/engine/toggle", methods=["POST"])
+def engine_toggle():
+    data = request.get_json() or {}
+    unit = (data.get("unit") or "aromatex").lower()
+    enabled = bool(data.get("enabled"))
+    config = SdrDirEngineConfig.query.filter_by(unit=unit).first()
+    if not config:
+        return jsonify({"error": "no_config_for_unit"}), 400
+    config.enabled = enabled
+    config.updated_at = datetime.now(timezone.utc)
+    db.session.commit()
+    return jsonify(config.to_dict())
+
+
+@sdr_directivo_bp.route("/engine/run-now", methods=["POST"])
+def engine_run_now():
+    data = request.get_json() or {}
+    unit = (data.get("unit") or "aromatex").lower()
+    dry_run = bool(data.get("dry_run"))
+    override_max = data.get("override_max_companies")
+    try:
+        override_max = int(override_max) if override_max else None
+    except (ValueError, TypeError):
+        override_max = None
+    try:
+        result = engine.engine_run_daily_batch(
+            unit=unit, dry_run=dry_run, force=True,
+            override_max_companies=override_max,
+        )
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+    return jsonify(result)
+
+
+# ── Credits status / estimate / config ─────────────────────────────
+
+
+@sdr_directivo_bp.route("/credits/status", methods=["GET"])
+def credits_status():
+    unit = (request.args.get("unit") or "aromatex").lower()
+    ym = engine.current_year_month()
+    for svc in ("lusha", "apollo"):
+        try:
+            engine.ensure_monthly_row(unit, svc)
+        except Exception:
+            pass
+    lusha_sync = None
+    try:
+        lusha_sync = engine.sync_lusha_credits_from_api(unit)
+    except Exception:
+        pass
+    rows = (
+        SdrDirCreditsMonthly.query.filter_by(unit=unit, year_month=ym)
+        .order_by(SdrDirCreditsMonthly.service).all()
+    )
+    today = datetime.now(timezone.utc).date()
+    if today.month == 12:
+        reset_at = today.replace(year=today.year + 1, month=1, day=1)
+    else:
+        reset_at = today.replace(month=today.month + 1, day=1)
+    return jsonify({
+        "unit": unit, "year_month": ym, "reset_at": reset_at.isoformat(),
+        "services": [r.to_dict() for r in rows], "lusha_sync": lusha_sync,
+    })
+
+
+@sdr_directivo_bp.route("/credits/estimate", methods=["GET"])
+def credits_estimate():
+    unit = (request.args.get("unit") or "aromatex").lower()
+    try:
+        n = max(1, min(int(request.args.get("n") or 10), 200))
+    except ValueError:
+        n = 10
+    config = SdrDirEngineConfig.query.filter_by(unit=unit).first()
+    if not config:
+        return jsonify({"error": "no_config_for_unit"}), 400
+    companies = (
+        SdrDirMasterCompany.query
+        .filter_by(unit=unit, status="pending", requires_manual=False)
+        .order_by(SdrDirMasterCompany.priority_order.asc()).limit(n).all()
+    )
+    breakdown = {"A": 0, "B": 0, "C": 0, "other": 0}
+    phones_a, phones_bc = 0, 0
+    for co in companies:
+        t = (co.tam or "").upper()
+        if t == "A":
+            breakdown["A"] += 1
+            if config.tam_a_enrich_phone:
+                phones_a += config.tam_a_phones_per_company or 0
+        elif t == "B":
+            breakdown["B"] += 1
+            if config.tam_bc_enrich_phone:
+                phones_bc += config.tam_bc_phones_per_company or 0
+        elif t == "C":
+            breakdown["C"] += 1
+            if config.tam_bc_enrich_phone:
+                phones_bc += config.tam_bc_phones_per_company or 0
+        else:
+            breakdown["other"] += 1
+    est_lusha = phones_a + phones_bc
+    ym = engine.current_year_month()
+    lusha_row = SdrDirCreditsMonthly.query.filter_by(unit=unit, service="lusha", year_month=ym).first()
+    current = lusha_row.credits_used or 0 if lusha_row else 0
+    limit = lusha_row.credits_limit if lusha_row else 600
+    after = current + est_lusha
+    return jsonify({
+        "unit": unit, "requested_n": n, "sample_size": len(companies),
+        "breakdown": breakdown,
+        "phones_estimated": {"tam_a": phones_a, "tam_bc": phones_bc},
+        "estimated_lusha_credits": est_lusha,
+        "current_used": current, "limit": limit, "after_used": after,
+        "will_exceed": (after > limit) and bool(lusha_row.hard_cap if lusha_row else False),
+        "threshold_pct": (after / limit) if limit else 0,
+    })
+
+
+@sdr_directivo_bp.route("/credits/config", methods=["PUT"])
+def credits_config_put():
+    data = request.get_json() or {}
+    unit = (data.get("unit") or "aromatex").lower()
+    service = (data.get("service") or "lusha").lower()
+    ym = engine.current_year_month()
+    row = engine.ensure_monthly_row(unit, service)
+    touched = False
+    if "credits_limit" in data:
+        row.credits_limit = int(data["credits_limit"]) or 0
+        touched = True
+    if "hard_cap" in data:
+        row.hard_cap = bool(data["hard_cap"])
+        touched = True
+    if "alert_threshold" in data:
+        row.alert_threshold = float(data["alert_threshold"]) or 0.8
+        touched = True
+    if "credits_used" in data:
+        row.credits_used = int(data["credits_used"]) or 0
+        touched = True
+    for k in ("alerted_80", "alerted_95", "alerted_100"):
+        if k in data:
+            setattr(row, k, bool(data[k]))
+            touched = True
+    if not touched:
+        return jsonify({"error": "No fields"}), 400
+    row.updated_at = datetime.now(timezone.utc)
+    db.session.commit()
+    return jsonify(row.to_dict())
