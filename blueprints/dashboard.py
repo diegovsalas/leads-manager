@@ -7,7 +7,7 @@ from datetime import date
 from flask import Blueprint, request, jsonify, session
 from sqlalchemy import func
 from extensions import db
-from models import Lead, EtapaPipeline, GastoPublicidad, PlataformaAds
+from models import Lead, EtapaPipeline, OrigenLead, GastoPublicidad, PlataformaAds
 from blueprints.auth import get_vendedor_filter, require_role
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -188,6 +188,141 @@ def eliminar_gasto(gasto_id):
     db.session.delete(gasto)
     db.session.commit()
     return jsonify({"ok": True})
+
+
+# ── Marketing ROI: embudo + spend segmentado por canal ────────────
+
+
+# Mapeo PlataformaAds → OrigenLead (para attribución)
+_PLATAFORMA_TO_ORIGEN = {
+    PlataformaAds.FACEBOOK:  OrigenLead.META_ADS,
+    PlataformaAds.INSTAGRAM: OrigenLead.META_ADS,
+    PlataformaAds.GOOGLE:    OrigenLead.WEB,    # asumimos paid search → leads que llegan vía Web
+    PlataformaAds.TIKTOK:    OrigenLead.WEB,
+    PlataformaAds.OTRO:      None,              # no atribuye, queda en bucket "sin atribuir"
+}
+
+
+def _empty_bucket():
+    return {
+        "leads": 0, "calificados": 0, "cotizados": 0,
+        "ganados": 0, "perdidos": 0,
+        "spend": 0.0, "revenue": 0.0,
+        "cpl": 0.0, "cac": 0.0, "roi": 0.0, "tasa_cierre": 0.0,
+    }
+
+
+@dashboard_bp.route("/marketing-roi", methods=["GET"])
+def marketing_roi():
+    """Embudo + spend segmentado por origen. Devuelve per-canal y totales.
+    Filtros: ?mes=YYYY-MM (default mes actual), ?marca=Aromatex (opcional)."""
+    mes_param = request.args.get("mes")
+    inicio_mes, fin_mes = _get_date_range(mes_param)
+    marca_filter = request.args.get("marca")
+
+    etapas_calif = [
+        EtapaPipeline.CONTACTO_1, EtapaPipeline.CONTACTO_2,
+        EtapaPipeline.CONTACTO_3, EtapaPipeline.CONTACTO_4,
+        EtapaPipeline.COTIZACION, EtapaPipeline.DEMO,
+        EtapaPipeline.NEGOCIACION, EtapaPipeline.CIERRE_GANADO,
+    ]
+    etapas_cotiz = [
+        EtapaPipeline.COTIZACION, EtapaPipeline.DEMO,
+        EtapaPipeline.NEGOCIACION, EtapaPipeline.CIERRE_GANADO,
+    ]
+
+    # Base query Leads del período
+    leads_q = Lead.query.filter(
+        Lead.fecha_creacion >= inicio_mes,
+        Lead.fecha_creacion < fin_mes,
+    )
+    leads_q = _apply_vendedor_filter(leads_q)
+    if marca_filter:
+        leads_q = leads_q.filter(Lead.marca_interes == marca_filter)
+
+    # Buckets por origen
+    por_origen = {o.value: _empty_bucket() for o in OrigenLead}
+    sin_origen = _empty_bucket()  # leads sin origen marcado
+
+    # Counts por origen
+    rows = (
+        leads_q.with_entities(Lead.origen, func.count(Lead.id))
+        .group_by(Lead.origen).all()
+    )
+    for orig, cnt in rows:
+        b = por_origen[orig.value] if orig else sin_origen
+        b["leads"] = int(cnt)
+
+    # Calificados/cotizados/ganados/perdidos por origen
+    for etapa_list, key in [
+        (etapas_calif, "calificados"), (etapas_cotiz, "cotizados"),
+        ([EtapaPipeline.CIERRE_GANADO], "ganados"),
+        ([EtapaPipeline.CIERRE_PERDIDO], "perdidos"),
+    ]:
+        sub = (
+            leads_q.filter(Lead.etapa_pipeline.in_(etapa_list))
+            .with_entities(Lead.origen, func.count(Lead.id))
+            .group_by(Lead.origen).all()
+        )
+        for orig, cnt in sub:
+            b = por_origen[orig.value] if orig else sin_origen
+            b[key] = int(cnt)
+
+    # Revenue por origen (suma de cantidad*precio o valor_estimado de ganados)
+    rev_rows = (
+        leads_q.filter(Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO)
+        .with_entities(
+            Lead.origen,
+            func.coalesce(func.sum(func.coalesce(
+                Lead.cantidad_productos * Lead.precio_unitario,
+                Lead.valor_estimado, 0,
+            )), 0),
+        ).group_by(Lead.origen).all()
+    )
+    for orig, rev in rev_rows:
+        b = por_origen[orig.value] if orig else sin_origen
+        b["revenue"] = float(rev or 0)
+
+    # Spend por origen (solo super_admin lo ve real, vendedor=0)
+    vid = get_vendedor_filter()
+    if not vid:
+        gastos_q = GastoPublicidad.query.filter(
+            GastoPublicidad.fecha >= inicio_mes,
+            GastoPublicidad.fecha < fin_mes,
+        )
+        if marca_filter:
+            gastos_q = gastos_q.filter(GastoPublicidad.marca == marca_filter)
+        for g in gastos_q.all():
+            origen = _PLATAFORMA_TO_ORIGEN.get(g.plataforma)
+            target = por_origen[origen.value] if origen else sin_origen
+            target["spend"] += float(g.monto or 0)
+
+    # Calcular CPL, CAC, ROI, tasa cierre por bucket
+    def _finish(b):
+        b["cpl"] = round(b["spend"] / b["leads"], 2) if b["leads"] else 0.0
+        b["cac"] = round(b["spend"] / b["ganados"], 2) if b["ganados"] else 0.0
+        b["roi"] = round(b["revenue"] / b["spend"], 2) if b["spend"] else 0.0
+        b["tasa_cierre"] = round((b["ganados"] / b["leads"]) * 100, 1) if b["leads"] else 0.0
+    for b in por_origen.values():
+        _finish(b)
+    _finish(sin_origen)
+
+    # Totales
+    total = _empty_bucket()
+    for k in ("leads", "calificados", "cotizados", "ganados", "perdidos", "spend", "revenue"):
+        total[k] = sum(b[k] for b in por_origen.values()) + sin_origen[k]
+    _finish(total)
+
+    return jsonify({
+        "mes": inicio_mes.strftime("%Y-%m"),
+        "marca_filter": marca_filter,
+        "total": total,
+        "por_origen": por_origen,
+        "sin_origen": sin_origen,
+        "platform_to_origen_map": {
+            p.value: (o.value if o else None) for p, o in _PLATAFORMA_TO_ORIGEN.items()
+        },
+    })
 
 
 @dashboard_bp.route("/actividad", methods=["GET"])

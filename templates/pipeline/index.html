@@ -310,6 +310,7 @@ tbody td{padding:8px 12px;font-size:14px;}
     <div class="slink admin-only" onclick="showView('ventas',this)">&#128200; Ventas</div>
     <div class="slink admin-only" onclick="showView('costos',this)">&#128181; Costos APIs</div>
     <div class="slink admin-only" onclick="showView('vincular',this)">&#128279; Vincular Savio&#8594;CS</div>
+    <div class="slink admin-only" onclick="showView('roi',this)">&#128202; Marketing ROI</div>
 
     <div class="sidebar-divider admin-only"></div>
     <div class="sidebar-section admin-only">Administracion</div>
@@ -1149,6 +1150,111 @@ tbody td{padding:8px 12px;font-size:14px;}
   </div>
 </div>
 
+<!-- ===== MARKETING ROI ===== -->
+<div class="view" id="view-roi" style="overflow-y:auto;">
+  <div class="page-header">
+    <div class="page-emoji">&#128202;</div>
+    <div class="page-title">Marketing ROI</div>
+    <div class="page-desc">Embudo + spend por canal: CPL, CAC, ROI segmentado</div>
+  </div>
+  <div style="padding:20px 48px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <input class="form-input" id="roi-mes" type="month" style="max-width:160px;font-size:13px;"/>
+    <select class="form-input" id="roi-marca" style="max-width:160px;font-size:13px;">
+      <option value="">Todas las marcas</option>
+      <option value="Aromatex">Aromatex</option>
+      <option value="Pestex">Pestex</option>
+      <option value="Weldex">Weldex</option>
+    </select>
+    <button class="btn btn-filled" onclick="loadRoi()" style="font-size:13px;">Actualizar</button>
+    <button class="btn" onclick="openGastoModal()" style="font-size:13px;margin-left:auto;">+ Registrar gasto</button>
+  </div>
+  <div style="padding:0 48px 20px;display:grid;grid-template-columns:repeat(6,1fr);gap:12px;">
+    <div class="dash-card"><div class="dash-card-title">Leads</div><div style="font-size:22px;font-weight:600;" id="roi-leads">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">Calificados</div><div style="font-size:22px;font-weight:600;color:var(--blue);" id="roi-calif">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">Ganados</div><div style="font-size:22px;font-weight:600;color:var(--green);" id="roi-gan">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">Spend</div><div style="font-size:22px;font-weight:600;color:var(--orange);" id="roi-spend">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">CAC global</div><div style="font-size:22px;font-weight:600;" id="roi-cac">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">ROI</div><div style="font-size:22px;font-weight:600;" id="roi-roi">—</div></div>
+  </div>
+  <div style="padding:0 48px 20px;">
+    <div class="dash-card">
+      <div class="dash-card-title">Embudo por canal</div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Canal</th>
+          <th style="text-align:right;">Leads</th>
+          <th style="text-align:right;">Calif</th>
+          <th style="text-align:right;">Cotiz</th>
+          <th style="text-align:right;">Ganados</th>
+          <th style="text-align:right;">Tasa cierre</th>
+          <th style="text-align:right;">Spend</th>
+          <th style="text-align:right;">CPL</th>
+          <th style="text-align:right;">CAC</th>
+          <th style="text-align:right;">Ingresos</th>
+          <th style="text-align:right;">ROI</th>
+        </tr></thead>
+        <tbody id="roi-tbody"></tbody>
+      </table></div>
+      <div style="font-size:11px;color:var(--text3);margin-top:8px;padding:0 4px;" id="roi-mapping"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Registrar gasto manual -->
+<div class="nl-overlay" id="gasto-overlay" onclick="if(event.target===this)closeGastoModal()">
+  <div class="nl-card" style="width:480px;">
+    <div class="nl-header"><h3>Registrar gasto de marketing</h3><span class="nl-kbd">Esc</span></div>
+    <div class="nl-body">
+      <div class="nl-row two">
+        <div>
+          <label class="nl-label">Plataforma *</label>
+          <select class="nl-input" id="ga-plataforma">
+            <option value="Facebook">Facebook</option>
+            <option value="Instagram">Instagram</option>
+            <option value="Google">Google</option>
+            <option value="TikTok">TikTok</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div>
+          <label class="nl-label">Marca</label>
+          <select class="nl-input" id="ga-marca">
+            <option value="">— Todas / sin atribuir —</option>
+            <option value="Aromatex">Aromatex</option>
+            <option value="Pestex">Pestex</option>
+            <option value="Weldex">Weldex</option>
+          </select>
+        </div>
+      </div>
+      <div class="nl-row two">
+        <div>
+          <label class="nl-label">Fecha *</label>
+          <input class="nl-input" id="ga-fecha" type="date"/>
+        </div>
+        <div>
+          <label class="nl-label">Monto MXN *</label>
+          <input class="nl-input" id="ga-monto" type="number" step="0.01" min="0"/>
+        </div>
+      </div>
+      <div class="nl-row">
+        <label class="nl-label">Campaña (opcional)</label>
+        <input class="nl-input" id="ga-campana" type="text" placeholder="ej: Aromatex_Q2_Retail"/>
+      </div>
+      <div class="nl-row">
+        <label class="nl-label">Notas</label>
+        <input class="nl-input" id="ga-notas" type="text"/>
+      </div>
+    </div>
+    <div class="nl-foot">
+      <div class="nl-assign" id="ga-status" style="color:var(--text3);"></div>
+      <div class="nl-btns">
+        <button class="nl-btn" onclick="closeGastoModal()">Cancelar</button>
+        <button class="nl-btn primary" onclick="saveGasto()">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ===== COSTOS APIs ===== -->
 <div class="view" id="view-costos" style="overflow-y:auto;">
   <div class="page-header">
@@ -1456,6 +1562,7 @@ function showView(name,el){
   if(name==='ventas')loadVentas();
   if(name==='costos')loadCostos();
   if(name==='vincular')loadVincular();
+  if(name==='roi')loadRoi();
 }
 
 // ──────────────────────────────────────────────
@@ -1714,6 +1821,105 @@ async function syncAllCs(){
     document.getElementById('vinc-status').textContent=`${d.accounts_synced}/${d.accounts_total} sincronizadas | +${d.invoices_inserted} facturas | ${d.accounts_no_master+d.accounts_no_rfcs} sin vincular`;
     loadVincular();
   }catch(e){document.getElementById('vinc-status').textContent='Error: '+e.message;}
+}
+
+// ── Marketing ROI ──
+async function loadRoi(){
+  const mes=document.getElementById('roi-mes').value;
+  const marca=document.getElementById('roi-marca').value;
+  const params=new URLSearchParams();
+  if(mes)params.set('mes',mes);
+  if(marca)params.set('marca',marca);
+  const d=await _api('/api/dashboard/marketing-roi'+(params.toString()?'?'+params:''));
+  if(!d)return;
+  const t=d.total;
+  document.getElementById('roi-leads').textContent=_fmtNum(t.leads);
+  document.getElementById('roi-calif').textContent=_fmtNum(t.calificados);
+  document.getElementById('roi-gan').textContent=_fmtNum(t.ganados);
+  document.getElementById('roi-spend').textContent=_fmtMxn(t.spend);
+  document.getElementById('roi-cac').textContent=t.cac?_fmtMxn(t.cac):'—';
+  document.getElementById('roi-roi').textContent=t.roi?(t.roi.toFixed(2)+'x'):(t.spend===0&&t.revenue>0?'∞':'—');
+
+  const tbody=document.getElementById('roi-tbody');tbody.innerHTML='';
+  const rowFor=(label,b)=>{
+    const roiTxt=b.roi?(b.roi.toFixed(2)+'x'):(b.spend===0&&b.revenue>0?'∞':'—');
+    const cplTxt=b.cpl?_fmtMxn(b.cpl):'—';
+    const cacTxt=b.cac?_fmtMxn(b.cac):'—';
+    return `<tr>
+      <td><strong>${label}</strong></td>
+      <td style="text-align:right;">${_fmtNum(b.leads)}</td>
+      <td style="text-align:right;">${_fmtNum(b.calificados)}</td>
+      <td style="text-align:right;">${_fmtNum(b.cotizados)}</td>
+      <td style="text-align:right;color:var(--green);">${_fmtNum(b.ganados)}</td>
+      <td style="text-align:right;font-weight:600;">${b.tasa_cierre?b.tasa_cierre+'%':'—'}</td>
+      <td style="text-align:right;color:var(--orange);">${b.spend?_fmtMxn(b.spend):'$0'}</td>
+      <td style="text-align:right;">${cplTxt}</td>
+      <td style="text-align:right;">${cacTxt}</td>
+      <td style="text-align:right;">${b.revenue?_fmtMxn(b.revenue):'—'}</td>
+      <td style="text-align:right;font-weight:600;">${roiTxt}</td>
+    </tr>`;
+  };
+  for(const[origen,b]of Object.entries(d.por_origen)){
+    if(b.leads===0&&b.spend===0)continue;
+    tbody.innerHTML+=rowFor(origen,b);
+  }
+  if(d.sin_origen.leads>0||d.sin_origen.spend>0){
+    tbody.innerHTML+=rowFor('Sin atribuir',d.sin_origen);
+  }
+  // Totales row
+  tbody.innerHTML+=`<tr style="border-top:2px solid var(--border);font-weight:600;background:var(--bg-sidebar);">
+    <td>TOTAL</td>
+    <td style="text-align:right;">${_fmtNum(t.leads)}</td>
+    <td style="text-align:right;">${_fmtNum(t.calificados)}</td>
+    <td style="text-align:right;">${_fmtNum(t.cotizados)}</td>
+    <td style="text-align:right;color:var(--green);">${_fmtNum(t.ganados)}</td>
+    <td style="text-align:right;">${t.tasa_cierre?t.tasa_cierre+'%':'—'}</td>
+    <td style="text-align:right;color:var(--orange);">${_fmtMxn(t.spend)}</td>
+    <td style="text-align:right;">${t.cpl?_fmtMxn(t.cpl):'—'}</td>
+    <td style="text-align:right;">${t.cac?_fmtMxn(t.cac):'—'}</td>
+    <td style="text-align:right;">${_fmtMxn(t.revenue)}</td>
+    <td style="text-align:right;">${t.roi?(t.roi.toFixed(2)+'x'):(t.spend===0&&t.revenue>0?'∞':'—')}</td>
+  </tr>`;
+
+  // Mapping plataforma→origen para que el usuario sepa cómo se atribuye
+  const mp=d.platform_to_origen_map||{};
+  document.getElementById('roi-mapping').innerHTML=
+    'Atribución: '+Object.entries(mp).map(([p,o])=>`${p} → ${o||'sin atribuir'}`).join(' • ');
+}
+
+// Modal de gasto manual
+function openGastoModal(){
+  const m=document.getElementById('gasto-overlay');
+  document.getElementById('ga-monto').value='';
+  document.getElementById('ga-campana').value='';
+  document.getElementById('ga-notas').value='';
+  document.getElementById('ga-fecha').value=new Date().toISOString().slice(0,10);
+  document.getElementById('ga-status').textContent='';
+  m.classList.add('open');
+  setTimeout(()=>document.getElementById('ga-monto').focus(),50);
+}
+function closeGastoModal(){document.getElementById('gasto-overlay').classList.remove('open');}
+async function saveGasto(){
+  const body={
+    plataforma:document.getElementById('ga-plataforma').value,
+    marca:document.getElementById('ga-marca').value||null,
+    fecha:document.getElementById('ga-fecha').value,
+    monto:parseFloat(document.getElementById('ga-monto').value)||0,
+    campana:document.getElementById('ga-campana').value||null,
+    notas:document.getElementById('ga-notas').value||null,
+  };
+  if(!body.fecha||body.monto<=0){
+    document.getElementById('ga-status').textContent='Fecha y monto son requeridos';
+    document.getElementById('ga-status').style.color='var(--red)';return;
+  }
+  try{
+    const r=await fetch('/api/dashboard/gastos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok){const e=await r.json();throw new Error(e.error||'error');}
+    closeGastoModal();loadRoi();_nlToast('Gasto registrado: '+_fmtMxn(body.monto));
+  }catch(e){
+    document.getElementById('ga-status').textContent='Error: '+e.message;
+    document.getElementById('ga-status').style.color='var(--red)';
+  }
 }
 
 // ── Costos APIs ──
