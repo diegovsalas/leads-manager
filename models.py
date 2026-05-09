@@ -1311,6 +1311,122 @@ class SdrDirEngineRun(db.Model):
         }
 
 
+class Touchpoint(db.Model):
+    """Touchpoints post-venta (llamadas, whatsapp, email, etc) por cliente.
+    Day_number indica los hitos: día 1, 7, 15, 30, etc.
+    Status: pendiente, completado, omitido."""
+    __tablename__ = "touchpoints"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    client_id = db.Column(UUID(as_uuid=True), db.ForeignKey("clients.id"), nullable=True, index=True)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=True, index=True)
+    day_number = db.Column(db.Integer, nullable=False)
+    type = db.Column(db.String(40), nullable=False)  # llamada/whatsapp/email/reporte/encuesta
+    status = db.Column(db.String(40), default="pendiente", nullable=False, index=True)
+    scheduled_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    completed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "client_id": str(self.client_id) if self.client_id else None,
+            "user_id": str(self.user_id) if self.user_id else None,
+            "day_number": self.day_number, "type": self.type,
+            "status": self.status,
+            "scheduled_at": self.scheduled_at.isoformat() if self.scheduled_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "notes": self.notes,
+        }
+
+
+class WeeklyKpi(db.Model):
+    """KPIs semanales por vendedor con targets y compliance %."""
+    __tablename__ = "weekly_kpis"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=False, index=True)
+    week_start = db.Column(db.Date, nullable=False)
+    calls_made = db.Column(db.Integer, default=0, nullable=False)
+    whatsapps_sent = db.Column(db.Integer, default=0, nullable=False)
+    emails_sent = db.Column(db.Integer, default=0, nullable=False)
+    quotes_sent = db.Column(db.Integer, default=0, nullable=False)
+    visits_made = db.Column(db.Integer, default=0, nullable=False)
+    leads_generated = db.Column(db.Integer, default=0, nullable=False)
+    crm_compliance = db.Column(db.Float, default=0, nullable=False)  # porcentaje
+    target_calls = db.Column(db.Integer, default=80, nullable=False)
+    target_whatsapps = db.Column(db.Integer, default=60, nullable=False)
+    target_emails = db.Column(db.Integer, default=40, nullable=False)
+    target_quotes = db.Column(db.Integer, default=15, nullable=False)
+    target_visits = db.Column(db.Integer, default=5, nullable=False)
+    compliance_pct = db.Column(db.Float, default=0, nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "week_start", name="uq_weekly_kpis_user_week"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id, "user_id": str(self.user_id),
+            "week_start": self.week_start.isoformat(),
+            "calls_made": self.calls_made, "whatsapps_sent": self.whatsapps_sent,
+            "emails_sent": self.emails_sent, "quotes_sent": self.quotes_sent,
+            "visits_made": self.visits_made, "leads_generated": self.leads_generated,
+            "crm_compliance": self.crm_compliance,
+            "targets": {
+                "calls": self.target_calls, "whatsapps": self.target_whatsapps,
+                "emails": self.target_emails, "quotes": self.target_quotes,
+                "visits": self.target_visits,
+            },
+            "compliance_pct": self.compliance_pct,
+        }
+
+
+class CityAssignment(db.Model):
+    """Routing por ciudad+unit. Round-robin order define orden de asignación."""
+    __tablename__ = "city_assignments"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    city = db.Column(db.String(120), nullable=False, index=True)
+    unit = db.Column(db.String(40), nullable=False, index=True)  # aromatex/pestex/weldex
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=True, index=True)
+    round_robin_order = db.Column(db.Integer, default=0, nullable=False)
+    active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id, "city": self.city, "unit": self.unit,
+            "user_id": str(self.user_id) if self.user_id else None,
+            "round_robin_order": self.round_robin_order,
+            "active": self.active,
+        }
+
+
+class StateAssignment(db.Model):
+    """Routing por estado+unit. Las dos pueden coexistir; state_assignments
+    es lo que el SDR Prospector usa cuando hace assign con state."""
+    __tablename__ = "state_assignments"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    state = db.Column(db.String(120), nullable=False, index=True)
+    unit = db.Column(db.String(40), nullable=False, index=True)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=True, index=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("state", "unit", "user_id", name="uq_state_assignments"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id, "state": self.state, "unit": self.unit,
+            "user_id": str(self.user_id) if self.user_id else None,
+        }
+
+
 class ZohoToken(db.Model):
     """Tokens OAuth de Zoho. Single-row (id=1) — replazo del archivo
     .zoho_tokens.json del legacy, persistente en DB para Render."""
