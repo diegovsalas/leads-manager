@@ -1,5 +1,7 @@
 # blueprints/leads.py
-from flask import Blueprint, request, jsonify
+import re
+from flask import Blueprint, request, jsonify, session
+from sqlalchemy import or_, func
 from extensions import db, socketio
 from models import Lead, EtapaPipeline, OrigenLead, Usuario
 from icp_scoring import calcular_icp, INDUSTRIAS, TAMANOS
@@ -84,21 +86,37 @@ def crear_lead():
         except ValueError:
             pass  # Sin vendedores disponibles, crear sin asignar
 
+    # Etapa override (default NUEVO_LEAD; modal manual permite "calificado" → COTIZACION)
+    etapa = EtapaPipeline.NUEVO_LEAD
+    etapa_str = data.get("etapa_pipeline")
+    if etapa_str:
+        try:
+            etapa = EtapaPipeline(etapa_str)
+        except ValueError:
+            pass
+
+    # Asignación: si manual y no viene usuario_asignado_id, usar el usuario en sesión
+    asignado = data.get("usuario_asignado_id")
+    if not asignado:
+        asignado = session.get("usuario_id") or session.get("user_id")
+
     # Crear lead con asignacion manual (o sin asignar)
     lead = Lead(
         nombre=data.get("nombre", "Sin nombre"),
         telefono=data.get("telefono"),
+        empresa_nombre=data.get("empresa_nombre") or data.get("empresa"),
+        estado_cliente=data.get("estado_cliente") or data.get("estado"),
         origen=origen_enum,
         marca_interes=marca,
-        etapa_pipeline=EtapaPipeline.NUEVO_LEAD,
+        etapa_pipeline=etapa,
         cantidad_productos=cantidad,
         precio_unitario=precio,
         valor_estimado=valor,
-        usuario_asignado_id=data.get("usuario_asignado_id"),
+        usuario_asignado_id=asignado,
         tipo_industria=data.get("tipo_industria"),
         tamano_empresa=data.get("tamano_empresa"),
         num_sucursales=data.get("num_sucursales"),
-        tipo_cliente=data.get("tipo_cliente"),
+        tipo_cliente=data.get("tipo_cliente") or data.get("notas"),
     )
     _apply_icp(lead)
     db.session.add(lead)
@@ -107,6 +125,76 @@ def crear_lead():
     log_actividad("crear", "lead", lead.id, f"Lead creado: {lead.nombre} ({lead.telefono})")
     socketio.emit("nuevo_lead", lead.to_dict())
     return jsonify(lead.to_dict()), 201
+
+
+@leads_bp.route("/check-duplicate", methods=["GET"])
+def check_duplicate():
+    """GET /api/leads/check-duplicate?phone=52... — devuelve el Lead existente
+    si hay match por últimos 10 dígitos. Para validación inline del modal."""
+    phone = request.args.get("phone", "").strip()
+    digits = re.sub(r"\D", "", phone)[-10:]
+    if len(digits) < 10:
+        return jsonify({"duplicate": False})
+    lead = (
+        Lead.query
+        .filter(Lead.telefono.like(f"%{digits}"))
+        .order_by(Lead.fecha_creacion.desc())
+        .first()
+    )
+    if not lead:
+        return jsonify({"duplicate": False})
+    asignado_nombre = lead.usuario_asignado.nombre if lead.usuario_asignado else None
+    return jsonify({
+        "duplicate": True,
+        "lead": {
+            "id": str(lead.id),
+            "nombre": lead.nombre,
+            "empresa_nombre": lead.empresa_nombre,
+            "telefono": lead.telefono,
+            "etapa": lead.etapa_pipeline.value if lead.etapa_pipeline else None,
+            "asignado_a": asignado_nombre,
+        },
+    })
+
+
+@leads_bp.route("/empresa-search", methods=["GET"])
+def empresa_search():
+    """GET /api/leads/empresa-search?q=foo — autocomplete por empresa_nombre.
+    Devuelve hasta 10 nombres únicos para el modal."""
+    q = (request.args.get("q") or "").strip()
+    if len(q) < 2:
+        return jsonify([])
+    like = f"%{q}%"
+    rows = (
+        db.session.query(Lead.empresa_nombre)
+        .filter(Lead.empresa_nombre.isnot(None), Lead.empresa_nombre != "")
+        .filter(Lead.empresa_nombre.ilike(like))
+        .distinct().limit(10).all()
+    )
+    return jsonify([r[0] for r in rows])
+
+
+@leads_bp.route("/me", methods=["GET"])
+def me():
+    """Datos del usuario en sesión + sus marcas (especialidad_marca de Usuario).
+    Para que el modal sepa qué unidades mostrar (multi-tenant)."""
+    user_id = session.get("user_id")
+    usuario_id = session.get("usuario_id")
+    rol = session.get("user_rol", "")
+    nombre = session.get("user_nombre", "")
+
+    marcas = []
+    if usuario_id:
+        u = db.session.get(Usuario, usuario_id)
+        if u and u.especialidad_marca:
+            marcas = list(u.especialidad_marca)
+
+    is_admin = rol.lower().replace(" ", "_") == "super_admin"
+    return jsonify({
+        "user_id": user_id, "usuario_id": usuario_id,
+        "nombre": nombre, "rol": rol, "is_admin": is_admin,
+        "marcas": marcas,  # ej. ["Aromatex", "Pestex"]
+    })
 
 
 @leads_bp.route("/<uuid:lead_id>/mover", methods=["PATCH"])

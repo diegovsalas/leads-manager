@@ -289,6 +289,7 @@ tbody td{padding:8px 12px;font-size:14px;}
     <div class="slink active" onclick="showView('dashboard',this)">&#128202; Dashboard</div>
     <div class="slink" onclick="showView('mihoy',this)">&#127919; Mi dia <span class="slink-badge" style="color:var(--red);font-weight:600;" id="mihoy-badge"></span></div>
     <div class="slink" onclick="showView('pipeline',this)">&#128203; Pipeline</div>
+    <div class="slink" onclick="openLeadModal()" style="background:var(--copper-soft);color:var(--copper);font-weight:600;">&#10133; Nuevo Lead <kbd style="float:right;font-size:9px;color:var(--text3);background:var(--bg-card);padding:1px 4px;border-radius:3px;border:1px solid var(--border);">⌘N</kbd></div>
     <div class="slink" onclick="showView('leads',this)">&#128101; Leads</div>
     <div class="slink admin-only" onclick="showView('vendedores',this)">&#128100; Vendedores</div>
     <div class="slink" onclick="showView('proyecto',this)">&#128221; Proyecto</div>
@@ -2731,6 +2732,365 @@ fetch('/api/leads/icp-opciones').then(r=>r.json()).then(d=>{
   if(sel&&d.industrias){d.industrias.forEach(i=>{sel.innerHTML+=`<option value="${i}">${i}</option>`;});}
 }).catch(()=>{});
 applyRoleVisibility();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     NUEVO LEAD — Modal de creación rápida (best in market)
+     ═══════════════════════════════════════════════════════════════ -->
+<style>
+.nl-overlay{position:fixed;inset:0;background:rgba(20,15,10,.45);backdrop-filter:blur(4px);z-index:10000;display:none;align-items:flex-start;justify-content:center;padding-top:6vh;}
+.nl-overlay.open{display:flex;}
+.nl-card{background:var(--bg-card);border-radius:12px;width:560px;max-width:94vw;max-height:88vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25),0 0 0 1px var(--border);animation:nl-pop .15s ease-out;}
+@keyframes nl-pop{from{opacity:0;transform:translateY(-8px) scale(.98);}to{opacity:1;transform:translateY(0) scale(1);}}
+.nl-header{padding:16px 20px 12px;border-bottom:1px solid var(--border-light);display:flex;justify-content:space-between;align-items:center;}
+.nl-header h3{font-size:18px;font-weight:600;margin:0;}
+.nl-header .nl-kbd{font-size:10px;color:var(--text3);background:var(--bg-sidebar);padding:2px 6px;border-radius:4px;border:1px solid var(--border);font-family:var(--mono);}
+.nl-body{padding:14px 20px;overflow-y:auto;flex:1;}
+.nl-row{margin-bottom:10px;}
+.nl-row.two{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.nl-label{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;display:block;}
+.nl-input{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:var(--font);background:var(--bg-input);color:var(--text);outline:none;transition:border-color .12s;}
+.nl-input:focus{border-color:var(--copper);box-shadow:0 0 0 3px var(--copper-soft);}
+.nl-input.error{border-color:var(--red);}
+.nl-pills{display:flex;gap:6px;flex-wrap:wrap;}
+.nl-pill{padding:6px 12px;border:1px solid var(--border);border-radius:99px;font-size:12px;cursor:pointer;background:var(--bg-card);transition:all .12s;user-select:none;}
+.nl-pill:hover{background:var(--bg-hover);}
+.nl-pill.active{background:var(--copper);color:#fff;border-color:var(--copper);}
+.nl-banner{padding:9px 12px;border-radius:6px;font-size:12px;display:flex;align-items:center;gap:8px;margin-top:6px;}
+.nl-banner.warn{background:var(--orange-bg);color:var(--orange);border:1px solid var(--orange);}
+.nl-banner.info{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue);}
+.nl-banner.success{background:var(--green-bg);color:var(--green);border:1px solid var(--green);}
+.nl-collapse{margin-top:8px;border-top:1px solid var(--border-light);padding-top:10px;}
+.nl-collapse summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);padding:4px 0;list-style:none;display:flex;align-items:center;gap:6px;user-select:none;}
+.nl-collapse summary::before{content:'▸';transition:transform .12s;display:inline-block;font-size:10px;}
+.nl-collapse[open] summary::before{transform:rotate(90deg);}
+.nl-icp{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700;}
+.nl-icp.A{background:var(--green-bg);color:var(--green);}
+.nl-icp.B{background:var(--blue-bg);color:var(--blue);}
+.nl-icp.C{background:var(--yellow-bg);color:var(--yellow);}
+.nl-icp.D{background:var(--red-bg);color:var(--red);}
+.nl-foot{padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:8px;align-items:center;background:var(--bg-sidebar);}
+.nl-assign{font-size:11px;color:var(--text2);}
+.nl-assign strong{color:var(--text);}
+.nl-btns{display:flex;gap:6px;}
+.nl-btn{padding:7px 12px;border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;background:var(--bg-card);font-family:var(--font);}
+.nl-btn:hover{background:var(--bg-hover);}
+.nl-btn.primary{background:var(--copper);color:#fff;border-color:var(--copper);}
+.nl-btn.primary:hover{background:#7a4f30;}
+.nl-btn:disabled{opacity:.5;cursor:not-allowed;}
+.nl-btn .nl-kbd{margin-left:6px;font-size:9px;opacity:.85;font-family:var(--mono);}
+.nl-empresa-list{position:absolute;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;box-shadow:var(--shadow-lg);max-height:160px;overflow-y:auto;z-index:10;width:100%;margin-top:2px;}
+.nl-empresa-item{padding:6px 11px;cursor:pointer;font-size:13px;}
+.nl-empresa-item:hover{background:var(--bg-hover);}
+.nl-checkbox{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:6px 0;}
+.nl-checkbox input{width:16px;height:16px;cursor:pointer;}
+.nl-toast{position:fixed;bottom:24px;right:24px;background:var(--green);color:#fff;padding:12px 18px;border-radius:8px;font-size:13px;font-weight:500;box-shadow:0 8px 24px rgba(0,0,0,.2);z-index:10001;opacity:0;transform:translateY(8px);transition:all .2s;pointer-events:none;}
+.nl-toast.show{opacity:1;transform:translateY(0);}
+.nl-toast.error{background:var(--red);}
+</style>
+
+<div class="nl-overlay" id="nl-overlay" onclick="if(event.target===this)closeLeadModal()">
+  <div class="nl-card">
+    <div class="nl-header">
+      <h3>Nuevo Lead</h3>
+      <span class="nl-kbd">Esc para cerrar</span>
+    </div>
+    <div class="nl-body">
+      <div class="nl-row">
+        <label class="nl-label">Teléfono *</label>
+        <input class="nl-input" id="nl-phone" type="tel" placeholder="52 81 1234 5678" autocomplete="off"/>
+        <div id="nl-dup-banner" style="display:none;"></div>
+      </div>
+      <div class="nl-row two">
+        <div>
+          <label class="nl-label">Nombre del contacto *</label>
+          <input class="nl-input" id="nl-nombre" type="text" autocomplete="off"/>
+        </div>
+        <div style="position:relative;">
+          <label class="nl-label">Empresa</label>
+          <input class="nl-input" id="nl-empresa" type="text" autocomplete="off" oninput="nlEmpresaSearch()"/>
+          <div id="nl-empresa-list" class="nl-empresa-list" style="display:none;"></div>
+        </div>
+      </div>
+      <div class="nl-row two">
+        <div>
+          <label class="nl-label">Estado</label>
+          <select class="nl-input" id="nl-estado">
+            <option value="">— Seleccionar —</option>
+          </select>
+        </div>
+        <div>
+          <label class="nl-label">Sucursales</label>
+          <input class="nl-input" id="nl-sucursales" type="number" min="1" placeholder="1"/>
+        </div>
+      </div>
+      <div class="nl-row">
+        <label class="nl-label">Unidad de negocio *</label>
+        <div class="nl-pills" id="nl-unidad-pills"></div>
+      </div>
+      <div class="nl-row">
+        <label class="nl-label">Origen</label>
+        <div class="nl-pills" id="nl-origen-pills">
+          <div class="nl-pill active" data-val="Prospeccion">Prospección</div>
+          <div class="nl-pill" data-val="Web">Web</div>
+          <div class="nl-pill" data-val="WhatsApp Organico">WhatsApp Orgánico</div>
+        </div>
+      </div>
+
+      <details class="nl-collapse">
+        <summary>Calificar más (opcional) — ICP <span class="nl-icp D" id="nl-icp-badge">D</span></summary>
+        <div style="padding-top:8px;">
+          <div class="nl-row two">
+            <div>
+              <label class="nl-label">Industria</label>
+              <select class="nl-input" id="nl-industria"><option value="">—</option></select>
+            </div>
+            <div>
+              <label class="nl-label">Tamaño empresa</label>
+              <select class="nl-input" id="nl-tamano"><option value="">—</option></select>
+            </div>
+          </div>
+          <div class="nl-row two">
+            <div>
+              <label class="nl-label">Cantidad productos</label>
+              <input class="nl-input" id="nl-cantidad" type="number" min="0"/>
+            </div>
+            <div>
+              <label class="nl-label">Precio unitario</label>
+              <input class="nl-input" id="nl-precio" type="number" min="0" step="0.01"/>
+            </div>
+          </div>
+          <div class="nl-row">
+            <label class="nl-label">Notas</label>
+            <textarea class="nl-input" id="nl-notas" rows="2" style="resize:vertical;"></textarea>
+          </div>
+        </div>
+      </details>
+
+      <div class="nl-row" style="margin-top:14px;">
+        <label class="nl-checkbox">
+          <input type="checkbox" id="nl-calificado"/>
+          <span>Marcar como <strong>calificado</strong> (salta directo a Cotización)</span>
+        </label>
+      </div>
+    </div>
+    <div class="nl-foot">
+      <div class="nl-assign" id="nl-assign-preview">Se asignará a vos</div>
+      <div class="nl-btns">
+        <button class="nl-btn" onclick="closeLeadModal()">Cancelar</button>
+        <button class="nl-btn" onclick="nlSubmit('add-another')">Guardar + nuevo<span class="nl-kbd">⌘⇧↵</span></button>
+        <button class="nl-btn primary" id="nl-save-btn" onclick="nlSubmit('close')">Guardar<span class="nl-kbd">⌘↵</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="nl-toast" id="nl-toast"></div>
+
+<script>
+// ── Estados MX para dropdown ──
+const _NL_ESTADOS = ["Aguascalientes","Baja California","Baja California Sur","Campeche","Chiapas","Chihuahua","Ciudad de México","Coahuila","Colima","Durango","Estado de México","Guanajuato","Guerrero","Hidalgo","Jalisco","Michoacán","Morelos","Nayarit","Nuevo León","Oaxaca","Puebla","Querétaro","Quintana Roo","San Luis Potosí","Sinaloa","Sonora","Tabasco","Tamaulipas","Tlaxcala","Veracruz","Yucatán","Zacatecas"];
+
+const _NL_ICP_THRESHOLDS = {A:75,B:50,C:25};
+let _nlMe = null;
+
+async function _nlLoadMe(){
+  if(_nlMe)return _nlMe;
+  try{const r=await fetch('/api/leads/me');_nlMe=await r.json();return _nlMe;}
+  catch(e){_nlMe={nombre:'Usuario',marcas:[],is_admin:false};return _nlMe;}
+}
+
+async function openLeadModal(){
+  const me=await _nlLoadMe();
+  const overlay=document.getElementById('nl-overlay');
+  overlay.classList.add('open');
+  // Reset
+  ['nl-phone','nl-nombre','nl-empresa','nl-sucursales','nl-cantidad','nl-precio','nl-notas'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('nl-estado').value='';
+  document.getElementById('nl-industria').value='';
+  document.getElementById('nl-tamano').value='';
+  document.getElementById('nl-calificado').checked=false;
+  document.getElementById('nl-dup-banner').style.display='none';
+  // Estados
+  const estSel=document.getElementById('nl-estado');
+  if(estSel.children.length<=1){
+    _NL_ESTADOS.forEach(s=>{estSel.innerHTML+=`<option value="${s}">${s}</option>`;});
+  }
+  // Unidades pills (filtradas por marcas del usuario)
+  const allMarcas=['Aromatex','Pestex','Weldex'];
+  const userMarcas=me.is_admin?allMarcas:(me.marcas&&me.marcas.length?me.marcas:allMarcas);
+  const pillsEl=document.getElementById('nl-unidad-pills');
+  pillsEl.innerHTML='';
+  userMarcas.forEach((m,i)=>{
+    const p=document.createElement('div');p.className='nl-pill'+(i===0?' active':'');p.dataset.val=m;p.textContent=m;
+    p.onclick=()=>{pillsEl.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');};
+    pillsEl.appendChild(p);
+  });
+  // Origen pills (default Prospección activo)
+  document.getElementById('nl-origen-pills').querySelectorAll('.nl-pill').forEach((p,i)=>{
+    p.onclick=()=>{p.parentElement.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');};
+  });
+  // Industria + tamaño desde la API ya cargada
+  const indSel=document.getElementById('nl-industria'),tamSel=document.getElementById('nl-tamano');
+  if(indSel.children.length<=1){
+    fetch('/api/leads/icp-opciones').then(r=>r.json()).then(d=>{
+      (d.industrias||[]).forEach(i=>{indSel.innerHTML+=`<option value="${i}">${i}</option>`;});
+      (d.tamanos||[]).forEach(t=>{tamSel.innerHTML+=`<option value="${t}">${t}</option>`;});
+    }).catch(()=>{});
+  }
+  // Asignación preview
+  document.getElementById('nl-assign-preview').innerHTML=`Se asignará a <strong>${me.nombre||'vos'}</strong>`;
+  // Reset ICP badge
+  _nlUpdateIcp();
+  setTimeout(()=>document.getElementById('nl-phone').focus(),50);
+}
+
+function closeLeadModal(){document.getElementById('nl-overlay').classList.remove('open');}
+
+// Phone format + duplicate check on blur
+document.addEventListener('DOMContentLoaded',()=>{
+  const phoneEl=document.getElementById('nl-phone');
+  if(phoneEl){
+    phoneEl.addEventListener('blur',async e=>{
+      let v=e.target.value.replace(/\D/g,'');
+      if(v.length===10)v='52'+v;
+      else if(v.startsWith('52')&&v.length===12)v=v;
+      else if(v.length>=10)v=v.slice(-10),v='52'+v;
+      e.target.value=v;
+      if(v.length<12){document.getElementById('nl-dup-banner').style.display='none';return;}
+      try{
+        const r=await fetch('/api/leads/check-duplicate?phone='+v);
+        const d=await r.json();
+        const banner=document.getElementById('nl-dup-banner');
+        if(d.duplicate){
+          banner.className='nl-banner warn';
+          banner.innerHTML=`⚠ Ya existe: <strong>${d.lead.nombre||'(sin nombre)'}</strong> ${d.lead.empresa_nombre?'· '+d.lead.empresa_nombre:''} · etapa: ${d.lead.etapa} · asignado a ${d.lead.asignado_a||'nadie'}`;
+          banner.style.display='flex';
+        }else{banner.style.display='none';}
+      }catch(e){}
+    });
+    phoneEl.addEventListener('input',e=>{
+      let v=e.target.value.replace(/\D/g,'');
+      if(v.length>13)v=v.slice(0,13);
+      e.target.value=v;
+    });
+  }
+
+  // ICP live recalc
+  ['nl-industria','nl-tamano','nl-sucursales'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.addEventListener('change',_nlUpdateIcp);
+    if(el)el.addEventListener('input',_nlUpdateIcp);
+  });
+
+  // Hotkeys
+  document.addEventListener('keydown',e=>{
+    // Cmd+N (Mac) o Ctrl+N (Win/Linux)
+    if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='n'&&!document.getElementById('nl-overlay').classList.contains('open')){
+      // Solo en pipeline view, no si hay un input externo focuseado en otra cosa
+      e.preventDefault();openLeadModal();return;
+    }
+    if(!document.getElementById('nl-overlay').classList.contains('open'))return;
+    if(e.key==='Escape'){e.preventDefault();closeLeadModal();}
+    if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){
+      e.preventDefault();
+      if(e.shiftKey)nlSubmit('add-another');
+      else nlSubmit('close');
+    }
+  });
+});
+
+let _nlEmpresaTimer=null;
+function nlEmpresaSearch(){
+  clearTimeout(_nlEmpresaTimer);
+  _nlEmpresaTimer=setTimeout(async()=>{
+    const q=document.getElementById('nl-empresa').value.trim();
+    const list=document.getElementById('nl-empresa-list');
+    if(q.length<2){list.style.display='none';return;}
+    try{
+      const r=await fetch('/api/leads/empresa-search?q='+encodeURIComponent(q));
+      const items=await r.json();
+      if(!items.length){list.style.display='none';return;}
+      list.innerHTML=items.map(it=>`<div class="nl-empresa-item" onclick="nlPickEmpresa('${it.replace(/'/g,"&apos;")}')">${it}</div>`).join('');
+      list.style.display='block';
+    }catch(e){list.style.display='none';}
+  },200);
+}
+function nlPickEmpresa(name){document.getElementById('nl-empresa').value=name;document.getElementById('nl-empresa-list').style.display='none';}
+
+function _nlUpdateIcp(){
+  // Heurística simple para preview (la real corre server-side al guardar)
+  const ind=document.getElementById('nl-industria').value;
+  const tam=document.getElementById('nl-tamano').value;
+  const suc=parseInt(document.getElementById('nl-sucursales').value)||0;
+  let score=0;
+  if(ind)score+=20;
+  if(tam==='Grande (200+)')score+=30;else if(tam==='Mediana (51-200)')score+=20;else if(tam)score+=10;
+  if(suc>=10)score+=30;else if(suc>=5)score+=20;else if(suc>=2)score+=10;
+  if(score>=_NL_ICP_THRESHOLDS.A)score+=15; // bonus exec presence stub
+  let level='D';
+  if(score>=75)level='A';else if(score>=50)level='B';else if(score>=25)level='C';
+  const badge=document.getElementById('nl-icp-badge');
+  badge.textContent=level;badge.className='nl-icp '+level;
+}
+
+function _nlToast(msg,err){
+  const t=document.getElementById('nl-toast');
+  t.textContent=msg;
+  t.className='nl-toast'+(err?' error show':' show');
+  setTimeout(()=>{t.className='nl-toast';},2400);
+}
+
+async function nlSubmit(mode){
+  const phone=document.getElementById('nl-phone').value.replace(/\D/g,'');
+  const nombre=document.getElementById('nl-nombre').value.trim();
+  const empresa=document.getElementById('nl-empresa').value.trim();
+  const estado=document.getElementById('nl-estado').value;
+  const sucursales=document.getElementById('nl-sucursales').value;
+  const industria=document.getElementById('nl-industria').value;
+  const tamano=document.getElementById('nl-tamano').value;
+  const cantidad=document.getElementById('nl-cantidad').value;
+  const precio=document.getElementById('nl-precio').value;
+  const notas=document.getElementById('nl-notas').value.trim();
+  const calificado=document.getElementById('nl-calificado').checked;
+  const unidad=document.querySelector('#nl-unidad-pills .nl-pill.active')?.dataset.val||'';
+  const origen=document.querySelector('#nl-origen-pills .nl-pill.active')?.dataset.val||'Prospeccion';
+
+  if(!phone||phone.length<10){_nlToast('Teléfono inválido (mínimo 10 dígitos)',true);return;}
+  if(!nombre){_nlToast('Falta nombre del contacto',true);return;}
+  if(!unidad){_nlToast('Seleccioná una unidad de negocio',true);return;}
+
+  const phoneNorm=phone.length===10?'52'+phone:phone;
+
+  const body={
+    telefono:phoneNorm, nombre, empresa_nombre:empresa||null,
+    estado_cliente:estado||null,
+    marca_interes:unidad, origen,
+    num_sucursales:sucursales?parseInt(sucursales):null,
+    tipo_industria:industria||null, tamano_empresa:tamano||null,
+    cantidad_productos:cantidad?parseInt(cantidad):null,
+    precio_unitario:precio?parseFloat(precio):null,
+    tipo_cliente:notas||null,
+    etapa_pipeline: calificado ? 'Cotización' : 'Nuevo Lead',
+  };
+
+  const btn=document.getElementById('nl-save-btn');btn.disabled=true;
+  try{
+    const r=await fetch('/api/leads/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok){const err=await r.json();throw new Error(err.error||'Error');}
+    const lead=await r.json();
+    _nlToast('Lead creado: '+nombre);
+    if(mode==='close'){closeLeadModal();setTimeout(()=>{if(typeof loadKanban==='function')loadKanban();else location.reload();},400);}
+    else if(mode==='add-another'){
+      // Reset y reabrir
+      ['nl-phone','nl-nombre','nl-empresa','nl-sucursales','nl-cantidad','nl-precio','nl-notas'].forEach(id=>document.getElementById(id).value='');
+      document.getElementById('nl-dup-banner').style.display='none';
+      _nlUpdateIcp();
+      setTimeout(()=>document.getElementById('nl-phone').focus(),100);
+    }
+  }catch(e){_nlToast('Error: '+e.message,true);}
+  finally{btn.disabled=false;}
+}
 </script>
 </body>
 </html>
