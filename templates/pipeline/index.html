@@ -311,6 +311,7 @@ tbody td{padding:8px 12px;font-size:14px;}
     <div class="slink admin-only" onclick="showView('costos',this)">&#128181; Costos APIs</div>
     <div class="slink admin-only" onclick="showView('vincular',this)">&#128279; Vincular Savio&#8594;CS</div>
     <div class="slink admin-only" onclick="showView('roi',this)">&#128202; Marketing ROI</div>
+    <div class="slink admin-only" onclick="showView('scip',this)">&#127919; SCIP Director</div>
 
     <div class="sidebar-divider admin-only"></div>
     <div class="sidebar-section admin-only">Administracion</div>
@@ -1255,6 +1256,81 @@ tbody td{padding:8px 12px;font-size:14px;}
   </div>
 </div>
 
+<!-- ===== SCIP DIRECTOR ===== -->
+<div class="view" id="view-scip" style="overflow-y:auto;">
+  <div class="page-header">
+    <div class="page-emoji">&#127919;</div>
+    <div class="page-title">SCIP Director</div>
+    <div class="page-desc">Campañas Meta + Google con análisis IA, alertas y atribución a vendedor</div>
+  </div>
+  <div style="padding:20px 48px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <select class="form-input" id="scip-platform" style="max-width:140px;font-size:13px;" onchange="loadScip()">
+      <option value="">Todas</option><option value="meta">Meta Ads</option><option value="google">Google Ads</option>
+    </select>
+    <select class="form-input" id="scip-unit" style="max-width:160px;font-size:13px;" onchange="loadScip()">
+      <option value="">Todas las unidades</option>
+      <option value="aromatex">Aromatex</option><option value="pestex">Pestex</option><option value="weldex">Weldex</option>
+    </select>
+    <button class="btn btn-filled" onclick="loadScip()" style="font-size:13px;">Refrescar</button>
+    <button class="btn" onclick="scanScipAlerts()" style="font-size:13px;">Escanear alertas</button>
+    <span id="scip-status" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
+  </div>
+  <div style="padding:0 48px 16px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+    <div class="dash-card"><div class="dash-card-title">Campañas</div><div style="font-size:22px;font-weight:600;" id="scip-count">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">Elegibles</div><div style="font-size:22px;font-weight:600;color:var(--green);" id="scip-eligible">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">Spend total (30d)</div><div style="font-size:22px;font-weight:600;color:var(--orange);" id="scip-spend">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">Alertas</div><div style="font-size:22px;font-weight:600;color:var(--red);" id="scip-alerts-count">—</div></div>
+  </div>
+  <div style="padding:0 48px 20px;">
+    <div class="dash-card">
+      <div class="dash-card-title">Campañas activas</div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Campaña</th><th>Plataforma</th><th>Unidad</th><th style="text-align:right;">Días</th>
+          <th style="text-align:right;">Spend</th><th style="text-align:right;">CTR</th>
+          <th style="text-align:right;">CPC</th><th style="text-align:right;">Conv</th>
+          <th>Status</th><th>Acciones</th>
+        </tr></thead>
+        <tbody id="scip-tbody"></tbody>
+      </table></div>
+    </div>
+  </div>
+  <div style="padding:0 48px 20px;display:none;" id="scip-alerts-block">
+    <div class="dash-card">
+      <div class="dash-card-title">Alertas detectadas</div>
+      <div id="scip-alerts-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: análisis IA de campaña -->
+<div class="nl-overlay" id="scip-analyze-overlay" onclick="if(event.target===this)closeScipAnalyze()">
+  <div class="nl-card" style="width:640px;">
+    <div class="nl-header">
+      <h3>Análisis IA — <span id="scip-analyze-camp" style="font-weight:400;color:var(--text2);"></span></h3>
+      <span class="nl-kbd">Esc</span>
+    </div>
+    <div class="nl-body">
+      <div class="nl-row two">
+        <div>
+          <label class="nl-label">Leads cerrados (reportar)</label>
+          <input class="nl-input" id="scip-leads-closed" type="number" min="0" value="0"/>
+        </div>
+        <div>
+          <label class="nl-label">Leads en pipeline</label>
+          <input class="nl-input" id="scip-leads-pipeline" type="number" min="0" value="0"/>
+        </div>
+      </div>
+      <button class="nl-btn primary" onclick="runScipAnalyze()" style="width:100%;margin:6px 0 12px;font-size:13px;padding:10px;" id="scip-analyze-btn">Generar análisis con Claude</button>
+      <div id="scip-analyze-result" style="font-size:13px;line-height:1.5;"></div>
+    </div>
+    <div class="nl-foot">
+      <span style="font-size:11px;color:var(--text3);" id="scip-analyze-cost"></span>
+      <button class="nl-btn" onclick="closeScipAnalyze()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== COSTOS APIs ===== -->
 <div class="view" id="view-costos" style="overflow-y:auto;">
   <div class="page-header">
@@ -1563,6 +1639,7 @@ function showView(name,el){
   if(name==='costos')loadCostos();
   if(name==='vincular')loadVincular();
   if(name==='roi')loadRoi();
+  if(name==='scip')loadScip();
 }
 
 // ──────────────────────────────────────────────
@@ -1920,6 +1997,123 @@ async function saveGasto(){
     document.getElementById('ga-status').textContent='Error: '+e.message;
     document.getElementById('ga-status').style.color='var(--red)';
   }
+}
+
+// ── SCIP Director ──
+let _scipCampaigns = [];
+
+async function loadScip(){
+  const platform=document.getElementById('scip-platform').value;
+  const unit=document.getElementById('scip-unit').value;
+  const params=new URLSearchParams();
+  if(platform)params.set('platform',platform);
+  if(unit)params.set('unit',unit);
+  document.getElementById('scip-status').textContent='Cargando…';
+  const d=await _api('/api/scip/director/campaigns'+(params.toString()?'?'+params:''));
+  if(!d){document.getElementById('scip-status').textContent='Error';return;}
+  _scipCampaigns=d.data||[];
+  document.getElementById('scip-status').textContent=`${d.cached?'(cached) ':''}${d.timestamp||''}`;
+  document.getElementById('scip-count').textContent=_fmtNum(d.count||0);
+  document.getElementById('scip-eligible').textContent=_fmtNum(d.eligible_count||0);
+  let totSpend=0;
+  for(const c of _scipCampaigns)totSpend+=(c.metrics?.spend||0);
+  document.getElementById('scip-spend').textContent=_fmtMxn(totSpend);
+
+  const tbody=document.getElementById('scip-tbody');tbody.innerHTML='';
+  for(const c of _scipCampaigns){
+    const m=c.metrics||{};
+    const eligibleBadge=c.eligible_for_analysis?'':`<span style="color:var(--text3);font-size:10px;"> (no elegible)</span>`;
+    const statusColor=c.status==='ACTIVE'?'var(--green)':'var(--text2)';
+    const platLabel=c.platform==='meta'?'Meta':'Google';
+    tbody.innerHTML+=`<tr>
+      <td><strong>${c.name||'(sin nombre)'}</strong> <span style="font-family:var(--mono);font-size:10px;color:var(--text3);">${c.id}</span>${eligibleBadge}</td>
+      <td>${platLabel}</td>
+      <td>${c.unit||'—'}</td>
+      <td style="text-align:right;">${c.days_running||0}</td>
+      <td style="text-align:right;">${_fmtMxn(m.spend||0)}</td>
+      <td style="text-align:right;">${(m.ctr||0).toFixed(2)}%</td>
+      <td style="text-align:right;">${_fmtMxn(m.cpc||0)}</td>
+      <td style="text-align:right;">${_fmtNum((m.conversations||0)+(m.purchases||0)+(m.conversions||0))}</td>
+      <td><span style="color:${statusColor};font-weight:600;font-size:11px;">${c.status}</span></td>
+      <td>
+        <button class="btn" ${c.eligible_for_analysis?'':'disabled'} onclick='openScipAnalyze(${JSON.stringify(c).replace(/'/g,"&apos;")})' style="font-size:11px;padding:4px 8px;">Analizar</button>
+      </td>
+    </tr>`;
+  }
+  if(!tbody.innerHTML)tbody.innerHTML='<tr><td colspan="10" style="color:var(--text2);text-align:center;padding:14px;">Sin campañas. ¿Configuraste META_* / GOOGLE_ADS_*?</td></tr>';
+}
+
+async function scanScipAlerts(){
+  const platform=document.getElementById('scip-platform').value;
+  const unit=document.getElementById('scip-unit').value;
+  const params=new URLSearchParams();
+  if(platform)params.set('platform',platform);
+  if(unit)params.set('unit',unit);
+  document.getElementById('scip-status').textContent='Escaneando…';
+  const d=await _api('/api/scip/alerts/scan'+(params.toString()?'?'+params:''));
+  if(!d)return;
+  document.getElementById('scip-alerts-count').textContent=_fmtNum(d.total_alerts||0);
+  document.getElementById('scip-status').textContent=`${d.campaigns_scanned||0} campañas escaneadas`;
+  const block=document.getElementById('scip-alerts-block');
+  const list=document.getElementById('scip-alerts-list');
+  if(!d.alerts?.length){block.style.display='none';return;}
+  block.style.display='block';list.innerHTML='';
+  for(const a of d.alerts){
+    const colorBg=a.level==='critical'?'var(--red-bg)':'var(--yellow-bg)';
+    const colorTx=a.level==='critical'?'var(--red)':'var(--yellow)';
+    list.innerHTML+=`<div style="padding:8px 12px;background:${colorBg};border-radius:6px;border-left:3px solid ${colorTx};">
+      <div style="font-weight:600;font-size:12px;color:${colorTx};">${a.level.toUpperCase()} · ${a.type} · ${a.platform}</div>
+      <div style="font-size:13px;margin-top:2px;">${a.campaign_name} <span style="color:var(--text3);">(${a.unit||'—'})</span></div>
+      <div style="font-size:12px;color:var(--text2);margin-top:2px;">${a.message}</div>
+    </div>`;
+  }
+}
+
+let _scipAnalyzeCamp=null;
+function openScipAnalyze(campaign){
+  _scipAnalyzeCamp=campaign;
+  document.getElementById('scip-analyze-camp').textContent=campaign.name+' · '+campaign.platform;
+  document.getElementById('scip-leads-closed').value=campaign.leads_estimate?.ganados||0;
+  document.getElementById('scip-leads-pipeline').value=campaign.leads_estimate?.en_proceso||0;
+  document.getElementById('scip-analyze-result').innerHTML='';
+  document.getElementById('scip-analyze-cost').textContent='';
+  document.getElementById('scip-analyze-overlay').classList.add('open');
+}
+function closeScipAnalyze(){document.getElementById('scip-analyze-overlay').classList.remove('open');}
+
+async function runScipAnalyze(){
+  if(!_scipAnalyzeCamp)return;
+  const btn=document.getElementById('scip-analyze-btn');
+  btn.disabled=true;btn.textContent='Pensando…';
+  const result=document.getElementById('scip-analyze-result');
+  result.innerHTML='<div style="color:var(--text2);font-size:12px;">Llamando a Claude (5-10s)…</div>';
+  try{
+    const r=await fetch('/api/scip/director/analyze',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        campaign_id:_scipAnalyzeCamp.id, platform:_scipAnalyzeCamp.platform,
+        account:_scipAnalyzeCamp.account, unit:_scipAnalyzeCamp.unit,
+        name:_scipAnalyzeCamp.name, metrics:_scipAnalyzeCamp.metrics,
+        leads_closed:parseInt(document.getElementById('scip-leads-closed').value)||0,
+        leads_in_pipeline:parseInt(document.getElementById('scip-leads-pipeline').value)||0,
+      })});
+    const d=await r.json();
+    if(d.error){result.innerHTML='<div style="color:var(--red);">Error: '+d.error+'</div>';return;}
+    const a=d.analysis||{};
+    const actionColor={scale_up:'var(--green)',pause:'var(--red)',duplicate_to:'var(--blue)',refresh_creative:'var(--orange)',keep:'var(--text2)',redirect_budget:'var(--yellow)'}[a.suggested_action]||'var(--text)';
+    result.innerHTML=`
+      <div style="padding:14px;background:var(--bg-sidebar);border-radius:8px;margin-bottom:12px;">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;">Acción sugerida</div>
+        <div style="font-size:20px;font-weight:600;color:${actionColor};margin-top:2px;">${a.suggested_action||'?'}</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:4px;">Confianza: ${a.confidence||'?'}%</div>
+      </div>
+      <div style="margin-bottom:10px;"><strong>Razonamiento:</strong><br>${a.rationale||'—'}</div>
+      ${a.expected_impact?`<div style="margin-bottom:10px;"><strong>Impacto esperado:</strong><br>${a.expected_impact}</div>`:''}
+      ${a.risk_warnings?.length?`<div style="margin-bottom:10px;color:var(--orange);"><strong>⚠ Advertencias:</strong><ul style="margin:4px 0 0 18px;">${a.risk_warnings.map(w=>'<li>'+w+'</li>').join('')}</ul></div>`:''}
+      ${a.options?.length?`<div><strong>Otras opciones:</strong>${a.options.map(o=>`<div style="margin-top:6px;padding:8px;border:1px solid var(--border);border-radius:6px;"><strong>${o.action}</strong> <span style="font-size:11px;color:var(--text3);">[${o.priority}]</span><br><span style="font-size:12px;color:var(--text2);">${o.rationale}</span></div>`).join('')}</div>`:''}
+    `;
+    document.getElementById('scip-analyze-cost').textContent=`Costo: $${(d.cost_usd||0).toFixed(6)} USD · ${d.tokens?.in||0}+${d.tokens?.out||0} tokens`;
+  }catch(e){result.innerHTML='<div style="color:var(--red);">Error: '+e.message+'</div>';}
+  finally{btn.disabled=false;btn.textContent='Generar análisis con Claude';}
 }
 
 // ── Costos APIs ──
