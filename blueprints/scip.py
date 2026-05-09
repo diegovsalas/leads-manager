@@ -28,6 +28,9 @@ from extensions import db
 from models import ScipDirectorRecommendation
 import scip_meta
 import scip_google
+import scip_director
+import scip_sellers
+import scip_alerts
 
 scip_bp = Blueprint("scip", __name__)
 
@@ -285,3 +288,97 @@ def google_daily():
 @scip_bp.route("/google/cache/flush", methods=["POST"])
 def google_flush():
     return jsonify(scip_google.flush_cache())
+
+
+# ── Director: campaigns + analyze ──────────────────────────────────
+
+
+@scip_bp.route("/director/campaigns", methods=["GET"])
+def director_campaigns():
+    """?platform=meta|google &unit=aromatex &min_days=7 — lista
+    consolidada de campañas elegibles para análisis del director."""
+    try:
+        min_days = int(request.args.get("min_days") or scip_director.DAYS_LEARNING_PHASE)
+    except ValueError:
+        min_days = scip_director.DAYS_LEARNING_PHASE
+    return jsonify(scip_director.list_eligible_campaigns(
+        platform=request.args.get("platform"),
+        unit_filter=request.args.get("unit"),
+        min_days=min_days,
+    ))
+
+
+@scip_bp.route("/director/analyze", methods=["POST"])
+def director_analyze():
+    """Body: {campaign_id, platform, account?, leads_closed?, leads_in_pipeline?,
+    unit?, name?, metrics?}. Llama Claude y devuelve análisis estructurado."""
+    d = request.get_json() or {}
+    if not d.get("campaign_id") or not d.get("platform"):
+        return jsonify({"error": "campaign_id y platform requeridos"}), 400
+    result = scip_director.analyze_campaign(
+        campaign_id=d["campaign_id"],
+        platform=d["platform"],
+        account=d.get("account"),
+        leads_closed=int(d.get("leads_closed") or 0),
+        leads_in_pipeline=int(d.get("leads_in_pipeline") or 0),
+        unit=d.get("unit"), name=d.get("name"),
+        metrics=d.get("metrics"),
+    )
+    if result.get("error"):
+        return jsonify(result), 500
+    return jsonify(result)
+
+
+# ── Sellers: attribution ──────────────────────────────────────────
+
+
+@scip_bp.route("/sellers/parse-ad-name", methods=["GET"])
+def sellers_parse_ad():
+    """?name=AROMATEX_RETAIL_JANETH_v3 — devuelve tokens + unit_hint + version."""
+    return jsonify(scip_sellers.parse_ad_name(request.args.get("name", "")))
+
+
+@scip_bp.route("/sellers/match", methods=["GET"])
+def sellers_match():
+    """?ad_name=... — busca el vendedor cuyo primer nombre aparece en el ad."""
+    seller = scip_sellers.match_seller_by_any_part(request.args.get("ad_name", ""))
+    if not seller:
+        return jsonify({"matched": False})
+    return jsonify({"matched": True, "seller": {
+        "id": str(seller.id), "nombre": seller.nombre,
+        "especialidad_marca": list(seller.especialidad_marca or []),
+    }})
+
+
+@scip_bp.route("/sellers", methods=["GET"])
+def sellers_list():
+    """?unit=Aromatex — vendedores activos para esa marca (para reasignación)."""
+    return jsonify(scip_sellers.list_sellers_for_unit(request.args.get("unit", "")))
+
+
+@scip_bp.route("/sellers/attribute-creatives", methods=["GET"])
+def sellers_attribute_creatives():
+    """?account=aromatex_b2c — devuelve creative_performance con seller atribuido."""
+    account = request.args.get("account", "aromatex_b2c")
+    try:
+        creatives = scip_meta.get_creative_performance(account)
+        return jsonify(scip_sellers.attribute_ads(creatives))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Alerts: scan + thresholds ─────────────────────────────────────
+
+
+@scip_bp.route("/alerts/scan", methods=["GET"])
+def alerts_scan():
+    """?platform=&unit= — escanea campañas activas y devuelve alerts."""
+    return jsonify(scip_alerts.scan_all(
+        platform=request.args.get("platform"),
+        unit_filter=request.args.get("unit"),
+    ))
+
+
+@scip_bp.route("/alerts/thresholds", methods=["GET"])
+def alerts_thresholds():
+    return jsonify(scip_alerts.DEFAULT_THRESHOLDS)
