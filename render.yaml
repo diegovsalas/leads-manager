@@ -48,6 +48,26 @@ services:
         value: https://leads-manager-avantex.onrender.com/api/zoho/auth/zoho/callback
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: META_API_VERSION
+        value: v19.0
+      - key: META_APP_ID
+        sync: false
+      - key: META_ACCOUNT_B2C
+        sync: false
+      - key: META_ACCOUNT_B2B
+        sync: false
+      - key: META_ACCOUNT_WELDU
+        sync: false
+      - key: GOOGLE_ADS_CLIENT_ID
+        sync: false
+      - key: GOOGLE_ADS_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_ADS_REFRESH_TOKEN
+        sync: false
+      - key: GOOGLE_ADS_DEVELOPER_TOKEN
+        sync: false
+      - key: GOOGLE_ADS_LOGIN_CUSTOMER_ID
+        sync: false
 
   # WhatsApp Baileys Bot
   - type: web

@@ -26,6 +26,8 @@ from sqlalchemy import func
 
 from extensions import db
 from models import ScipDirectorRecommendation
+import scip_meta
+import scip_google
 
 scip_bp = Blueprint("scip", __name__)
 
@@ -151,32 +153,135 @@ def director_stats():
     })
 
 
-# ── Stubs para integraciones Meta/Google Ads (TODO) ────────────────
+# ── Meta Ads endpoints (live, port de meta-ads.service.js) ─────────
+
+
+def _safe(fn, *args, **kwargs):
+    """Wrapper: si la operación tira, devuelve {error}."""
+    try:
+        return jsonify(fn(*args, **kwargs))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@scip_bp.route("/meta/health", methods=["GET"])
+def meta_health():
+    return jsonify(scip_meta.health())
 
 
 @scip_bp.route("/meta/campaigns", methods=["GET"])
-def meta_campaigns_stub():
-    return jsonify({
-        "error": "meta_ads_not_configured",
-        "message": "SCIP Meta integration pendiente. Ver scip/meta-ads.* en _legacy.",
-        "todo": [
-            "pip install facebook-business",
-            "Configurar META_ACCESS_TOKEN, META_APP_ID, META_API_VERSION",
-            "Configurar META_ACCOUNT_B2C, META_ACCOUNT_B2B, META_ACCOUNT_WELDU",
-            "Portar scip/meta-ads.service.js (~845 líneas) a Python",
-        ],
-    }), 501
+def meta_campaigns():
+    """?account=aromatex_b2c|aromatex_b2b|weldu (default aromatex_b2c)"""
+    account = request.args.get("account", "aromatex_b2c")
+    return _safe(scip_meta.get_campaigns, account)
+
+
+@scip_bp.route("/meta/campaigns/<campaign_id>/adsets", methods=["GET"])
+def meta_adsets(campaign_id):
+    return _safe(scip_meta.get_adsets_by_campaign, campaign_id)
+
+
+@scip_bp.route("/meta/adsets/<adset_id>/ads", methods=["GET"])
+def meta_ads(adset_id):
+    return _safe(scip_meta.get_ads_by_adset, adset_id)
+
+
+@scip_bp.route("/meta/metrics/campaign/<campaign_id>", methods=["GET"])
+def meta_campaign_metrics(campaign_id):
+    return _safe(scip_meta.get_campaign_metrics, campaign_id)
+
+
+@scip_bp.route("/meta/daily-metrics", methods=["GET"])
+def meta_daily():
+    """?account=&since=YYYY-MM-DD&until=YYYY-MM-DD"""
+    account = request.args.get("account", "aromatex_b2c")
+    since = request.args.get("since")
+    until = request.args.get("until")
+    if not since or not until:
+        return jsonify({"error": "since y until requeridos (YYYY-MM-DD)"}), 400
+    return _safe(scip_meta.get_account_daily_insights, account, since, until)
+
+
+@scip_bp.route("/meta/full-sync", methods=["GET"])
+def meta_full_sync():
+    """Pull pesado: campaigns + adsets + ads. Cached 5min."""
+    account = request.args.get("account", "aromatex_b2c")
+    return _safe(scip_meta.get_full_sync, account)
+
+
+@scip_bp.route("/meta/marketinsito-report", methods=["GET"])
+def meta_marketinsito_report():
+    """Reporte ejecutivo: summary + campaigns + alerts + recommendations."""
+    account = request.args.get("account", "aromatex_b2c")
+    return _safe(scip_meta.get_marketinsito_report, account)
+
+
+@scip_bp.route("/meta/creative-performance", methods=["GET"])
+def meta_creative_perf():
+    """Top 50 creativos por spend. Para SCIP director: qué ad escalar."""
+    account = request.args.get("account", "aromatex_b2c")
+    return _safe(scip_meta.get_creative_performance, account)
+
+
+@scip_bp.route("/meta/cache/flush", methods=["POST"])
+def meta_flush():
+    return jsonify(scip_meta.flush_cache())
+
+
+# ── Google Ads endpoints (live, port de google-ads.service.js) ─────
+
+
+@scip_bp.route("/google/health", methods=["GET"])
+def google_health():
+    return jsonify(scip_google.health())
+
+
+@scip_bp.route("/google/customers", methods=["GET"])
+def google_customers():
+    """Lista los customer IDs accesibles con el refresh token actual."""
+    return jsonify(scip_google.list_accessible_customers())
 
 
 @scip_bp.route("/google/campaigns", methods=["GET"])
-def google_campaigns_stub():
-    return jsonify({
-        "error": "google_ads_not_configured",
-        "message": "SCIP Google Ads integration pendiente. Ver scip/google-ads.* en _legacy.",
-        "todo": [
-            "pip install google-ads",
-            "Configurar GOOGLE_ADS_CLIENT_ID/SECRET/REFRESH_TOKEN",
-            "Configurar GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_LOGIN_CUSTOMER_ID",
-            "Portar scip/google-ads.service.js (~277 líneas) a Python",
-        ],
-    }), 501
+def google_campaigns():
+    """?customer_id= (opcional, default LOGIN_CUSTOMER_ID)"""
+    cid = request.args.get("customer_id")
+    return jsonify(scip_google.get_campaigns(cid))
+
+
+@scip_bp.route("/google/campaigns/<campaign_id>", methods=["GET"])
+def google_campaign(campaign_id):
+    cid = request.args.get("customer_id")
+    return jsonify(scip_google.get_campaign(cid, campaign_id))
+
+
+@scip_bp.route("/google/campaigns/<campaign_id>/adgroups", methods=["GET"])
+def google_adgroups(campaign_id):
+    cid = request.args.get("customer_id")
+    return jsonify(scip_google.get_ad_groups(cid, campaign_id))
+
+
+@scip_bp.route("/google/metrics", methods=["GET"])
+def google_metrics():
+    """?customer_id=&days=30"""
+    cid = request.args.get("customer_id")
+    try:
+        days = int(request.args.get("days", "30"))
+    except ValueError:
+        days = 30
+    return jsonify(scip_google.get_metrics(cid, days))
+
+
+@scip_bp.route("/google/daily-metrics", methods=["GET"])
+def google_daily():
+    cid = request.args.get("customer_id")
+    try:
+        days = int(request.args.get("days", "30"))
+    except ValueError:
+        days = 30
+    return jsonify(scip_google.get_daily_metrics(cid, days))
+
+
+@scip_bp.route("/google/cache/flush", methods=["POST"])
+def google_flush():
+    return jsonify(scip_google.flush_cache())
