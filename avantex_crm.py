@@ -65,6 +65,7 @@ def create_app():
     from blueprints.sales         import sales_bp, clients_bp
     from blueprints.costs         import costs_bp
     from blueprints.aircall       import aircall_bp
+    from blueprints.zoho          import zoho_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp,      url_prefix="/webhook")
@@ -88,6 +89,7 @@ def create_app():
     app.register_blueprint(clients_bp,       url_prefix="/api/clients")
     app.register_blueprint(costs_bp,         url_prefix="/api/costs")
     app.register_blueprint(aircall_bp,       url_prefix="/api/aircall")
+    app.register_blueprint(zoho_bp,          url_prefix="/api/zoho")
 
     # Serve React app at /app/
     @app.route("/app/")

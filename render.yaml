@@ -40,6 +40,12 @@ services:
         sync: false
       - key: AIRCALL_API_TOKEN
         sync: false
+      - key: ZOHO_CLIENT_ID
+        sync: false
+      - key: ZOHO_CLIENT_SECRET
+        sync: false
+      - key: ZOHO_REDIRECT_URI
+        value: https://leads-manager-avantex.onrender.com/api/zoho/auth/zoho/callback
 
   # WhatsApp Baileys Bot
   - type: web

@@ -1311,6 +1311,25 @@ class SdrDirEngineRun(db.Model):
         }
 
 
+class ZohoToken(db.Model):
+    """Tokens OAuth de Zoho. Single-row (id=1) — replazo del archivo
+    .zoho_tokens.json del legacy, persistente en DB para Render."""
+    __tablename__ = "zoho_tokens"
+
+    id = db.Column(db.Integer, primary_key=True, default=1)
+    access_token = db.Column(db.Text, nullable=True)
+    refresh_token = db.Column(db.Text, nullable=True)
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "connected": bool(self.refresh_token),
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
+            "last_refresh": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class ApiCost(db.Model):
     """Una fila por llamada a API externa con costo. Power para reportes
     de spend por servicio/unidad/día."""
