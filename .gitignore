@@ -41,3 +41,7 @@ frontend/dist/
 # Legacy code dump (vendedores.cloud) — contiene secrets, NO subir
 _legacy/
 _rsync_legacy.sh
+
+# Migration scripts one-shot (con queries directas a DB, no commitear)
+_migrate_legacy_leads.py
+_migrate_zoho_leads.py
