@@ -67,6 +67,7 @@ def create_app():
     from blueprints.aircall       import aircall_bp
     from blueprints.zoho          import zoho_bp
     from blueprints.cs_extras     import touchpoints_bp, weekly_kpis_bp, assignments_bp
+    from blueprints.scip          import scip_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp,      url_prefix="/webhook")
@@ -94,6 +95,7 @@ def create_app():
     app.register_blueprint(touchpoints_bp,   url_prefix="/api/touchpoints")
     app.register_blueprint(weekly_kpis_bp,   url_prefix="/api/weekly-kpis")
     app.register_blueprint(assignments_bp,   url_prefix="/api/assignments")
+    app.register_blueprint(scip_bp,          url_prefix="/api/scip")
 
     # Serve React app at /app/
     @app.route("/app/")

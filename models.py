@@ -1311,6 +1311,68 @@ class SdrDirEngineRun(db.Model):
         }
 
 
+class ScipDirectorRecommendation(db.Model):
+    """SCIP — recomendaciones del Director sobre campañas Meta/Google Ads.
+    Cada fila representa una decisión del director (escalar, pausar, ajustar
+    creativo, etc) sobre una campaña/ad específico, ejecutable por Marketing.
+    Status: pending → executed | dismissed."""
+    __tablename__ = "scip_director_recommendations"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    campaign_id = db.Column(db.String(120), nullable=False, index=True)
+    campaign_name = db.Column(db.Text, nullable=False)
+    campaign_platform = db.Column(db.String(40), nullable=True)  # meta / google
+    campaign_unit = db.Column(db.String(40), nullable=True)
+    director_user_id = db.Column(UUID(as_uuid=True), nullable=False)
+    director_name = db.Column(db.String(150), nullable=False)
+    decided_action = db.Column(db.String(80), nullable=False)  # scale_up / pause / duplicate_to / etc
+    scale_to_campaign_id = db.Column(db.String(120), nullable=True)
+    scale_to_campaign_name = db.Column(db.Text, nullable=True)
+    rationale = db.Column(db.Text, nullable=True)
+    data_snapshot_json = db.Column(db.JSON, nullable=True)
+    options_snapshot_json = db.Column(db.JSON, nullable=True)
+    status = db.Column(db.String(40), default="pending", nullable=False, index=True)
+    executed_by_user_id = db.Column(UUID(as_uuid=True), nullable=True)
+    executed_by_name = db.Column(db.String(150), nullable=True)
+    executed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    marketing_notes = db.Column(db.Text, nullable=True)
+    # Ad-level overrides (cuando la decisión es sobre un ad específico, no la campaña entera)
+    ad_id = db.Column(db.String(120), nullable=True)
+    ad_name = db.Column(db.Text, nullable=True)
+    seller_user_id = db.Column(UUID(as_uuid=True), nullable=True)
+    seller_name = db.Column(db.String(150), nullable=True)
+    scale_to_seller_id = db.Column(UUID(as_uuid=True), nullable=True)
+    scale_to_seller_name = db.Column(db.String(150), nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id, "campaign_id": self.campaign_id,
+            "campaign_name": self.campaign_name,
+            "campaign_platform": self.campaign_platform,
+            "campaign_unit": self.campaign_unit,
+            "director_user_id": str(self.director_user_id),
+            "director_name": self.director_name,
+            "decided_action": self.decided_action,
+            "scale_to_campaign_id": self.scale_to_campaign_id,
+            "scale_to_campaign_name": self.scale_to_campaign_name,
+            "rationale": self.rationale,
+            "data_snapshot": self.data_snapshot_json,
+            "options_snapshot": self.options_snapshot_json,
+            "status": self.status,
+            "executed_by_user_id": str(self.executed_by_user_id) if self.executed_by_user_id else None,
+            "executed_by_name": self.executed_by_name,
+            "executed_at": self.executed_at.isoformat() if self.executed_at else None,
+            "marketing_notes": self.marketing_notes,
+            "ad_id": self.ad_id, "ad_name": self.ad_name,
+            "seller_user_id": str(self.seller_user_id) if self.seller_user_id else None,
+            "seller_name": self.seller_name,
+            "scale_to_seller_id": str(self.scale_to_seller_id) if self.scale_to_seller_id else None,
+            "scale_to_seller_name": self.scale_to_seller_name,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class Touchpoint(db.Model):
     """Touchpoints post-venta (llamadas, whatsapp, email, etc) por cliente.
     Day_number indica los hitos: día 1, 7, 15, 30, etc.
