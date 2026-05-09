@@ -1311,6 +1311,79 @@ class SdrDirEngineRun(db.Model):
         }
 
 
+class ChatbotConfig(db.Model):
+    """Config del chatbot por unidad. Single-row por unit (PK).
+    Reemplazo del archivo legacy chatbot_config en SQLite."""
+    __tablename__ = "chatbot_config"
+
+    unit = db.Column(db.String(40), primary_key=True)
+    phone_number_id = db.Column(db.String(80), nullable=True)
+    wa_business_account_id = db.Column(db.String(80), nullable=True)
+    wa_access_token = db.Column(db.Text, nullable=True)
+    webhook_verify_token = db.Column(db.String(120), nullable=True, index=True)
+    closer_user_id = db.Column(UUID(as_uuid=True), nullable=True)
+    active = db.Column(db.Boolean, default=True, nullable=False)
+
+    def to_dict(self):
+        return {
+            "unit": self.unit, "phone_number_id": self.phone_number_id,
+            "wa_business_account_id": self.wa_business_account_id,
+            "wa_access_token_set": bool(self.wa_access_token),
+            "webhook_verify_token": self.webhook_verify_token,
+            "closer_user_id": str(self.closer_user_id) if self.closer_user_id else None,
+            "active": self.active,
+        }
+
+
+class ChatbotConversation(db.Model):
+    """Conversación WhatsApp del bot Anthropic.
+    NO confundir con Conversacion (clase del chat web/Baileys interno)."""
+    __tablename__ = "chatbot_conversations"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    wa_phone = db.Column(db.String(30), nullable=False, index=True)
+    wa_name = db.Column(db.String(150), nullable=True)
+    unit = db.Column(db.String(40), nullable=True, index=True)
+    status = db.Column(db.String(40), default="activa", nullable=False, index=True)
+    score = db.Column(db.Integer, default=0, nullable=False)
+    lead_data = db.Column(db.JSON, nullable=True)  # business_type, locations, city, need, urgency
+    assigned_to = db.Column(UUID(as_uuid=True), nullable=True)
+    outcome = db.Column(db.String(40), nullable=True)  # cerrador/asesor/seguimiento/no_califica
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    messages = db.relationship("ChatbotMessage", backref="conversation",
+                                lazy="dynamic", cascade="all, delete-orphan",
+                                order_by="ChatbotMessage.created_at")
+
+    def to_dict(self):
+        return {
+            "id": self.id, "wa_phone": self.wa_phone, "wa_name": self.wa_name,
+            "unit": self.unit, "status": self.status, "score": self.score,
+            "lead_data": self.lead_data, "outcome": self.outcome,
+            "assigned_to": str(self.assigned_to) if self.assigned_to else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ChatbotMessage(db.Model):
+    __tablename__ = "chatbot_messages"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey("chatbot_conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = db.Column(db.String(20), nullable=False)  # user/assistant
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id, "conversation_id": self.conversation_id,
+            "role": self.role, "content": self.content,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class ScipDirectorRecommendation(db.Model):
     """SCIP — recomendaciones del Director sobre campañas Meta/Google Ads.
     Cada fila representa una decisión del director (escalar, pausar, ajustar

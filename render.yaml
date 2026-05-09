@@ -46,6 +46,8 @@ services:
         sync: false
       - key: ZOHO_REDIRECT_URI
         value: https://leads-manager-avantex.onrender.com/api/zoho/auth/zoho/callback
+      - key: ANTHROPIC_API_KEY
+        sync: false
 
   # WhatsApp Baileys Bot
   - type: web
