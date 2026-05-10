@@ -39,6 +39,28 @@ class EtapaPipeline(enum.Enum):
     CIERRE_PERDIDO = "Cerrado Perdido"
 
 
+class EtapaOportunidad(enum.Enum):
+    """Etapas de una oportunidad (deal pre-cierre). Cada etapa tiene una
+    probabilidad implícita usada en forecasting (valor ponderado del pipe)."""
+    CALIFICACION   = "Calificación"
+    ANALISIS       = "Análisis"
+    PROPUESTA      = "Propuesta"
+    NEGOCIACION    = "Negociación"
+    CIERRE_GANADO  = "Cerrado Ganado"
+    CIERRE_PERDIDO = "Cerrado Perdido"
+
+
+# Probabilidad default por etapa de oportunidad — usado en weighted pipeline.
+PROBABILIDAD_OPORTUNIDAD = {
+    EtapaOportunidad.CALIFICACION:   10,
+    EtapaOportunidad.ANALISIS:       25,
+    EtapaOportunidad.PROPUESTA:      50,
+    EtapaOportunidad.NEGOCIACION:    75,
+    EtapaOportunidad.CIERRE_GANADO:  100,
+    EtapaOportunidad.CIERRE_PERDIDO: 0,
+}
+
+
 class DireccionMensaje(enum.Enum):
     ENTRANTE         = "Entrante"
     SALIENTE_VENDEDOR = "Saliente_Vendedor"
@@ -1747,3 +1769,101 @@ class SdrDirCreditsMonthly(db.Model):
             "alerted_100": self.alerted_100,
             "last_sync_at": self.last_sync_at.isoformat() if self.last_sync_at else None,
         }
+
+
+# ──────────────────────────────────────────────
+# OPORTUNIDAD (Deal) — Pre-cierre, post-Lead. Equivalente a Zoho Deal.
+# Una empresa puede tener múltiples oportunidades simultáneas. Lead →
+# Oportunidad es el flow de conversión.
+# ──────────────────────────────────────────────
+
+
+class Oportunidad(db.Model):
+    __tablename__ = "oportunidades"
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    nombre = db.Column(db.String(255), nullable=False)  # "Aromatex - Walmart Norte 50 sucursales"
+    empresa = db.Column(db.String(255), nullable=True, index=True)
+    contacto_nombre = db.Column(db.String(150), nullable=True)
+    contacto_telefono = db.Column(db.String(30), nullable=True)
+    contacto_email = db.Column(db.String(200), nullable=True)
+    valor = db.Column(db.Numeric(14, 2), default=0, nullable=False)  # USD o MXN según tu contexto
+    moneda = db.Column(db.String(8), default="MXN", nullable=False)
+    fecha_cierre_esperada = db.Column(db.Date, nullable=True, index=True)
+    etapa = db.Column(
+        db.Enum(EtapaOportunidad, name="etapa_oportunidad_enum",
+                values_callable=lambda e: [x.value for x in e]),
+        nullable=False, default=EtapaOportunidad.CALIFICACION, index=True,
+    )
+    probabilidad = db.Column(db.Integer, default=10, nullable=False)  # 0-100, auto-ajustada por etapa
+    propietario_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=True, index=True)
+    marca_interes = db.Column(db.String(80), nullable=True, index=True)  # Aromatex/Pestex/Weldex
+    estado_cliente = db.Column(db.String(100), nullable=True)
+    num_sucursales = db.Column(db.Integer, nullable=True)
+    monthly_amount = db.Column(db.Numeric(14, 2), nullable=True)  # si es subscription
+    sale_type = db.Column(db.String(40), nullable=True)  # suscripcion_nueva/servicio_unico/upsell
+    notas = db.Column(db.Text, nullable=True)
+    motivo_perdida = db.Column(db.Text, nullable=True)
+
+    # Trazabilidad y origen
+    lead_id = db.Column(UUID(as_uuid=True), db.ForeignKey("leads.id"), nullable=True, index=True)
+    zoho_deal_id = db.Column(db.String(80), nullable=True, unique=True, index=True)
+
+    fecha_creacion = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+    fecha_actualizacion = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+    fecha_cierre_real = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    propietario = db.relationship("Usuario", foreign_keys=[propietario_id])
+    lead = db.relationship("Lead", foreign_keys=[lead_id])
+
+    @property
+    def valor_ponderado(self):
+        """Valor × probabilidad/100 — útil para forecasting del pipe."""
+        v = float(self.valor or 0)
+        p = (self.probabilidad or 0) / 100.0
+        return round(v * p, 2)
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "nombre": self.nombre,
+            "empresa": self.empresa,
+            "contacto_nombre": self.contacto_nombre,
+            "contacto_telefono": self.contacto_telefono,
+            "contacto_email": self.contacto_email,
+            "valor": float(self.valor or 0),
+            "moneda": self.moneda,
+            "fecha_cierre_esperada": self.fecha_cierre_esperada.isoformat() if self.fecha_cierre_esperada else None,
+            "etapa": self.etapa.value if self.etapa else None,
+            "probabilidad": self.probabilidad,
+            "valor_ponderado": self.valor_ponderado,
+            "propietario_id": str(self.propietario_id) if self.propietario_id else None,
+            "propietario_nombre": self.propietario.nombre if self.propietario else None,
+            "marca_interes": self.marca_interes,
+            "estado_cliente": self.estado_cliente,
+            "num_sucursales": self.num_sucursales,
+            "monthly_amount": float(self.monthly_amount) if self.monthly_amount else None,
+            "sale_type": self.sale_type,
+            "notas": self.notas,
+            "motivo_perdida": self.motivo_perdida,
+            "lead_id": str(self.lead_id) if self.lead_id else None,
+            "zoho_deal_id": self.zoho_deal_id,
+            "fecha_creacion": self.fecha_creacion.isoformat() if self.fecha_creacion else None,
+            "fecha_actualizacion": self.fecha_actualizacion.isoformat() if self.fecha_actualizacion else None,
+            "fecha_cierre_real": self.fecha_cierre_real.isoformat() if self.fecha_cierre_real else None,
+        }
+
+
+@db.event.listens_for(Oportunidad, "before_insert")
+@db.event.listens_for(Oportunidad, "before_update")
+def _auto_probabilidad(mapper, connection, target):
+    """Autoset probabilidad desde la etapa si el caller no la pasó
+    explícitamente. Si fecha_cierre_real falta y etapa es ganada/perdida,
+    setearla a now."""
+    if target.etapa and (target.probabilidad is None or target.probabilidad == 0
+                         or target.probabilidad == 10):
+        # Solo override si es default (10 = CALIFICACION) o vacío
+        target.probabilidad = PROBABILIDAD_OPORTUNIDAD.get(target.etapa, 10)
+    if target.etapa in (EtapaOportunidad.CIERRE_GANADO, EtapaOportunidad.CIERRE_PERDIDO):
+        if not target.fecha_cierre_real:
+            target.fecha_cierre_real = datetime.now(timezone.utc)
