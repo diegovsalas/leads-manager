@@ -290,6 +290,7 @@ tbody td{padding:8px 12px;font-size:14px;}
     <div class="slink" onclick="showView('mihoy',this)">&#127919; Mi dia <span class="slink-badge" style="color:var(--red);font-weight:600;" id="mihoy-badge"></span></div>
     <div class="slink" onclick="showView('pipeline',this)">&#128203; Pipeline</div>
     <div class="slink" onclick="openLeadModal()" style="background:var(--copper-soft);color:var(--copper);font-weight:600;">&#10133; Nuevo Lead <kbd style="float:right;font-size:9px;color:var(--text3);background:var(--bg-card);padding:1px 4px;border-radius:3px;border:1px solid var(--border);">⌘N</kbd></div>
+    <div class="slink" onclick="showView('opps',this)">&#127919; Oportunidades</div>
     <div class="slink" onclick="showView('leads',this)">&#128101; Leads</div>
     <div class="slink admin-only" onclick="showView('vendedores',this)">&#128100; Vendedores</div>
     <div class="slink" onclick="showView('proyecto',this)">&#128221; Proyecto</div>
@@ -1096,6 +1097,33 @@ tbody td{padding:8px 12px;font-size:14px;}
   </div>
 </div>
 
+<!-- ===== OPORTUNIDADES KANBAN ===== -->
+<div class="view" id="view-opps" style="overflow-y:auto;">
+  <div class="page-header">
+    <div class="page-emoji">&#127919;</div>
+    <div class="page-title">Oportunidades</div>
+    <div class="page-desc">Deals pre-cierre con valor monetario, probabilidad y forecast ponderado</div>
+  </div>
+  <div style="padding:20px 48px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <select class="form-input" id="opps-marca" onchange="loadOpps()" style="max-width:160px;font-size:13px;">
+      <option value="">Todas las marcas</option>
+      <option value="Aromatex">Aromatex</option><option value="Pestex">Pestex</option><option value="Weldex">Weldex</option>
+    </select>
+    <button class="btn btn-filled" onclick="openOppModal()" style="font-size:13px;">+ Nueva oportunidad</button>
+    <button class="btn" onclick="loadOpps()" style="font-size:13px;">Refrescar</button>
+    <span id="opps-status" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
+  </div>
+  <div style="padding:0 48px 16px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+    <div class="dash-card"><div class="dash-card-title">Pipe abierto</div><div style="font-size:22px;font-weight:600;" id="opps-abierto">—</div><div style="font-size:11px;color:var(--text3);" id="opps-abierto-count">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">Forecast ponderado</div><div style="font-size:22px;font-weight:600;color:var(--blue);" id="opps-ponderado">—</div><div style="font-size:11px;color:var(--text3);">valor × prob/100</div></div>
+    <div class="dash-card"><div class="dash-card-title">Ganadas</div><div style="font-size:22px;font-weight:600;color:var(--green);" id="opps-ganadas">—</div><div style="font-size:11px;color:var(--text3);" id="opps-ganadas-count">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">Perdidas</div><div style="font-size:22px;font-weight:600;color:var(--red);" id="opps-perdidas">—</div><div style="font-size:11px;color:var(--text3);" id="opps-perdidas-count">—</div></div>
+  </div>
+  <div style="padding:0 24px 24px;">
+    <div id="opps-kanban" style="display:flex;gap:10px;overflow-x:auto;align-items:flex-start;min-height:60vh;"></div>
+  </div>
+</div>
+
 <!-- ===== VINCULAR SAVIO -> CS ===== -->
 <div class="view" id="view-vincular" style="overflow-y:auto;">
   <div class="page-header">
@@ -1640,6 +1668,7 @@ function showView(name,el){
   if(name==='vincular')loadVincular();
   if(name==='roi')loadRoi();
   if(name==='scip')loadScip();
+  if(name==='opps')loadOpps();
 }
 
 // ──────────────────────────────────────────────
@@ -1996,6 +2025,90 @@ async function saveGasto(){
   }catch(e){
     document.getElementById('ga-status').textContent='Error: '+e.message;
     document.getElementById('ga-status').style.color='var(--red)';
+  }
+}
+
+// ── Oportunidades Kanban ──
+const _OPPS_ETAPA_COLOR = {
+  'Calificación':   'var(--text2)',
+  'Análisis':       'var(--blue)',
+  'Propuesta':      'var(--purple)',
+  'Negociación':    'var(--orange)',
+  'Cerrado Ganado': 'var(--green)',
+  'Cerrado Perdido':'var(--red)',
+};
+
+async function loadOpps(){
+  const marca=document.getElementById('opps-marca').value;
+  const url='/api/oportunidades/kanban'+(marca?('?marca='+encodeURIComponent(marca)):'');
+  const d=await _api(url);
+  if(!d){document.getElementById('opps-status').textContent='Error cargando';return;}
+  const s=d.summary||{};
+  document.getElementById('opps-abierto').textContent=_fmtMxn(s.abiertas_valor||0);
+  document.getElementById('opps-abierto-count').textContent=`${s.abiertas_count||0} abiertas`;
+  document.getElementById('opps-ponderado').textContent=_fmtMxn(s.abiertas_valor_ponderado||0);
+  document.getElementById('opps-ganadas').textContent=_fmtMxn(s.ganadas_valor||0);
+  document.getElementById('opps-ganadas-count').textContent=`${s.ganadas_count||0} ganadas`;
+  document.getElementById('opps-perdidas').textContent=_fmtMxn(s.perdidas_valor||0);
+  document.getElementById('opps-perdidas-count').textContent=`${s.perdidas_count||0} perdidas`;
+
+  const kanban=document.getElementById('opps-kanban');kanban.innerHTML='';
+  for(const col of(d.etapas||[])){
+    const color=_OPPS_ETAPA_COLOR[col.etapa]||'var(--text2)';
+    const colEl=document.createElement('div');
+    colEl.className='opps-col';colEl.dataset.etapa=col.etapa;
+    colEl.style.cssText='flex:0 0 280px;background:var(--bg-sidebar);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px;border-top:3px solid '+color+';';
+    colEl.innerHTML=`
+      <div style="display:flex;justify-content:space-between;align-items:baseline;padding:0 4px 6px;">
+        <div style="font-weight:600;font-size:12px;color:${color};">${col.etapa}</div>
+        <div style="font-size:10px;color:var(--text3);">${col.count} · ${_fmtMxn(col.valor_total||0)}</div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);padding:0 4px 4px;">prob ${col.probabilidad_default}% · pond ${_fmtMxn(col.valor_ponderado_total||0)}</div>
+    `;
+    const items=document.createElement('div');
+    items.style.cssText='display:flex;flex-direction:column;gap:6px;min-height:40px;';
+    items.dataset.etapa=col.etapa;
+    items.ondragover=e=>{e.preventDefault();items.parentElement.style.background='var(--copper-soft)';};
+    items.ondragleave=()=>{items.parentElement.style.background='var(--bg-sidebar)';};
+    items.ondrop=async e=>{
+      e.preventDefault();items.parentElement.style.background='var(--bg-sidebar)';
+      const oppId=e.dataTransfer.getData('text/opp-id');
+      const targetEtapa=items.dataset.etapa;
+      if(!oppId)return;
+      try{await fetch(`/api/oportunidades/${oppId}/mover`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({etapa:targetEtapa})});loadOpps();}
+      catch(err){alert('Error: '+err.message);}
+    };
+
+    for(const op of(col.items||[])){
+      const card=document.createElement('div');
+      card.className='opps-card';card.draggable=true;
+      card.style.cssText='background:var(--bg-card);border-radius:6px;padding:8px 10px;border:1px solid var(--border);cursor:grab;font-size:12px;';
+      const fechaCierre=op.fecha_cierre_esperada?` · cierra ${op.fecha_cierre_esperada}`:'';
+      card.innerHTML=`
+        <div style="font-weight:600;color:var(--text);line-height:1.3;">${op.nombre}</div>
+        ${op.empresa?`<div style="color:var(--text2);font-size:11px;margin-top:2px;">${op.empresa}</div>`:''}
+        <div style="display:flex;justify-content:space-between;margin-top:6px;">
+          <div style="font-weight:600;color:${color};">${_fmtMxn(op.valor)}</div>
+          <div style="font-size:10px;color:var(--text3);">${op.probabilidad}% · ${_fmtMxn(op.valor_ponderado)}</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-top:3px;">
+          <div>${op.marca_interes||'—'}${fechaCierre}</div>
+          <div>${op.propietario_nombre||'sin asignar'}</div>
+        </div>
+      `;
+      card.ondragstart=e=>{e.dataTransfer.setData('text/opp-id',op.id);card.style.opacity='0.5';};
+      card.ondragend=()=>{card.style.opacity='1';};
+      card.onclick=()=>openOppModal(op);
+      items.appendChild(card);
+    }
+    if(!col.items?.length){
+      const empty=document.createElement('div');
+      empty.style.cssText='font-size:10px;color:var(--text3);text-align:center;padding:14px 0;';
+      empty.textContent='—';
+      items.appendChild(empty);
+    }
+    colEl.appendChild(items);
+    kanban.appendChild(colEl);
   }
 }
 
@@ -3286,6 +3399,192 @@ applyRoleVisibility();
 </div>
 
 <div class="nl-toast" id="nl-toast"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     OPORTUNIDAD — Modal crear/editar
+     ═══════════════════════════════════════════════════════════════ -->
+<div class="nl-overlay" id="opp-overlay" onclick="if(event.target===this)closeOppModal()">
+  <div class="nl-card" style="width:600px;">
+    <div class="nl-header">
+      <h3 id="opp-modal-title">Nueva oportunidad</h3>
+      <span class="nl-kbd">Esc para cerrar</span>
+    </div>
+    <div class="nl-body">
+      <div class="nl-row">
+        <label class="nl-label">Nombre de la oportunidad *</label>
+        <input class="nl-input" id="opp-nombre" placeholder="ej: Aromatex - Walmart Norte 50 sucursales"/>
+      </div>
+      <div class="nl-row two">
+        <div>
+          <label class="nl-label">Empresa</label>
+          <input class="nl-input" id="opp-empresa"/>
+        </div>
+        <div>
+          <label class="nl-label">Estado</label>
+          <input class="nl-input" id="opp-estado"/>
+        </div>
+      </div>
+      <div class="nl-row two">
+        <div>
+          <label class="nl-label">Contacto</label>
+          <input class="nl-input" id="opp-contacto-nombre"/>
+        </div>
+        <div>
+          <label class="nl-label">Teléfono</label>
+          <input class="nl-input" id="opp-contacto-telefono" type="tel"/>
+        </div>
+      </div>
+      <div class="nl-row">
+        <label class="nl-label">Email del contacto</label>
+        <input class="nl-input" id="opp-contacto-email" type="email"/>
+      </div>
+      <div class="nl-row two">
+        <div>
+          <label class="nl-label">Valor *</label>
+          <input class="nl-input" id="opp-valor" type="number" step="0.01" min="0"/>
+        </div>
+        <div>
+          <label class="nl-label">Fecha cierre esperada</label>
+          <input class="nl-input" id="opp-fecha-cierre" type="date"/>
+        </div>
+      </div>
+      <div class="nl-row">
+        <label class="nl-label">Marca *</label>
+        <div class="nl-pills" id="opp-marca-pills">
+          <div class="nl-pill" data-val="Aromatex">Aromatex</div>
+          <div class="nl-pill" data-val="Pestex">Pestex</div>
+          <div class="nl-pill" data-val="Weldex">Weldex</div>
+        </div>
+      </div>
+      <div class="nl-row">
+        <label class="nl-label">Etapa</label>
+        <div class="nl-pills" id="opp-etapa-pills">
+          <div class="nl-pill active" data-val="Calificación">Calificación</div>
+          <div class="nl-pill" data-val="Análisis">Análisis</div>
+          <div class="nl-pill" data-val="Propuesta">Propuesta</div>
+          <div class="nl-pill" data-val="Negociación">Negociación</div>
+          <div class="nl-pill" data-val="Cerrado Ganado" style="border-color:var(--green);">Ganado</div>
+          <div class="nl-pill" data-val="Cerrado Perdido" style="border-color:var(--red);">Perdido</div>
+        </div>
+      </div>
+      <div class="nl-row two">
+        <div>
+          <label class="nl-label">Sucursales</label>
+          <input class="nl-input" id="opp-sucursales" type="number" min="1"/>
+        </div>
+        <div>
+          <label class="nl-label">Monthly amount</label>
+          <input class="nl-input" id="opp-monthly" type="number" step="0.01" min="0"/>
+        </div>
+      </div>
+      <div class="nl-row">
+        <label class="nl-label">Notas</label>
+        <textarea class="nl-input" id="opp-notas" rows="2" style="resize:vertical;"></textarea>
+      </div>
+      <div class="nl-row" id="opp-perdida-block" style="display:none;">
+        <label class="nl-label">Motivo de pérdida</label>
+        <input class="nl-input" id="opp-motivo-perdida"/>
+      </div>
+    </div>
+    <div class="nl-foot">
+      <div class="nl-assign" id="opp-assign-preview">Propietario: vos</div>
+      <div class="nl-btns">
+        <button class="nl-btn" onclick="closeOppModal()">Cancelar</button>
+        <button class="nl-btn" id="opp-delete-btn" onclick="deleteOpp()" style="display:none;color:var(--red);">Eliminar</button>
+        <button class="nl-btn primary" id="opp-save-btn" onclick="saveOpp()">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let _oppEditing = null;
+
+async function openOppModal(opp){
+  _oppEditing=opp||null;
+  const me=await _nlLoadMe();
+  document.getElementById('opp-modal-title').textContent=opp?'Editar oportunidad':'Nueva oportunidad';
+  document.getElementById('opp-delete-btn').style.display=opp?'':'none';
+  // Reset
+  ['opp-nombre','opp-empresa','opp-estado','opp-contacto-nombre','opp-contacto-telefono','opp-contacto-email','opp-valor','opp-monthly','opp-fecha-cierre','opp-sucursales','opp-notas','opp-motivo-perdida'].forEach(id=>document.getElementById(id).value='');
+  document.querySelectorAll('#opp-marca-pills .nl-pill').forEach((p,i)=>{p.classList.remove('active');p.onclick=()=>{p.parentElement.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');};});
+  document.querySelectorAll('#opp-etapa-pills .nl-pill').forEach((p,i)=>{p.classList.remove('active');p.onclick=()=>{p.parentElement.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');_oppToggleMotivo();};});
+  if(opp){
+    document.getElementById('opp-nombre').value=opp.nombre||'';
+    document.getElementById('opp-empresa').value=opp.empresa||'';
+    document.getElementById('opp-estado').value=opp.estado_cliente||'';
+    document.getElementById('opp-contacto-nombre').value=opp.contacto_nombre||'';
+    document.getElementById('opp-contacto-telefono').value=opp.contacto_telefono||'';
+    document.getElementById('opp-contacto-email').value=opp.contacto_email||'';
+    document.getElementById('opp-valor').value=opp.valor||0;
+    document.getElementById('opp-monthly').value=opp.monthly_amount||'';
+    document.getElementById('opp-fecha-cierre').value=opp.fecha_cierre_esperada||'';
+    document.getElementById('opp-sucursales').value=opp.num_sucursales||'';
+    document.getElementById('opp-notas').value=opp.notas||'';
+    document.getElementById('opp-motivo-perdida').value=opp.motivo_perdida||'';
+    if(opp.marca_interes){const p=document.querySelector(`#opp-marca-pills .nl-pill[data-val="${opp.marca_interes}"]`);if(p)p.classList.add('active');}
+    if(opp.etapa){const p=document.querySelector(`#opp-etapa-pills .nl-pill[data-val="${opp.etapa}"]`);if(p)p.classList.add('active');}
+  }else{
+    document.querySelector('#opp-marca-pills .nl-pill').classList.add('active');
+    document.querySelector('#opp-etapa-pills .nl-pill').classList.add('active');
+  }
+  _oppToggleMotivo();
+  document.getElementById('opp-assign-preview').innerHTML=opp?
+    `Propietario: <strong>${opp.propietario_nombre||'sin asignar'}</strong>`:
+    `Propietario: <strong>${me.nombre||'vos'}</strong>`;
+  document.getElementById('opp-overlay').classList.add('open');
+  setTimeout(()=>document.getElementById('opp-nombre').focus(),50);
+}
+
+function closeOppModal(){document.getElementById('opp-overlay').classList.remove('open');_oppEditing=null;}
+
+function _oppToggleMotivo(){
+  const sel=document.querySelector('#opp-etapa-pills .nl-pill.active')?.dataset.val;
+  document.getElementById('opp-perdida-block').style.display=(sel==='Cerrado Perdido')?'':'none';
+}
+
+async function saveOpp(){
+  const nombre=document.getElementById('opp-nombre').value.trim();
+  const marca=document.querySelector('#opp-marca-pills .nl-pill.active')?.dataset.val;
+  const etapa=document.querySelector('#opp-etapa-pills .nl-pill.active')?.dataset.val;
+  const valor=parseFloat(document.getElementById('opp-valor').value)||0;
+  if(!nombre){_nlToast('Falta el nombre de la oportunidad',true);return;}
+  if(!marca){_nlToast('Seleccioná una marca',true);return;}
+  const body={
+    nombre, empresa:document.getElementById('opp-empresa').value.trim()||null,
+    estado_cliente:document.getElementById('opp-estado').value.trim()||null,
+    contacto_nombre:document.getElementById('opp-contacto-nombre').value.trim()||null,
+    contacto_telefono:document.getElementById('opp-contacto-telefono').value.trim()||null,
+    contacto_email:document.getElementById('opp-contacto-email').value.trim()||null,
+    valor, marca_interes:marca, etapa,
+    fecha_cierre_esperada:document.getElementById('opp-fecha-cierre').value||null,
+    num_sucursales:parseInt(document.getElementById('opp-sucursales').value)||null,
+    monthly_amount:parseFloat(document.getElementById('opp-monthly').value)||null,
+    notas:document.getElementById('opp-notas').value.trim()||null,
+    motivo_perdida:document.getElementById('opp-motivo-perdida').value.trim()||null,
+  };
+  const btn=document.getElementById('opp-save-btn');btn.disabled=true;
+  try{
+    const url=_oppEditing?`/api/oportunidades/${_oppEditing.id}`:'/api/oportunidades/';
+    const method=_oppEditing?'PATCH':'POST';
+    const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok){const e=await r.json();throw new Error(e.error||'Error');}
+    _nlToast(_oppEditing?'Actualizada: '+nombre:'Creada: '+nombre);
+    closeOppModal();loadOpps();
+  }catch(e){_nlToast('Error: '+e.message,true);}
+  finally{btn.disabled=false;}
+}
+
+async function deleteOpp(){
+  if(!_oppEditing)return;
+  if(!confirm(`¿Eliminar oportunidad "${_oppEditing.nombre}"?`))return;
+  try{
+    const r=await fetch(`/api/oportunidades/${_oppEditing.id}`,{method:'DELETE'});
+    if(!r.ok)throw new Error('Error eliminando');
+    _nlToast('Eliminada');closeOppModal();loadOpps();
+  }catch(e){_nlToast('Error: '+e.message,true);}
+}
+</script>
 
 <script>
 // ── Estados MX para dropdown ──
