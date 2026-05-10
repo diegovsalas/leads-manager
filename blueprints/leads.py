@@ -100,11 +100,53 @@ def crear_lead():
     if not asignado:
         asignado = session.get("usuario_id") or session.get("user_id")
 
+    # Auto-vincular Account si viene empresa_nombre o explicit account_id
+    from models import Account, Contact
+    account_id = data.get("account_id")
+    empresa_str = data.get("empresa_nombre") or data.get("empresa")
+    if not account_id and empresa_str:
+        # Buscar account existente por nombre exacto, crear si no existe
+        existing = Account.query.filter(
+            db.func.lower(Account.nombre) == empresa_str.lower()
+        ).first()
+        if existing:
+            account_id = existing.id
+        else:
+            new_acc = Account(
+                nombre=empresa_str.strip(),
+                estado=data.get("estado_cliente") or data.get("estado"),
+                num_sucursales=data.get("num_sucursales"),
+                industria=data.get("tipo_industria"),
+                tamano=data.get("tamano_empresa"),
+                owner_id=asignado,
+            )
+            db.session.add(new_acc)
+            db.session.flush()
+            account_id = new_acc.id
+
+    # Auto-vincular Contact si viene nombre+telefono y no existe
+    contact_id = data.get("contact_id")
+    nombre_contacto = data.get("nombre")
+    if not contact_id and nombre_contacto and data.get("telefono"):
+        existing_c = Contact.query.filter(Contact.telefono == data["telefono"]).first()
+        if existing_c:
+            contact_id = existing_c.id
+        else:
+            new_c = Contact(
+                nombre=nombre_contacto, telefono=data["telefono"],
+                whatsapp=data["telefono"], account_id=account_id,
+            )
+            db.session.add(new_c)
+            db.session.flush()
+            contact_id = new_c.id
+
     # Crear lead con asignacion manual (o sin asignar)
     lead = Lead(
         nombre=data.get("nombre", "Sin nombre"),
         telefono=data.get("telefono"),
-        empresa_nombre=data.get("empresa_nombre") or data.get("empresa"),
+        empresa_nombre=empresa_str,  # legacy compat
+        account_id=account_id,
+        contact_id=contact_id,
         estado_cliente=data.get("estado_cliente") or data.get("estado"),
         origen=origen_enum,
         marca_interes=marca,

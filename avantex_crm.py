@@ -70,6 +70,7 @@ def create_app():
     from blueprints.scip          import scip_bp
     from blueprints.chatbot       import chatbot_bp
     from blueprints.oportunidades import oportunidades_bp
+    from blueprints.accounts      import accounts_bp, contacts_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp,      url_prefix="/webhook")
@@ -100,6 +101,8 @@ def create_app():
     app.register_blueprint(scip_bp,          url_prefix="/api/scip")
     app.register_blueprint(chatbot_bp,       url_prefix="/api/chatbot")
     app.register_blueprint(oportunidades_bp, url_prefix="/api/oportunidades")
+    app.register_blueprint(accounts_bp,      url_prefix="/api/accounts")
+    app.register_blueprint(contacts_bp,      url_prefix="/api/contacts")
 
     # Serve React app at /app/
     @app.route("/app/")
