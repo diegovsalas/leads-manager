@@ -90,6 +90,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .kanban-scroll{flex:1;overflow-x:auto;overflow-y:hidden;padding:12px 48px 20px;display:flex;gap:12px;}
 .k-col{width:260px;flex-shrink:0;display:flex;flex-direction:column;max-height:100%;}
 .k-head{padding:6px 8px 8px;display:flex;flex-direction:column;gap:2px;flex-shrink:0;}
+.k-group-label{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:2px 4px 4px;margin-bottom:4px;}
+.k-card-actions{display:flex;gap:4px;margin-left:auto;align-items:center;}
 .k-head-row{display:flex;align-items:center;justify-content:space-between;}
 .k-col-title{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:500;}
 .k-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
@@ -474,6 +476,9 @@ tbody td{padding:8px 12px;font-size:14px;}
            ondragleave="this.classList.remove('drag-over')"
            ondrop="onDrop(event,'{{ etapa.value }}')">
         <div class="k-head">
+          {% if grupo.grupo %}
+          <div class="k-group-label" style="color:{{ grupo.grupo_color }};border-bottom:2px solid {{ grupo.grupo_color }};">{{ grupo.grupo }}</div>
+          {% endif %}
           <div class="k-head-row">
             <div class="k-col-title"><div class="k-dot" style="background:{{ grupo.color }}"></div>{{ etapa.value }}</div>
             <span class="k-count" id="kc-{{ etapa.value }}">{{ grupo.leads|length }}</span>
@@ -508,8 +513,14 @@ tbody td{padding:8px 12px;font-size:14px;}
               <span class="tag" style="background:{{ icp_c[0] }};color:{{ icp_c[1] }};font-weight:600;">ICP {{ lead.icp_nivel }}</span>
               {% endif %}
               {% if lead.usuario_asignado %}<span class="tag tag-vendedor">{{ lead.usuario_asignado.nombre.split(' ')[0] }}</span>{% endif %}
-              {% if etapa.value in ['Cotización', 'Demo', 'Negociación'] %}<span class="tag" style="background:var(--blue-bg);color:var(--accent);cursor:pointer;margin-left:auto;" onclick="event.stopPropagation();abrirCotizacion('{{ lead.id }}')">&#128196; Cotizar</span>{% endif %}
-              {% if etapa.value in ['Cotización', 'Demo', 'Negociación', '2do Contacto', '3er Contacto', '4to Contacto'] %}<span class="tag" style="background:var(--copper-soft);color:var(--copper);cursor:pointer;font-weight:600;" onclick="event.stopPropagation();convertirLeadAOportunidad('{{ lead.id }}')">&#127919; Oportunidad</span>{% endif %}
+              {% set has_cotizar = etapa.value in ['Cotización', 'Demo', 'Negociación'] %}
+              {% set has_opp = etapa.value in ['Cotización', 'Demo', 'Negociación', '2do Contacto', '3er Contacto', '4to Contacto'] %}
+              {% if has_cotizar or has_opp %}
+              <div class="k-card-actions">
+                {% if has_cotizar %}<span class="tag" style="background:var(--blue-bg);color:var(--accent);cursor:pointer;" onclick="event.stopPropagation();abrirCotizacion('{{ lead.id }}')" title="Generar cotización">&#128196;</span>{% endif %}
+                {% if has_opp %}<span class="tag" style="background:var(--copper-soft);color:var(--copper);cursor:pointer;font-weight:600;" onclick="event.stopPropagation();convertirLeadAOportunidad('{{ lead.id }}')" title="Convertir a Oportunidad">&#127919;</span>{% endif %}
+              </div>
+              {% endif %}
             </div>
           </div>
           {% endfor %}

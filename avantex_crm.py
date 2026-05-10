@@ -142,6 +142,21 @@ def create_app():
         EtapaPipeline.CIERRE_PERDIDO: "#dc2626",
     }
 
+    # Agrupación tipo Zoho: cada etapa pertenece a una fase del funnel.
+    # Se muestra como label arriba del header de cada columna.
+    GRUPO_ETAPA = {
+        EtapaPipeline.NUEVO_LEAD:     ("Nuevos",       "#6366f1"),
+        EtapaPipeline.CONTACTO_1:     ("En contacto",  "#9333ea"),
+        EtapaPipeline.CONTACTO_2:     ("En contacto",  "#9333ea"),
+        EtapaPipeline.CONTACTO_3:     ("En contacto",  "#9333ea"),
+        EtapaPipeline.CONTACTO_4:     ("En contacto",  "#9333ea"),
+        EtapaPipeline.COTIZACION:     ("Negociando",   "#d97706"),
+        EtapaPipeline.DEMO:           ("Negociando",   "#d97706"),
+        EtapaPipeline.NEGOCIACION:    ("Negociando",   "#d97706"),
+        EtapaPipeline.CIERRE_GANADO:  ("Cerrado",      "#16a34a"),
+        EtapaPipeline.CIERRE_PERDIDO: ("Cerrado",      "#dc2626"),
+    }
+
     @app.route("/")
     def index():
         from sqlalchemy.orm import joinedload
@@ -161,11 +176,14 @@ def create_app():
 
         pipeline = {}
         for etapa in EtapaPipeline:
+            grupo_nombre, grupo_color = GRUPO_ETAPA.get(etapa, ("", "#6b7280"))
             pipeline[etapa.value] = {
-                "etapa_enum":  etapa,
+                "etapa_enum":   etapa,
                 "etapa_nombre": etapa.value,
-                "color":       COLORES_ETAPA.get(etapa, "#6b7280"),
-                "leads":       leads_by_etapa.get(etapa, []),
+                "color":        COLORES_ETAPA.get(etapa, "#6b7280"),
+                "grupo":        grupo_nombre,
+                "grupo_color":  grupo_color,
+                "leads":        leads_by_etapa.get(etapa, []),
             }
         return render_template(
             "pipeline/index.html",
