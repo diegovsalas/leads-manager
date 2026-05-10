@@ -183,7 +183,11 @@ class Lead(db.Model):
     tipo_industria = db.Column(db.Text, nullable=True)
     tamano_empresa = db.Column(db.Text, nullable=True)
     estado_cliente = db.Column(db.String(100), nullable=True)  # Estado normalizado (ej: "Nuevo León")
-    empresa_nombre = db.Column(db.String(200), nullable=True)  # Nombre de la empresa (del bot)
+    empresa_nombre = db.Column(db.String(200), nullable=True)  # Nombre de la empresa (del bot) — legacy, se reemplaza por account_id
+
+    # Account + Contact (Fase 3) — referencias opcionales sin FK estricto en DB
+    account_id = db.Column(UUID(as_uuid=True), nullable=True, index=True)
+    contact_id = db.Column(UUID(as_uuid=True), nullable=True, index=True)
 
     # FK → usuarios
     usuario_asignado_id = db.Column(
@@ -1772,6 +1776,114 @@ class SdrDirCreditsMonthly(db.Model):
 
 
 # ──────────────────────────────────────────────
+# ACCOUNT (Empresa) y CONTACT (Persona) — entidades reutilizables
+# tipo Zoho/HubSpot. Un Lead/Oportunidad puede referenciar una Account
+# (la empresa) y un Contact (la persona) sin duplicar texto.
+# CSAccount sigue separado por ahora; se vincula via Account.cs_account_id.
+# ──────────────────────────────────────────────
+
+
+class Account(db.Model):
+    """Empresa cliente o prospecto. Una sola fila por empresa, varios leads
+    y oportunidades pueden referenciarla. nombre y rfc tienen unique
+    constraints separados."""
+    __tablename__ = "accounts"
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    nombre = db.Column(db.String(255), nullable=False, unique=True, index=True)
+    nombre_comercial = db.Column(db.String(255), nullable=True)
+    rfc = db.Column(db.String(20), nullable=True, unique=True, index=True)
+    industria = db.Column(db.String(120), nullable=True)
+    tamano = db.Column(db.String(60), nullable=True)  # micro/pequena/mediana/grande
+    num_sucursales = db.Column(db.Integer, nullable=True)
+    website = db.Column(db.String(255), nullable=True)
+    telefono = db.Column(db.String(30), nullable=True)
+    direccion = db.Column(db.Text, nullable=True)
+    ciudad = db.Column(db.String(120), nullable=True)
+    estado = db.Column(db.String(120), nullable=True, index=True)
+    pais = db.Column(db.String(60), default="México", nullable=True)
+
+    owner_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=True, index=True)
+    is_cliente = db.Column(db.Boolean, default=False, nullable=False)  # ya cerró venta
+    notas = db.Column(db.Text, nullable=True)
+
+    # Trazabilidad cross-system
+    cs_account_id = db.Column(UUID(as_uuid=True), nullable=True, index=True)  # opcional link a CSAccount
+    zoho_account_id = db.Column(db.String(80), nullable=True, unique=True)  # para migración Zoho
+    customer_master_id = db.Column(db.Integer, nullable=True, index=True)  # link a CustomerMaster (Savio)
+
+    fecha_creacion = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+    fecha_actualizacion = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    owner = db.relationship("Usuario", foreign_keys=[owner_id])
+
+    def to_dict(self):
+        return {
+            "id": str(self.id), "nombre": self.nombre,
+            "nombre_comercial": self.nombre_comercial,
+            "rfc": self.rfc, "industria": self.industria,
+            "tamano": self.tamano, "num_sucursales": self.num_sucursales,
+            "website": self.website, "telefono": self.telefono,
+            "direccion": self.direccion, "ciudad": self.ciudad,
+            "estado": self.estado, "pais": self.pais,
+            "owner_id": str(self.owner_id) if self.owner_id else None,
+            "owner_nombre": self.owner.nombre if self.owner else None,
+            "is_cliente": self.is_cliente, "notas": self.notas,
+            "cs_account_id": str(self.cs_account_id) if self.cs_account_id else None,
+            "zoho_account_id": self.zoho_account_id,
+            "customer_master_id": self.customer_master_id,
+            "fecha_creacion": self.fecha_creacion.isoformat() if self.fecha_creacion else None,
+            "fecha_actualizacion": self.fecha_actualizacion.isoformat() if self.fecha_actualizacion else None,
+        }
+
+
+class Contact(db.Model):
+    """Persona vinculada a una Account. Un Account puede tener N contactos.
+    NO confundir con CSContacto (CS-specific) — son tablas separadas hasta
+    que se haga la merge de Fase 3.5."""
+    __tablename__ = "contacts"
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    nombre = db.Column(db.String(150), nullable=False)
+    apellido = db.Column(db.String(150), nullable=True)
+    email = db.Column(db.String(200), nullable=True, index=True)
+    telefono = db.Column(db.String(30), nullable=True, index=True)
+    whatsapp = db.Column(db.String(30), nullable=True)
+    puesto = db.Column(db.String(150), nullable=True)
+    departamento = db.Column(db.String(120), nullable=True)
+    linkedin = db.Column(db.String(255), nullable=True)
+
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True, index=True)
+    is_primary = db.Column(db.Boolean, default=False, nullable=False)  # contacto principal de la cuenta
+
+    notas = db.Column(db.Text, nullable=True)
+    fecha_creacion = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+    fecha_actualizacion = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    account = db.relationship("Account", foreign_keys=[account_id], backref="contacts")
+
+    @property
+    def nombre_completo(self):
+        if self.apellido:
+            return f"{self.nombre} {self.apellido}"
+        return self.nombre
+
+    def to_dict(self):
+        return {
+            "id": str(self.id), "nombre": self.nombre, "apellido": self.apellido,
+            "nombre_completo": self.nombre_completo,
+            "email": self.email, "telefono": self.telefono,
+            "whatsapp": self.whatsapp, "puesto": self.puesto,
+            "departamento": self.departamento, "linkedin": self.linkedin,
+            "account_id": str(self.account_id) if self.account_id else None,
+            "account_nombre": self.account.nombre if self.account else None,
+            "is_primary": self.is_primary, "notas": self.notas,
+            "fecha_creacion": self.fecha_creacion.isoformat() if self.fecha_creacion else None,
+            "fecha_actualizacion": self.fecha_actualizacion.isoformat() if self.fecha_actualizacion else None,
+        }
+
+
+# ──────────────────────────────────────────────
 # OPORTUNIDAD (Deal) — Pre-cierre, post-Lead. Equivalente a Zoho Deal.
 # Una empresa puede tener múltiples oportunidades simultáneas. Lead →
 # Oportunidad es el flow de conversión.
@@ -1808,6 +1920,10 @@ class Oportunidad(db.Model):
     # Trazabilidad y origen
     lead_id = db.Column(UUID(as_uuid=True), db.ForeignKey("leads.id"), nullable=True, index=True)
     zoho_deal_id = db.Column(db.String(80), nullable=True, unique=True, index=True)
+
+    # Account + Contact (Fase 3) — soft links sin FK estricto en DB
+    account_id = db.Column(UUID(as_uuid=True), nullable=True, index=True)
+    contact_id = db.Column(UUID(as_uuid=True), nullable=True, index=True)
 
     fecha_creacion = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
     fecha_actualizacion = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
