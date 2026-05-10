@@ -509,6 +509,7 @@ tbody td{padding:8px 12px;font-size:14px;}
               {% endif %}
               {% if lead.usuario_asignado %}<span class="tag tag-vendedor">{{ lead.usuario_asignado.nombre.split(' ')[0] }}</span>{% endif %}
               {% if etapa.value in ['Cotización', 'Demo', 'Negociación'] %}<span class="tag" style="background:var(--blue-bg);color:var(--accent);cursor:pointer;margin-left:auto;" onclick="event.stopPropagation();abrirCotizacion('{{ lead.id }}')">&#128196; Cotizar</span>{% endif %}
+              {% if etapa.value in ['Cotización', 'Demo', 'Negociación', '2do Contacto', '3er Contacto', '4to Contacto'] %}<span class="tag" style="background:var(--copper-soft);color:var(--copper);cursor:pointer;font-weight:600;" onclick="event.stopPropagation();convertirLeadAOportunidad('{{ lead.id }}')">&#127919; Oportunidad</span>{% endif %}
             </div>
           </div>
           {% endfor %}
@@ -3499,8 +3500,69 @@ applyRoleVisibility();
 
 <script>
 let _oppEditing = null;
+let _oppFromLeadId = null;  // si está set, saveOpp usa endpoint /from-lead/<id>
+
+async function convertirLeadAOportunidad(leadId){
+  // Fetch lead data y abre modal pre-rellenado
+  try{
+    const r=await fetch(`/api/leads/${leadId}`);
+    if(!r.ok)throw new Error('No se pudo cargar el lead');
+    const lead=await r.json();
+    _oppFromLeadId=leadId;
+    _oppEditing=null;
+    // Pre-rellenar campos a partir del lead
+    const valorEstimado=Number(lead.valor_estimado||0);
+    const cantPrecio=(lead.cantidad_productos&&lead.precio_unitario)?
+      Number(lead.cantidad_productos)*Number(lead.precio_unitario):0;
+    const valorInicial=valorEstimado||cantPrecio||0;
+    const monthly=lead.precio_unitario?Number(lead.precio_unitario):'';
+
+    const me=await _nlLoadMe();
+    document.getElementById('opp-modal-title').textContent='Convertir Lead → Oportunidad';
+    document.getElementById('opp-delete-btn').style.display='none';
+    document.getElementById('opp-nombre').value=`${lead.empresa_nombre||lead.nombre} - ${lead.marca_interes||''}`.replace(/ - $/,'');
+    document.getElementById('opp-empresa').value=lead.empresa_nombre||'';
+    document.getElementById('opp-estado').value=lead.estado_cliente||'';
+    document.getElementById('opp-contacto-nombre').value=lead.nombre||'';
+    document.getElementById('opp-contacto-telefono').value=lead.telefono||'';
+    document.getElementById('opp-contacto-email').value='';
+    document.getElementById('opp-valor').value=valorInicial;
+    document.getElementById('opp-monthly').value=monthly;
+    document.getElementById('opp-fecha-cierre').value='';
+    document.getElementById('opp-sucursales').value=lead.num_sucursales||'';
+    document.getElementById('opp-notas').value=lead.tipo_cliente||lead.notas||'';
+    document.getElementById('opp-motivo-perdida').value='';
+
+    // Marca pill
+    document.querySelectorAll('#opp-marca-pills .nl-pill').forEach(p=>{
+      p.classList.remove('active');
+      p.onclick=()=>{p.parentElement.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');};
+      if(lead.marca_interes&&p.dataset.val===lead.marca_interes)p.classList.add('active');
+    });
+    // Etapa pill — default a Calificación si no había una más avanzada en lead
+    document.querySelectorAll('#opp-etapa-pills .nl-pill').forEach((p,i)=>{
+      p.classList.remove('active');
+      p.onclick=()=>{p.parentElement.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');_oppToggleMotivo();};
+    });
+    // Mapear etapa del lead a etapa de oportunidad inicial
+    const etapaLead=lead.etapa_pipeline||'';
+    const etapaOpp=({
+      'Cotización':'Análisis','Demo':'Propuesta','Negociación':'Negociación',
+    })[etapaLead]||'Calificación';
+    const targetPill=document.querySelector(`#opp-etapa-pills .nl-pill[data-val="${etapaOpp}"]`);
+    if(targetPill)targetPill.classList.add('active');
+    else document.querySelector('#opp-etapa-pills .nl-pill').classList.add('active');
+
+    _oppToggleMotivo();
+    document.getElementById('opp-assign-preview').innerHTML=
+      `Propietario: <strong>${lead.usuario_asignado?.nombre||me.nombre||'vos'}</strong> · convertido desde Lead`;
+    document.getElementById('opp-overlay').classList.add('open');
+    setTimeout(()=>document.getElementById('opp-valor').focus(),50);
+  }catch(e){alert('Error: '+e.message);}
+}
 
 async function openOppModal(opp){
+  _oppFromLeadId=null;  // reset cuando se abre modo normal
   _oppEditing=opp||null;
   const me=await _nlLoadMe();
   document.getElementById('opp-modal-title').textContent=opp?'Editar oportunidad':'Nueva oportunidad';
@@ -3565,12 +3627,26 @@ async function saveOpp(){
   };
   const btn=document.getElementById('opp-save-btn');btn.disabled=true;
   try{
-    const url=_oppEditing?`/api/oportunidades/${_oppEditing.id}`:'/api/oportunidades/';
-    const method=_oppEditing?'PATCH':'POST';
+    let url, method;
+    if(_oppEditing){
+      url=`/api/oportunidades/${_oppEditing.id}`;method='PATCH';
+    }else if(_oppFromLeadId){
+      url=`/api/oportunidades/from-lead/${_oppFromLeadId}`;method='POST';
+    }else{
+      url='/api/oportunidades/';method='POST';
+    }
     const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(!r.ok){const e=await r.json();throw new Error(e.error||'Error');}
-    _nlToast(_oppEditing?'Actualizada: '+nombre:'Creada: '+nombre);
-    closeOppModal();loadOpps();
+    const successMsg=_oppEditing?'Actualizada: '+nombre:
+      _oppFromLeadId?'Lead convertido → Oportunidad: '+nombre:'Creada: '+nombre;
+    _nlToast(successMsg);
+    closeOppModal();
+    if(_oppFromLeadId){
+      // Si estábamos en pipeline, recargar para ver el cambio de etapa del lead
+      if(typeof location!=='undefined')location.reload();
+    }else{
+      loadOpps();
+    }
   }catch(e){_nlToast('Error: '+e.message,true);}
   finally{btn.disabled=false;}
 }
