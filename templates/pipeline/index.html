@@ -293,6 +293,8 @@ tbody td{padding:8px 12px;font-size:14px;}
     <div class="slink" onclick="showView('pipeline',this)">&#128203; Pipeline</div>
     <div class="slink" onclick="openLeadModal()" style="background:var(--copper-soft);color:var(--copper);font-weight:600;">&#10133; Nuevo Lead <kbd style="float:right;font-size:9px;color:var(--text3);background:var(--bg-card);padding:1px 4px;border-radius:3px;border:1px solid var(--border);">⌘N</kbd></div>
     <div class="slink" onclick="showView('opps',this)">&#127919; Oportunidades</div>
+    <div class="slink" onclick="showView('accounts',this)">&#127970; Empresas</div>
+    <div class="slink" onclick="showView('contacts',this)">&#128101; Contactos</div>
     <div class="slink" onclick="showView('leads',this)">&#128101; Leads</div>
     <div class="slink admin-only" onclick="showView('vendedores',this)">&#128100; Vendedores</div>
     <div class="slink" onclick="showView('proyecto',this)">&#128221; Proyecto</div>
@@ -1136,6 +1138,158 @@ tbody td{padding:8px 12px;font-size:14px;}
   </div>
 </div>
 
+<!-- ===== EMPRESAS ===== -->
+<div class="view" id="view-accounts" style="overflow-y:auto;">
+  <div class="page-header">
+    <div class="page-emoji">&#127970;</div>
+    <div class="page-title">Empresas</div>
+    <div class="page-desc">Una empresa puede tener N leads y N oportunidades. Sin duplicados.</div>
+  </div>
+  <div style="padding:20px 48px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <input class="form-input" id="acc-search" placeholder="Buscar nombre o RFC..." style="max-width:260px;font-size:13px;" oninput="loadAccountsDebounced()"/>
+    <select class="form-input" id="acc-estado" onchange="loadAccounts()" style="max-width:160px;font-size:13px;">
+      <option value="">Todos los estados</option>
+    </select>
+    <label style="display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer;">
+      <input type="checkbox" id="acc-cliente" onchange="loadAccounts()"/> Solo clientes
+    </label>
+    <button class="btn btn-filled" onclick="openAccountModal()" style="font-size:13px;margin-left:auto;">+ Nueva empresa</button>
+  </div>
+  <div style="padding:0 48px 20px;">
+    <div class="dash-card">
+      <div class="dash-card-title"><span id="acc-count">—</span> empresas</div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Nombre</th><th>RFC</th><th>Industria</th><th>Estado</th>
+          <th style="text-align:right;">Sucursales</th><th>Owner</th><th>Status</th><th></th>
+        </tr></thead>
+        <tbody id="acc-tbody"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== CONTACTOS ===== -->
+<div class="view" id="view-contacts" style="overflow-y:auto;">
+  <div class="page-header">
+    <div class="page-emoji">&#128101;</div>
+    <div class="page-title">Contactos</div>
+    <div class="page-desc">Personas vinculadas a empresas — directorio global</div>
+  </div>
+  <div style="padding:20px 48px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <input class="form-input" id="con-search" placeholder="Buscar nombre, email o teléfono..." style="max-width:280px;font-size:13px;" oninput="loadContactsDebounced()"/>
+    <button class="btn btn-filled" onclick="openContactModal()" style="font-size:13px;margin-left:auto;">+ Nuevo contacto</button>
+  </div>
+  <div style="padding:0 48px 20px;">
+    <div class="dash-card">
+      <div class="dash-card-title"><span id="con-count">—</span> contactos</div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Nombre</th><th>Puesto</th><th>Empresa</th><th>Email</th><th>Teléfono</th><th></th>
+        </tr></thead>
+        <tbody id="con-tbody"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Empresa (crear/editar) -->
+<div class="nl-overlay" id="acc-overlay" onclick="if(event.target===this)closeAccountModal()">
+  <div class="nl-card" style="width:580px;">
+    <div class="nl-header"><h3 id="acc-modal-title">Nueva empresa</h3><span class="nl-kbd">Esc</span></div>
+    <div class="nl-body">
+      <div class="nl-row two">
+        <div><label class="nl-label">Nombre legal *</label><input class="nl-input" id="acc-nombre"/></div>
+        <div><label class="nl-label">Nombre comercial</label><input class="nl-input" id="acc-comercial"/></div>
+      </div>
+      <div class="nl-row two">
+        <div><label class="nl-label">RFC</label><input class="nl-input" id="acc-rfc" style="text-transform:uppercase;"/></div>
+        <div><label class="nl-label">Industria</label><input class="nl-input" id="acc-industria" placeholder="ej: Retail, Hospitality"/></div>
+      </div>
+      <div class="nl-row two">
+        <div><label class="nl-label">Tamaño</label>
+          <select class="nl-input" id="acc-tamano">
+            <option value="">—</option><option>Micro (1-10)</option><option>Pequeña (11-50)</option>
+            <option>Mediana (51-200)</option><option>Grande (200+)</option>
+          </select>
+        </div>
+        <div><label class="nl-label">Sucursales</label><input class="nl-input" id="acc-sucursales" type="number" min="1"/></div>
+      </div>
+      <div class="nl-row two">
+        <div><label class="nl-label">Estado</label><input class="nl-input" id="acc-estado-input" placeholder="ej: Nuevo León"/></div>
+        <div><label class="nl-label">Ciudad</label><input class="nl-input" id="acc-ciudad"/></div>
+      </div>
+      <div class="nl-row two">
+        <div><label class="nl-label">Teléfono</label><input class="nl-input" id="acc-telefono"/></div>
+        <div><label class="nl-label">Website</label><input class="nl-input" id="acc-website" placeholder="https://"/></div>
+      </div>
+      <div class="nl-row">
+        <label class="nl-label">Notas</label>
+        <textarea class="nl-input" id="acc-notas" rows="2" style="resize:vertical;"></textarea>
+      </div>
+      <div class="nl-row">
+        <label class="nl-checkbox">
+          <input type="checkbox" id="acc-is-cliente"/>
+          <span>Marcar como <strong>cliente</strong> (ya cerró venta)</span>
+        </label>
+      </div>
+    </div>
+    <div class="nl-foot">
+      <div class="nl-assign" id="acc-detail-link" style="font-size:11px;"></div>
+      <div class="nl-btns">
+        <button class="nl-btn" onclick="closeAccountModal()">Cancelar</button>
+        <button class="nl-btn" id="acc-delete-btn" onclick="deleteAccount()" style="display:none;color:var(--red);">Eliminar</button>
+        <button class="nl-btn primary" id="acc-save-btn" onclick="saveAccount()">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Contacto -->
+<div class="nl-overlay" id="con-overlay" onclick="if(event.target===this)closeContactModal()">
+  <div class="nl-card" style="width:560px;">
+    <div class="nl-header"><h3 id="con-modal-title">Nuevo contacto</h3><span class="nl-kbd">Esc</span></div>
+    <div class="nl-body">
+      <div class="nl-row two">
+        <div><label class="nl-label">Nombre *</label><input class="nl-input" id="con-nombre"/></div>
+        <div><label class="nl-label">Apellido</label><input class="nl-input" id="con-apellido"/></div>
+      </div>
+      <div class="nl-row two">
+        <div><label class="nl-label">Email</label><input class="nl-input" id="con-email" type="email"/></div>
+        <div><label class="nl-label">Teléfono</label><input class="nl-input" id="con-telefono"/></div>
+      </div>
+      <div class="nl-row two">
+        <div><label class="nl-label">Puesto</label><input class="nl-input" id="con-puesto" placeholder="ej: Director Comercial"/></div>
+        <div><label class="nl-label">Departamento</label><input class="nl-input" id="con-departamento"/></div>
+      </div>
+      <div class="nl-row" style="position:relative;">
+        <label class="nl-label">Empresa</label>
+        <input class="nl-input" id="con-empresa" placeholder="Buscar empresa..." oninput="conEmpresaSearch()" autocomplete="off"/>
+        <input type="hidden" id="con-account-id"/>
+        <div id="con-empresa-list" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;max-height:160px;overflow-y:auto;z-index:10;box-shadow:var(--shadow-lg);"></div>
+      </div>
+      <div class="nl-row">
+        <label class="nl-label">LinkedIn</label>
+        <input class="nl-input" id="con-linkedin" placeholder="https://linkedin.com/in/..."/>
+      </div>
+      <div class="nl-row">
+        <label class="nl-checkbox">
+          <input type="checkbox" id="con-primary"/>
+          <span>Contacto <strong>principal</strong> de la empresa</span>
+        </label>
+      </div>
+    </div>
+    <div class="nl-foot">
+      <div></div>
+      <div class="nl-btns">
+        <button class="nl-btn" onclick="closeContactModal()">Cancelar</button>
+        <button class="nl-btn" id="con-delete-btn" onclick="deleteContact()" style="display:none;color:var(--red);">Eliminar</button>
+        <button class="nl-btn primary" id="con-save-btn" onclick="saveContact()">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ===== VINCULAR SAVIO -> CS ===== -->
 <div class="view" id="view-vincular" style="overflow-y:auto;">
   <div class="page-header">
@@ -1681,6 +1835,8 @@ function showView(name,el){
   if(name==='roi')loadRoi();
   if(name==='scip')loadScip();
   if(name==='opps')loadOpps();
+  if(name==='accounts')loadAccounts();
+  if(name==='contacts')loadContacts();
 }
 
 // ──────────────────────────────────────────────
@@ -3669,6 +3825,234 @@ async function deleteOpp(){
     const r=await fetch(`/api/oportunidades/${_oppEditing.id}`,{method:'DELETE'});
     if(!r.ok)throw new Error('Error eliminando');
     _nlToast('Eliminada');closeOppModal();loadOpps();
+  }catch(e){_nlToast('Error: '+e.message,true);}
+}
+
+// ───────────────────────────────────────────────────
+// EMPRESAS (Accounts)
+// ───────────────────────────────────────────────────
+let _accEditing = null;
+let _accSearchTimer = null;
+
+function loadAccountsDebounced(){clearTimeout(_accSearchTimer);_accSearchTimer=setTimeout(loadAccounts,250);}
+
+async function loadAccounts(){
+  const params=new URLSearchParams();
+  const search=document.getElementById('acc-search').value.trim();
+  const estado=document.getElementById('acc-estado').value;
+  const isCliente=document.getElementById('acc-cliente').checked;
+  if(search)params.set('search',search);
+  if(estado)params.set('estado',estado);
+  if(isCliente)params.set('is_cliente','true');
+  const rows=await _api('/api/accounts/'+(params.toString()?'?'+params:''))||[];
+  document.getElementById('acc-count').textContent=_fmtNum(rows.length);
+  const tb=document.getElementById('acc-tbody');tb.innerHTML='';
+  if(!rows.length){tb.innerHTML='<tr><td colspan="8" style="color:var(--text2);text-align:center;padding:14px;">Sin empresas — creá una con "+ Nueva empresa"</td></tr>';return;}
+  for(const a of rows){
+    const clienteBadge=a.is_cliente?'<span style="background:var(--green-bg);color:var(--green);padding:1px 8px;border-radius:99px;font-size:10px;font-weight:600;">CLIENTE</span>':'<span style="color:var(--text3);font-size:11px;">prospecto</span>';
+    tb.innerHTML+=`<tr style="cursor:pointer;" onclick='openAccountModal(${JSON.stringify(a).replace(/'/g,"&apos;")})'>
+      <td><strong>${a.nombre}</strong>${a.nombre_comercial?`<div style="color:var(--text3);font-size:11px;">${a.nombre_comercial}</div>`:''}</td>
+      <td style="font-family:var(--mono);font-size:11px;">${a.rfc||'—'}</td>
+      <td>${a.industria||'—'}</td>
+      <td>${a.estado||'—'}</td>
+      <td style="text-align:right;">${a.num_sucursales||'—'}</td>
+      <td style="font-size:11px;">${a.owner_nombre||'—'}</td>
+      <td>${clienteBadge}</td>
+      <td onclick="event.stopPropagation();openAccountDetail('${a.id}')" style="cursor:pointer;color:var(--copper);font-size:11px;">Ver detalle →</td>
+    </tr>`;
+  }
+}
+
+function openAccountModal(acc){
+  _accEditing=acc||null;
+  document.getElementById('acc-modal-title').textContent=acc?'Editar empresa':'Nueva empresa';
+  document.getElementById('acc-delete-btn').style.display=acc?'':'none';
+  ['acc-nombre','acc-comercial','acc-rfc','acc-industria','acc-sucursales','acc-estado-input','acc-ciudad','acc-telefono','acc-website','acc-notas'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('acc-tamano').value='';
+  document.getElementById('acc-is-cliente').checked=false;
+  document.getElementById('acc-detail-link').textContent='';
+  if(acc){
+    document.getElementById('acc-nombre').value=acc.nombre||'';
+    document.getElementById('acc-comercial').value=acc.nombre_comercial||'';
+    document.getElementById('acc-rfc').value=acc.rfc||'';
+    document.getElementById('acc-industria').value=acc.industria||'';
+    document.getElementById('acc-tamano').value=acc.tamano||'';
+    document.getElementById('acc-sucursales').value=acc.num_sucursales||'';
+    document.getElementById('acc-estado-input').value=acc.estado||'';
+    document.getElementById('acc-ciudad').value=acc.ciudad||'';
+    document.getElementById('acc-telefono').value=acc.telefono||'';
+    document.getElementById('acc-website').value=acc.website||'';
+    document.getElementById('acc-notas').value=acc.notas||'';
+    document.getElementById('acc-is-cliente').checked=!!acc.is_cliente;
+    document.getElementById('acc-detail-link').innerHTML=`<a href="#" onclick="event.preventDefault();openAccountDetail('${acc.id}')" style="color:var(--copper);">Ver leads + oportunidades</a>`;
+  }
+  document.getElementById('acc-overlay').classList.add('open');
+  setTimeout(()=>document.getElementById('acc-nombre').focus(),50);
+}
+function closeAccountModal(){document.getElementById('acc-overlay').classList.remove('open');_accEditing=null;}
+
+async function saveAccount(){
+  const nombre=document.getElementById('acc-nombre').value.trim();
+  if(!nombre){_nlToast('Falta nombre',true);return;}
+  const body={
+    nombre, nombre_comercial:document.getElementById('acc-comercial').value.trim()||null,
+    rfc:document.getElementById('acc-rfc').value.trim().toUpperCase()||null,
+    industria:document.getElementById('acc-industria').value.trim()||null,
+    tamano:document.getElementById('acc-tamano').value||null,
+    num_sucursales:parseInt(document.getElementById('acc-sucursales').value)||null,
+    estado:document.getElementById('acc-estado-input').value.trim()||null,
+    ciudad:document.getElementById('acc-ciudad').value.trim()||null,
+    telefono:document.getElementById('acc-telefono').value.trim()||null,
+    website:document.getElementById('acc-website').value.trim()||null,
+    notas:document.getElementById('acc-notas').value.trim()||null,
+    is_cliente:document.getElementById('acc-is-cliente').checked,
+  };
+  try{
+    const url=_accEditing?`/api/accounts/${_accEditing.id}`:'/api/accounts/';
+    const method=_accEditing?'PATCH':'POST';
+    const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok){const e=await r.json();throw new Error(e.error||'Error');}
+    _nlToast(_accEditing?'Actualizada: '+nombre:'Creada: '+nombre);
+    closeAccountModal();loadAccounts();
+  }catch(e){_nlToast('Error: '+e.message,true);}
+}
+
+async function deleteAccount(){
+  if(!_accEditing)return;
+  if(!confirm(`¿Eliminar empresa "${_accEditing.nombre}"? Los leads y oportunidades vinculados quedarán sin empresa.`))return;
+  try{
+    await fetch(`/api/accounts/${_accEditing.id}`,{method:'DELETE'});
+    _nlToast('Eliminada');closeAccountModal();loadAccounts();
+  }catch(e){_nlToast('Error: '+e.message,true);}
+}
+
+async function openAccountDetail(accountId){
+  const d=await _api(`/api/accounts/${accountId}`);
+  if(!d){_nlToast('No se pudo cargar',true);return;}
+  const html=`
+    <div style="padding:14px;background:var(--bg-sidebar);border-radius:8px;margin-bottom:12px;">
+      <div style="font-weight:600;font-size:18px;">${d.nombre}</div>
+      ${d.nombre_comercial?`<div style="color:var(--text2);">${d.nombre_comercial}</div>`:''}
+      <div style="display:flex;gap:14px;margin-top:8px;font-size:12px;">
+        <div><strong>${d.counts.leads}</strong> leads</div>
+        <div><strong>${d.counts.oportunidades}</strong> oportunidades</div>
+        <div><strong>${d.counts.contactos}</strong> contactos</div>
+        <div>Pipe: <strong>${_fmtMxn(d.valor_pipe_abierto||0)}</strong></div>
+        <div>Ganado: <strong style="color:var(--green);">${_fmtMxn(d.valor_ganado_total||0)}</strong></div>
+      </div>
+    </div>
+    <div style="font-weight:600;margin-bottom:6px;">Oportunidades</div>
+    ${d.oportunidades.length?'<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:14px;">'+d.oportunidades.map(o=>`<div style="padding:6px 10px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;display:flex;justify-content:space-between;font-size:12px;"><span>${o.nombre} <span style="color:var(--text3);">· ${o.etapa}</span></span><span style="font-weight:600;">${_fmtMxn(o.valor)}</span></div>`).join('')+'</div>':'<div style="color:var(--text3);font-size:12px;margin-bottom:14px;">Sin oportunidades</div>'}
+    <div style="font-weight:600;margin-bottom:6px;">Contactos</div>
+    ${d.contactos.length?'<div style="display:flex;flex-direction:column;gap:4px;">'+d.contactos.map(c=>`<div style="padding:6px 10px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;font-size:12px;"><strong>${c.nombre_completo}</strong>${c.puesto?` · ${c.puesto}`:''}<div style="color:var(--text3);font-size:11px;">${c.email||''} ${c.telefono||''}</div></div>`).join('')+'</div>':'<div style="color:var(--text3);font-size:12px;">Sin contactos</div>'}
+  `;
+  // Reuse del modal nl-overlay con un container ad-hoc
+  const overlay=document.createElement('div');overlay.className='nl-overlay open';
+  overlay.innerHTML=`<div class="nl-card" style="width:600px;"><div class="nl-header"><h3>${d.nombre}</h3><span class="nl-kbd" onclick="this.closest('.nl-overlay').remove()" style="cursor:pointer;">Esc</span></div><div class="nl-body">${html}</div></div>`;
+  overlay.onclick=e=>{if(e.target===overlay)overlay.remove();};
+  document.body.appendChild(overlay);
+}
+
+// ───────────────────────────────────────────────────
+// CONTACTOS
+// ───────────────────────────────────────────────────
+let _conEditing = null;
+let _conSearchTimer = null;
+let _conEmpresaTimer = null;
+
+function loadContactsDebounced(){clearTimeout(_conSearchTimer);_conSearchTimer=setTimeout(loadContacts,250);}
+
+async function loadContacts(){
+  const search=document.getElementById('con-search').value.trim();
+  const url='/api/contacts/'+(search?'?search='+encodeURIComponent(search):'');
+  const rows=await _api(url)||[];
+  document.getElementById('con-count').textContent=_fmtNum(rows.length);
+  const tb=document.getElementById('con-tbody');tb.innerHTML='';
+  if(!rows.length){tb.innerHTML='<tr><td colspan="6" style="color:var(--text2);text-align:center;padding:14px;">Sin contactos</td></tr>';return;}
+  for(const c of rows){
+    const primaryBadge=c.is_primary?' <span style="font-size:10px;color:var(--green);font-weight:600;">★ PRIMARY</span>':'';
+    tb.innerHTML+=`<tr style="cursor:pointer;" onclick='openContactModal(${JSON.stringify(c).replace(/'/g,"&apos;")})'>
+      <td><strong>${c.nombre_completo}</strong>${primaryBadge}</td>
+      <td>${c.puesto||'—'}</td>
+      <td>${c.account_nombre||'—'}</td>
+      <td style="font-size:11px;">${c.email||'—'}</td>
+      <td style="font-family:var(--mono);font-size:11px;">${c.telefono||'—'}</td>
+      <td style="color:var(--copper);font-size:11px;">Editar →</td>
+    </tr>`;
+  }
+}
+
+function openContactModal(c){
+  _conEditing=c||null;
+  document.getElementById('con-modal-title').textContent=c?'Editar contacto':'Nuevo contacto';
+  document.getElementById('con-delete-btn').style.display=c?'':'none';
+  ['con-nombre','con-apellido','con-email','con-telefono','con-puesto','con-departamento','con-linkedin','con-empresa','con-account-id'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('con-primary').checked=false;
+  document.getElementById('con-empresa-list').style.display='none';
+  if(c){
+    document.getElementById('con-nombre').value=c.nombre||'';
+    document.getElementById('con-apellido').value=c.apellido||'';
+    document.getElementById('con-email').value=c.email||'';
+    document.getElementById('con-telefono').value=c.telefono||'';
+    document.getElementById('con-puesto').value=c.puesto||'';
+    document.getElementById('con-departamento').value=c.departamento||'';
+    document.getElementById('con-linkedin').value=c.linkedin||'';
+    document.getElementById('con-empresa').value=c.account_nombre||'';
+    document.getElementById('con-account-id').value=c.account_id||'';
+    document.getElementById('con-primary').checked=!!c.is_primary;
+  }
+  document.getElementById('con-overlay').classList.add('open');
+  setTimeout(()=>document.getElementById('con-nombre').focus(),50);
+}
+function closeContactModal(){document.getElementById('con-overlay').classList.remove('open');_conEditing=null;}
+
+function conEmpresaSearch(){
+  clearTimeout(_conEmpresaTimer);
+  _conEmpresaTimer=setTimeout(async()=>{
+    const q=document.getElementById('con-empresa').value.trim();
+    const list=document.getElementById('con-empresa-list');
+    if(q.length<2){list.style.display='none';return;}
+    const items=await _api('/api/accounts/search?q='+encodeURIComponent(q))||[];
+    if(!items.length){list.innerHTML='<div style="padding:8px;color:var(--text3);font-size:12px;">Sin resultados</div>';list.style.display='block';return;}
+    list.innerHTML=items.map(a=>`<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border-light);" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'" onclick='conPickEmpresa("${a.id}","${(a.nombre||'').replace(/"/g,"&quot;")}")'><strong>${a.nombre}</strong>${a.rfc?`<span style="color:var(--text3);font-size:11px;font-family:var(--mono);"> ${a.rfc}</span>`:''}</div>`).join('');
+    list.style.display='block';
+  },250);
+}
+function conPickEmpresa(id,nombre){
+  document.getElementById('con-empresa').value=nombre;
+  document.getElementById('con-account-id').value=id;
+  document.getElementById('con-empresa-list').style.display='none';
+}
+
+async function saveContact(){
+  const nombre=document.getElementById('con-nombre').value.trim();
+  if(!nombre){_nlToast('Falta nombre',true);return;}
+  const body={
+    nombre, apellido:document.getElementById('con-apellido').value.trim()||null,
+    email:document.getElementById('con-email').value.trim().toLowerCase()||null,
+    telefono:document.getElementById('con-telefono').value.trim()||null,
+    puesto:document.getElementById('con-puesto').value.trim()||null,
+    departamento:document.getElementById('con-departamento').value.trim()||null,
+    linkedin:document.getElementById('con-linkedin').value.trim()||null,
+    account_id:document.getElementById('con-account-id').value||null,
+    is_primary:document.getElementById('con-primary').checked,
+  };
+  try{
+    const url=_conEditing?`/api/contacts/${_conEditing.id}`:'/api/contacts/';
+    const method=_conEditing?'PATCH':'POST';
+    const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok){const e=await r.json();throw new Error(e.error||'Error');}
+    _nlToast(_conEditing?'Actualizado':'Creado: '+nombre);
+    closeContactModal();loadContacts();
+  }catch(e){_nlToast('Error: '+e.message,true);}
+}
+
+async function deleteContact(){
+  if(!_conEditing)return;
+  if(!confirm(`¿Eliminar contacto "${_conEditing.nombre_completo}"?`))return;
+  try{
+    await fetch(`/api/contacts/${_conEditing.id}`,{method:'DELETE'});
+    _nlToast('Eliminado');closeContactModal();loadContacts();
   }catch(e){_nlToast('Error: '+e.message,true);}
 }
 </script>
