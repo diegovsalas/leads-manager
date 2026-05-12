@@ -110,8 +110,11 @@
                     <!-- MRR -->
                     <td class="r">${{ "{:,.0f}".format(acc.mrr|float) }}</td>
 
-                    <!-- Edit + Delete -->
+                    <!-- Edit + Sucursales + Delete -->
                     <td class="c" style="white-space:nowrap;">
+                        <button class="btn ghost" style="padding:4px 6px;height:auto"
+                                onclick='openSucursalesModal("{{ acc.id }}", {{ acc.nombre|tojson }})'
+                                title="Cargar portafolio de sucursales (CSV)">{{ icon('upload', 13) }}</button>
                         {% if not is_kam %}
                         <button class="btn ghost" style="padding:4px 6px;height:auto"
                                 onclick="openEditModal('{{ acc.id }}','{{ acc.nombre }}','{{ acc.logo_url or "" }}','{{ acc.giro }}','{{ acc.tier }}','{{ acc.kam_id }}','{{ acc.client_id or "" }}','{{ acc.mrr|float }}','{{ acc.sucursales or 0 }}','{{ acc.unidades_contratadas or "" }}')"
@@ -335,6 +338,46 @@ function filterTable(query) {
         row.style.display = row.getAttribute('data-search').indexOf(q) !== -1 ? '' : 'none';
     });
 }
+
+function openSucursalesModal(accId, accNombre) {
+    document.getElementById('suc-title').textContent = 'Portafolio de sucursales — ' + accNombre;
+    document.getElementById('suc-form').action = '/cs/cuentas/' + accId + '/propiedades/upload-csv';
+    document.getElementById('suc-template-link').href = '/cs/cuentas/' + accId + '/propiedades/template-csv';
+    document.getElementById('suc-archivo').value = '';
+    document.getElementById('modal-sucursales').style.display = 'grid';
+}
 </script>
+
+<!-- Modal: Cargar Portafolio de Sucursales (CSV) -->
+<div id="modal-sucursales" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;place-items:center" onclick="if(event.target===this)this.style.display='none'">
+    <div class="card" style="width:100%;max-width:520px;margin:24px">
+        <div class="card-head">
+            <h3 id="suc-title">Portafolio de sucursales</h3>
+            <button class="btn ghost" onclick="document.getElementById('modal-sucursales').style.display='none'" style="padding:4px 8px;height:auto">&times;</button>
+        </div>
+        <div class="card-body">
+            <p style="font-size:13px;color:var(--ink-2);margin:0 0 12px;">
+                Subí un CSV con las sucursales de esta cuenta. El sistema upsertea por <strong>nombre</strong> (case-insensitive) y cruza con las citas existentes de Operación.
+            </p>
+            <div style="background:var(--bg-surface,#f9f7f3);border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px;">
+                <strong>Columnas del CSV:</strong><br>
+                <code style="font-family:var(--mono);font-size:11px;">nombre, direccion, zona, unidad_negocio</code><br>
+                <span class="muted" style="font-size:11px;">unidad_negocio: AROMATEX / PESTEX (opcional). Solo <em>nombre</em> es obligatorio.</span>
+            </div>
+            <a id="suc-template-link" href="#" class="btn ghost" style="margin-bottom:14px;display:inline-flex;align-items:center;gap:6px;">
+                {{ icon('download', 14) }} Descargar plantilla
+            </a>
+            <form id="suc-form" method="POST" enctype="multipart/form-data" style="margin-top:14px;">
+                <label style="display:block;font-size:11px;font-weight:600;color:var(--ink-3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em">Archivo CSV *</label>
+                <input type="file" name="archivo" id="suc-archivo" accept=".csv" required
+                       style="width:100%;padding:10px;border:1px dashed var(--border);border-radius:8px;font-size:13px;margin-bottom:14px;">
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <button type="button" class="btn ghost" onclick="document.getElementById('modal-sucursales').style.display='none'">Cancelar</button>
+                    <button type="submit" class="btn primary">Subir portafolio</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 {% endblock %}

@@ -1657,6 +1657,125 @@ def api_propiedades(account_id):
     } for p in props])
 
 
+# ──────────────────────────────────────────────
+# Portafolio de sucursales — CSV upload por cuenta
+# Cross-reference con CSAppointment.propiedad por nombre (case-insensitive)
+# ──────────────────────────────────────────────
+@cs_bp.route("/cuentas/<uuid:account_id>/propiedades/template-csv")
+def descargar_template_propiedades(account_id):
+    """Plantilla CSV con headers + 2 filas de ejemplo."""
+    acc = db.session.get(CSAccount, account_id)
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["nombre", "direccion", "zona", "unidad_negocio"])
+    w.writerow(["Sucursal Centro", "Av. Reforma 100, CDMX", "CDMX-Centro", "AROMATEX"])
+    w.writerow(["Sucursal Sur", "Calz. de Tlalpan 500, CDMX", "CDMX-Sur", "PESTEX"])
+    bom = "﻿" + out.getvalue()
+    nombre_archivo = f"plantilla_sucursales_{(acc.nombre if acc else 'cuenta').replace(' ', '_')[:40]}.csv"
+    return send_file(
+        io.BytesIO(bom.encode("utf-8")),
+        mimetype="text/csv",
+        as_attachment=True,
+        download_name=nombre_archivo,
+    )
+
+
+@cs_bp.route("/cuentas/<uuid:account_id>/propiedades/upload-csv", methods=["POST"])
+def upload_propiedades_csv(account_id):
+    """Procesa CSV de sucursales y upserta en cs_propiedades.
+    Después calcula cross-ref con citas existentes (match por nombre, ci)."""
+    acc = db.session.get(CSAccount, account_id)
+    if not acc:
+        flash("Cuenta no encontrada", "error")
+        return redirect(url_for("cs.clientes"))
+
+    if _is_kam() and str(acc.kam_id) != str(_current_kam_id()):
+        flash("Solo podés cargar sucursales de tus propias cuentas", "error")
+        return redirect(url_for("cs.clientes"))
+
+    file = request.files.get("archivo")
+    if not file or not (file.filename or "").lower().endswith(".csv"):
+        flash("Subí un archivo .csv válido", "error")
+        return redirect(url_for("cs.clientes"))
+
+    content = file.read().decode("utf-8-sig", errors="replace")
+    reader = csv.DictReader(io.StringIO(content))
+
+    existentes = {p.nombre.strip().lower(): p for p in CSPropiedad.query.filter_by(account_id=account_id).all()}
+    creadas = 0
+    actualizadas = 0
+    errores = 0
+
+    for row in reader:
+        nombre = (row.get("nombre") or row.get("Nombre") or row.get("propiedad") or row.get("Propiedad") or "").strip()
+        if not nombre:
+            errores += 1
+            continue
+        direccion = (row.get("direccion") or row.get("Direccion") or row.get("dirección") or row.get("Dirección") or "").strip()
+        zona = (row.get("zona") or row.get("Zona") or "").strip()
+        un = (row.get("unidad_negocio") or row.get("UnidadNegocio") or row.get("Unidad") or row.get("UN") or "").strip().upper()
+
+        key = nombre.lower()
+        if key in existentes:
+            p = existentes[key]
+            if direccion:
+                p.direccion = direccion
+            if zona:
+                p.zona = zona
+            if un:
+                p.unidad_negocio = un
+            actualizadas += 1
+        else:
+            p = CSPropiedad(
+                account_id=account_id, nombre=nombre,
+                direccion=direccion, zona=zona, unidad_negocio=un,
+            )
+            db.session.add(p)
+            existentes[key] = p
+            creadas += 1
+
+    db.session.commit()
+
+    # Cross-reference: cuántas citas existentes matchean por nombre (case-insensitive)
+    nombres_canonicos = list(existentes.keys())
+    matched = 0
+    citas_total = CSAppointment.query.filter_by(account_id=account_id).count()
+    if nombres_canonicos:
+        matched = (
+            db.session.query(func.count(CSAppointment.id))
+            .filter(CSAppointment.account_id == account_id)
+            .filter(func.lower(func.trim(CSAppointment.propiedad)).in_(nombres_canonicos))
+            .scalar() or 0
+        )
+
+    sucursales_unicas_en_citas = (
+        db.session.query(func.count(func.distinct(func.lower(func.trim(CSAppointment.propiedad)))))
+        .filter(CSAppointment.account_id == account_id)
+        .filter(CSAppointment.propiedad != "")
+        .scalar() or 0
+    )
+
+    return render_template(
+        "cs_cargar_resultado.html",
+        tipo=f"Sucursales de {acc.nombre}",
+        insertados=creadas + actualizadas,
+        no_match=errores,
+        errores=0,
+        total=creadas + actualizadas + errores,
+        extra_info={
+            "creadas": creadas,
+            "actualizadas": actualizadas,
+            "total_portafolio": len(existentes),
+            "citas_total": citas_total,
+            "citas_matched": matched,
+            "citas_unmatched": citas_total - matched,
+            "sucursales_distintas_en_citas": sucursales_unicas_en_citas,
+        },
+        back_url=url_for("cs.clientes"),
+        **_ctx(),
+    )
+
+
 # ══════════════════════════════════════════════
 # ENTREGABLES — Flujo de servicio por cuenta
 # ══════════════════════════════════════════════
