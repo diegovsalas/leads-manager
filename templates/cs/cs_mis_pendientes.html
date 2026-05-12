@@ -134,9 +134,12 @@
                 {% set acc = accounts_for_inc.get(i.account_id|string) %}
                 <tr>
                     <td>{% if acc %}<a href="/cs/account/{{ acc.id }}">{{ acc.nombre }}</a>{% else %}—{% endif %}</td>
-                    <td>{{ (i.descripcion or '')[:120] }}</td>
-                    <td class="c"><span class="pill warn">{{ i.estatus or '—' }}</span></td>
-                    <td class="c"><span class="muted" style="font-size:11px;">{{ i.fecha_creacion.strftime('%d/%m/%Y') if i.fecha_creacion else '—' }}</span></td>
+                    <td>
+                        <strong>{{ i.tipo or '—' }}</strong>
+                        {% if i.detalle %}<div class="muted" style="font-size:11px;">{{ i.detalle[:100] }}</div>{% endif %}
+                    </td>
+                    <td class="c"><span class="pill warn">{{ i.status or '—' }}</span></td>
+                    <td class="c"><span class="muted" style="font-size:11px;">{{ i.created_at.strftime('%d/%m/%Y') if i.created_at else '—' }}</span></td>
                 </tr>
                 {% endfor %}
             </tbody>

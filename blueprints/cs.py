@@ -484,8 +484,8 @@ def mis_pendientes():
         incidencias = (
             CSIncidencia.query
             .filter(CSIncidencia.account_id.in_(mis_account_ids))
-            .filter(CSIncidencia.estatus != "Cerrada")
-            .order_by(CSIncidencia.fecha_creacion.desc()).limit(50).all()
+            .filter(CSIncidencia.status != "Resuelta")
+            .order_by(CSIncidencia.created_at.desc()).limit(50).all()
         )
     accounts_for_inc = {str(a.id): a for a in CSAccount.query.filter(
         CSAccount.id.in_([i.account_id for i in incidencias])
