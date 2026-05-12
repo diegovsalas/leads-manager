@@ -1,0 +1,107 @@
+{% extends "cs/cs_base.html" %}
+{% block title %}Mis cuentas — CS Avantex{% endblock %}
+{% block breadcrumb %}Mis cuentas{% endblock %}
+
+{% block content %}
+
+<!-- Page head -->
+<div class="page-head">
+    <div>
+        <h1>Mis cuentas</h1>
+        <p class="sub">{{ total_cuentas }} cuentas asignadas a vos · {{ user_nombre }}</p>
+    </div>
+    <div class="actions">
+        <a href="/cs/clientes" class="btn ghost">Ver todas las cuentas</a>
+    </div>
+</div>
+
+<!-- KPI cards -->
+<div class="grid g-4" style="margin-bottom:18px;gap:12px;">
+    <div class="card" style="padding:14px;">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;">Cuentas</div>
+        <div style="font-size:24px;font-weight:700;">{{ total_cuentas }}</div>
+    </div>
+    <div class="card" style="padding:14px;">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;">MRR Total</div>
+        <div style="font-size:24px;font-weight:700;color:var(--green,#2d7a4f);">${{ "{:,.0f}".format(mrr_total) }}</div>
+    </div>
+    <div class="card" style="padding:14px;">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;">Nuevas (onboarding)</div>
+        <div style="font-size:24px;font-weight:700;color:var(--blue,#2eaadc);">{{ cuentas_nuevas }}</div>
+    </div>
+    <div class="card" style="padding:14px;">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;">En riesgo (score<40)</div>
+        <div style="font-size:24px;font-weight:700;color:var(--red,#c4412b);">{{ en_riesgo }}</div>
+    </div>
+</div>
+
+{% if accounts %}
+<div class="card" style="overflow:hidden">
+    <div style="overflow-x:auto">
+        <table class="tbl">
+            <thead>
+                <tr>
+                    <th style="width:80px">ID</th>
+                    <th style="width:260px">Cuenta</th>
+                    <th style="width:130px">Owner</th>
+                    <th class="c" style="width:90px">Tier</th>
+                    <th class="c" style="width:70px">Score</th>
+                    <th class="c" style="width:90px">Tareas</th>
+                    <th class="r" style="width:120px">MRR</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in accounts %}
+                {% set acc = item.account %}
+                {% set hs = item.health %}
+                <tr>
+                    <td><span class="pill info" style="font-weight:700;font-size:11px">{{ acc.client_id or '—' }}</span></td>
+                    <td class="primary">
+                        <div class="hstack">
+                            {% if acc.logo_url %}
+                            <img src="{{ acc.logo_url }}" alt="" style="width:32px;height:32px;border-radius:var(--r-sm);object-fit:contain;border:1px solid var(--border);background:var(--bg-surface);padding:2px;flex-shrink:0">
+                            {% else %}
+                            <div class="ava" style="width:32px;height:32px;border-radius:var(--r-sm);font-size:11px">{{ acc.nombre[:2]|upper }}</div>
+                            {% endif %}
+                            <div style="min-width:0">
+                                <a href="/cs/account/{{ acc.id }}">{{ acc.nombre }}</a>
+                                <div class="hstack" style="margin-top:2px;flex-wrap:wrap">
+                                    {% for un in (acc.unidades_contratadas or '').split(',') if un.strip() %}
+                                    <span class="tag {% if un.strip() == 'PESTEX' %}pestex{% else %}aromatex{% endif %}">{{ un.strip() }}</span>
+                                    {% endfor %}
+                                    {% if acc.sucursales %}<span class="muted" style="font-size:10px">{{ acc.sucursales }} suc</span>{% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        {% if item.owners %}
+                            {{ item.owners[0].nombre }}
+                        {% else %}<span class="muted">—</span>{% endif %}
+                    </td>
+                    <td class="c">
+                        {% if acc.tier %}<span class="pill neutral">{{ acc.tier }}</span>{% else %}<span class="muted">—</span>{% endif %}
+                    </td>
+                    <td class="c">
+                        <span class="score {% if hs.score >= 70 %}ok{% elif hs.score >= 40 %}warn{% else %}danger{% endif %}">{{ hs.score }}</span>
+                    </td>
+                    <td class="c">
+                        {% if item.tareas_pendientes %}
+                            <span class="pill warn">{{ item.tareas_pendientes|length }} pend.</span>
+                        {% else %}<span class="muted">0</span>{% endif %}
+                    </td>
+                    <td class="r">${{ "{:,.0f}".format(acc.mrr|float) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="card" style="padding:32px;text-align:center;">
+    <p style="font-size:14px;color:var(--ink-3);margin-bottom:8px;">No tenés cuentas asignadas aún.</p>
+    <p class="muted" style="font-size:12px;">Pedile a un admin que te asigne cuentas en <a href="/cs/clientes" style="color:var(--copper);">Clientes</a>.</p>
+</div>
+{% endif %}
+
+{% endblock %}

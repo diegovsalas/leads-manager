@@ -38,6 +38,16 @@ def _get_kams():
     return UserCRM.query.filter_by(rol=RolCRM.KAM, activo=True).order_by(UserCRM.nombre).all()
 
 
+def _get_assignables():
+    """Usuarios que pueden ser asignados como kam_id de una cuenta CS.
+    Incluye KAMs + Super Admins (admins pueden auto-asignarse cuentas).
+    No incluye Vendedores (esos manejan leads, no CS accounts)."""
+    return UserCRM.query.filter(
+        UserCRM.rol.in_([RolCRM.KAM, RolCRM.SUPER_ADMIN]),
+        UserCRM.activo.is_(True),
+    ).order_by(UserCRM.rol.desc(), UserCRM.nombre).all()
+
+
 def _is_kam():
     return session.get("user_rol", "").upper() == "KAM"
 
@@ -46,6 +56,11 @@ def _current_kam_id():
     if _is_kam():
         return session.get("user_id")
     return None
+
+
+def _current_user_id():
+    """ID del usuario logueado (cualquier rol)."""
+    return session.get("user_id")
 
 
 def _parse_adjuntos(form):
@@ -365,7 +380,132 @@ def clientes():
 
     return render_template(
         "cs_clientes.html",
-        clientes=clientes_data, kams=_get_kams(),
+        clientes=clientes_data, kams=_get_assignables(),
+        **_ctx(),
+    )
+
+
+# ══════════════════════════════════════════════
+# MIS CUENTAS — vista personalizada del usuario logueado (cualquier rol)
+# ══════════════════════════════════════════════
+@cs_bp.route("/mis-cuentas")
+def mis_cuentas():
+    """Lista de cuentas CS donde kam_id == usuario actual. Independiente del
+    rol — funciona para KAM, admin, super_admin."""
+    user_id = _current_user_id()
+    if not user_id:
+        return redirect(url_for("auth.login_page"))
+
+    accounts = CSAccount.query.filter_by(kam_id=user_id).order_by(CSAccount.mrr.desc()).all()
+    scores_map = calcular_health_scores_batch(accounts) if accounts else {}
+
+    # Tasks pendientes por cuenta
+    account_data = []
+    for acc in accounts:
+        hs = scores_map.get(str(acc.id), {"score": 0})
+        tareas = CSTask.query.filter_by(account_id=acc.id, completada=False).order_by(CSTask.fecha_limite).all()
+        owners = CSContacto.query.filter_by(account_id=acc.id, is_owner=True).all()
+        account_data.append({
+            "account": acc, "health": hs,
+            "owners": owners, "tareas_pendientes": tareas,
+        })
+
+    # KPIs propios
+    mrr_total = sum(float(a.mrr or 0) for a in accounts)
+    arr_total = sum(float(a.arr_proyectado or 0) for a in accounts)
+    cuentas_nuevas = sum(1 for a in accounts if a.es_cuenta_nueva)
+    en_riesgo = sum(1 for a in accounts if scores_map.get(str(a.id), {}).get("score", 100) < 40)
+
+    return render_template(
+        "cs_mis_cuentas.html",
+        accounts=account_data,
+        mrr_total=mrr_total, arr_total=arr_total,
+        cuentas_nuevas=cuentas_nuevas, en_riesgo=en_riesgo,
+        total_cuentas=len(accounts),
+        **_ctx(),
+    )
+
+
+# ══════════════════════════════════════════════
+# MIS PENDIENTES Y TAREAS — agregador cross-modules
+# ══════════════════════════════════════════════
+@cs_bp.route("/mis-pendientes")
+def mis_pendientes():
+    """Todo lo asignado al usuario logueado: tareas, citas próximas,
+    incidencias abiertas, alertas. Cross-account."""
+    user_id = _current_user_id()
+    user_nombre = session.get("user_nombre", "")
+    if not user_id:
+        return redirect(url_for("auth.login_page"))
+
+    # Mis cuentas (para limitar tareas/citas a las que me corresponden)
+    mis_account_ids = [a.id for a in CSAccount.query.filter_by(kam_id=user_id).all()]
+
+    # Tasks pendientes
+    tasks_q = CSTask.query.filter_by(completada=False)
+    if mis_account_ids:
+        # Tasks de mis cuentas O tasks donde responsable matchea mi nombre
+        from sqlalchemy import or_ as _or
+        tasks_q = tasks_q.filter(_or(
+            CSTask.account_id.in_(mis_account_ids),
+            CSTask.responsable.ilike(f"%{user_nombre}%") if user_nombre else False,
+        ))
+    elif user_nombre:
+        tasks_q = tasks_q.filter(CSTask.responsable.ilike(f"%{user_nombre}%"))
+    else:
+        tasks_q = tasks_q.filter(False)  # no scope, empty
+
+    tareas = tasks_q.order_by(CSTask.fecha_limite.asc().nullslast()).limit(200).all()
+    accounts_for_tareas = {str(a.id): a for a in CSAccount.query.filter(
+        CSAccount.id.in_([t.account_id for t in tareas])
+    ).all()}
+
+    # Citas próximas (próximos 14 días) de mis cuentas
+    from datetime import timedelta as _td
+    today_dt = datetime.utcnow()
+    citas_proximas = []
+    if mis_account_ids:
+        citas_proximas = (
+            CSAppointment.query
+            .filter(CSAppointment.account_id.in_(mis_account_ids))
+            .filter(CSAppointment.fecha_inicio >= today_dt)
+            .filter(CSAppointment.fecha_inicio < today_dt + _td(days=14))
+            .filter(~CSAppointment.estatus.in_(("Cancelada", "No Realizada", "Archivada")))
+            .order_by(CSAppointment.fecha_inicio.asc()).limit(50).all()
+        )
+    accounts_for_citas = {str(a.id): a for a in CSAccount.query.filter(
+        CSAccount.id.in_([c.account_id for c in citas_proximas])
+    ).all()}
+
+    # Incidencias abiertas
+    incidencias = []
+    if mis_account_ids:
+        from models import CSIncidencia
+        incidencias = (
+            CSIncidencia.query
+            .filter(CSIncidencia.account_id.in_(mis_account_ids))
+            .filter(CSIncidencia.estatus != "Cerrada")
+            .order_by(CSIncidencia.fecha_creacion.desc()).limit(50).all()
+        )
+    accounts_for_inc = {str(a.id): a for a in CSAccount.query.filter(
+        CSAccount.id.in_([i.account_id for i in incidencias])
+    ).all()}
+
+    # Stats
+    stats = {
+        "total_tareas": len(tareas),
+        "tareas_vencidas": sum(1 for t in tareas if t.fecha_limite and t.fecha_limite < today_dt.date()),
+        "citas_proximas": len(citas_proximas),
+        "incidencias_abiertas": len(incidencias),
+        "mis_cuentas": len(mis_account_ids),
+    }
+
+    return render_template(
+        "cs_mis_pendientes.html",
+        tareas=tareas, accounts_for_tareas=accounts_for_tareas,
+        citas_proximas=citas_proximas, accounts_for_citas=accounts_for_citas,
+        incidencias=incidencias, accounts_for_inc=accounts_for_inc,
+        stats=stats,
         **_ctx(),
     )
 

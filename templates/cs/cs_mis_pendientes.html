@@ -1,0 +1,151 @@
+{% extends "cs/cs_base.html" %}
+{% block title %}Mis pendientes — CS Avantex{% endblock %}
+{% block breadcrumb %}Mis pendientes y tareas{% endblock %}
+
+{% block content %}
+
+<div class="page-head">
+    <div>
+        <h1>Mis pendientes y tareas</h1>
+        <p class="sub">Tareas, citas próximas e incidencias asignadas a {{ user_nombre }}</p>
+    </div>
+</div>
+
+<!-- KPIs -->
+<div class="grid g-4" style="margin-bottom:18px;gap:12px;">
+    <div class="card" style="padding:14px;">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;">Tareas pendientes</div>
+        <div style="font-size:24px;font-weight:700;">{{ stats.total_tareas }}</div>
+    </div>
+    <div class="card" style="padding:14px;">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;">Vencidas</div>
+        <div style="font-size:24px;font-weight:700;color:var(--red,#c4412b);">{{ stats.tareas_vencidas }}</div>
+    </div>
+    <div class="card" style="padding:14px;">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;">Citas próximas (14d)</div>
+        <div style="font-size:24px;font-weight:700;color:var(--blue,#2eaadc);">{{ stats.citas_proximas }}</div>
+    </div>
+    <div class="card" style="padding:14px;">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;">Incidencias abiertas</div>
+        <div style="font-size:24px;font-weight:700;color:var(--orange,#e07c1a);">{{ stats.incidencias_abiertas }}</div>
+    </div>
+</div>
+
+<!-- Tareas -->
+<div class="card" style="margin-bottom:16px;">
+    <div class="card-head"><h3>Tareas pendientes</h3><span class="muted" style="font-size:11px;">{{ stats.total_tareas }} totales</span></div>
+    <div class="card-body" style="padding:0;">
+    {% if tareas %}
+    <div style="overflow-x:auto;">
+        <table class="tbl">
+            <thead>
+                <tr>
+                    <th style="width:240px;">Cuenta</th>
+                    <th style="width:120px;">Tipo</th>
+                    <th>Descripción</th>
+                    <th style="width:120px;">Responsable</th>
+                    <th class="c" style="width:110px;">Fecha límite</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in tareas %}
+                {% set acc = accounts_for_tareas.get(t.account_id|string) %}
+                <tr>
+                    <td>
+                        {% if acc %}<a href="/cs/account/{{ acc.id }}">{{ acc.nombre }}</a>
+                        {% else %}<span class="muted">—</span>{% endif %}
+                    </td>
+                    <td><span class="tag">{{ t.tipo or '—' }}</span></td>
+                    <td>{{ t.descripcion[:120] }}</td>
+                    <td><span class="muted" style="font-size:11px;">{{ t.responsable or '—' }}</span></td>
+                    <td class="c">
+                        {% if t.fecha_limite %}
+                            {% set is_vencida = t.fecha_limite < t.created_at.date() if t.created_at else false %}
+                            <span class="{% if is_vencida %}pill danger{% else %}pill neutral{% endif %}" style="font-size:11px;">{{ t.fecha_limite.strftime('%d/%m') }}</span>
+                        {% else %}<span class="muted">—</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="padding:24px;text-align:center;color:var(--ink-3);font-size:13px;">No hay tareas pendientes ✓</div>
+    {% endif %}
+    </div>
+</div>
+
+<!-- Citas próximas -->
+<div class="card" style="margin-bottom:16px;">
+    <div class="card-head"><h3>Citas próximas (14 días)</h3><span class="muted" style="font-size:11px;">{{ stats.citas_proximas }} totales</span></div>
+    <div class="card-body" style="padding:0;">
+    {% if citas_proximas %}
+    <div style="overflow-x:auto;">
+        <table class="tbl">
+            <thead>
+                <tr>
+                    <th style="width:140px;">Fecha/Hora</th>
+                    <th style="width:200px;">Cuenta</th>
+                    <th>Propiedad / Servicio</th>
+                    <th style="width:120px;">Técnico</th>
+                    <th class="c" style="width:100px;">Estatus</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in citas_proximas %}
+                {% set acc = accounts_for_citas.get(c.account_id|string) %}
+                <tr>
+                    <td><span style="font-family:var(--mono);font-size:11px;">{{ c.fecha_inicio.strftime('%d/%m %H:%M') if c.fecha_inicio else '—' }}</span></td>
+                    <td>{% if acc %}<a href="/cs/account/{{ acc.id }}">{{ acc.nombre }}</a>{% else %}—{% endif %}</td>
+                    <td>
+                        <strong>{{ c.propiedad[:50] if c.propiedad else '—' }}</strong>
+                        {% if c.titulo_servicio %}<div class="muted" style="font-size:11px;">{{ c.titulo_servicio[:60] }}</div>{% endif %}
+                    </td>
+                    <td><span class="muted" style="font-size:11px;">{{ c.tecnico if c.tecnico and c.tecnico != 'nan' else '—' }}</span></td>
+                    <td class="c"><span class="pill {% if c.estatus == 'Terminada' %}success{% else %}info{% endif %}" style="font-size:11px;">{{ c.estatus or '—' }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="padding:24px;text-align:center;color:var(--ink-3);font-size:13px;">No hay citas en los próximos 14 días</div>
+    {% endif %}
+    </div>
+</div>
+
+<!-- Incidencias -->
+<div class="card">
+    <div class="card-head"><h3>Incidencias abiertas</h3><span class="muted" style="font-size:11px;">{{ stats.incidencias_abiertas }} totales</span></div>
+    <div class="card-body" style="padding:0;">
+    {% if incidencias %}
+    <div style="overflow-x:auto;">
+        <table class="tbl">
+            <thead>
+                <tr>
+                    <th style="width:200px;">Cuenta</th>
+                    <th>Descripción</th>
+                    <th class="c" style="width:100px;">Estatus</th>
+                    <th class="c" style="width:110px;">Creada</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for i in incidencias %}
+                {% set acc = accounts_for_inc.get(i.account_id|string) %}
+                <tr>
+                    <td>{% if acc %}<a href="/cs/account/{{ acc.id }}">{{ acc.nombre }}</a>{% else %}—{% endif %}</td>
+                    <td>{{ (i.descripcion or '')[:120] }}</td>
+                    <td class="c"><span class="pill warn">{{ i.estatus or '—' }}</span></td>
+                    <td class="c"><span class="muted" style="font-size:11px;">{{ i.fecha_creacion.strftime('%d/%m/%Y') if i.fecha_creacion else '—' }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="padding:24px;text-align:center;color:var(--ink-3);font-size:13px;">No hay incidencias abiertas ✓</div>
+    {% endif %}
+    </div>
+</div>
+
+{% endblock %}
