@@ -1091,6 +1091,142 @@ def cargar_citas():
     )
 
 
+# ──────────────────────────────────────────────
+# CRUD de citas por cuenta — para que el KAM gestione su plantilla activa
+# sin depender de la carga masiva (que arrastra cancelaciones).
+# ──────────────────────────────────────────────
+
+
+def _can_edit_account(account):
+    """KAM solo puede editar sus propias cuentas. Admin/director: todas."""
+    if not _is_kam():
+        return True
+    return str(account.kam_id) == str(_current_kam_id())
+
+
+def _parse_dt_iso(s):
+    if not s:
+        return None
+    s = s.strip()
+    if not s:
+        return None
+    try:
+        # Acepta "YYYY-MM-DD" o "YYYY-MM-DDTHH:MM" del input HTML
+        from datetime import datetime as _dt
+        if "T" in s:
+            return _dt.fromisoformat(s)
+        return _dt.strptime(s[:10], "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return None
+
+
+@cs_bp.route("/api/cuentas/<uuid:account_id>/citas", methods=["GET"])
+def listar_citas_cuenta(account_id):
+    """GET /cs/api/cuentas/<id>/citas?solo_activas=1 — citas filtradas.
+    Default: solo_activas=1 (oculta Cancelada / No Realizada / Archivada)."""
+    account = db.session.get(CSAccount, account_id)
+    if not account:
+        return jsonify({"error": "Cuenta no encontrada"}), 404
+    if not _can_edit_account(account):
+        return jsonify({"error": "Sin permisos"}), 403
+
+    solo_activas = request.args.get("solo_activas", "1") in ("1", "true", "yes")
+    q = CSAppointment.query.filter(CSAppointment.account_id == account.id)
+    if solo_activas:
+        q = q.filter(~CSAppointment.estatus.in_(("Cancelada", "No Realizada", "Archivada")))
+    rows = q.order_by(CSAppointment.fecha_inicio.desc().nullslast()).all()
+    return jsonify([{
+        "id": str(a.id), "propiedad": a.propiedad, "direccion": a.direccion,
+        "zona": a.zona, "tecnico": a.tecnico,
+        "fecha_inicio": a.fecha_inicio.isoformat() if a.fecha_inicio else None,
+        "fecha_terminacion": a.fecha_terminacion.isoformat() if a.fecha_terminacion else None,
+        "estatus": a.estatus, "titulo_servicio": a.titulo_servicio,
+        "cantidad": a.cantidad,
+    } for a in rows])
+
+
+@cs_bp.route("/api/cuentas/<uuid:account_id>/citas", methods=["POST"])
+def crear_cita(account_id):
+    """KAM agrega una cita a la plantilla activa. Default estatus 'Agendada'."""
+    account = db.session.get(CSAccount, account_id)
+    if not account:
+        return jsonify({"error": "Cuenta no encontrada"}), 404
+    if not _can_edit_account(account):
+        return jsonify({"error": "Sin permisos"}), 403
+
+    data = request.get_json() or {}
+    cita = CSAppointment(
+        account_id=account.id,
+        propiedad=data.get("propiedad", ""),
+        direccion=data.get("direccion", ""),
+        zona=data.get("zona", ""),
+        tecnico=data.get("tecnico", ""),
+        fecha_inicio=_parse_dt_iso(data.get("fecha_inicio")),
+        fecha_terminacion=_parse_dt_iso(data.get("fecha_terminacion")),
+        estatus=data.get("estatus") or "Agendada",
+        titulo_servicio=data.get("titulo_servicio", ""),
+        cantidad=int(data.get("cantidad") or 1),
+    )
+    db.session.add(cita)
+    db.session.commit()
+    return jsonify({"ok": True, "id": str(cita.id), "estatus": cita.estatus}), 201
+
+
+@cs_bp.route("/api/citas/<uuid:cita_id>", methods=["PATCH"])
+def actualizar_cita(cita_id):
+    """KAM edita una cita. Permite cambiar cualquier campo, incluido estatus."""
+    cita = db.session.get(CSAppointment, cita_id)
+    if not cita:
+        return jsonify({"error": "Cita no encontrada"}), 404
+    account = db.session.get(CSAccount, cita.account_id)
+    if not _can_edit_account(account):
+        return jsonify({"error": "Sin permisos"}), 403
+
+    data = request.get_json() or {}
+    for fld in ("propiedad", "direccion", "zona", "tecnico", "estatus", "titulo_servicio"):
+        if fld in data:
+            setattr(cita, fld, data[fld] or "")
+    if "fecha_inicio" in data:
+        cita.fecha_inicio = _parse_dt_iso(data["fecha_inicio"])
+    if "fecha_terminacion" in data:
+        cita.fecha_terminacion = _parse_dt_iso(data["fecha_terminacion"])
+    if "cantidad" in data:
+        try:
+            cita.cantidad = int(data["cantidad"])
+        except (ValueError, TypeError):
+            pass
+    db.session.commit()
+    return jsonify({"ok": True, "id": str(cita.id), "estatus": cita.estatus})
+
+
+@cs_bp.route("/api/citas/<uuid:cita_id>/cancelar", methods=["POST"])
+def cancelar_cita(cita_id):
+    """Soft-delete: marca estatus='Cancelada' en lugar de borrar.
+    Preserva el historial — útil para auditoría."""
+    cita = db.session.get(CSAppointment, cita_id)
+    if not cita:
+        return jsonify({"error": "Cita no encontrada"}), 404
+    account = db.session.get(CSAccount, cita.account_id)
+    if not _can_edit_account(account):
+        return jsonify({"error": "Sin permisos"}), 403
+    cita.estatus = "Cancelada"
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@cs_bp.route("/api/citas/<uuid:cita_id>", methods=["DELETE"])
+def eliminar_cita(cita_id):
+    """Hard delete: solo super_admin / director. KAMs usan /cancelar."""
+    if _is_kam():
+        return jsonify({"error": "KAMs usan /cancelar (soft delete)"}), 403
+    cita = db.session.get(CSAppointment, cita_id)
+    if not cita:
+        return jsonify({"error": "Cita no encontrada"}), 404
+    db.session.delete(cita)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
 @cs_bp.route("/cargar-datos/limpiar/<tipo>", methods=["POST"])
 def limpiar_datos(tipo):
     """Elimina todos los registros de un tipo para recargar."""

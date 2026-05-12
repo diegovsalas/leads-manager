@@ -440,13 +440,19 @@
         </div>
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div class="flex justify-between items-center mb-4">
-                <h2 class="text-sm font-semibold text-gray-700">Citas de Servicio</h2>
-                <span class="text-xs text-gray-500">{{ appointments|length }} registros</span>
+                <h2 class="text-sm font-semibold text-gray-700">Citas de Servicio · Plantilla activa</h2>
+                <div class="flex items-center gap-3">
+                    <span class="text-xs text-gray-500">{{ appointments|length }} registros</span>
+                    <button onclick="abrirAgregarCita()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs rounded-lg font-medium">+ Agregar cita</button>
+                </div>
             </div>
 
-            <!-- Filtro rápido por estatus -->
-            <div x-data="{ filtro: 'todos' }" class="mb-4">
+            <!-- Filtro rápido por estatus — default 'activas' (oculta Canceladas/No Realizadas) -->
+            <div x-data="{ filtro: 'activas' }" class="mb-4">
                 <div class="flex flex-wrap gap-2 mb-4">
+                    <button @click="filtro = 'activas'"
+                            :class="filtro === 'activas' ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-600'"
+                            class="px-3 py-1 rounded-full text-xs font-medium">★ Activas</button>
                     <button @click="filtro = 'todos'"
                             :class="filtro === 'todos' ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-600'"
                             class="px-3 py-1 rounded-full text-xs font-medium">Todos</button>
@@ -467,12 +473,14 @@
                                 <th class="pb-2">Servicio</th>
                                 <th class="pb-2">F. Inicio</th>
                                 <th class="pb-2 text-center">Estatus</th>
+                                <th class="pb-2 text-right">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for apt in appointments %}
+                            {% set is_inactiva = apt.estatus in ('Cancelada','No Realizada','Archivada') %}
                             <tr class="border-b last:border-0 hover:bg-gray-50 text-xs"
-                                x-show="filtro === 'todos' || filtro === '{{ apt.estatus }}'">
+                                x-show="filtro === 'todos' || filtro === '{{ apt.estatus }}' || (filtro === 'activas' && {{ 'false' if is_inactiva else 'true' }})">
                                 <td class="py-2 max-w-xs truncate" title="{{ apt.propiedad }}">{{ apt.propiedad[:50] }}</td>
                                 <td class="py-2 text-gray-500">{{ apt.zona[:20] if apt.zona else '-' }}</td>
                                 <td class="py-2 text-gray-600">{{ apt.tecnico[:20] if apt.tecnico and apt.tecnico != 'nan' else '-' }}</td>
@@ -487,6 +495,16 @@
                                         {% else %}bg-gray-100 text-gray-600{% endif %}">
                                         {{ apt.estatus }}
                                     </span>
+                                </td>
+                                <td class="py-2 text-right whitespace-nowrap">
+                                    {% if not is_inactiva %}
+                                    <button onclick="editarCita('{{ apt.id }}',{{ {'propiedad': apt.propiedad or '','direccion': apt.direccion or '','zona': apt.zona or '','tecnico': apt.tecnico or '','estatus': apt.estatus or '','titulo_servicio': apt.titulo_servicio or '','cantidad': apt.cantidad or 1,'fecha_inicio': apt.fecha_inicio.strftime('%Y-%m-%dT%H:%M') if apt.fecha_inicio else '','fecha_terminacion': apt.fecha_terminacion.strftime('%Y-%m-%dT%H:%M') if apt.fecha_terminacion else ''}|tojson|forceescape }})"
+                                            class="text-brand-600 hover:underline">Editar</button>
+                                    <button onclick="cancelarCita('{{ apt.id }}')"
+                                            class="text-red-600 hover:underline ml-2">Cancelar</button>
+                                    {% else %}
+                                    <span class="text-gray-300 text-xs">—</span>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -1267,6 +1285,147 @@
         </form>
     </div>
 </div>
+
+<!-- Modal: Agregar / editar cita (plantilla activa) -->
+<div id="modal-cita" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-800" id="modal-cita-title">Agregar cita</h3>
+            <button onclick="cerrarCitaModal()" class="text-gray-400 hover:text-gray-600">✕</button>
+        </div>
+        <input type="hidden" id="cita-id"/>
+        <div class="space-y-3">
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Propiedad / Sucursal</label>
+                <input id="cita-propiedad" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="ej: Walmart Mitras"/>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Servicio</label>
+                <input id="cita-servicio" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="ej: Fumigación trimestral"/>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Fecha inicio</label>
+                    <input id="cita-fecha-inicio" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"/>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Fecha terminación</label>
+                    <input id="cita-fecha-fin" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"/>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Zona</label>
+                    <input id="cita-zona" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"/>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Técnico</label>
+                    <input id="cita-tecnico" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"/>
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Dirección</label>
+                <input id="cita-direccion" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"/>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Estatus</label>
+                    <select id="cita-estatus" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                        <option value="Agendada">Agendada</option>
+                        <option value="Técnico Asignado">Técnico Asignado</option>
+                        <option value="Terminada">Terminada</option>
+                        <option value="Cancelada">Cancelada</option>
+                        <option value="No Realizada">No Realizada</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Cantidad</label>
+                    <input id="cita-cantidad" type="number" min="1" value="1" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"/>
+                </div>
+            </div>
+        </div>
+        <div class="flex justify-end gap-2 mt-5">
+            <button onclick="cerrarCitaModal()" class="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Cancelar</button>
+            <button onclick="guardarCita()" class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700" id="cita-save-btn">Guardar</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const _ACCOUNT_ID = "{{ account.id }}";
+
+function abrirAgregarCita(){
+    document.getElementById('modal-cita-title').textContent='Agregar cita';
+    document.getElementById('cita-id').value='';
+    document.getElementById('cita-propiedad').value='';
+    document.getElementById('cita-servicio').value='';
+    document.getElementById('cita-fecha-inicio').value='';
+    document.getElementById('cita-fecha-fin').value='';
+    document.getElementById('cita-zona').value='';
+    document.getElementById('cita-tecnico').value='';
+    document.getElementById('cita-direccion').value='';
+    document.getElementById('cita-estatus').value='Agendada';
+    document.getElementById('cita-cantidad').value='1';
+    const m=document.getElementById('modal-cita');
+    m.classList.remove('hidden');m.classList.add('flex');
+    setTimeout(()=>document.getElementById('cita-propiedad').focus(),50);
+}
+
+function editarCita(citaId, data){
+    document.getElementById('modal-cita-title').textContent='Editar cita';
+    document.getElementById('cita-id').value=citaId;
+    document.getElementById('cita-propiedad').value=data.propiedad||'';
+    document.getElementById('cita-servicio').value=data.titulo_servicio||'';
+    document.getElementById('cita-fecha-inicio').value=data.fecha_inicio||'';
+    document.getElementById('cita-fecha-fin').value=data.fecha_terminacion||'';
+    document.getElementById('cita-zona').value=data.zona||'';
+    document.getElementById('cita-tecnico').value=data.tecnico||'';
+    document.getElementById('cita-direccion').value=data.direccion||'';
+    document.getElementById('cita-estatus').value=data.estatus||'Agendada';
+    document.getElementById('cita-cantidad').value=data.cantidad||1;
+    const m=document.getElementById('modal-cita');
+    m.classList.remove('hidden');m.classList.add('flex');
+}
+
+function cerrarCitaModal(){
+    const m=document.getElementById('modal-cita');
+    m.classList.add('hidden');m.classList.remove('flex');
+}
+
+async function guardarCita(){
+    const id=document.getElementById('cita-id').value;
+    const body={
+        propiedad:document.getElementById('cita-propiedad').value.trim(),
+        titulo_servicio:document.getElementById('cita-servicio').value.trim(),
+        fecha_inicio:document.getElementById('cita-fecha-inicio').value||null,
+        fecha_terminacion:document.getElementById('cita-fecha-fin').value||null,
+        zona:document.getElementById('cita-zona').value.trim(),
+        tecnico:document.getElementById('cita-tecnico').value.trim(),
+        direccion:document.getElementById('cita-direccion').value.trim(),
+        estatus:document.getElementById('cita-estatus').value,
+        cantidad:parseInt(document.getElementById('cita-cantidad').value)||1,
+    };
+    if(!body.propiedad){alert('Propiedad es requerida');return;}
+    const btn=document.getElementById('cita-save-btn');btn.disabled=true;btn.textContent='Guardando...';
+    try{
+        const url=id?`/cs/api/citas/${id}`:`/cs/api/cuentas/${_ACCOUNT_ID}/citas`;
+        const method=id?'PATCH':'POST';
+        const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        if(!r.ok){const e=await r.json();throw new Error(e.error||'Error');}
+        cerrarCitaModal();location.reload();
+    }catch(e){alert('Error: '+e.message);}
+    finally{btn.disabled=false;btn.textContent='Guardar';}
+}
+
+async function cancelarCita(citaId){
+    if(!confirm('¿Marcar esta cita como Cancelada? Se queda en historial pero sale de la plantilla activa.'))return;
+    try{
+        const r=await fetch(`/cs/api/citas/${citaId}/cancelar`,{method:'POST'});
+        if(!r.ok){const e=await r.json();throw new Error(e.error||'Error');}
+        location.reload();
+    }catch(e){alert('Error: '+e.message);}
+}
+</script>
 
 {% endblock %}
 
