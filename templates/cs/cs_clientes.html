@@ -117,9 +117,9 @@
                                 onclick="openEditModal('{{ acc.id }}','{{ acc.nombre }}','{{ acc.logo_url or "" }}','{{ acc.giro }}','{{ acc.tier }}','{{ acc.kam_id }}','{{ acc.client_id or "" }}','{{ acc.mrr|float }}','{{ acc.sucursales or 0 }}','{{ acc.unidades_contratadas or "" }}')"
                                 title="Editar">{{ icon('activity', 13) }}</button>
                         {% endif %}
-                        {% if user_rol|lower|replace(' ','_') == 'super_admin' %}
+                        {% if user_rol and user_rol|lower|replace(' ','_') == 'super_admin' %}
                         <button class="btn ghost" style="padding:4px 6px;height:auto;color:var(--red,#c4412b);"
-                                onclick="eliminarCuenta('{{ acc.id }}','{{ acc.nombre|replace('\\'','\\\\\\'') }}')"
+                                onclick='eliminarCuenta("{{ acc.id }}", {{ acc.nombre|tojson }})'
                                 title="Eliminar cuenta">✕</button>
                         {% endif %}
                     </td>
