@@ -375,6 +375,13 @@ def editar_cliente(account_id):
     acc = db.session.get(CSAccount, account_id)
     if not acc:
         return "No encontrado", 404
+    # nombre se puede editar también si viene
+    if "nombre" in request.form:
+        new_nombre = request.form.get("nombre", "").strip()
+        if new_nombre and new_nombre != acc.nombre:
+            existing = CSAccount.query.filter(CSAccount.nombre == new_nombre, CSAccount.id != acc.id).first()
+            if not existing:
+                acc.nombre = new_nombre
     if "client_id" in request.form:
         new_cid = request.form.get("client_id", "").strip().upper()
         if new_cid and new_cid != acc.client_id:
@@ -392,7 +399,100 @@ def editar_cliente(account_id):
         acc.giro = ",".join(g.strip() for g in giros if g.strip())
     if "tier" in request.form:
         acc.tier = request.form.get("tier", "").strip()
+    if "mrr" in request.form:
+        try:
+            acc.mrr = float(request.form.get("mrr") or 0)
+        except (ValueError, TypeError):
+            pass
+    if "sucursales" in request.form:
+        try:
+            acc.sucursales = int(request.form.get("sucursales") or 0)
+        except (ValueError, TypeError):
+            pass
+    if "unidades_contratadas" in request.form:
+        unidades = request.form.getlist("unidades_contratadas")
+        acc.unidades_contratadas = ",".join(u.strip() for u in unidades if u.strip())
     db.session.commit()
+    return redirect(url_for("cs.clientes"))
+
+
+@cs_bp.route("/clientes/crear", methods=["POST"])
+def crear_cliente():
+    """Crear nueva CSAccount. Solo admin/director (no KAM)."""
+    if _is_kam():
+        return "Sin permisos — los KAMs no crean cuentas", 403
+    nombre = (request.form.get("nombre") or "").strip()
+    if not nombre:
+        return "nombre es requerido", 400
+    if CSAccount.query.filter(CSAccount.nombre == nombre).first():
+        return "Ya existe una cuenta con ese nombre", 400
+    kam_id = request.form.get("kam_id", "").strip()
+    if not kam_id:
+        return "kam_id es requerido", 400
+    # client_id auto-asignado por before_insert listener si viene vacío
+    client_id = (request.form.get("client_id") or "").strip().upper() or None
+    if client_id:
+        existing = CSAccount.query.filter(CSAccount.client_id == client_id).first()
+        if existing:
+            return f"client_id {client_id} ya está en uso", 400
+
+    try:
+        mrr = float(request.form.get("mrr") or 0)
+    except (ValueError, TypeError):
+        mrr = 0
+    try:
+        sucursales = int(request.form.get("sucursales") or 0)
+    except (ValueError, TypeError):
+        sucursales = 0
+
+    giros = request.form.getlist("giro")
+    unidades = request.form.getlist("unidades_contratadas")
+
+    acc = CSAccount(
+        nombre=nombre, kam_id=kam_id,
+        client_id=client_id,  # None → auto AX-XXXX por listener
+        logo_url=request.form.get("logo_url", "").strip(),
+        tier=request.form.get("tier", "").strip(),
+        giro=",".join(g.strip() for g in giros if g.strip()),
+        unidades_contratadas=",".join(u.strip() for u in unidades if u.strip()),
+        mrr=mrr, sucursales=sucursales,
+        es_cuenta_nueva=True,  # marca onboarding
+    )
+    db.session.add(acc)
+    db.session.commit()
+    return redirect(url_for("cs.clientes"))
+
+
+@cs_bp.route("/clientes/<uuid:account_id>/eliminar", methods=["POST"])
+def eliminar_cliente(account_id):
+    """Elimina una CSAccount y todos sus registros relacionados.
+    SOLO super_admin (no KAM, no director — es operación destructiva)."""
+    rol = session.get("user_rol", "").lower().replace(" ", "_")
+    if rol != "super_admin":
+        return "Sin permisos — solo super_admin elimina cuentas", 403
+    acc = db.session.get(CSAccount, account_id)
+    if not acc:
+        return "No encontrada", 404
+    # Cascade manual: borrar registros relacionados primero
+    from models import (
+        CSInvoice as _Inv, CSAppointment as _Apt, CSNote as _Note,
+        CSTask as _Task, CSContacto as _Cnt, CSEntregable as _Ent,
+        CSEncuesta as _Enc, CSIncidencia as _Inc, CSPropiedad as _Prop,
+        CSOnboardingAccount as _On, CSOpportunity as _Opp,
+    )
+    nombre_borrado = acc.nombre
+    for model_cls in (_Inv, _Apt, _Note, _Task, _Cnt, _Ent, _Enc, _Inc, _Prop, _On, _Opp):
+        try:
+            model_cls.query.filter_by(account_id=acc.id).delete(synchronize_session=False)
+        except Exception:
+            pass
+    db.session.delete(acc)
+    db.session.commit()
+    from actividad import log_actividad
+    try:
+        log_actividad("eliminar", "cs_account", acc.id, f"Cuenta CS eliminada: {nombre_borrado}")
+    except Exception:
+        pass
     return redirect(url_for("cs.clientes"))
 
 
