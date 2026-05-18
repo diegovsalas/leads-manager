@@ -32,3 +32,23 @@ CREATE INDEX IF NOT EXISTS idx_leads_account_id          ON leads(account_id);
 CREATE INDEX IF NOT EXISTS idx_leads_contact_id          ON leads(contact_id);
 CREATE INDEX IF NOT EXISTS idx_oportunidades_account_id  ON oportunidades(account_id);
 CREATE INDEX IF NOT EXISTS idx_oportunidades_contact_id  ON oportunidades(contact_id);
+
+-- Zoho Analytics ETL: clave única para upsert idempotente de citas.
+-- El script zoho_appointments_etl.py usa esta columna como onConflict.
+ALTER TABLE cs_appointments
+    ADD COLUMN IF NOT EXISTS zoho_appointment_id VARCHAR(64);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_cs_appointments_zoho_id
+    ON cs_appointments(zoho_appointment_id)
+    WHERE zoho_appointment_id IS NOT NULL;
+
+-- customer_rfcs: el RFC NO debe ser único — múltiples clientes Savio
+-- comparten el RFC genérico "XAXX010101000" (público en general MX).
+-- Lo único que sí debe ser único es savio_customer_id.
+-- Antes de cambiar el constraint, limpiamos duplicados existentes por savio_customer_id.
+DELETE FROM customer_rfcs a USING customer_rfcs b
+    WHERE a.id > b.id AND a.savio_customer_id = b.savio_customer_id;
+ALTER TABLE customer_rfcs DROP CONSTRAINT IF EXISTS customer_rfcs_rfc_key;
+DROP INDEX IF EXISTS ix_customer_rfcs_rfc;  -- era unique, lo reemplazamos
+CREATE INDEX IF NOT EXISTS ix_customer_rfcs_rfc ON customer_rfcs(rfc);
+ALTER TABLE customer_rfcs
+    ADD CONSTRAINT customer_rfcs_savio_customer_id_unique UNIQUE (savio_customer_id);

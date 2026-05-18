@@ -148,7 +148,11 @@ def derive_customer_units():
 def auto_populate_masters() -> int:
     """Crea CustomerMaster + CustomerRfc para SavioCustomers no mapeados.
     Si el RFC ya existe en customer_rfcs, los agrega al mismo master.
-    Devuelve cuántos masters nuevos se crearon."""
+    Devuelve cuántos masters nuevos se crearon.
+
+    Defensivo: cada fila se inserta en su propio savepoint para que un
+    UniqueViolation (ej. RFC genérico "XAXX010101000" compartido por muchos
+    clientes Savio) no aborte el batch entero."""
     unmapped = (
         db.session.query(SavioCustomer)
         .filter(SavioCustomer.tax_id.isnot(None), SavioCustomer.tax_id != "")
@@ -160,29 +164,38 @@ def auto_populate_masters() -> int:
         .all()
     )
     created = 0
+    skipped = 0
     for c in unmapped:
-        existing = CustomerRfc.query.filter_by(rfc=c.tax_id).first()
-        if existing:
-            new_rfc = CustomerRfc(
-                master_id=existing.master_id,
-                rfc=c.tax_id,
-                legal_name=c.legal_name or "",
-                savio_customer_id=c.customer_id,
-            )
-            db.session.add(new_rfc)
-        else:
-            master = CustomerMaster(master_name=c.name or c.legal_name or "")
-            db.session.add(master)
-            db.session.flush()
-            new_rfc = CustomerRfc(
-                master_id=master.id,
-                rfc=c.tax_id,
-                legal_name=c.legal_name or "",
-                savio_customer_id=c.customer_id,
-            )
-            db.session.add(new_rfc)
-            created += 1
+        try:
+            with db.session.begin_nested():  # savepoint por fila
+                existing = CustomerRfc.query.filter_by(rfc=c.tax_id).first()
+                if existing:
+                    new_rfc = CustomerRfc(
+                        master_id=existing.master_id,
+                        rfc=c.tax_id,
+                        legal_name=c.legal_name or "",
+                        savio_customer_id=c.customer_id,
+                    )
+                    db.session.add(new_rfc)
+                else:
+                    master = CustomerMaster(master_name=c.name or c.legal_name or "")
+                    db.session.add(master)
+                    db.session.flush()
+                    new_rfc = CustomerRfc(
+                        master_id=master.id,
+                        rfc=c.tax_id,
+                        legal_name=c.legal_name or "",
+                        savio_customer_id=c.customer_id,
+                    )
+                    db.session.add(new_rfc)
+                    created += 1
+        except Exception:
+            skipped += 1
+            # savepoint hace rollback solo de esta fila — la sesión sigue viva
     db.session.commit()
+    if skipped:
+        import logging as _logging
+        _logging.warning("[savio] auto_populate_masters: %d filas saltadas por duplicados", skipped)
     return created
 
 

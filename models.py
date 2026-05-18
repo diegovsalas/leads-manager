@@ -661,6 +661,7 @@ class CSAppointment(db.Model):
     estatus = db.Column(db.String(50), default="")
     titulo_servicio = db.Column(db.String(200), default="")
     cantidad = db.Column(db.Integer, default=1)
+    zoho_appointment_id = db.Column(db.String(64), nullable=True, unique=False, index=True)
 
 
 class CSNote(db.Model):
@@ -1024,9 +1025,11 @@ class CustomerRfc(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     master_id = db.Column(db.Integer, db.ForeignKey("customer_master.id", ondelete="CASCADE"), nullable=False, index=True)
-    rfc = db.Column(db.String(20), unique=True, nullable=False, index=True)
+    # rfc NO es único: múltiples savio_customers comparten "XAXX010101000" (público en general MX)
+    rfc = db.Column(db.String(20), nullable=False, index=True)
     legal_name = db.Column(db.String(255), nullable=True)
-    savio_customer_id = db.Column(db.String(64), nullable=True, index=True)
+    # savio_customer_id sí es único: cada cliente Savio sólo aparece una vez
+    savio_customer_id = db.Column(db.String(64), nullable=True, unique=True, index=True)
 
     def to_dict(self):
         return {
