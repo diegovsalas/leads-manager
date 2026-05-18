@@ -1134,6 +1134,24 @@ def _parse_date_cobros(val):
     return None
 
 
+# Cache de presencia de la columna zoho_appointment_id en cs_appointments.
+# Evita un round-trip a Supabase en cada carga de CSV.
+_HAS_ZOHO_APPT_COL: bool | None = None
+
+
+def _has_zoho_appointment_col() -> bool:
+    global _HAS_ZOHO_APPT_COL
+    if _HAS_ZOHO_APPT_COL is not None:
+        return _HAS_ZOHO_APPT_COL
+    try:
+        from sqlalchemy import inspect as _sa_inspect
+        cols = {c["name"] for c in _sa_inspect(db.engine).get_columns("cs_appointments")}
+        _HAS_ZOHO_APPT_COL = "zoho_appointment_id" in cols
+    except Exception:
+        _HAS_ZOHO_APPT_COL = False
+    return _HAS_ZOHO_APPT_COL
+
+
 def _parse_datetime_citas(val):
     """Parsea '06/04/2026 17:41:21'."""
     if not val or val == "nan" or str(val).strip() == "":
@@ -1300,7 +1318,6 @@ def cargar_citas():
       plano (posibles duplicados) y avisa al usuario en el resultado.
     """
     import logging as _logging
-    from sqlalchemy import inspect as _sa_inspect
     from sqlalchemy.dialects.postgresql import insert as pg_insert
 
     file = request.files.get("archivo")
@@ -1320,9 +1337,7 @@ def cargar_citas():
     reader = csv.DictReader(io.StringIO(content))
     columnas_detectadas = reader.fieldnames or []
 
-    has_zoho_col = "zoho_appointment_id" in {
-        c["name"] for c in _sa_inspect(db.engine).get_columns("cs_appointments")
-    }
+    has_zoho_col = _has_zoho_appointment_col()
 
     insertados = 0
     actualizados = 0
