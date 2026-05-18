@@ -1318,7 +1318,7 @@ def cargar_citas():
       plano (posibles duplicados) y avisa al usuario en el resultado.
     """
     import logging as _logging
-    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from sqlalchemy import text as _text
 
     file = request.files.get("archivo")
     if not file or not (file.filename or "").lower().endswith(".csv"):
@@ -1340,86 +1340,105 @@ def cargar_citas():
     has_zoho_col = _has_zoho_appointment_col()
 
     insertados = 0
-    actualizados = 0
     no_match = 0
     errores = 0
     samples_no_match: list[str] = []
     samples_error: list[str] = []
     batch: list[dict] = []
+    abort_upsert: bool = False  # si el primer batch falla con error estructural, bajamos a INSERT plano
 
-    def _flush(buf: list[dict]) -> tuple[int, int, int]:
-        """Upsert por zoho_appointment_id si existe la columna y la fila trae ID.
-        Si no, INSERT plano. Fallback fila por fila si una rompe."""
+    # SQL raw para esquivar problemas con SQLAlchemy Table.__table__ + .values(list).
+    _SQL_UPSERT = _text("""
+        INSERT INTO cs_appointments
+            (account_id, propiedad, direccion, zona, tecnico,
+             fecha_inicio, fecha_terminacion, estatus, titulo_servicio,
+             cantidad, zoho_appointment_id)
+        VALUES
+            (:account_id, :propiedad, :direccion, :zona, :tecnico,
+             :fecha_inicio, :fecha_terminacion, :estatus, :titulo_servicio,
+             :cantidad, :zoho_appointment_id)
+        ON CONFLICT (zoho_appointment_id) DO UPDATE SET
+            account_id = EXCLUDED.account_id,
+            propiedad = EXCLUDED.propiedad,
+            direccion = EXCLUDED.direccion,
+            zona = EXCLUDED.zona,
+            tecnico = EXCLUDED.tecnico,
+            fecha_inicio = EXCLUDED.fecha_inicio,
+            fecha_terminacion = EXCLUDED.fecha_terminacion,
+            estatus = EXCLUDED.estatus,
+            titulo_servicio = EXCLUDED.titulo_servicio,
+            cantidad = EXCLUDED.cantidad
+    """)
+    _SQL_INSERT = _text("""
+        INSERT INTO cs_appointments
+            (account_id, propiedad, direccion, zona, tecnico,
+             fecha_inicio, fecha_terminacion, estatus, titulo_servicio, cantidad)
+        VALUES
+            (:account_id, :propiedad, :direccion, :zona, :tecnico,
+             :fecha_inicio, :fecha_terminacion, :estatus, :titulo_servicio, :cantidad)
+    """)
+
+    def _flush(buf: list[dict]) -> tuple[int, int]:
+        """Devuelve (ok, fail). Usa upsert SQL raw para filas con zoho_appointment_id,
+        INSERT plano para el resto. Si el primer batch upsert falla con error estructural
+        (columna no existe), bajamos `abort_upsert=True` y todo va a INSERT plano."""
+        nonlocal abort_upsert
         if not buf:
-            return 0, 0, 0
+            return 0, 0
 
-        rows_con_id = [r for r in buf if has_zoho_col and r.get("zoho_appointment_id")]
-        rows_sin_id = [r for r in buf if not has_zoho_col or not r.get("zoho_appointment_id")]
-        ok_ins, ok_upd, fail = 0, 0, 0
+        if abort_upsert or not has_zoho_col:
+            rows_con_id = []
+            rows_sin_id = [{k: v for k, v in r.items() if k != "zoho_appointment_id"} for r in buf]
+        else:
+            rows_con_id = [r for r in buf if r.get("zoho_appointment_id")]
+            rows_sin_id = [{k: v for k, v in r.items() if k != "zoho_appointment_id"}
+                            for r in buf if not r.get("zoho_appointment_id")]
+        ok, fail = 0, 0
 
-        # Upsert (idempotente)
+        # Upsert (executemany)
         if rows_con_id:
             try:
-                stmt = pg_insert(CSAppointment.__table__).values(rows_con_id)
-                update_cols = {
-                    c: stmt.excluded[c] for c in (
-                        "account_id", "propiedad", "direccion", "zona", "tecnico",
-                        "fecha_inicio", "fecha_terminacion", "estatus",
-                        "titulo_servicio", "cantidad",
-                    )
-                }
-                stmt = stmt.on_conflict_do_update(
-                    index_elements=["zoho_appointment_id"], set_=update_cols,
-                )
-                db.session.execute(stmt)
+                db.session.execute(_SQL_UPSERT, rows_con_id)
                 db.session.commit()
-                ok_ins += len(rows_con_id)
+                ok += len(rows_con_id)
             except Exception as e:
                 db.session.rollback()
-                _logging.warning("[CITAS] upsert falló (%s) — fallback fila por fila", e)
-                for r in rows_con_id:
-                    try:
-                        stmt_one = pg_insert(CSAppointment.__table__).values([r])
-                        update_cols = {
-                            c: stmt_one.excluded[c] for c in (
-                                "account_id", "propiedad", "direccion", "zona", "tecnico",
-                                "fecha_inicio", "fecha_terminacion", "estatus",
-                                "titulo_servicio", "cantidad",
-                            )
-                        }
-                        stmt_one = stmt_one.on_conflict_do_update(
-                            index_elements=["zoho_appointment_id"], set_=update_cols,
-                        )
-                        db.session.execute(stmt_one)
-                        db.session.commit()
-                        ok_ins += 1
-                    except Exception as e2:
-                        db.session.rollback()
-                        fail += 1
-                        if len(samples_error) < 3:
-                            samples_error.append(f"{type(e2).__name__}: {str(e2)[:120]}")
+                msg = str(e)[:200]
+                _logging.warning("[CITAS] upsert SQL falló — abortando upsert: %s", msg)
+                samples_error.append(f"upsert: {msg}")
+                abort_upsert = True
+                # Reintentar este batch como INSERT plano
+                fallback_rows = [{k: v for k, v in r.items() if k != "zoho_appointment_id"} for r in rows_con_id]
+                try:
+                    db.session.execute(_SQL_INSERT, fallback_rows)
+                    db.session.commit()
+                    ok += len(fallback_rows)
+                except Exception as e2:
+                    db.session.rollback()
+                    fail += len(fallback_rows)
+                    samples_error.append(f"insert fallback: {str(e2)[:120]}")
 
-        # INSERT plano para filas sin ID o si no hay columna
+        # INSERT plano
         if rows_sin_id:
             try:
-                db.session.execute(CSAppointment.__table__.insert(), rows_sin_id)
+                db.session.execute(_SQL_INSERT, rows_sin_id)
                 db.session.commit()
-                ok_ins += len(rows_sin_id)
+                ok += len(rows_sin_id)
             except Exception as e:
                 db.session.rollback()
-                _logging.warning("[CITAS] bulk insert falló (%s) — fallback fila por fila", e)
+                _logging.warning("[CITAS] insert bulk falló — fila por fila: %s", str(e)[:150])
                 for r in rows_sin_id:
                     try:
-                        db.session.execute(CSAppointment.__table__.insert(), [r])
+                        db.session.execute(_SQL_INSERT, r)
                         db.session.commit()
-                        ok_ins += 1
+                        ok += 1
                     except Exception as e2:
                         db.session.rollback()
                         fail += 1
                         if len(samples_error) < 3:
-                            samples_error.append(f"{type(e2).__name__}: {str(e2)[:120]}")
+                            samples_error.append(f"row: {str(e2)[:120]}")
 
-        return ok_ins, ok_upd, fail
+        return ok, fail
 
     for row in reader:
         visita_id = (row.get("ID") or "").strip()  # ID de la visita, NO del cliente
@@ -1449,9 +1468,8 @@ def cargar_citas():
             batch.append(r_dict)
 
             if len(batch) >= 500:
-                ins, upd, fail = _flush(batch)
+                ins, fail = _flush(batch)
                 insertados += ins
-                actualizados += upd
                 errores += fail
                 batch = []
         except (ValueError, TypeError) as e:
@@ -1460,9 +1478,8 @@ def cargar_citas():
                 samples_error.append(f"row parse: {str(e)[:120]}")
 
     if batch:
-        ins, upd, fail = _flush(batch)
+        ins, fail = _flush(batch)
         insertados += ins
-        actualizados += upd
         errores += fail
 
     debug_parts = [f"columnas detectadas: {columnas_detectadas}"]
