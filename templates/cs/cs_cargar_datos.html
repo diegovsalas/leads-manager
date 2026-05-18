@@ -10,6 +10,18 @@
     </div>
 </div>
 
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div style="margin-bottom:14px;">
+    {% for cat, msg in messages %}
+    <div class="card" style="padding:12px 16px;border-left:4px solid {% if cat == 'error' %}var(--red,#c4412b){% else %}var(--blue,#2eaadc){% endif %};font-size:13px;">
+        <strong>{{ '⚠ Error' if cat == 'error' else 'ℹ' }}:</strong> {{ msg }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endwith %}
+
 <!-- Estado actual -->
 <div class="grid g-2 mb-4">
     <div class="kpi">
@@ -71,12 +83,16 @@
             <button type="submit" class="btn primary" style="width:100%;margin-top:12px;justify-content:center">Cargar Citas</button>
         </form>
         <div style="margin-top:12px;padding:10px;background:var(--bg-sunken);border-radius:7px">
-            <div style="font-size:11px;font-weight:600;color:var(--ink-2);margin-bottom:6px">Columnas esperadas:</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                <div style="font-size:11px;font-weight:600;color:var(--ink-2)">Columnas esperadas:</div>
+                <a href="/cs/cargar-datos/plantilla-citas" download class="btn ghost" style="font-size:11px;padding:3px 8px;display:inline-flex;align-items:center;gap:4px">{{ icon('download', 13) }} Plantilla CSV</a>
+            </div>
             <div style="display:flex;flex-wrap:wrap;gap:3px">
-                {% for col in ['ID','Cliente','Propiedad','Zona','Tecnico','Fecha de Inicio','Estatus','Titulo Servicio'] %}
+                {% for col in ['ID','Cliente','Propiedad','Dirección','Zona','Tecnico','Fecha de Inicio','Fecha de Terminación','Estatus','Titulo Servicio','Cantidad'] %}
                 <span class="tag">{{ col }}</span>
                 {% endfor %}
             </div>
+            <div class="muted" style="font-size:10px;margin-top:6px">Fechas: <code>dd/mm/yyyy hh:mm:ss</code> (o solo <code>dd/mm/yyyy</code>). UTF-8. Match por <code>ID</code> (preferido) o <code>Cliente</code>.</div>
         </div>
     </div>
 </div>

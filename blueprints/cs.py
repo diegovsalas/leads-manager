@@ -1189,11 +1189,25 @@ def plantilla_cobros():
     )
 
 
+@cs_bp.route("/cargar-datos/plantilla-citas")
+def plantilla_citas():
+    """Descarga la plantilla CSV para citas/operación."""
+    headers = "ID,Cliente,Propiedad,Dirección,Zona,Tecnico,Fecha de Inicio,Fecha de Terminación,Estatus,Titulo Servicio,Cantidad\n"
+    ejemplo = "AX-0001,Walmart Mexico,Sucursal Centro,Av. Reforma 100,CDMX-Centro,Juan Perez,06/04/2026 09:00:00,06/04/2026 11:00:00,Terminada,Servicio Aromatex,1\n"
+    return send_file(
+        io.BytesIO((headers + ejemplo).encode("utf-8-sig")),
+        as_attachment=True,
+        download_name="plantilla_citas.csv",
+        mimetype="text/csv",
+    )
+
+
 @cs_bp.route("/cargar-datos/cobros", methods=["POST"])
 def cargar_cobros():
     """Procesa CSV de cobros/facturas."""
     file = request.files.get("archivo")
-    if not file or not file.filename.endswith(".csv"):
+    if not file or not (file.filename or "").lower().endswith(".csv"):
+        flash("Subí un archivo .csv válido (cualquier mayúscula/minúscula).", "error")
         return redirect(url_for("cs.cargar_datos"))
 
     # Build account name + client_id maps
@@ -1275,58 +1289,108 @@ def cargar_cobros():
 @cs_bp.route("/cargar-datos/citas", methods=["POST"])
 def cargar_citas():
     """Procesa CSV de citas/operación."""
+    import logging as _logging
     file = request.files.get("archivo")
-    if not file or not file.filename.endswith(".csv"):
+    if not file or not (file.filename or "").lower().endswith(".csv"):
+        flash("Subí un archivo .csv válido (cualquier mayúscula/minúscula). No se procesó nada.", "error")
         return redirect(url_for("cs.cargar_datos"))
 
     accounts = CSAccount.query.all()
     accounts_map = {a.nombre: str(a.id) for a in accounts}
     client_id_map = {a.client_id.upper(): str(a.id) for a in accounts if a.client_id}
 
-    content = file.read().decode("utf-8-sig")
+    try:
+        content = file.read().decode("utf-8-sig")
+    except UnicodeDecodeError:
+        flash("El archivo no es UTF-8. Guardalo como CSV UTF-8 desde Excel/Sheets y reintentá.", "error")
+        return redirect(url_for("cs.cargar_datos"))
+
     reader = csv.DictReader(io.StringIO(content))
+    columnas_detectadas = reader.fieldnames or []
 
     insertados = 0
     no_match = 0
     errores = 0
-    batch = []
+    samples_no_match: list[str] = []
+    samples_error: list[str] = []
+    batch: list[dict] = []
+
+    def _flush(buf: list[dict]) -> tuple[int, int]:
+        """Intenta bulk insert. Si falla, cae a insert fila por fila para aislar el error."""
+        if not buf:
+            return 0, 0
+        try:
+            db.session.execute(CSAppointment.__table__.insert(), buf)
+            db.session.commit()
+            return len(buf), 0
+        except Exception as e:
+            db.session.rollback()
+            _logging.warning("[CITAS] bulk insert falló (%s) — fallback fila por fila", e)
+            ok = 0
+            fail = 0
+            for r in buf:
+                try:
+                    db.session.execute(CSAppointment.__table__.insert(), [r])
+                    db.session.commit()
+                    ok += 1
+                except Exception as e2:
+                    db.session.rollback()
+                    fail += 1
+                    if len(samples_error) < 3:
+                        samples_error.append(f"{type(e2).__name__}: {str(e2)[:120]}")
+            return ok, fail
 
     for row in reader:
-        id_val = row.get("ID", "").strip()
-        cliente = row.get("Cliente", "").strip()
+        id_val = (row.get("ID") or "").strip()
+        cliente = (row.get("Cliente") or "").strip()
         acc_id = _match_account(id_val or cliente, accounts_map, client_id_map)
         if not acc_id:
             no_match += 1
+            if len(samples_no_match) < 5 and (id_val or cliente):
+                samples_no_match.append(f"{id_val or '—'} / {cliente or '—'}")
             continue
 
         try:
             batch.append({
                 "account_id": acc_id,
-                "propiedad": row.get("Propiedad", ""),
-                "direccion": row.get("Dirección", row.get("Direccion", "")),
-                "zona": row.get("Zona", ""),
-                "tecnico": row.get("Tecnico", row.get("Técnico", "")),
+                "propiedad": (row.get("Propiedad") or "").strip(),
+                "direccion": (row.get("Dirección") or row.get("Direccion") or "").strip(),
+                "zona": (row.get("Zona") or "").strip(),
+                "tecnico": (row.get("Tecnico") or row.get("Técnico") or "").strip(),
                 "fecha_inicio": _parse_datetime_citas(row.get("Fecha de Inicio")),
-                "fecha_terminacion": _parse_datetime_citas(row.get("Fecha de Terminación", row.get("Fecha de Terminacion", ""))),
-                "estatus": row.get("Estatus", ""),
-                "titulo_servicio": row.get("Titulo Servicio", row.get("Título Servicio", "")),
-                "cantidad": int(float(row.get("Cantidad", 1) or 1)),
+                "fecha_terminacion": _parse_datetime_citas(row.get("Fecha de Terminación") or row.get("Fecha de Terminacion") or ""),
+                "estatus": (row.get("Estatus") or "").strip(),
+                "titulo_servicio": (row.get("Titulo Servicio") or row.get("Título Servicio") or "").strip(),
+                "cantidad": int(float(row.get("Cantidad") or 1)),
             })
-            insertados += 1
             if len(batch) >= 500:
-                db.session.execute(CSAppointment.__table__.insert(), batch)
-                db.session.commit()
+                ok, fail = _flush(batch)
+                insertados += ok
+                errores += fail
                 batch = []
-        except Exception:
+        except (ValueError, TypeError) as e:
             errores += 1
+            if len(samples_error) < 3:
+                samples_error.append(f"row parse: {str(e)[:120]}")
 
     if batch:
-        db.session.execute(CSAppointment.__table__.insert(), batch)
-    db.session.commit()
+        ok, fail = _flush(batch)
+        insertados += ok
+        errores += fail
+
+    debug_parts = [f"columnas detectadas: {columnas_detectadas}"]
+    if samples_no_match:
+        debug_parts.append(f"sin match (ID/Cliente): {samples_no_match}")
+    if samples_error:
+        debug_parts.append(f"errores: {samples_error}")
+    if insertados == 0 and (no_match + errores) > 0:
+        debug_parts.insert(0, "⚠️ No se insertó ninguna fila — revisá headers o el matching de cuentas.")
+
     return render_template(
         "cs_cargar_resultado.html",
         tipo="Citas", insertados=insertados, no_match=no_match,
         errores=errores, total=insertados + no_match + errores,
+        debug_info=" | ".join(debug_parts),
         **_ctx(),
     )
 
