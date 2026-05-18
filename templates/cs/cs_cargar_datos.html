@@ -92,7 +92,11 @@
                 <span class="tag">{{ col }}</span>
                 {% endfor %}
             </div>
-            <div class="muted" style="font-size:10px;margin-top:6px">Fechas: <code>dd/mm/yyyy hh:mm:ss</code> (o solo <code>dd/mm/yyyy</code>). UTF-8. Match por <code>ID</code> (preferido) o <code>Cliente</code>.</div>
+            <div class="muted" style="font-size:10px;margin-top:6px">
+                Fechas: <code>dd/mm/yyyy hh:mm:ss</code> (o solo <code>dd/mm/yyyy</code>). UTF-8.<br>
+                <strong>ID</strong> = ID de la visita (no del cliente) → permite reimportar sin duplicar.<br>
+                <strong>Cliente</strong> = nombre del cliente → matchea con cuentas registradas.
+            </div>
         </div>
     </div>
 </div>
@@ -100,7 +104,10 @@
 <!-- Cuentas -->
 <div class="card" style="padding:18px">
     <h3 style="margin:0 0 8px;font-size:13px;font-weight:600;color:var(--ink-1)">Cuentas registradas ({{ accounts|length }})</h3>
-    <p class="muted" style="font-size:11px;margin:0 0 10px">Usa la columna "ID" o "Cliente" en tu CSV para vincular registros. Si ambas existen, "ID" tiene prioridad.</p>
+    <p class="muted" style="font-size:11px;margin:0 0 10px">
+        <strong>Cobros:</strong> matchean por <code>ID</code> (AX-0001) o <code>Cliente</code> (nombre).<br>
+        <strong>Citas:</strong> matchean por <code>Cliente</code> (nombre); el <code>ID</code> es el ID de la visita y se usa para evitar duplicados al reimportar.
+    </p>
     <div style="display:flex;flex-wrap:wrap;gap:4px">
         {% for acc in accounts %}<span class="tag">{% if acc.client_id %}<strong style="color:var(--copper)">{{ acc.client_id }}</strong> {% endif %}{{ acc.nombre }}</span>{% endfor %}
     </div>

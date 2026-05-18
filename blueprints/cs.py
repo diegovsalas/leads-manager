@@ -1191,9 +1191,10 @@ def plantilla_cobros():
 
 @cs_bp.route("/cargar-datos/plantilla-citas")
 def plantilla_citas():
-    """Descarga la plantilla CSV para citas/operación."""
+    """Descarga la plantilla CSV para citas/operación.
+    'ID' = ID de la visita (no del cliente). 'Cliente' = nombre del cliente."""
     headers = "ID,Cliente,Propiedad,Dirección,Zona,Tecnico,Fecha de Inicio,Fecha de Terminación,Estatus,Titulo Servicio,Cantidad\n"
-    ejemplo = "AX-0001,Walmart Mexico,Sucursal Centro,Av. Reforma 100,CDMX-Centro,Juan Perez,06/04/2026 09:00:00,06/04/2026 11:00:00,Terminada,Servicio Aromatex,1\n"
+    ejemplo = "VIS-00123,Walmart Mexico,Sucursal Centro,Av. Reforma 100,CDMX-Centro,Juan Perez,06/04/2026 09:00:00,06/04/2026 11:00:00,Terminada,Servicio Aromatex,1\n"
     return send_file(
         io.BytesIO((headers + ejemplo).encode("utf-8-sig")),
         as_attachment=True,
@@ -1288,8 +1289,20 @@ def cargar_cobros():
 
 @cs_bp.route("/cargar-datos/citas", methods=["POST"])
 def cargar_citas():
-    """Procesa CSV de citas/operación."""
+    """Procesa CSV de citas/operación.
+
+    Reglas:
+    - 'Cliente' (nombre) → matchea cs_accounts (case-insensitive, parcial).
+    - 'ID' del CSV es el ID de la VISITA (no del cliente) → se guarda como
+      zoho_appointment_id para upsert idempotente (recargar el mismo CSV no
+      duplica filas, actualiza por ID de visita).
+    - Si la columna zoho_appointment_id no existe aún en la BD, cae a INSERT
+      plano (posibles duplicados) y avisa al usuario en el resultado.
+    """
     import logging as _logging
+    from sqlalchemy import inspect as _sa_inspect
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
     file = request.files.get("archivo")
     if not file or not (file.filename or "").lower().endswith(".csv"):
         flash("Subí un archivo .csv válido (cualquier mayúscula/minúscula). No se procesó nada.", "error")
@@ -1297,7 +1310,6 @@ def cargar_citas():
 
     accounts = CSAccount.query.all()
     accounts_map = {a.nombre: str(a.id) for a in accounts}
-    client_id_map = {a.client_id.upper(): str(a.id) for a in accounts if a.client_id}
 
     try:
         content = file.read().decode("utf-8-sig")
@@ -1308,50 +1320,104 @@ def cargar_citas():
     reader = csv.DictReader(io.StringIO(content))
     columnas_detectadas = reader.fieldnames or []
 
+    has_zoho_col = "zoho_appointment_id" in {
+        c["name"] for c in _sa_inspect(db.engine).get_columns("cs_appointments")
+    }
+
     insertados = 0
+    actualizados = 0
     no_match = 0
     errores = 0
     samples_no_match: list[str] = []
     samples_error: list[str] = []
     batch: list[dict] = []
 
-    def _flush(buf: list[dict]) -> tuple[int, int]:
-        """Intenta bulk insert. Si falla, cae a insert fila por fila para aislar el error."""
+    def _flush(buf: list[dict]) -> tuple[int, int, int]:
+        """Upsert por zoho_appointment_id si existe la columna y la fila trae ID.
+        Si no, INSERT plano. Fallback fila por fila si una rompe."""
         if not buf:
-            return 0, 0
-        try:
-            db.session.execute(CSAppointment.__table__.insert(), buf)
-            db.session.commit()
-            return len(buf), 0
-        except Exception as e:
-            db.session.rollback()
-            _logging.warning("[CITAS] bulk insert falló (%s) — fallback fila por fila", e)
-            ok = 0
-            fail = 0
-            for r in buf:
-                try:
-                    db.session.execute(CSAppointment.__table__.insert(), [r])
-                    db.session.commit()
-                    ok += 1
-                except Exception as e2:
-                    db.session.rollback()
-                    fail += 1
-                    if len(samples_error) < 3:
-                        samples_error.append(f"{type(e2).__name__}: {str(e2)[:120]}")
-            return ok, fail
+            return 0, 0, 0
+
+        rows_con_id = [r for r in buf if has_zoho_col and r.get("zoho_appointment_id")]
+        rows_sin_id = [r for r in buf if not has_zoho_col or not r.get("zoho_appointment_id")]
+        ok_ins, ok_upd, fail = 0, 0, 0
+
+        # Upsert (idempotente)
+        if rows_con_id:
+            try:
+                stmt = pg_insert(CSAppointment.__table__).values(rows_con_id)
+                update_cols = {
+                    c: stmt.excluded[c] for c in (
+                        "account_id", "propiedad", "direccion", "zona", "tecnico",
+                        "fecha_inicio", "fecha_terminacion", "estatus",
+                        "titulo_servicio", "cantidad",
+                    )
+                }
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["zoho_appointment_id"], set_=update_cols,
+                )
+                db.session.execute(stmt)
+                db.session.commit()
+                ok_ins += len(rows_con_id)
+            except Exception as e:
+                db.session.rollback()
+                _logging.warning("[CITAS] upsert falló (%s) — fallback fila por fila", e)
+                for r in rows_con_id:
+                    try:
+                        stmt_one = pg_insert(CSAppointment.__table__).values([r])
+                        update_cols = {
+                            c: stmt_one.excluded[c] for c in (
+                                "account_id", "propiedad", "direccion", "zona", "tecnico",
+                                "fecha_inicio", "fecha_terminacion", "estatus",
+                                "titulo_servicio", "cantidad",
+                            )
+                        }
+                        stmt_one = stmt_one.on_conflict_do_update(
+                            index_elements=["zoho_appointment_id"], set_=update_cols,
+                        )
+                        db.session.execute(stmt_one)
+                        db.session.commit()
+                        ok_ins += 1
+                    except Exception as e2:
+                        db.session.rollback()
+                        fail += 1
+                        if len(samples_error) < 3:
+                            samples_error.append(f"{type(e2).__name__}: {str(e2)[:120]}")
+
+        # INSERT plano para filas sin ID o si no hay columna
+        if rows_sin_id:
+            try:
+                db.session.execute(CSAppointment.__table__.insert(), rows_sin_id)
+                db.session.commit()
+                ok_ins += len(rows_sin_id)
+            except Exception as e:
+                db.session.rollback()
+                _logging.warning("[CITAS] bulk insert falló (%s) — fallback fila por fila", e)
+                for r in rows_sin_id:
+                    try:
+                        db.session.execute(CSAppointment.__table__.insert(), [r])
+                        db.session.commit()
+                        ok_ins += 1
+                    except Exception as e2:
+                        db.session.rollback()
+                        fail += 1
+                        if len(samples_error) < 3:
+                            samples_error.append(f"{type(e2).__name__}: {str(e2)[:120]}")
+
+        return ok_ins, ok_upd, fail
 
     for row in reader:
-        id_val = (row.get("ID") or "").strip()
+        visita_id = (row.get("ID") or "").strip()  # ID de la visita, NO del cliente
         cliente = (row.get("Cliente") or "").strip()
-        acc_id = _match_account(id_val or cliente, accounts_map, client_id_map)
+        acc_id = _match_account(cliente, accounts_map) if cliente else None
         if not acc_id:
             no_match += 1
-            if len(samples_no_match) < 5 and (id_val or cliente):
-                samples_no_match.append(f"{id_val or '—'} / {cliente or '—'}")
+            if len(samples_no_match) < 5 and cliente:
+                samples_no_match.append(cliente)
             continue
 
         try:
-            batch.append({
+            r_dict = {
                 "account_id": acc_id,
                 "propiedad": (row.get("Propiedad") or "").strip(),
                 "direccion": (row.get("Dirección") or row.get("Direccion") or "").strip(),
@@ -1362,10 +1428,15 @@ def cargar_citas():
                 "estatus": (row.get("Estatus") or "").strip(),
                 "titulo_servicio": (row.get("Titulo Servicio") or row.get("Título Servicio") or "").strip(),
                 "cantidad": int(float(row.get("Cantidad") or 1)),
-            })
+            }
+            if has_zoho_col and visita_id:
+                r_dict["zoho_appointment_id"] = visita_id[:64]
+            batch.append(r_dict)
+
             if len(batch) >= 500:
-                ok, fail = _flush(batch)
-                insertados += ok
+                ins, upd, fail = _flush(batch)
+                insertados += ins
+                actualizados += upd
                 errores += fail
                 batch = []
         except (ValueError, TypeError) as e:
@@ -1374,17 +1445,20 @@ def cargar_citas():
                 samples_error.append(f"row parse: {str(e)[:120]}")
 
     if batch:
-        ok, fail = _flush(batch)
-        insertados += ok
+        ins, upd, fail = _flush(batch)
+        insertados += ins
+        actualizados += upd
         errores += fail
 
     debug_parts = [f"columnas detectadas: {columnas_detectadas}"]
+    if not has_zoho_col:
+        debug_parts.append("⚠️ Columna zoho_appointment_id NO existe — corré la migración en Supabase para evitar duplicados al reimportar")
     if samples_no_match:
-        debug_parts.append(f"sin match (ID/Cliente): {samples_no_match}")
+        debug_parts.append(f"clientes sin match: {samples_no_match}")
     if samples_error:
         debug_parts.append(f"errores: {samples_error}")
     if insertados == 0 and (no_match + errores) > 0:
-        debug_parts.insert(0, "⚠️ No se insertó ninguna fila — revisá headers o el matching de cuentas.")
+        debug_parts.insert(0, "⚠️ No se insertó ninguna fila — revisá headers o nombres de clientes.")
 
     return render_template(
         "cs_cargar_resultado.html",
