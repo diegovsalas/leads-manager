@@ -1348,6 +1348,8 @@ def cargar_citas():
     abort_upsert: bool = False  # si el primer batch falla con error estructural, bajamos a INSERT plano
 
     # SQL raw para esquivar problemas con SQLAlchemy Table.__table__ + .values(list).
+    # El WHERE en ON CONFLICT matchea el índice único parcial
+    # (ux_cs_appointments_zoho_id ... WHERE zoho_appointment_id IS NOT NULL).
     _SQL_UPSERT = _text("""
         INSERT INTO cs_appointments
             (account_id, propiedad, direccion, zona, tecnico,
@@ -1357,7 +1359,8 @@ def cargar_citas():
             (:account_id, :propiedad, :direccion, :zona, :tecnico,
              :fecha_inicio, :fecha_terminacion, :estatus, :titulo_servicio,
              :cantidad, :zoho_appointment_id)
-        ON CONFLICT (zoho_appointment_id) DO UPDATE SET
+        ON CONFLICT (zoho_appointment_id) WHERE zoho_appointment_id IS NOT NULL
+        DO UPDATE SET
             account_id = EXCLUDED.account_id,
             propiedad = EXCLUDED.propiedad,
             direccion = EXCLUDED.direccion,
