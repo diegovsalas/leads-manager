@@ -950,6 +950,32 @@ def cambiar_etapa(opp_id):
     return redirect(url_for("cs.oportunidades"))
 
 
+@cs_bp.route("/oportunidades/<uuid:opp_id>/editar", methods=["POST"])
+def editar_oportunidad(opp_id):
+    """Edita todos los campos del detalle de una oportunidad."""
+    opp = db.session.get(CSOpportunity, opp_id)
+    if not opp:
+        return redirect(url_for("cs.oportunidades"))
+    f = request.form
+    acc_id = (f.get("account_id") or "").strip()
+    opp.account_id = acc_id if acc_id else None
+    opp.prospecto_nombre = (f.get("prospecto_nombre") or "").strip()
+    opp.contacto = (f.get("contacto") or "").strip()
+    opp.tipo = f.get("tipo") or opp.tipo
+    opp.unidad_negocio = (f.get("unidad_negocio") or "").strip()
+    opp.descripcion = (f.get("descripcion") or "").strip()
+    try:
+        opp.valor_estimado = float(f.get("valor_estimado") or 0)
+    except (ValueError, TypeError):
+        pass
+    nueva_etapa = f.get("etapa") or opp.etapa
+    if nueva_etapa in [e[0] for e in ETAPAS_PIPELINE]:
+        opp.etapa = nueva_etapa
+    opp.kam_id = f.get("kam_id") or None
+    db.session.commit()
+    return redirect(url_for("cs.oportunidades"))
+
+
 @cs_bp.route("/oportunidades/<uuid:opp_id>/delete", methods=["POST"])
 def eliminar_oportunidad(opp_id):
     opp = db.session.get(CSOpportunity, opp_id)
