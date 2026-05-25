@@ -52,3 +52,9 @@ DROP INDEX IF EXISTS ix_customer_rfcs_rfc;  -- era unique, lo reemplazamos
 CREATE INDEX IF NOT EXISTS ix_customer_rfcs_rfc ON customer_rfcs(rfc);
 ALTER TABLE customer_rfcs
     ADD CONSTRAINT customer_rfcs_savio_customer_id_unique UNIQUE (savio_customer_id);
+
+-- Oportunidades: split del campo 'contacto' (texto libre) en 3 sub-campos
+-- (persona, teléfono, email). 'contacto' queda como nombre de la persona.
+ALTER TABLE cs_opportunities
+    ADD COLUMN IF NOT EXISTS contacto_telefono VARCHAR(40) DEFAULT '',
+    ADD COLUMN IF NOT EXISTS contacto_email    VARCHAR(200) DEFAULT '';

@@ -806,8 +806,10 @@ class CSOpportunity(db.Model):
     __tablename__ = "cs_opportunities"
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
     account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=True)
-    prospecto_nombre = db.Column(db.String(200), default="")
-    contacto = db.Column(db.String(200), default="")
+    prospecto_nombre = db.Column(db.String(200), default="")  # Empresa / prospecto (cuando no hay cuenta)
+    contacto = db.Column(db.String(200), default="")  # Nombre de la persona
+    contacto_telefono = db.Column(db.String(40), default="")
+    contacto_email = db.Column(db.String(200), default="")
     tipo = db.Column(db.String(50), nullable=False)
     unidad_negocio = db.Column(db.String(30), default="")
     descripcion = db.Column(db.Text, default="")

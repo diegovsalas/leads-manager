@@ -38,9 +38,11 @@
                 {{ opp.descripcion[:140] }}{% if opp.descripcion|length > 140 %}…{% endif %}
             </div>
             {% endif %}
-            {% if opp.contacto %}
-            <div class="muted" style="font-size:11px;margin-top:6px;color:var(--ink-3);">
-                {{ icon('users', 12) }} {{ opp.contacto }}
+            {% if opp.contacto or opp.contacto_telefono or opp.contacto_email %}
+            <div class="muted" style="font-size:11px;margin-top:6px;color:var(--ink-3);line-height:1.4;">
+                {% if opp.contacto %}{{ icon('users', 12) }} {{ opp.contacto }}{% endif %}
+                {% if opp.contacto_telefono %}<div>{{ opp.contacto_telefono }}</div>{% endif %}
+                {% if opp.contacto_email %}<div>{{ opp.contacto_email }}</div>{% endif %}
             </div>
             {% endif %}
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
@@ -55,6 +57,8 @@
                             "account_id": (opp.account_id|string if opp.account_id else ""),
                             "prospecto_nombre": opp.prospecto_nombre or "",
                             "contacto": opp.contacto or "",
+                            "contacto_telefono": opp.contacto_telefono or "",
+                            "contacto_email": opp.contacto_email or "",
                             "tipo": opp.tipo or "",
                             "unidad_negocio": opp.unidad_negocio or "",
                             "descripcion": opp.descripcion or "",
@@ -85,9 +89,13 @@
         <div style="display:flex;justify-content:space-between;margin-bottom:16px"><h3 style="margin:0;font-size:16px;font-weight:600">Nueva Oportunidad</h3><button onclick="document.getElementById('modal-nueva-opp').style.display='none'" class="iconbtn" style="width:28px;height:28px">&times;</button></div>
         <form action="/cs/oportunidades/crear" method="POST">
             <div style="display:flex;flex-direction:column;gap:10px">
-                <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cuenta existente</label><select name="account_id" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"><option value="">Prospecto nuevo</option>{% for acc in accounts %}<option value="{{ acc.id }}">{{ acc.nombre }}</option>{% endfor %}</select></div>
-                <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Prospecto (si no es cuenta existente)</label><input type="text" name="prospecto_nombre" placeholder="Nombre del prospecto" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"></div>
-                <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Contacto</label><input type="text" name="contacto" placeholder="Persona contacto / teléfono / correo" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"></div>
+                <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cuenta existente</label><select name="account_id" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"><option value="">— Prospecto nuevo (sin cuenta CS) —</option>{% for acc in accounts %}<option value="{{ acc.id }}">{{ acc.nombre }}</option>{% endfor %}</select></div>
+                <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Empresa / Prospecto <span class="muted" style="font-weight:400">(si NO seleccionaste cuenta)</span></label><input type="text" name="prospecto_nombre" placeholder="ej: Walmart, Innova Sport" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"></div>
+                <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Persona de contacto</label><input type="text" name="contacto" placeholder="Nombre completo" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                    <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Teléfono</label><input type="text" name="contacto_telefono" placeholder="+52 ..." style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"></div>
+                    <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Email</label><input type="email" name="contacto_email" placeholder="cliente@empresa.com" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"></div>
+                </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
                     <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Tipo</label><select name="tipo" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">{% for t_key, t_label in tipos %}<option value="{{ t_key }}">{{ t_label }}</option>{% endfor %}</select></div>
                     <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Unidad</label><select name="unidad_negocio" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"><option value="">—</option><option>AROMATEX</option><option>PESTEX</option><option>WELDEX</option></select></div>
@@ -117,17 +125,27 @@
                 <div>
                     <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cuenta existente</label>
                     <select name="account_id" id="det-account_id" style="width:100%;height:36px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">
-                        <option value="">— Prospecto nuevo (sin cuenta) —</option>
+                        <option value="">— Prospecto nuevo (sin cuenta CS) —</option>
                         {% for acc in accounts %}<option value="{{ acc.id }}">{{ acc.nombre }}</option>{% endfor %}
                     </select>
                 </div>
                 <div>
-                    <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Prospecto (si no hay cuenta)</label>
-                    <input type="text" name="prospecto_nombre" id="det-prospecto_nombre" placeholder="Nombre del prospecto" style="width:100%;height:36px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">
+                    <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Empresa / Prospecto <span class="muted" style="font-weight:400">(si NO seleccionaste cuenta)</span></label>
+                    <input type="text" name="prospecto_nombre" id="det-prospecto_nombre" placeholder="ej: Walmart, Innova Sport" style="width:100%;height:36px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">
                 </div>
                 <div>
-                    <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Contacto (persona / tel / mail)</label>
-                    <input type="text" name="contacto" id="det-contacto" placeholder="ej: Juan Pérez · 81 1234 5678 · juan@cliente.mx" style="width:100%;height:36px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">
+                    <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Persona de contacto</label>
+                    <input type="text" name="contacto" id="det-contacto" placeholder="Nombre completo de la persona" style="width:100%;height:36px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                    <div>
+                        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Teléfono</label>
+                        <input type="text" name="contacto_telefono" id="det-contacto_telefono" placeholder="+52 ..." style="width:100%;height:36px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">
+                    </div>
+                    <div>
+                        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Email</label>
+                        <input type="email" name="contacto_email" id="det-contacto_email" placeholder="cliente@empresa.com" style="width:100%;height:36px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">
+                    </div>
                 </div>
 
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -191,6 +209,8 @@ function openDetalleOpp(opp) {
     document.getElementById('det-account_id').value = opp.account_id || '';
     document.getElementById('det-prospecto_nombre').value = opp.prospecto_nombre || '';
     document.getElementById('det-contacto').value = opp.contacto || '';
+    document.getElementById('det-contacto_telefono').value = opp.contacto_telefono || '';
+    document.getElementById('det-contacto_email').value = opp.contacto_email || '';
     document.getElementById('det-tipo').value = opp.tipo || '';
     document.getElementById('det-unidad_negocio').value = opp.unidad_negocio || '';
     document.getElementById('det-valor_estimado').value = opp.valor_estimado || 0;

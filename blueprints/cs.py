@@ -927,6 +927,8 @@ def crear_oportunidad():
         account_id=account_id if account_id else None,
         prospecto_nombre=request.form.get("prospecto_nombre", "").strip(),
         contacto=request.form.get("contacto", "").strip(),
+        contacto_telefono=request.form.get("contacto_telefono", "").strip(),
+        contacto_email=request.form.get("contacto_email", "").strip(),
         tipo=request.form.get("tipo", "upsell_un"),
         unidad_negocio=request.form.get("unidad_negocio", ""),
         descripcion=request.form.get("descripcion", "").strip(),
@@ -961,6 +963,8 @@ def editar_oportunidad(opp_id):
     opp.account_id = acc_id if acc_id else None
     opp.prospecto_nombre = (f.get("prospecto_nombre") or "").strip()
     opp.contacto = (f.get("contacto") or "").strip()
+    opp.contacto_telefono = (f.get("contacto_telefono") or "").strip()
+    opp.contacto_email = (f.get("contacto_email") or "").strip()
     opp.tipo = f.get("tipo") or opp.tipo
     opp.unidad_negocio = (f.get("unidad_negocio") or "").strip()
     opp.descripcion = (f.get("descripcion") or "").strip()
