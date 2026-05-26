@@ -3,13 +3,27 @@
 {% block breadcrumb %}Oportunidades{% endblock %}
 
 {% block content %}
+<style>
+/* Secciones del modal de oportunidad */
+.opp-section { border:1px solid var(--border); border-radius:10px; padding:14px; background:var(--bg-surface,#fafaf7); }
+.opp-section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--copper-ink,#a45a2a); margin:0 0 10px; display:flex; align-items:center; gap:6px; }
+.opp-label { font-size:11px; color:var(--ink-3); display:block; margin-bottom:4px; font-weight:500; }
+.opp-input { width:100%; height:36px; border:1px solid var(--border); border-radius:7px; padding:0 10px; font-size:13px; background:#fff; }
+.opp-input:focus { outline:none; border-color:var(--copper,#c97432); }
+.opp-input[readonly] { background:var(--bg-sunken,#f0ede6); color:var(--ink-2); cursor:not-allowed; }
+.opp-textarea { width:100%; border:1px solid var(--border); border-radius:7px; padding:10px; font-size:13px; font-family:inherit; line-height:1.5; background:#fff; resize:vertical; }
+.opp-tabs { display:flex; gap:6px; margin-bottom:10px; }
+.opp-tab { flex:1; padding:8px 12px; border:1.5px solid var(--border); border-radius:8px; background:#fff; font-size:12px; font-weight:600; cursor:pointer; text-align:center; }
+.opp-tab.active { border-color:var(--copper,#c97432); background:var(--copper-soft,#f5e3d0); color:var(--copper-ink,#a45a2a); }
+</style>
+
 <div class="page-head">
     <div>
         <h1>Oportunidades</h1>
         <p class="sub">Pipeline de ventas — upsell, expansion y nuevos servicios</p>
     </div>
     <div class="actions">
-        <button onclick="document.getElementById('modal-nueva-opp').style.display='grid'" class="btn primary">{{ icon('plus') }} Nueva Oportunidad</button>
+        <button onclick="abrirNueva()" class="btn primary">{{ icon('plus') }} Nueva Oportunidad</button>
     </div>
 </div>
 
@@ -20,7 +34,6 @@
     <div class="kpi"><div class="label">MRR Ganado</div><div class="value" style="font-size:24px;color:var(--ok-ink)">${{ "{:,.0f}".format(valor_ganado) }}</div></div>
 </div>
 
-{% set etapa_colors = {'prospeccion':'info','propuesta_enviada':'info','negociacion':'warn','ganada':'ok','perdida':'danger'} %}
 <div class="kan">
     {% for key, label in etapas %}
     {% set data = pipeline[key] %}
@@ -52,7 +65,7 @@
             <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-subtle)">
                 <button type="button" class="btn ghost"
                         style="height:24px;padding:0 8px;font-size:11px;font-weight:600;color:var(--copper-ink)"
-                        onclick='openDetalleOpp({{ {
+                        onclick='abrirEditar({{ {
                             "id": opp.id|string,
                             "account_id": (opp.account_id|string if opp.account_id else ""),
                             "prospecto_nombre": opp.prospecto_nombre or "",
@@ -66,6 +79,7 @@
                             "etapa": opp.etapa or "",
                             "kam_id": (opp.kam_id|string if opp.kam_id else ""),
                             "cliente_nombre": opp.cliente_nombre or "",
+                            "account_nombre": (opp.account.nombre if opp.account else ""),
                             "created_at": (opp.created_at.strftime("%d/%m/%Y") if opp.created_at else "")
                         }|tojson }})'>
                     Ver / Editar
@@ -83,141 +97,193 @@
     {% endfor %}
 </div>
 
-<!-- Modal Nueva -->
-<div id="modal-nueva-opp" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;place-items:center" onclick="if(event.target===this)this.style.display='none'">
-    <div class="card" style="width:100%;max-width:520px;padding:24px;margin:16px;max-height:90vh;overflow-y:auto">
-        <div style="display:flex;justify-content:space-between;margin-bottom:16px"><h3 style="margin:0;font-size:16px;font-weight:600">Nueva Oportunidad</h3><button onclick="document.getElementById('modal-nueva-opp').style.display='none'" class="iconbtn" style="width:28px;height:28px">&times;</button></div>
-        <form action="/cs/oportunidades/crear" method="POST">
-            <div style="display:flex;flex-direction:column;gap:10px">
-                <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cuenta existente</label><select name="account_id" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"><option value="">— Prospecto nuevo (sin cuenta CS) —</option>{% for acc in accounts %}<option value="{{ acc.id }}">{{ acc.nombre }}</option>{% endfor %}</select></div>
-                <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Empresa / Prospecto <span class="muted" style="font-weight:400">(si NO seleccionaste cuenta)</span></label><input type="text" name="prospecto_nombre" placeholder="ej: Walmart, Innova Sport" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"></div>
-                <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Persona de contacto</label><input type="text" name="contacto" placeholder="Nombre completo" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"></div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                    <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Teléfono</label><input type="text" name="contacto_telefono" placeholder="+52 ..." style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"></div>
-                    <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Email</label><input type="email" name="contacto_email" placeholder="cliente@empresa.com" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"></div>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                    <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Tipo</label><select name="tipo" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">{% for t_key, t_label in tipos %}<option value="{{ t_key }}">{{ t_label }}</option>{% endfor %}</select></div>
-                    <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Unidad</label><select name="unidad_negocio" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"><option value="">—</option><option>AROMATEX</option><option>PESTEX</option><option>WELDEX</option></select></div>
-                </div>
-                <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">MRR estimado</label><input type="number" name="valor_estimado" step="0.01" placeholder="0" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"></div>
-                <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Descripción / contexto</label><textarea name="descripcion" rows="3" placeholder="Necesidad detectada, contexto, próximos pasos" style="width:100%;border:1px solid var(--border);border-radius:7px;padding:8px 10px;font-size:13px;font-family:inherit"></textarea></div>
-                <div><label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">KAM</label><select name="kam_id" style="width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px"><option value="">Sin asignar</option>{% for k in kams %}<option value="{{ k.id }}">{{ k.nombre }}</option>{% endfor %}</select></div>
-            </div>
-            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button type="button" onclick="document.getElementById('modal-nueva-opp').style.display='none'" class="btn ghost">Cancelar</button><button type="submit" class="btn primary">Crear</button></div>
-        </form>
-    </div>
-</div>
-
-<!-- Modal Detalle / Editar -->
-<div id="modal-detalle-opp" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:60;place-items:center" onclick="if(event.target===this)this.style.display='none'">
-    <div class="card" style="width:100%;max-width:560px;padding:24px;margin:16px;max-height:92vh;overflow-y:auto">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- Modal Unificado (sirve para Nueva y Editar)              -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div id="modal-opp" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:60;place-items:center" onclick="if(event.target===this)this.style.display='none'">
+    <div class="card" style="width:100%;max-width:600px;padding:24px;margin:16px;max-height:92vh;overflow-y:auto">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
             <div>
-                <h3 id="det-title" style="margin:0;font-size:17px;font-weight:600"></h3>
-                <span id="det-created" class="muted" style="font-size:11px"></span>
+                <h3 id="opp-title" style="margin:0;font-size:18px;font-weight:600">Nueva Oportunidad</h3>
+                <span id="opp-created" class="muted" style="font-size:11px"></span>
             </div>
-            <button onclick="document.getElementById('modal-detalle-opp').style.display='none'" class="iconbtn" style="width:28px;height:28px">&times;</button>
+            <button onclick="document.getElementById('modal-opp').style.display='none'" class="iconbtn" style="width:28px;height:28px">&times;</button>
         </div>
 
-        <form id="det-form" method="POST" style="margin-top:14px">
-            <div style="display:flex;flex-direction:column;gap:10px">
-                <div>
-                    <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cuenta existente</label>
-                    <select name="account_id" id="det-account_id" style="width:100%;height:36px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">
-                        <option value="">— Prospecto nuevo (sin cuenta CS) —</option>
-                        {% for acc in accounts %}<option value="{{ acc.id }}">{{ acc.nombre }}</option>{% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Empresa / Prospecto <span class="muted" style="font-weight:400">(si NO seleccionaste cuenta)</span></label>
-                    <input type="text" name="prospecto_nombre" id="det-prospecto_nombre" placeholder="ej: Walmart, Innova Sport" style="width:100%;height:36px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">
-                </div>
-                <div>
-                    <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Persona de contacto</label>
-                    <input type="text" name="contacto" id="det-contacto" placeholder="Nombre completo de la persona" style="width:100%;height:36px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                    <div>
-                        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Teléfono</label>
-                        <input type="text" name="contacto_telefono" id="det-contacto_telefono" placeholder="+52 ..." style="width:100%;height:36px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">
-                    </div>
-                    <div>
-                        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Email</label>
-                        <input type="email" name="contacto_email" id="det-contacto_email" placeholder="cliente@empresa.com" style="width:100%;height:36px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">
-                    </div>
-                </div>
+        <form id="opp-form" method="POST">
+            <div style="display:flex;flex-direction:column;gap:14px">
 
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                    <div>
-                        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Tipo</label>
-                        <select name="tipo" id="det-tipo" style="width:100%;height:36px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">
-                            {% for t_key, t_label in tipos %}<option value="{{ t_key }}">{{ t_label }}</option>{% endfor %}
+                <!-- ── BLOQUE 1: EMPRESA ────────────────────────── -->
+                <div class="opp-section">
+                    <div class="opp-section-title">{{ icon('building', 13) }} Empresa</div>
+
+                    <!-- Toggle: cliente existente vs prospecto nuevo -->
+                    <div class="opp-tabs">
+                        <div class="opp-tab" id="tab-existente" onclick="setEmpresaTipo('existente')">Cliente existente</div>
+                        <div class="opp-tab" id="tab-nuevo"     onclick="setEmpresaTipo('nuevo')">Prospecto nuevo</div>
+                    </div>
+
+                    <!-- Modo: cliente existente -->
+                    <div id="campo-existente" style="display:none">
+                        <label class="opp-label">Cuenta CS</label>
+                        <select name="account_id" id="opp-account_id" class="opp-input">
+                            <option value="">— Seleccioná una cuenta —</option>
+                            {% for acc in accounts %}<option value="{{ acc.id }}">{{ acc.nombre }}</option>{% endfor %}
                         </select>
                     </div>
-                    <div>
-                        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Unidad de negocio</label>
-                        <select name="unidad_negocio" id="det-unidad_negocio" style="width:100%;height:36px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">
-                            <option value="">—</option>
-                            <option>AROMATEX</option>
-                            <option>PESTEX</option>
-                            <option>WELDEX</option>
-                        </select>
+
+                    <!-- Modo: prospecto nuevo -->
+                    <div id="campo-nuevo" style="display:none">
+                        <label class="opp-label">Nombre de la empresa</label>
+                        <input type="text" name="prospecto_nombre" id="opp-prospecto_nombre" class="opp-input" placeholder="ej: Walmart, Innova Sport">
                     </div>
                 </div>
 
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                    <div>
-                        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">MRR estimado ($/mes)</label>
-                        <input type="number" name="valor_estimado" id="det-valor_estimado" step="0.01" min="0" style="width:100%;height:36px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">
-                    </div>
-                    <div>
-                        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Etapa</label>
-                        <select name="etapa" id="det-etapa" style="width:100%;height:36px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">
-                            {% for e_key, e_label in etapas %}<option value="{{ e_key }}">{{ e_label }}</option>{% endfor %}
-                        </select>
+                <!-- ── BLOQUE 2: PERSONA DE CONTACTO ────────────── -->
+                <div class="opp-section">
+                    <div class="opp-section-title">{{ icon('users', 13) }} Persona de contacto</div>
+                    <div style="display:flex;flex-direction:column;gap:8px">
+                        <div>
+                            <label class="opp-label">Nombre completo</label>
+                            <input type="text" name="contacto" id="opp-contacto" class="opp-input" placeholder="ej: Juan Pérez">
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                            <div>
+                                <label class="opp-label">Teléfono</label>
+                                <input type="text" name="contacto_telefono" id="opp-contacto_telefono" class="opp-input" placeholder="+52 ...">
+                            </div>
+                            <div>
+                                <label class="opp-label">Email</label>
+                                <input type="email" name="contacto_email" id="opp-contacto_email" class="opp-input" placeholder="persona@empresa.com">
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div>
-                    <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">KAM asignado</label>
-                    <select name="kam_id" id="det-kam_id" style="width:100%;height:36px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px">
-                        <option value="">Sin asignar</option>
-                        {% for k in kams %}<option value="{{ k.id }}">{{ k.nombre }}</option>{% endfor %}
-                    </select>
-                </div>
-
-                <div>
-                    <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Descripción / contexto / próximos pasos</label>
-                    <textarea name="descripcion" id="det-descripcion" rows="5" placeholder="Necesidad detectada, conversaciones, próximos pasos, blockers..." style="width:100%;border:1px solid var(--border);border-radius:7px;padding:10px;font-size:13px;font-family:inherit;line-height:1.5"></textarea>
+                <!-- ── BLOQUE 3: DETALLES DE LA OPORTUNIDAD ─────── -->
+                <div class="opp-section">
+                    <div class="opp-section-title">{{ icon('target', 13) }} Detalles de la oportunidad</div>
+                    <div style="display:flex;flex-direction:column;gap:8px">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                            <div>
+                                <label class="opp-label">Tipo</label>
+                                <select name="tipo" id="opp-tipo" class="opp-input">
+                                    {% for t_key, t_label in tipos %}<option value="{{ t_key }}">{{ t_label }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="opp-label">Unidad de negocio</label>
+                                <select name="unidad_negocio" id="opp-unidad_negocio" class="opp-input">
+                                    <option value="">—</option>
+                                    <option>AROMATEX</option>
+                                    <option>PESTEX</option>
+                                    <option>WELDEX</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                            <div>
+                                <label class="opp-label">MRR estimado ($/mes)</label>
+                                <input type="number" name="valor_estimado" id="opp-valor_estimado" step="0.01" min="0" class="opp-input" placeholder="0">
+                            </div>
+                            <div>
+                                <label class="opp-label">Etapa</label>
+                                <select name="etapa" id="opp-etapa" class="opp-input">
+                                    {% for e_key, e_label in etapas %}<option value="{{ e_key }}">{{ e_label }}</option>{% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="opp-label">KAM asignado</label>
+                            <select name="kam_id" id="opp-kam_id" class="opp-input">
+                                <option value="">Sin asignar</option>
+                                {% for k in kams %}<option value="{{ k.id }}">{{ k.nombre }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="opp-label">Descripción / próximos pasos</label>
+                            <textarea name="descripcion" id="opp-descripcion" rows="4" class="opp-textarea" placeholder="Necesidad detectada, conversaciones, blockers, próximos pasos..."></textarea>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border-subtle)">
-                <button type="button" onclick="document.getElementById('modal-detalle-opp').style.display='none'" class="btn ghost">Cancelar</button>
-                <button type="submit" class="btn primary">Guardar cambios</button>
+                <button type="button" onclick="document.getElementById('modal-opp').style.display='none'" class="btn ghost">Cancelar</button>
+                <button type="submit" class="btn primary" id="opp-submit">Crear</button>
             </div>
         </form>
     </div>
 </div>
 
 <script>
-function openDetalleOpp(opp) {
-    document.getElementById('det-title').textContent = opp.cliente_nombre || 'Oportunidad';
-    document.getElementById('det-created').textContent = opp.created_at ? ('Creada ' + opp.created_at) : '';
-    document.getElementById('det-form').action = '/cs/oportunidades/' + opp.id + '/editar';
-    document.getElementById('det-account_id').value = opp.account_id || '';
-    document.getElementById('det-prospecto_nombre').value = opp.prospecto_nombre || '';
-    document.getElementById('det-contacto').value = opp.contacto || '';
-    document.getElementById('det-contacto_telefono').value = opp.contacto_telefono || '';
-    document.getElementById('det-contacto_email').value = opp.contacto_email || '';
-    document.getElementById('det-tipo').value = opp.tipo || '';
-    document.getElementById('det-unidad_negocio').value = opp.unidad_negocio || '';
-    document.getElementById('det-valor_estimado').value = opp.valor_estimado || 0;
-    document.getElementById('det-etapa').value = opp.etapa || '';
-    document.getElementById('det-kam_id').value = opp.kam_id || '';
-    document.getElementById('det-descripcion').value = opp.descripcion || '';
-    document.getElementById('modal-detalle-opp').style.display = 'grid';
+function setEmpresaTipo(tipo) {
+    const tabEx = document.getElementById('tab-existente');
+    const tabNu = document.getElementById('tab-nuevo');
+    const camEx = document.getElementById('campo-existente');
+    const camNu = document.getElementById('campo-nuevo');
+    if (tipo === 'existente') {
+        tabEx.classList.add('active'); tabNu.classList.remove('active');
+        camEx.style.display = 'block';  camNu.style.display = 'none';
+        document.getElementById('opp-prospecto_nombre').value = '';
+    } else {
+        tabNu.classList.add('active'); tabEx.classList.remove('active');
+        camNu.style.display = 'block'; camEx.style.display = 'none';
+        document.getElementById('opp-account_id').value = '';
+    }
+}
+
+function _reset() {
+    document.getElementById('opp-account_id').value = '';
+    document.getElementById('opp-prospecto_nombre').value = '';
+    document.getElementById('opp-contacto').value = '';
+    document.getElementById('opp-contacto_telefono').value = '';
+    document.getElementById('opp-contacto_email').value = '';
+    document.getElementById('opp-tipo').selectedIndex = 0;
+    document.getElementById('opp-unidad_negocio').value = '';
+    document.getElementById('opp-valor_estimado').value = '';
+    document.getElementById('opp-etapa').selectedIndex = 0;
+    document.getElementById('opp-kam_id').value = '';
+    document.getElementById('opp-descripcion').value = '';
+    document.getElementById('opp-created').textContent = '';
+}
+
+function abrirNueva() {
+    _reset();
+    document.getElementById('opp-title').textContent = 'Nueva Oportunidad';
+    document.getElementById('opp-form').action = '/cs/oportunidades/crear';
+    document.getElementById('opp-submit').textContent = 'Crear';
+    setEmpresaTipo('existente');
+    document.getElementById('modal-opp').style.display = 'grid';
+}
+
+function abrirEditar(opp) {
+    _reset();
+    document.getElementById('opp-title').textContent = opp.cliente_nombre || 'Oportunidad';
+    document.getElementById('opp-created').textContent = opp.created_at ? ('Creada ' + opp.created_at) : '';
+    document.getElementById('opp-form').action = '/cs/oportunidades/' + opp.id + '/editar';
+    document.getElementById('opp-submit').textContent = 'Guardar cambios';
+
+    // Decidir el modo según los datos
+    if (opp.account_id) {
+        setEmpresaTipo('existente');
+        document.getElementById('opp-account_id').value = opp.account_id;
+    } else {
+        setEmpresaTipo('nuevo');
+        document.getElementById('opp-prospecto_nombre').value = opp.prospecto_nombre || '';
+    }
+
+    document.getElementById('opp-contacto').value = opp.contacto || '';
+    document.getElementById('opp-contacto_telefono').value = opp.contacto_telefono || '';
+    document.getElementById('opp-contacto_email').value = opp.contacto_email || '';
+    document.getElementById('opp-tipo').value = opp.tipo || '';
+    document.getElementById('opp-unidad_negocio').value = opp.unidad_negocio || '';
+    document.getElementById('opp-valor_estimado').value = opp.valor_estimado || 0;
+    document.getElementById('opp-etapa').value = opp.etapa || '';
+    document.getElementById('opp-kam_id').value = opp.kam_id || '';
+    document.getElementById('opp-descripcion').value = opp.descripcion || '';
+
+    document.getElementById('modal-opp').style.display = 'grid';
 }
 </script>
 {% endblock %}
