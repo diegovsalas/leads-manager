@@ -274,18 +274,22 @@ tbody td{padding:8px 12px;font-size:14px;}
 .toast-close{color:var(--text3);cursor:pointer;font-size:16px;line-height:1;}
 @keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 </style>
-<!-- Meta Pixel -->
-{% if config.get('META_PIXEL_ID') %}
+<!-- Meta Pixels (multi-UN) -->
+{% if meta_pixels %}
 <script>
 !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
 n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
 n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
 t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
 document,'script','https://connect.facebook.net/en_US/fbevents.js');
-fbq('init','{{ config.get("META_PIXEL_ID") }}');
+{% for un, pid in meta_pixels.items() %}
+fbq('init','{{ pid }}');
+{% endfor %}
 fbq('track','PageView');
 </script>
-<noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id={{ config.get('META_PIXEL_ID') }}&ev=PageView&noscript=1"/></noscript>
+{% for un, pid in meta_pixels.items() %}
+<noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id={{ pid }}&ev=PageView&noscript=1"/></noscript>
+{% endfor %}
 {% endif %}
 </head>
 <body>

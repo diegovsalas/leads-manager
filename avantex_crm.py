@@ -39,7 +39,6 @@ def create_app():
     app.config["WHATSAPP_TOKEN"]    = os.getenv("WHATSAPP_TOKEN", "")
     app.config["WHATSAPP_PHONE_ID"] = os.getenv("WHATSAPP_PHONE_ID", "")
     app.config["META_VERIFY_TOKEN"] = os.getenv("META_VERIFY_TOKEN", "avantex-verify-2026")
-    app.config["META_PIXEL_ID"]     = os.getenv("META_PIXEL_ID", "")
 
     # ── Extensiones ────────────────────────────
     db.init_app(app)
@@ -189,6 +188,7 @@ def create_app():
                 "grupo_color":  grupo_color,
                 "leads":        leads_by_etapa.get(etapa, []),
             }
+        from meta_conversions import get_pixel_ids
         return render_template(
             "pipeline/index.html",
             pipeline=pipeline,
@@ -196,6 +196,7 @@ def create_app():
             user_nombre=session.get("user_nombre", ""),
             user_rol=session.get("user_rol", ""),
             usuario_id=session.get("usuario_id", ""),
+            meta_pixels=get_pixel_ids(),
         )
 
     # ── Crear tablas en primera ejecución ──────
