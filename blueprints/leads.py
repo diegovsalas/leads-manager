@@ -6,6 +6,7 @@ from extensions import db, socketio
 from models import Lead, EtapaPipeline, OrigenLead, Usuario
 from icp_scoring import calcular_icp, INDUSTRIAS, TAMANOS
 from actividad import log_actividad
+from meta_conversions import send_pipeline_event
 
 leads_bp = Blueprint("leads", __name__)
 
@@ -260,6 +261,10 @@ def mover_lead(lead_id):
         "lead_id": str(lead.id),
         "etapa_pipeline": nueva_etapa.value,
     })
+
+    # Enviar evento de conversión a Meta CAPI
+    send_pipeline_event(lead, nueva_etapa.value)
+
     return jsonify(lead.to_dict())
 
 

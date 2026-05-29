@@ -39,6 +39,7 @@ def create_app():
     app.config["WHATSAPP_TOKEN"]    = os.getenv("WHATSAPP_TOKEN", "")
     app.config["WHATSAPP_PHONE_ID"] = os.getenv("WHATSAPP_PHONE_ID", "")
     app.config["META_VERIFY_TOKEN"] = os.getenv("META_VERIFY_TOKEN", "avantex-verify-2026")
+    app.config["META_PIXEL_ID"]     = os.getenv("META_PIXEL_ID", "")
 
     # ── Extensiones ────────────────────────────
     db.init_app(app)
