@@ -483,6 +483,41 @@ def recibir_mensaje_baileys():
     return jsonify({"ok": True, "lead_id": str(lead.id)}), 200
 
 
+# ══════════════════════════════════════════════
+# TEST — Meta Conversions API (temporal)
+# ══════════════════════════════════════════════
+@webhooks_bp.route("/meta/test-capi", methods=["GET"])
+def test_meta_capi():
+    """
+    Dispara un evento de prueba a Meta CAPI.
+    Uso: /webhook/meta/test-capi?marca=aromatex&test_code=TEST12345
+    """
+    from meta_conversions import send_conversion_event, _resolve_pixel
+
+    marca = request.args.get("marca", "aromatex")
+    test_code = request.args.get("test_code", "")
+
+    pixel_cfg = _resolve_pixel(marca)
+    if not pixel_cfg:
+        return jsonify({"error": f"No hay pixel configurado para marca '{marca}'"}), 400
+
+    # Lead ficticio para la prueba
+    class FakeLead:
+        id = "test-0000"
+        nombre = "Test Lead"
+        correo = "test@avantex.com"
+        telefono = "5551234567"
+        meta_lead_id = None
+        meta_campaign = "test_campaign"
+        marca_interes = marca
+
+    result = send_conversion_event(
+        FakeLead(), "Lead", pixel_cfg,
+        value=1000.0, test_event_code=test_code,
+    )
+    return jsonify({"status": "sent", "marca": marca, "pixel": pixel_cfg["pixel_id"], "meta_response": result})
+
+
 def _notificar_vendedor_baileys(lead, session_id, lead_data):
     """Envía notificación por WhatsApp al vendedor asignado."""
     import os, requests as http
