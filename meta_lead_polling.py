@@ -101,6 +101,7 @@ def poll_and_create_leads():
                     _create_lead_from_api(lead_data, page_name)
                     stats["leads_created"] += 1
                 except Exception as e:
+                    db.session.rollback()
                     log.exception(f"Error creando lead {meta_lead_id}: {e}")
                     stats["errors"] += 1
                     stats.setdefault("error_details", []).append({"lead_id": meta_lead_id, "error": str(e)})
@@ -129,9 +130,15 @@ def _create_lead_from_api(lead_data, page_name=""):
     email = campos.get("email") or campos.get("correo")
     marca = campos.get("marca_interes") or campos.get("brand", "")
 
-    if not telefono:
+    # Limpiar teléfono: quitar dummy data de Meta testing y truncar a 30 chars
+    if not telefono or "dummy" in str(telefono).lower() or "test lead" in str(telefono).lower():
         telefono = f"meta-{meta_lead_id[-10:]}"
-        log.warning(f"Lead {meta_lead_id} sin teléfono, usando placeholder: {telefono}")
+        log.warning(f"Lead {meta_lead_id} sin teléfono válido, usando placeholder: {telefono}")
+    telefono = str(telefono).strip()[:30]
+
+    # Limpiar nombre dummy
+    if nombre and "dummy" in nombre.lower():
+        nombre = f"Lead Meta {meta_lead_id[-6:]}"
 
     try:
         nuevo_lead = asignar_lead_comercial({
