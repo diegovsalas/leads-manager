@@ -315,6 +315,19 @@ def _start_scheduler(app):
                     )
         except Exception as e:
             app.logger.warning(f"SDR engine scheduler setup: {e}")
+
+        # Meta Lead Ads polling (cada 5 min) — alternativa al webhook mientras la App no está publicada
+        if os.getenv("META_PAGE_TOKEN"):
+            def _run_meta_polling():
+                with app.app_context():
+                    from meta_lead_polling import poll_and_create_leads
+                    result = poll_and_create_leads()
+                    if result.get("leads_created", 0) > 0:
+                        app.logger.info(f"Meta polling: {result}")
+
+            scheduler.add_job(_run_meta_polling, "interval", minutes=5, id="meta_lead_polling")
+            app.logger.info("Meta Lead Ads polling activo (cada 5 min)")
+
         scheduler.start()
         app.logger.info("Scheduler iniciado: cadencia (15 min) + notificaciones (9am) + backup (3am)")
     except Exception as e:

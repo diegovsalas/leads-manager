@@ -570,6 +570,17 @@ def subscribe_page_leadgen():
     })
 
 
+@webhooks_bp.route("/meta/poll-leads", methods=["GET"])
+def poll_leads():
+    """
+    Consulta Meta por nuevos leads vía Graph API (alternativa al webhook).
+    Uso: /webhook/meta/poll-leads
+    """
+    from meta_lead_polling import poll_and_create_leads
+    stats = poll_and_create_leads()
+    return jsonify(stats)
+
+
 def _notificar_vendedor_baileys(lead, session_id, lead_data):
     """Envía notificación por WhatsApp al vendedor asignado."""
     import os, requests as http
