@@ -125,9 +125,13 @@ def _create_lead_from_api(lead_data, page_name=""):
             campos[item["name"]] = item["values"][0]
 
     nombre = campos.get("full_name") or campos.get("nombre", "Sin nombre")
-    telefono = campos.get("phone_number") or campos.get("telefono")
+    telefono = campos.get("phone_number") or campos.get("telefono") or campos.get("tel")
     email = campos.get("email") or campos.get("correo")
     marca = campos.get("marca_interes") or campos.get("brand", "")
+
+    if not telefono:
+        telefono = f"meta-{meta_lead_id[-10:]}"
+        log.warning(f"Lead {meta_lead_id} sin teléfono, usando placeholder: {telefono}")
 
     try:
         nuevo_lead = asignar_lead_comercial({
