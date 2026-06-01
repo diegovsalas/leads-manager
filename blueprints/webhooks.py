@@ -518,6 +518,42 @@ def test_meta_capi():
     return jsonify({"status": "sent", "marca": marca, "pixel": pixel_cfg["pixel_id"], "meta_response": result})
 
 
+@webhooks_bp.route("/meta/subscribe-page", methods=["GET"])
+def subscribe_page_leadgen():
+    """
+    Suscribe una Page al webhook de leadgen de esta App.
+    Uso: /webhook/meta/subscribe-page?page_id=153702277822462
+    Requiere META_PAGE_TOKEN_<page_id> o META_PAGE_TOKEN en env vars.
+    """
+    import os, requests as http
+
+    page_id = request.args.get("page_id", "").strip()
+    if not page_id:
+        return jsonify({"error": "Falta page_id"}), 400
+
+    # Buscar token: primero específico, luego genérico
+    page_token = (
+        os.getenv(f"META_PAGE_TOKEN_{page_id}", "")
+        or os.getenv("META_PAGE_TOKEN", "")
+    )
+    if not page_token:
+        return jsonify({
+            "error": "Falta META_PAGE_TOKEN en env vars",
+            "help": "Genera un Page Access Token en Graph API Explorer y agrégalo en Render como META_PAGE_TOKEN",
+        }), 400
+
+    api_version = os.getenv("META_API_VERSION", "v19.0")
+    url = f"https://graph.facebook.com/{api_version}/{page_id}/subscribed_apps"
+
+    resp = http.post(url, json={
+        "subscribed_fields": "leadgen",
+        "access_token": page_token,
+    }, timeout=15)
+
+    result = resp.json()
+    return jsonify({"page_id": page_id, "status_code": resp.status_code, "meta_response": result})
+
+
 def _notificar_vendedor_baileys(lead, session_id, lead_data):
     """Envía notificación por WhatsApp al vendedor asignado."""
     import os, requests as http
