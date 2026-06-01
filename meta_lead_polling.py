@@ -133,7 +133,6 @@ def _create_lead_from_api(lead_data, page_name=""):
         nuevo_lead = asignar_lead_comercial({
             "telefono": telefono,
             "nombre": nombre,
-            "email": email,
             "origen": OrigenLead.META_ADS.value,
             "marca_interes": marca,
             "meta_lead_id": meta_lead_id,
@@ -146,7 +145,6 @@ def _create_lead_from_api(lead_data, page_name=""):
         nuevo_lead = Lead(
             telefono=telefono,
             nombre=nombre,
-            email=email,
             origen=OrigenLead.META_ADS,
             marca_interes=marca,
             etapa_pipeline=EtapaPipeline.NUEVO_LEAD,
