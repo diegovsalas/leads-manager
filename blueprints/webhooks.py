@@ -523,7 +523,7 @@ def subscribe_page_leadgen():
     """
     Suscribe una Page al webhook de leadgen de esta App.
     Uso: /webhook/meta/subscribe-page?page_id=153702277822462
-    Requiere META_PAGE_TOKEN_<page_id> o META_PAGE_TOKEN en env vars.
+    Intercambia el system user token por un Page token automáticamente.
     """
     import os, requests as http
 
@@ -531,27 +531,43 @@ def subscribe_page_leadgen():
     if not page_id:
         return jsonify({"error": "Falta page_id"}), 400
 
-    # Buscar token: primero específico, luego genérico
-    page_token = (
-        os.getenv(f"META_PAGE_TOKEN_{page_id}", "")
-        or os.getenv("META_PAGE_TOKEN", "")
-    )
-    if not page_token:
-        return jsonify({
-            "error": "Falta META_PAGE_TOKEN en env vars",
-            "help": "Genera un Page Access Token en Graph API Explorer y agrégalo en Render como META_PAGE_TOKEN",
-        }), 400
+    system_token = os.getenv("META_PAGE_TOKEN", "")
+    if not system_token:
+        return jsonify({"error": "Falta META_PAGE_TOKEN en env vars"}), 400
 
     api_version = os.getenv("META_API_VERSION", "v19.0")
-    url = f"https://graph.facebook.com/{api_version}/{page_id}/subscribed_apps"
+    base = f"https://graph.facebook.com/{api_version}"
 
-    resp = http.post(url, json={
+    # Paso 1: intercambiar system user token por page access token
+    token_resp = http.get(f"{base}/{page_id}", params={
+        "fields": "access_token,name",
+        "access_token": system_token,
+    }, timeout=15)
+    token_data = token_resp.json()
+
+    if "access_token" not in token_data:
+        return jsonify({
+            "error": "No se pudo obtener Page token",
+            "meta_response": token_data,
+            "help": "El system user necesita permisos de Page (manage page + leads)",
+        }), 400
+
+    page_token = token_data["access_token"]
+    page_name = token_data.get("name", "")
+
+    # Paso 2: suscribir la page al webhook de leadgen
+    resp = http.post(f"{base}/{page_id}/subscribed_apps", json={
         "subscribed_fields": "leadgen",
         "access_token": page_token,
     }, timeout=15)
 
     result = resp.json()
-    return jsonify({"page_id": page_id, "status_code": resp.status_code, "meta_response": result})
+    return jsonify({
+        "page_id": page_id,
+        "page_name": page_name,
+        "status_code": resp.status_code,
+        "meta_response": result,
+    })
 
 
 def _notificar_vendedor_baileys(lead, session_id, lead_data):
