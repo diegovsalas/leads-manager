@@ -103,6 +103,7 @@ def poll_and_create_leads():
                 except Exception as e:
                     log.exception(f"Error creando lead {meta_lead_id}: {e}")
                     stats["errors"] += 1
+                    stats.setdefault("error_details", []).append({"lead_id": meta_lead_id, "error": str(e)})
 
     return stats
 
