@@ -140,12 +140,21 @@ def _create_lead_from_api(lead_data, page_name=""):
     if nombre and "dummy" in nombre.lower():
         nombre = f"Lead Meta {meta_lead_id[-6:]}"
 
+    # Recopilar campos extra del formulario como notas
+    campos_conocidos = {"full_name", "nombre", "phone_number", "telefono", "tel",
+                        "email", "correo", "marca_interes", "brand"}
+    extras = {k: v for k, v in campos.items() if k not in campos_conocidos and v}
+    notas_formulario = ""
+    if extras:
+        notas_formulario = " | ".join(f"{k}: {v}" for k, v in extras.items())
+
     try:
         nuevo_lead = asignar_lead_comercial({
             "telefono": telefono,
             "nombre": nombre,
             "origen": OrigenLead.META_ADS.value,
             "marca_interes": marca,
+            "tipo_cliente": notas_formulario or None,
             "meta_lead_id": meta_lead_id,
             "meta_form_id": form_id,
             "meta_ad_id": ad_id,
@@ -158,6 +167,7 @@ def _create_lead_from_api(lead_data, page_name=""):
             nombre=nombre,
             origen=OrigenLead.META_ADS,
             marca_interes=marca,
+            tipo_cliente=notas_formulario or None,
             etapa_pipeline=EtapaPipeline.NUEVO_LEAD,
             meta_lead_id=meta_lead_id,
             meta_form_id=form_id,
