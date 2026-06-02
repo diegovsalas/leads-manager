@@ -126,9 +126,15 @@ def _create_lead_from_api(lead_data, page_name=""):
             campos[item["name"]] = item["values"][0]
 
     nombre = campos.get("full_name") or campos.get("nombre_completo") or campos.get("nombre", "Sin nombre")
-    telefono = campos.get("phone_number") or campos.get("telefono") or campos.get("tel")
+    whatsapp = campos.get("número_de_whatsapp") or campos.get("numero_de_whatsapp") or campos.get("whatsapp") or ""
+    telefono = campos.get("phone_number") or campos.get("telefono") or campos.get("tel") or whatsapp
     email = campos.get("email") or campos.get("correo")
     marca = campos.get("marca_interes") or campos.get("brand", "")
+
+    # Mapear campos conocidos del formulario a campos del Lead
+    empresa = campos.get("company_name") or campos.get("empresa") or ""
+    estado = campos.get("state") or campos.get("estado") or ""
+    ciudad = campos.get("city") or campos.get("ciudad") or ""
 
     # Limpiar teléfono: quitar dummy data de Meta testing y truncar a 30 chars
     if not telefono or "dummy" in str(telefono).lower() or "test lead" in str(telefono).lower():
@@ -139,14 +145,6 @@ def _create_lead_from_api(lead_data, page_name=""):
     # Limpiar nombre dummy
     if nombre and "dummy" in nombre.lower():
         nombre = f"Lead Meta {meta_lead_id[-6:]}"
-
-    # Mapear campos conocidos del formulario a campos del Lead
-    empresa = campos.get("company_name") or campos.get("empresa") or ""
-    estado = campos.get("state") or campos.get("estado") or ""
-    ciudad = campos.get("city") or campos.get("ciudad") or ""
-    whatsapp = campos.get("número_de_whatsapp") or campos.get("numero_de_whatsapp") or campos.get("whatsapp") or ""
-    if whatsapp and not telefono:
-        telefono = whatsapp
 
     # Campos extra como notas en motivo_perdida (campo Text sin constraint)
     campos_mapeados = {"full_name", "nombre", "nombre_completo", "phone_number", "telefono", "tel",
