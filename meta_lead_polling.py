@@ -125,7 +125,7 @@ def _create_lead_from_api(lead_data, page_name=""):
         if item.get("values"):
             campos[item["name"]] = item["values"][0]
 
-    nombre = campos.get("full_name") or campos.get("nombre", "Sin nombre")
+    nombre = campos.get("full_name") or campos.get("nombre_completo") or campos.get("nombre", "Sin nombre")
     telefono = campos.get("phone_number") or campos.get("telefono") or campos.get("tel")
     email = campos.get("email") or campos.get("correo")
     marca = campos.get("marca_interes") or campos.get("brand", "")
@@ -140,10 +140,20 @@ def _create_lead_from_api(lead_data, page_name=""):
     if nombre and "dummy" in nombre.lower():
         nombre = f"Lead Meta {meta_lead_id[-6:]}"
 
-    # Recopilar campos extra del formulario como notas
-    campos_conocidos = {"full_name", "nombre", "phone_number", "telefono", "tel",
-                        "email", "correo", "marca_interes", "brand"}
-    extras = {k: v for k, v in campos.items() if k not in campos_conocidos and v}
+    # Mapear campos conocidos del formulario a campos del Lead
+    empresa = campos.get("company_name") or campos.get("empresa") or ""
+    estado = campos.get("state") or campos.get("estado") or ""
+    ciudad = campos.get("city") or campos.get("ciudad") or ""
+    whatsapp = campos.get("número_de_whatsapp") or campos.get("numero_de_whatsapp") or campos.get("whatsapp") or ""
+    if whatsapp and not telefono:
+        telefono = whatsapp
+
+    # Campos extra como notas en motivo_perdida (campo Text sin constraint)
+    campos_mapeados = {"full_name", "nombre", "nombre_completo", "phone_number", "telefono", "tel",
+                       "email", "correo", "marca_interes", "brand", "company_name", "empresa",
+                       "state", "estado", "city", "ciudad", "número_de_whatsapp",
+                       "numero_de_whatsapp", "whatsapp"}
+    extras = {k: v for k, v in campos.items() if k not in campos_mapeados and v}
     notas_formulario = ""
     if extras:
         notas_formulario = " | ".join(f"{k}: {v}" for k, v in extras.items())
@@ -154,7 +164,9 @@ def _create_lead_from_api(lead_data, page_name=""):
             "nombre": nombre,
             "origen": OrigenLead.META_ADS.value,
             "marca_interes": marca,
-            "tipo_cliente": notas_formulario or None,
+            "empresa_nombre": empresa[:200] if empresa else None,
+            "estado_cliente": estado[:100] if estado else None,
+            "motivo_perdida": notas_formulario or None,
             "meta_lead_id": meta_lead_id,
             "meta_form_id": form_id,
             "meta_ad_id": ad_id,
@@ -167,7 +179,9 @@ def _create_lead_from_api(lead_data, page_name=""):
             nombre=nombre,
             origen=OrigenLead.META_ADS,
             marca_interes=marca,
-            tipo_cliente=notas_formulario or None,
+            empresa_nombre=empresa[:200] if empresa else None,
+            estado_cliente=estado[:100] if estado else None,
+            motivo_perdida=notas_formulario or None,
             etapa_pipeline=EtapaPipeline.NUEVO_LEAD,
             meta_lead_id=meta_lead_id,
             meta_form_id=form_id,
