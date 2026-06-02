@@ -24,6 +24,8 @@ class OrigenLead(enum.Enum):
     WHATSAPP_ORGANICO = "WhatsApp Organico"
     WEB               = "Web"
     PROSPECCION       = "Prospeccion"
+    UPSALE            = "Upsale"
+    CROSSALE          = "Crossale"
 
 
 class EtapaPipeline(enum.Enum):

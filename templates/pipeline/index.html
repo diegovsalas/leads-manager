@@ -376,7 +376,7 @@ fbq('track','PageView');
     </select>
     <div style="margin-left:auto;display:flex;gap:6px;">
       <button class="btn admin-only" onclick="openGastoModal()">+ Registrar gasto</button>
-      <button class="btn btn-filled" onclick="openModal()">+ Nuevo lead</button>
+      <button class="btn btn-filled" onclick="openLeadModal()">+ Nuevo lead</button>
     </div>
   </div>
   <div class="metrics-row">
@@ -483,7 +483,7 @@ fbq('track','PageView');
     <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
       <span style="font-size:13px;color:var(--text2);">Pipe total:</span>
       <span style="font-size:14px;font-weight:600;color:var(--green);" id="pipe-total">$0</span>
-      <button class="btn btn-filled" onclick="openModal()">+ Nuevo lead</button>
+      <button class="btn btn-filled" onclick="openLeadModal()">+ Nuevo lead</button>
     </div>
   </div>
   <div style="display:flex;flex:1;overflow:hidden;">
@@ -566,7 +566,7 @@ fbq('track','PageView');
 <div class="view" id="view-leads">
   <div class="toolbar">
     <input class="toolbar-search" type="text" placeholder="Buscar..." oninput="filterTable(this.value)"/>
-    <div style="margin-left:auto;"><button class="btn btn-filled" onclick="openModal()">+ Nuevo lead</button></div>
+    <div style="margin-left:auto;"><button class="btn btn-filled" onclick="openLeadModal()">+ Nuevo lead</button></div>
   </div>
   <div class="table-wrap">
     <table><thead><tr><th>Nombre</th><th>Telefono</th><th>Unidad</th><th>Cantidad</th><th>Valor</th><th>Etapa</th><th>Vendedor</th><th>Origen</th></tr></thead>
@@ -3532,6 +3532,9 @@ applyRoleVisibility();
           <div class="nl-pill active" data-val="Prospeccion">Prospección</div>
           <div class="nl-pill" data-val="Web">Web</div>
           <div class="nl-pill" data-val="WhatsApp Organico">WhatsApp Orgánico</div>
+          <div class="nl-pill" data-val="Meta Ads">Meta Ads</div>
+          <div class="nl-pill" data-val="Upsale">Upsale</div>
+          <div class="nl-pill" data-val="Crossale">Crossale</div>
         </div>
       </div>
 

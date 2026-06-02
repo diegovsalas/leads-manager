@@ -163,7 +163,14 @@ def crear_lead():
     )
     _apply_icp(lead)
     db.session.add(lead)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        existing = Lead.query.filter_by(telefono=data.get("telefono")).first()
+        if existing:
+            return jsonify({"error": f"Ya existe un lead con este teléfono: {existing.nombre}", "lead": existing.to_dict()}), 409
+        return jsonify({"error": "Error al crear el lead"}), 500
 
     log_actividad("crear", "lead", lead.id, f"Lead creado: {lead.nombre} ({lead.telefono})")
     socketio.emit("nuevo_lead", lead.to_dict())
