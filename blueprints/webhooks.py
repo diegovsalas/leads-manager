@@ -581,6 +581,17 @@ def poll_leads():
     return jsonify(stats)
 
 
+@webhooks_bp.route("/linkedin/poll-leads", methods=["GET"])
+def poll_linkedin_leads():
+    """
+    Consulta LinkedIn por nuevos leads vía Marketing API.
+    Uso: /webhook/linkedin/poll-leads
+    """
+    from linkedin_lead_polling import poll_and_create_leads
+    stats = poll_and_create_leads()
+    return jsonify(stats)
+
+
 def _notificar_vendedor_baileys(lead, session_id, lead_data):
     """Envía notificación por WhatsApp al vendedor asignado."""
     import os, requests as http
