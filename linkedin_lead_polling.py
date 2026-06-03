@@ -2,28 +2,22 @@
 LinkedIn Lead Gen Forms Polling — consulta leads vía LinkedIn Marketing API.
 
 Configuración via env vars:
-  LINKEDIN_CLIENT_ID       — Client ID de la App
-  LINKEDIN_CLIENT_SECRET   — Client Secret de la App
-  LINKEDIN_ACCESS_TOKEN    — OAuth2 access token (long-lived)
+  LINKEDIN_ACCESS_TOKEN    — OAuth2 access token con scope r_marketing_leadgen_automation
   LINKEDIN_AD_ACCOUNTS     — Ad Account IDs separados por coma (ej. "540980140,540810322,508602205")
 """
 import logging
 import os
-import time
-from datetime import datetime, timezone
+from urllib.parse import quote
 
 import requests
 
 log = logging.getLogger("linkedin_lead_polling")
 
-CLIENT_ID = os.getenv("LINKEDIN_CLIENT_ID", "")
-CLIENT_SECRET = os.getenv("LINKEDIN_CLIENT_SECRET", "")
 ACCESS_TOKEN = os.getenv("LINKEDIN_ACCESS_TOKEN", "")
 AD_ACCOUNTS = [a.strip() for a in os.getenv("LINKEDIN_AD_ACCOUNTS", "").split(",") if a.strip()]
 
 BASE_URL = "https://api.linkedin.com/rest"
 
-# Mapeo de Ad Account ID → marca
 ACCOUNT_MARCA = {
     "540980140": "Weldex",
     "540810322": "Aromatex",
@@ -40,63 +34,70 @@ def _headers():
 
 
 def _get_lead_forms(account_id):
-    """Obtiene los Lead Gen Forms de una Ad Account."""
-    resp = requests.get(
-        f"{BASE_URL}/leadForms",
-        headers=_headers(),
-        params={"q": "account", "account": f"urn:li:sponsoredAccount:{account_id}"},
-        timeout=15,
-    )
+    """Obtiene los Lead Gen Forms de una Ad Account via sponsoredAccount owner."""
+    owner_urn = quote(f"urn:li:sponsoredAccount:{account_id}")
+    url = f"{BASE_URL}/leadForms?q=owner&owner=(sponsoredAccount:{owner_urn})&count=50"
+    resp = requests.get(url, headers=_headers(), timeout=15)
     if not resp.ok:
-        log.error(f"LinkedIn forms error ({account_id}): {resp.status_code} {resp.text[:200]}")
+        log.error(f"LinkedIn forms error ({account_id}): {resp.status_code} {resp.text[:300]}")
         return []
     data = resp.json()
     return data.get("elements", [])
 
 
-def _get_leads(form_id):
-    """Obtiene leads de un formulario."""
-    resp = requests.get(
-        f"{BASE_URL}/leadFormResponses",
-        headers=_headers(),
-        params={"q": "form", "form": form_id, "count": 100},
-        timeout=15,
+def _get_leads(account_id):
+    """Obtiene TODOS los lead form responses de una Ad Account."""
+    owner_urn = quote(f"urn:li:sponsoredAccount:{account_id}")
+    url = (
+        f"{BASE_URL}/leadFormResponses"
+        f"?q=owner"
+        f"&owner=(sponsoredAccount:{owner_urn})"
+        f"&leadType=(leadType:SPONSORED)"
+        f"&limitedToTestLeads=false"
+        f"&count=100"
     )
+    resp = requests.get(url, headers=_headers(), timeout=15)
     if not resp.ok:
-        log.error(f"LinkedIn leads error ({form_id}): {resp.status_code} {resp.text[:200]}")
+        log.error(f"LinkedIn leads error ({account_id}): {resp.status_code} {resp.text[:300]}")
         return []
     data = resp.json()
     return data.get("elements", [])
 
 
-def _extract_fields(lead_data):
-    """Extrae campos del lead response de LinkedIn."""
+def _get_form_questions(forms):
+    """Crea un mapa de questionId → predefinedField/name para mapear respuestas."""
+    question_map = {}
+    for form in forms:
+        questions = form.get("content", {}).get("questions", [])
+        for q in questions:
+            qid = str(q.get("questionId", ""))
+            predefined = q.get("predefinedField", "")
+            name = q.get("name", "")
+            question_map[qid] = predefined or name
+    return question_map
+
+
+def _extract_fields(lead_data, question_map):
+    """Extrae campos del lead response de LinkedIn usando el question_map."""
     campos = {}
-    for answer in lead_data.get("answers", []):
-        question_id = answer.get("questionId", "")
-        value = answer.get("answerDetails", {}).get("textQuestionAnswer", {}).get("answer", "")
-        if not value:
-            value = answer.get("answerDetails", {}).get("singleChoiceAnswer", {}).get("selectedChoice", "")
+    answers = lead_data.get("formResponse", {}).get("answers", [])
 
-        q_lower = question_id.lower()
-        if "firstname" in q_lower or "first_name" in q_lower:
-            campos["first_name"] = value
-        elif "lastname" in q_lower or "last_name" in q_lower:
-            campos["last_name"] = value
-        elif "email" in q_lower:
-            campos["email"] = value
-        elif "phone" in q_lower or "tel" in q_lower:
-            campos["phone"] = value
-        elif "company" in q_lower or "empresa" in q_lower:
-            campos["company"] = value
-        elif "title" in q_lower or "puesto" in q_lower or "job" in q_lower:
-            campos["job_title"] = value
-        elif "city" in q_lower or "ciudad" in q_lower:
-            campos["city"] = value
-        elif "state" in q_lower or "estado" in q_lower:
-            campos["state"] = value
-        else:
-            campos[question_id] = value
+    for answer in answers:
+        question_id = str(answer.get("questionId", ""))
+        details = answer.get("answerDetails", {})
+
+        value = ""
+        if "textQuestionAnswer" in details:
+            value = details["textQuestionAnswer"].get("answer", "")
+        elif "multipleChoiceAnswer" in details:
+            options = details["multipleChoiceAnswer"].get("options", [])
+            value = ", ".join(str(o) for o in options)
+        elif "singleChoiceAnswer" in details:
+            value = str(details["singleChoiceAnswer"].get("selectedChoice", ""))
+
+        if value:
+            field_name = question_map.get(question_id, question_id)
+            campos[field_name] = value
 
     return campos
 
@@ -116,45 +117,45 @@ def poll_and_create_leads():
         marca = ACCOUNT_MARCA.get(account_id, "")
 
         forms = _get_lead_forms(account_id)
-        for form in forms:
-            stats["forms"] += 1
-            form_urn = form.get("id", "")
+        stats["forms"] += len(forms)
+        question_map = _get_form_questions(forms)
 
-            leads = _get_leads(form_urn)
-            for lead_data in leads:
-                stats["leads_found"] += 1
-                linkedin_lead_id = lead_data.get("id", "")
+        leads = _get_leads(account_id)
+        for lead_data in leads:
+            stats["leads_found"] += 1
+            linkedin_lead_id = lead_data.get("id", "")
 
-                if Lead.query.filter_by(meta_lead_id=f"li-{linkedin_lead_id}").first():
-                    stats["duplicates"] += 1
-                    continue
+            if Lead.query.filter_by(meta_lead_id=f"li-{linkedin_lead_id}").first():
+                stats["duplicates"] += 1
+                continue
 
-                try:
-                    _create_lead(lead_data, linkedin_lead_id, form_urn, marca)
-                    stats["leads_created"] += 1
-                except Exception as e:
-                    db.session.rollback()
-                    log.exception(f"Error creando lead LinkedIn {linkedin_lead_id}: {e}")
-                    stats["errors"] += 1
-                    stats.setdefault("error_details", []).append({"lead_id": linkedin_lead_id, "error": str(e)})
+            try:
+                _create_lead(lead_data, linkedin_lead_id, marca, question_map)
+                stats["leads_created"] += 1
+            except Exception as e:
+                db.session.rollback()
+                log.exception(f"Error creando lead LinkedIn {linkedin_lead_id}: {e}")
+                stats["errors"] += 1
+                stats.setdefault("error_details", []).append({"lead_id": linkedin_lead_id, "error": str(e)})
 
     return stats
 
 
-def _create_lead(lead_data, linkedin_lead_id, form_urn, marca):
+def _create_lead(lead_data, linkedin_lead_id, marca, question_map):
     """Crea un lead en el CRM desde datos de LinkedIn."""
     from extensions import db, socketio
     from models import Lead, EtapaPipeline, OrigenLead
     from asignacion import asignar_lead_comercial
 
-    campos = _extract_fields(lead_data)
+    campos = _extract_fields(lead_data, question_map)
 
-    first_name = campos.get("first_name", "")
-    last_name = campos.get("last_name", "")
+    first_name = campos.get("FIRST_NAME", "") or campos.get("firstName", "")
+    last_name = campos.get("LAST_NAME", "") or campos.get("lastName", "")
     nombre = f"{first_name} {last_name}".strip() or "Sin nombre"
-    telefono = campos.get("phone", "")
-    empresa = campos.get("company", "")
-    estado = campos.get("state", "")
+    telefono = campos.get("PHONE_NUMBER", "") or campos.get("phone", "") or campos.get("phoneNumber", "")
+    empresa = campos.get("COMPANY_NAME", "") or campos.get("company", "") or campos.get("companyName", "")
+    estado = campos.get("STATE", "") or campos.get("state", "")
+    job_title = campos.get("JOB_TITLE", "") or campos.get("jobTitle", "")
 
     if not telefono:
         telefono = f"li-{linkedin_lead_id[-10:]}"
@@ -162,11 +163,23 @@ def _create_lead(lead_data, linkedin_lead_id, form_urn, marca):
     telefono = str(telefono).strip()[:30]
 
     # Campos extra como notas
-    campos_mapeados = {"first_name", "last_name", "phone", "email", "company", "state", "city"}
+    campos_mapeados = {"FIRST_NAME", "LAST_NAME", "firstName", "lastName",
+                       "PHONE_NUMBER", "phone", "phoneNumber",
+                       "EMAIL", "email", "COMPANY_NAME", "company", "companyName",
+                       "STATE", "state", "CITY", "city",
+                       "JOB_TITLE", "jobTitle"}
     extras = {k: v for k, v in campos.items() if k not in campos_mapeados and v}
-    notas = ""
+    notas_parts = []
+    if job_title:
+        notas_parts.append(f"Puesto: {job_title}")
     if extras:
-        notas = " | ".join(f"{k}: {v}" for k, v in extras.items())
+        notas_parts.extend(f"{k}: {v}" for k, v in extras.items())
+    notas = " | ".join(notas_parts) if notas_parts else None
+
+    campaign_name = ""
+    meta_info = lead_data.get("leadMetadataInfo", {}).get("sponsoredLeadMetadataInfo", {})
+    if meta_info:
+        campaign_name = meta_info.get("campaign", {}).get("name", "")
 
     try:
         nuevo_lead = asignar_lead_comercial({
@@ -178,8 +191,7 @@ def _create_lead(lead_data, linkedin_lead_id, form_urn, marca):
             "estado_cliente": estado[:100] if estado else None,
             "motivo_perdida": f"[LinkedIn] {notas}" if notas else None,
             "meta_lead_id": f"li-{linkedin_lead_id}",
-            "meta_form_id": form_urn,
-            "meta_campaign": "LinkedIn Ads",
+            "meta_campaign": f"LinkedIn: {campaign_name}" if campaign_name else "LinkedIn Ads",
         })
         log.info(f"Lead LinkedIn creado: {nuevo_lead.id} ({nombre})")
     except ValueError:
@@ -193,8 +205,7 @@ def _create_lead(lead_data, linkedin_lead_id, form_urn, marca):
             motivo_perdida=f"[LinkedIn] {notas}" if notas else None,
             etapa_pipeline=EtapaPipeline.NUEVO_LEAD,
             meta_lead_id=f"li-{linkedin_lead_id}",
-            meta_form_id=form_urn,
-            meta_campaign="LinkedIn Ads",
+            meta_campaign=f"LinkedIn: {campaign_name}" if campaign_name else "LinkedIn Ads",
         )
         db.session.add(nuevo_lead)
         db.session.commit()
