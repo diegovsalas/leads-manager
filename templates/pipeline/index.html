@@ -18,8 +18,18 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px;}
 
-.shell{display:grid;grid-template-columns:220px 1fr;height:100vh;}
-.sidebar{background:var(--bg-sidebar);border-right:1px solid transparent;display:flex;flex-direction:column;overflow:hidden;position:sticky;top:0;height:100vh;box-shadow:0px 4px 50px #d9ddfc;}
+.shell{display:grid;grid-template-columns:220px 1fr;height:100vh;transition:grid-template-columns .2s;}
+.shell.collapsed{grid-template-columns:56px 1fr;}
+.sidebar{background:var(--bg-sidebar);border-right:1px solid transparent;display:flex;flex-direction:column;overflow:hidden;position:sticky;top:0;height:100vh;box-shadow:0px 4px 50px #d9ddfc;transition:all .2s;}
+.collapsed .sidebar-brand small,.collapsed .sidebar-section,.collapsed .slink span,.collapsed .slink kbd,.collapsed .slink-badge,.collapsed .sidebar-bottom .meta,.collapsed .ws-status span{display:none;}
+.collapsed .sidebar-brand .wm-row,.collapsed .sidebar-brand .tag-grupo{font-size:0;overflow:hidden;}
+.collapsed .sidebar-brand .wm-steel,.collapsed .sidebar-brand .wm-x{font-size:13px;}
+.collapsed .slink{justify-content:center;padding:9px 0;margin:1px 4px;font-size:16px;overflow:hidden;white-space:nowrap;}
+.collapsed .sidebar-bottom{justify-content:center;padding:10px 4px;}
+.collapsed .sidebar-bottom .avatar{margin:0;}
+.sidebar-toggle{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;border:none;background:rgba(255,255,255,.12);color:rgba(255,255,255,.7);cursor:pointer;font-size:14px;transition:all .15s;position:absolute;top:14px;right:8px;z-index:2;}
+.sidebar-toggle:hover{background:rgba(255,255,255,.2);color:#fff;}
+.collapsed .sidebar-toggle{position:static;margin:10px auto;}
 .content{overflow:hidden;display:flex;flex-direction:column;background:var(--bg);}
 .sidebar-brand{padding:14px 16px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:1px;line-height:1;}
 .sidebar-brand .wm-row{display:flex;align-items:baseline;gap:0;}
@@ -296,7 +306,8 @@ fbq('track','PageView');
 <div class="shell">
 
 <!-- ===== SIDEBAR ===== -->
-<aside class="sidebar">
+<aside class="sidebar" style="position:relative;">
+  <button class="sidebar-toggle" onclick="toggleSidebar()" title="Contraer/Expandir menú">&#9776;</button>
   <div class="sidebar-brand">
     <div class="tag-grupo">GRUPO</div>
     <div class="wm-row"><span class="wm-steel">AVANTE</span><span class="wm-x">X</span></div>
@@ -321,8 +332,7 @@ fbq('track','PageView');
     <div class="slink" data-marca="Aromatex Home" onclick="setFiltroMarca('Aromatex Home',this)">&#127810; Aromatex Home</div>
     <div class="slink" data-marca="Aromatex" onclick="setFiltroMarca('Aromatex',this)">&#127811; Aromatex</div>
     <div class="slink" data-marca="Pestex" onclick="setFiltroMarca('Pestex',this)">&#128027; Pestex</div>
-    <div class="slink" data-marca="Weldex" onclick="setFiltroMarca('Weldex',this)">&#128293; Weldex</div>
-    <div class="slink" data-marca="Nexo" onclick="setFiltroMarca('Nexo',this)">&#128279; Nexo</div>
+    <div class="slink" data-marca="Weldex" onclick="setFiltroMarca('Weldex',this)">&#128293; Weldex / Weldu</div>
 
     <div class="sidebar-divider admin-only"></div>
     <div class="sidebar-section admin-only">Avantex</div>
@@ -1815,6 +1825,13 @@ fbq('track','PageView');
 <div class="toast-container" id="toasts"></div>
 
 <script>
+function toggleSidebar(){
+  const shell=document.querySelector('.shell');
+  shell.classList.toggle('collapsed');
+  localStorage.setItem('sidebar-collapsed',shell.classList.contains('collapsed'));
+}
+if(localStorage.getItem('sidebar-collapsed')==='true') document.querySelector('.shell').classList.add('collapsed');
+
 const socket=io();
 // Role-based access
 window.ROL_USUARIO='{{ user_rol }}'.toLowerCase().replace(' ','_');
