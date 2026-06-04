@@ -293,7 +293,7 @@ def from_lead(lead_id):
         num_sucursales=data.get("num_sucursales") or lead.num_sucursales,
         monthly_amount=monthly,
         sale_type=data.get("sale_type"),
-        notas=data.get("notas") or lead.tipo_cliente,
+        notas=data.get("notas") or lead.notas,
         lead_id=lead.id,
     )
     db.session.add(op)

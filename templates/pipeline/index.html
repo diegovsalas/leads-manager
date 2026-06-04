@@ -1712,6 +1712,11 @@ fbq('track','PageView');
     </div>
 
     <div class="lp-section">
+      <div class="lp-section-title">Información importante</div>
+      <div id="lp-notas" style="font-size:13px;color:var(--text2);white-space:pre-wrap;line-height:1.5;">—</div>
+    </div>
+
+    <div class="lp-section">
       <div class="lp-section-title">Cotizaciones</div>
       <div id="lp-cotizaciones" style="font-size:13px;color:var(--text3);">Cargando...</div>
     </div>
@@ -3005,6 +3010,11 @@ async function abrirLeadPanel(id){
     document.getElementById('lp-sucursales').textContent=l.num_sucursales||'—';
     document.getElementById('lp-nurturing').innerHTML=l.en_nurturing?'<span style="color:var(--yellow);">Si — en nurturing</span>':'No';
 
+    // Notas / información importante
+    const notasEl=document.getElementById('lp-notas');
+    if(l.notas&&l.notas.trim()){notasEl.textContent=l.notas;notasEl.style.color='var(--text2)';}
+    else{notasEl.textContent='Sin notas — clic en Editar para agregar contexto del lead.';notasEl.style.color='var(--text3)';}
+
     // Seguimiento
     document.getElementById('lp-ultimo-contacto').textContent=l.fecha_ultimo_contacto?fmtDateTime(l.fecha_ultimo_contacto):'—';
     document.getElementById('lp-respondio').innerHTML=l.respondio_ultimo_contacto?'<span style="color:var(--green);">Si</span>':'<span style="color:var(--text3);">No</span>';
@@ -3039,11 +3049,14 @@ function closeLeadPanel(){
 function editLeadFromPanel(){
   const id=document.getElementById('lp-id').value;
   // For now show a prompt-based edit (TODO: full edit modal)
-  const campo=prompt('Que campo quieres editar?\n\n1) tipo_industria\n2) tamano_empresa\n3) num_sucursales\n4) tipo_cliente\n5) nombre\n\nEscribe el numero:');
-  const campos={1:'tipo_industria',2:'tamano_empresa',3:'num_sucursales',4:'tipo_cliente',5:'nombre'};
+  const campo=prompt('Que campo quieres editar?\n\n1) tipo_industria\n2) tamano_empresa\n3) num_sucursales\n4) tipo_cliente\n5) nombre\n6) notas (información importante)\n\nEscribe el numero:');
+  const campos={1:'tipo_industria',2:'tamano_empresa',3:'num_sucursales',4:'tipo_cliente',5:'nombre',6:'notas'};
   const field=campos[campo];
   if(!field)return;
-  const valor=prompt('Nuevo valor para '+field+':');
+  const actual=field==='notas'?document.getElementById('lp-notas').textContent:'';
+  const valor=field==='notas'
+    ?prompt('Información importante del lead:\n(contexto clave, decisor, urgencia, presupuesto…)',actual&&actual.startsWith('Sin notas')?'':actual)
+    :prompt('Nuevo valor para '+field+':');
   if(valor===null)return;
   const body={};
   body[field]=field==='num_sucursales'?parseInt(valor):valor;
@@ -3563,6 +3576,11 @@ applyRoleVisibility();
         </div>
       </div>
 
+      <div class="nl-row">
+        <label class="nl-label">Información importante</label>
+        <textarea class="nl-input" id="nl-notas" rows="3" style="resize:vertical;" placeholder="Contexto clave del lead: dolor, urgencia, decisor, presupuesto, próximos pasos…"></textarea>
+      </div>
+
       <details class="nl-collapse">
         <summary>Calificar más (opcional) — ICP <span class="nl-icp D" id="nl-icp-badge">D</span></summary>
         <div style="padding-top:8px;">
@@ -3586,9 +3604,17 @@ applyRoleVisibility();
               <input class="nl-input" id="nl-precio" type="number" min="0" step="0.01"/>
             </div>
           </div>
-          <div class="nl-row">
-            <label class="nl-label">Notas</label>
-            <textarea class="nl-input" id="nl-notas" rows="2" style="resize:vertical;"></textarea>
+          <div class="nl-row two">
+            <div>
+              <label class="nl-label">Tipo de cliente</label>
+              <select class="nl-input" id="nl-tipo-cliente">
+                <option value="">—</option>
+                <option value="Nuevo">Nuevo</option>
+                <option value="Recurrente">Recurrente</option>
+                <option value="Eventual">Eventual</option>
+              </select>
+            </div>
+            <div></div>
           </div>
         </div>
       </details>
@@ -4124,6 +4150,7 @@ async function openLeadModal(){
   document.getElementById('nl-estado').value='';
   document.getElementById('nl-industria').value='';
   document.getElementById('nl-tamano').value='';
+  document.getElementById('nl-tipo-cliente').value='';
   document.getElementById('nl-calificado').checked=false;
   document.getElementById('nl-dup-banner').style.display='none';
   // Estados
@@ -4267,6 +4294,7 @@ async function nlSubmit(mode){
   const cantidad=document.getElementById('nl-cantidad').value;
   const precio=document.getElementById('nl-precio').value;
   const notas=document.getElementById('nl-notas').value.trim();
+  const tipoCliente=document.getElementById('nl-tipo-cliente').value;
   const calificado=document.getElementById('nl-calificado').checked;
   const unidad=document.querySelector('#nl-unidad-pills .nl-pill.active')?.dataset.val||'';
   const origen=document.querySelector('#nl-origen-pills .nl-pill.active')?.dataset.val||'Prospeccion';
@@ -4285,7 +4313,8 @@ async function nlSubmit(mode){
     tipo_industria:industria||null, tamano_empresa:tamano||null,
     cantidad_productos:cantidad?parseInt(cantidad):null,
     precio_unitario:precio?parseFloat(precio):null,
-    tipo_cliente:notas||null,
+    tipo_cliente:tipoCliente||null,
+    notas:notas||null,
     etapa_pipeline: calificado ? 'Cotización' : 'Nuevo Lead',
   };
 
@@ -4299,6 +4328,7 @@ async function nlSubmit(mode){
     else if(mode==='add-another'){
       // Reset y reabrir
       ['nl-phone','nl-nombre','nl-empresa','nl-sucursales','nl-cantidad','nl-precio','nl-notas'].forEach(id=>document.getElementById(id).value='');
+      document.getElementById('nl-tipo-cliente').value='';
       document.getElementById('nl-dup-banner').style.display='none';
       _nlUpdateIcp();
       setTimeout(()=>document.getElementById('nl-phone').focus(),100);

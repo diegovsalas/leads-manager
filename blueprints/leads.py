@@ -158,7 +158,8 @@ def crear_lead():
         tipo_industria=data.get("tipo_industria"),
         tamano_empresa=data.get("tamano_empresa"),
         num_sucursales=data.get("num_sucursales"),
-        tipo_cliente=data.get("tipo_cliente") or data.get("notas"),
+        tipo_cliente=data.get("tipo_cliente"),
+        notas=data.get("notas"),
     )
     _apply_icp(lead)
     db.session.add(lead)
@@ -284,7 +285,7 @@ def actualizar_lead(lead_id):
     for campo in ["nombre", "telefono", "marca_interes", "cantidad_productos",
                    "precio_unitario", "valor_estimado", "motivo_perdida",
                    "usuario_asignado_id", "tipo_industria", "tamano_empresa",
-                   "num_sucursales", "tipo_cliente"]:
+                   "num_sucursales", "tipo_cliente", "notas"]:
         if campo in data:
             setattr(lead, campo, data[campo])
 

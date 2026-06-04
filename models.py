@@ -186,6 +186,7 @@ class Lead(db.Model):
     tamano_empresa = db.Column(db.Text, nullable=True)
     estado_cliente = db.Column(db.String(100), nullable=True)  # Estado normalizado (ej: "Nuevo León")
     empresa_nombre = db.Column(db.String(200), nullable=True)  # Nombre de la empresa (del bot) — legacy, se reemplaza por account_id
+    notas = db.Column(db.Text, nullable=True)  # Información importante / contexto libre del lead
 
     # Account + Contact (Fase 3) — referencias opcionales sin FK estricto en DB
     account_id = db.Column(UUID(as_uuid=True), nullable=True, index=True)
@@ -249,6 +250,7 @@ class Lead(db.Model):
             "num_sucursales": self.num_sucursales,
             "tipo_industria": self.tipo_industria,
             "tamano_empresa": self.tamano_empresa,
+            "notas": self.notas,
             "usuario_asignado": vendedor,
             "fecha_creacion": self.fecha_creacion.isoformat(),
             "fecha_actualizacion": self.fecha_actualizacion.isoformat(),

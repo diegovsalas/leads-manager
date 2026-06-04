@@ -58,3 +58,8 @@ ALTER TABLE customer_rfcs
 ALTER TABLE cs_opportunities
     ADD COLUMN IF NOT EXISTS contacto_telefono VARCHAR(40) DEFAULT '',
     ADD COLUMN IF NOT EXISTS contacto_email    VARCHAR(200) DEFAULT '';
+
+-- Leads: campo libre "información importante" / notas del lead.
+-- Antes vivía dentro del <details> oculto del modal y se guardaba en tipo_cliente
+-- (hack). Ahora tiene columna propia y campo visible en el formulario.
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS notas TEXT;
