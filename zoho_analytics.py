@@ -24,8 +24,8 @@ CLIENT_ID = os.getenv("ZOHO_ANALYTICS_CLIENT_ID") or os.getenv("ZOHO_CLIENT_ID",
 CLIENT_SECRET = os.getenv("ZOHO_ANALYTICS_CLIENT_SECRET") or os.getenv("ZOHO_CLIENT_SECRET", "")
 REFRESH_TOKEN = os.getenv("ZOHO_ANALYTICS_REFRESH_TOKEN", "")
 ORG_ID = os.getenv("ZOHO_ANALYTICS_ORG_ID", "")
-WORKSPACE_ID = os.getenv("ZOHO_ANALYTICS_WORKSPACE_ID", "")
-VIEW_ID = os.getenv("ZOHO_ANALYTICS_VIEW_ID", "")
+WORKSPACE_ID = os.getenv("ZOHO_ANALYTICS_WORKSPACE_ID") or os.getenv("ZOHO_ANALYTICS_WORKSPACE", "")
+VIEW_ID = os.getenv("ZOHO_ANALYTICS_VIEW_ID") or os.getenv("ZOHO_ANALYTICS_VIEW", "")
 
 ACCOUNTS_URL = "https://accounts.zoho.com"
 API_BASE = "https://analyticsapi.zoho.com/restapi/v2"
