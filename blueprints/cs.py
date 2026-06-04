@@ -1559,7 +1559,7 @@ def zoho_sync_citas():
         flash("Zoho Analytics no configurado. Configura las variables de entorno.", "error")
         return redirect(url_for("cs.cargar_datos"))
 
-    days = int(request.form.get("days", 90))
+    days = int(request.form.get("days", 30))
     since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     criteria = f'"Fecha de Inicio" >= \'{since}\''
 
@@ -1588,17 +1588,16 @@ def zoho_sync_citas():
     samples_no_match: list[str] = []
     samples_error: list[str] = []
     batch: list[dict] = []
-    abort_upsert: bool = False
 
     _SQL_UPSERT = _text("""
         INSERT INTO cs_appointments
             (account_id, propiedad, direccion, zona, tecnico,
              fecha_inicio, fecha_terminacion, estatus, titulo_servicio,
-             cantidad, precio_unitario, zoho_appointment_id)
+             cantidad, zoho_appointment_id)
         VALUES
             (:account_id, :propiedad, :direccion, :zona, :tecnico,
              :fecha_inicio, :fecha_terminacion, :estatus, :titulo_servicio,
-             :cantidad, :precio_unitario, :zoho_appointment_id)
+             :cantidad, :zoho_appointment_id)
         ON CONFLICT (zoho_appointment_id) WHERE zoho_appointment_id IS NOT NULL
         DO UPDATE SET
             account_id = EXCLUDED.account_id,
@@ -1610,65 +1609,37 @@ def zoho_sync_citas():
             fecha_terminacion = EXCLUDED.fecha_terminacion,
             estatus = EXCLUDED.estatus,
             titulo_servicio = EXCLUDED.titulo_servicio,
-            cantidad = EXCLUDED.cantidad,
-            precio_unitario = EXCLUDED.precio_unitario
+            cantidad = EXCLUDED.cantidad
     """)
     _SQL_INSERT = _text("""
         INSERT INTO cs_appointments
             (account_id, propiedad, direccion, zona, tecnico,
-             fecha_inicio, fecha_terminacion, estatus, titulo_servicio,
-             cantidad, precio_unitario)
+             fecha_inicio, fecha_terminacion, estatus, titulo_servicio, cantidad)
         VALUES
             (:account_id, :propiedad, :direccion, :zona, :tecnico,
-             :fecha_inicio, :fecha_terminacion, :estatus, :titulo_servicio,
-             :cantidad, :precio_unitario)
+             :fecha_inicio, :fecha_terminacion, :estatus, :titulo_servicio, :cantidad)
     """)
 
     def _flush_zoho(buf):
-        nonlocal abort_upsert
         if not buf:
             return 0, 0
-        if abort_upsert or not has_zoho_col:
-            rows_con_id = []
-            rows_sin_id = [{k: v for k, v in r.items() if k != "zoho_appointment_id"} for r in buf]
-        else:
-            rows_con_id = [r for r in buf if r.get("zoho_appointment_id")]
-            rows_sin_id = [{k: v for k, v in r.items() if k != "zoho_appointment_id"}
-                           for r in buf if not r.get("zoho_appointment_id")]
-        ok, fail = 0, 0
-        if rows_con_id:
+        if has_zoho_col:
             try:
-                db.session.execute(_SQL_UPSERT, rows_con_id)
+                db.session.execute(_SQL_UPSERT, buf)
                 db.session.commit()
-                ok += len(rows_con_id)
+                return len(buf), 0
             except Exception as e:
                 db.session.rollback()
-                _logging.warning("[ZOHO-CITAS] upsert falló: %s", str(e)[:200])
-                abort_upsert = True
-                fallback = [{k: v for k, v in r.items() if k != "zoho_appointment_id"} for r in rows_con_id]
-                try:
-                    db.session.execute(_SQL_INSERT, fallback)
-                    db.session.commit()
-                    ok += len(fallback)
-                except Exception:
-                    db.session.rollback()
-                    fail += len(fallback)
-        if rows_sin_id:
-            try:
-                db.session.execute(_SQL_INSERT, rows_sin_id)
-                db.session.commit()
-                ok += len(rows_sin_id)
-            except Exception:
-                db.session.rollback()
-                for r in rows_sin_id:
-                    try:
-                        db.session.execute(_SQL_INSERT, r)
-                        db.session.commit()
-                        ok += 1
-                    except Exception:
-                        db.session.rollback()
-                        fail += 1
-        return ok, fail
+                _logging.warning("[ZOHO-CITAS] upsert batch falló: %s", str(e)[:200])
+        plain = [{k: v for k, v in r.items() if k != "zoho_appointment_id"} for r in buf]
+        try:
+            db.session.execute(_SQL_INSERT, plain)
+            db.session.commit()
+            return len(plain), 0
+        except Exception as e:
+            db.session.rollback()
+            _logging.warning("[ZOHO-CITAS] insert batch falló: %s", str(e)[:200])
+            return 0, len(plain)
 
     for row in rows:
         visita_id = str(row.get("ID", "")).strip()
@@ -1681,9 +1652,6 @@ def zoho_sync_citas():
             continue
 
         try:
-            precio_raw = row.get("Precio UNITARIO con Descuento") or row.get("Precio Unitario") or None
-            precio = float(precio_raw) if precio_raw else None
-
             r_dict = {
                 "account_id": acc_id,
                 "propiedad": str(row.get("Propiedad", "")).strip(),
@@ -1699,13 +1667,12 @@ def zoho_sync_citas():
                     row.get("Titulo Servicio", "") or row.get("Título Servicio", "")
                 ).strip(),
                 "cantidad": int(float(row.get("Cantidad") or 1)),
-                "precio_unitario": precio,
             }
             if has_zoho_col and visita_id:
                 r_dict["zoho_appointment_id"] = visita_id[:64]
             batch.append(r_dict)
 
-            if len(batch) >= 500:
+            if len(batch) >= 2000:
                 ins, fail = _flush_zoho(batch)
                 insertados += ins
                 errores += fail
