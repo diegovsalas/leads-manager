@@ -20,8 +20,8 @@ import requests
 
 log = logging.getLogger("zoho_analytics")
 
-CLIENT_ID = os.getenv("ZOHO_ANALYTICS_CLIENT_ID", "")
-CLIENT_SECRET = os.getenv("ZOHO_ANALYTICS_CLIENT_SECRET", "")
+CLIENT_ID = os.getenv("ZOHO_ANALYTICS_CLIENT_ID") or os.getenv("ZOHO_CLIENT_ID", "")
+CLIENT_SECRET = os.getenv("ZOHO_ANALYTICS_CLIENT_SECRET") or os.getenv("ZOHO_CLIENT_SECRET", "")
 REFRESH_TOKEN = os.getenv("ZOHO_ANALYTICS_REFRESH_TOKEN", "")
 ORG_ID = os.getenv("ZOHO_ANALYTICS_ORG_ID", "")
 WORKSPACE_ID = os.getenv("ZOHO_ANALYTICS_WORKSPACE_ID", "")
