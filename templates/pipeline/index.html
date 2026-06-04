@@ -308,7 +308,7 @@ fbq('track','PageView');
     <div class="slink active" onclick="showView('dashboard',this)">&#128202; Dashboard</div>
     <div class="slink" onclick="showView('mihoy',this)">&#127919; Mi dia <span class="slink-badge" style="color:var(--red);font-weight:600;" id="mihoy-badge"></span></div>
     <div class="slink" onclick="showView('pipeline',this)">&#128203; Pipeline</div>
-    <div class="slink" onclick="openLeadModal()" style="background:var(--copper-soft);color:var(--copper);font-weight:600;">&#10133; Nuevo Lead <kbd style="float:right;font-size:9px;color:var(--text3);background:var(--bg-card);padding:1px 4px;border-radius:3px;border:1px solid var(--border);">⌘N</kbd></div>
+    <div class="slink" onclick="openLeadModal()" style="background:rgba(255,255,255,.12);color:#fff;font-weight:600;">&#10133; Nuevo Lead <kbd style="float:right;font-size:9px;color:rgba(255,255,255,.5);background:rgba(255,255,255,.1);padding:1px 4px;border-radius:3px;border:1px solid rgba(255,255,255,.2);">⌘N</kbd></div>
     <div class="slink" onclick="showView('opps',this)">&#127919; Oportunidades</div>
     <div class="slink" onclick="showView('accounts',this)">&#127970; Empresas</div>
     <div class="slink" onclick="showView('contacts',this)">&#128101; Contactos</div>
@@ -3448,12 +3448,12 @@ applyRoleVisibility();
 .nl-row.two{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .nl-label{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;display:block;}
 .nl-input{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:var(--font);background:var(--bg-input);color:var(--text);outline:none;transition:border-color .12s;}
-.nl-input:focus{border-color:var(--copper);box-shadow:0 0 0 3px var(--copper-soft);}
+.nl-input:focus{border-color:#0075b7;box-shadow:0 0 0 3px rgba(0,117,183,.12);}
 .nl-input.error{border-color:var(--red);}
 .nl-pills{display:flex;gap:6px;flex-wrap:wrap;}
 .nl-pill{padding:6px 12px;border:1px solid var(--border);border-radius:99px;font-size:12px;cursor:pointer;background:var(--bg-card);transition:all .12s;user-select:none;}
 .nl-pill:hover{background:var(--bg-hover);}
-.nl-pill.active{background:var(--copper);color:#fff;border-color:var(--copper);}
+.nl-pill.active{background:#0075b7;color:#fff;border-color:#0075b7;}
 .nl-banner{padding:9px 12px;border-radius:6px;font-size:12px;display:flex;align-items:center;gap:8px;margin-top:6px;}
 .nl-banner.warn{background:var(--orange-bg);color:var(--orange);border:1px solid var(--orange);}
 .nl-banner.info{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue);}
@@ -3473,8 +3473,8 @@ applyRoleVisibility();
 .nl-btns{display:flex;gap:6px;}
 .nl-btn{padding:7px 12px;border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;background:var(--bg-card);font-family:var(--font);}
 .nl-btn:hover{background:var(--bg-hover);}
-.nl-btn.primary{background:var(--copper);color:#fff;border-color:var(--copper);}
-.nl-btn.primary:hover{background:#7a4f30;}
+.nl-btn.primary{background:#0075b7;color:#fff;border-color:#0075b7;}
+.nl-btn.primary:hover{background:#005f96;}
 .nl-btn:disabled{opacity:.5;cursor:not-allowed;}
 .nl-btn .nl-kbd{margin-left:6px;font-size:9px;opacity:.85;font-family:var(--mono);}
 .nl-empresa-list{position:absolute;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;box-shadow:var(--shadow-lg);max-height:160px;overflow-y:auto;z-index:10;width:100%;margin-top:2px;}

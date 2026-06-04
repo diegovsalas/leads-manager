@@ -202,6 +202,13 @@ def create_app():
     # ── Crear tablas en primera ejecución ──────
     with app.app_context():
         db.create_all()
+        # Agregar nuevos valores al enum origen_lead si no existen
+        for val in ("Upselling", "Cross-selling"):
+            try:
+                db.session.execute(db.text(f"ALTER TYPE origen_lead_enum ADD VALUE IF NOT EXISTS '{val}'"))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
 
     # ── Cadencia automatica (cada 15 minutos) ──
     _start_scheduler(app)
