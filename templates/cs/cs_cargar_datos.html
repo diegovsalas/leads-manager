@@ -75,18 +75,26 @@
         <!-- Zoho Analytics Sync -->
         {% if zoho_analytics_configured %}
         <form action="/cs/cargar-datos/zoho-sync" method="POST" id="zoho-sync-form">
-            <div class="dropzone" style="border-color:var(--brand-400,#9171f5);background:var(--bg-sunken)" onclick="document.getElementById('zoho-sync-form').submit()">
+            <div class="dropzone" style="border-color:var(--brand-400,#9171f5);background:var(--bg-sunken)">
                 <label style="cursor:pointer;text-align:center">
                     <div class="dz-icon" style="color:var(--brand-500,#7c3aed)">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                     </div>
                     <h3 style="font-size:14px;margin:4px 0 2px">Sincronizar desde Zoho Analytics</h3>
-                    <p style="font-size:11px;color:var(--ink-3)" id="zoho-status">Click para jalar datos actualizados</p>
+                    <p style="font-size:11px;color:var(--ink-3)">Jala citas del período seleccionado</p>
                 </label>
             </div>
-            <button type="submit" class="btn primary" style="width:100%;margin-top:12px;justify-content:center" onclick="this.disabled=true;this.textContent='Sincronizando...';this.form.submit()">
-                Sincronizar Citas desde Zoho
-            </button>
+            <div style="display:flex;gap:8px;margin-top:12px">
+                <select name="days" style="flex:1;padding:8px 10px;border:1px solid var(--border-subtle);border-radius:7px;font-size:13px;background:var(--bg-card)">
+                    <option value="30">Últimos 30 días</option>
+                    <option value="90" selected>Últimos 90 días</option>
+                    <option value="180">Últimos 6 meses</option>
+                    <option value="365">Último año</option>
+                </select>
+                <button type="submit" class="btn primary" style="flex:1;justify-content:center" onclick="this.disabled=true;this.textContent='Sincronizando...'">
+                    Sincronizar
+                </button>
+            </div>
         </form>
         <div style="margin:12px 0 0;padding:8px 10px;background:var(--bg-sunken);border-radius:7px;font-size:11px;color:var(--ink-3)">
             Conectado a Zoho Analytics (vista {{ zoho_view_id }})

@@ -1552,14 +1552,19 @@ def zoho_sync_citas():
     """Jala citas directamente desde Zoho Analytics API y las upsertea."""
     import logging as _logging
     from sqlalchemy import text as _text
+    from datetime import timedelta
     import zoho_analytics
 
     if not zoho_analytics.is_configured():
         flash("Zoho Analytics no configurado. Configura las variables de entorno.", "error")
         return redirect(url_for("cs.cargar_datos"))
 
+    days = int(request.form.get("days", 90))
+    since = (datetime.now() - timedelta(days=days)).strftime("%d/%m/%Y")
+    criteria = f'"Fecha de Inicio" >= \'{since}\''
+
     try:
-        result = zoho_analytics.fetch_citas()
+        result = zoho_analytics.fetch_citas(criteria=criteria)
     except Exception as e:
         flash(f"Error conectando con Zoho Analytics: {e}", "error")
         return redirect(url_for("cs.cargar_datos"))
