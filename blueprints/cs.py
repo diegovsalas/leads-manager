@@ -1560,7 +1560,7 @@ def zoho_sync_citas():
         return redirect(url_for("cs.cargar_datos"))
 
     days = int(request.form.get("days", 90))
-    since = (datetime.now() - timedelta(days=days)).strftime("%d/%m/%Y")
+    since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     criteria = f'"Fecha de Inicio" >= \'{since}\''
 
     try:
