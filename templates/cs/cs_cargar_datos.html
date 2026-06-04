@@ -74,7 +74,7 @@
 
         <!-- Zoho Analytics Sync -->
         {% if zoho_analytics_configured %}
-        <form action="/cs/cargar-datos/zoho-sync" method="POST" id="zoho-sync-form">
+        <form action="/cs/cargar-datos/zoho-sync" method="POST" id="zoho-sync-form" onsubmit="var b=this.querySelector('button[type=submit]');b.disabled=true;b.textContent='Sincronizando...'">
             <div class="dropzone" style="border-color:var(--brand-400,#9171f5);background:var(--bg-sunken)">
                 <label style="cursor:pointer;text-align:center">
                     <div class="dz-icon" style="color:var(--brand-500,#7c3aed)">
@@ -91,7 +91,7 @@
                     <option value="180">Últimos 6 meses</option>
                     <option value="365">Último año</option>
                 </select>
-                <button type="submit" class="btn primary" style="flex:1;justify-content:center" onclick="this.disabled=true;this.textContent='Sincronizando...'">
+                <button type="submit" class="btn primary" style="flex:1;justify-content:center">
                     Sincronizar
                 </button>
             </div>
