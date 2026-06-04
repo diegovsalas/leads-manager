@@ -54,8 +54,9 @@ def _parse_dt(s):
 
 
 def _current_user_id():
-    """Devuelve el UUID del usuario en sesión (o None)."""
-    return session.get("user_id") or session.get("usuario_id")
+    """Devuelve el UUID del Usuario (vendedor) en sesión, o None.
+    Sale.user_id es FK a usuarios.id — NO usar session['user_id'] (eso es users.id)."""
+    return session.get("usuario_id")
 
 
 # ── Sales ──────────────────────────────────────────────────────────

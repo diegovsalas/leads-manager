@@ -15,7 +15,8 @@ contacts_bp = Blueprint("contacts", __name__)
 
 
 def _current_user_id():
-    return session.get("usuario_id") or session.get("user_id")
+    # Solo usuario_id (FK a usuarios). user_id es FK a users → FK violation si se usa como owner_id.
+    return session.get("usuario_id")
 
 
 # ── ACCOUNTS ───────────────────────────────────────────────────────

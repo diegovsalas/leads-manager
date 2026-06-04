@@ -96,10 +96,9 @@ def crear_lead():
         except ValueError:
             pass
 
-    # Asignación: si manual y no viene usuario_asignado_id, usar el usuario en sesión
-    asignado = data.get("usuario_asignado_id")
-    if not asignado:
-        asignado = session.get("usuario_id") or session.get("user_id")
+    # Asignación: si manual y no viene usuario_asignado_id, usar el usuario en sesión.
+    # Solo usuario_id (FK a usuarios). NO caer a user_id (es FK a users, FK violation).
+    asignado = data.get("usuario_asignado_id") or session.get("usuario_id")
 
     # Auto-vincular Account si viene empresa_nombre o explicit account_id
     from models import Account, Contact
