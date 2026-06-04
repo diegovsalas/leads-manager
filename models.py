@@ -663,6 +663,7 @@ class CSAppointment(db.Model):
     estatus = db.Column(db.String(50), default="")
     titulo_servicio = db.Column(db.String(200), default="")
     cantidad = db.Column(db.Integer, default=1)
+    precio_unitario = db.Column(db.Numeric(12, 2), nullable=True)
     zoho_appointment_id = db.Column(db.String(64), nullable=True, unique=False, index=True)
 
 

@@ -209,6 +209,14 @@ def create_app():
                 db.session.commit()
             except Exception:
                 db.session.rollback()
+        # precio_unitario en cs_appointments (para datos de Zoho Analytics)
+        try:
+            db.session.execute(db.text(
+                "ALTER TABLE cs_appointments ADD COLUMN IF NOT EXISTS precio_unitario NUMERIC(12,2)"
+            ))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
     # ── Cadencia automatica (cada 15 minutos) ──
     _start_scheduler(app)

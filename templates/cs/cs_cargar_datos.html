@@ -70,34 +70,75 @@
     <!-- Citas -->
     <div class="card" style="padding:24px">
         <h3 style="margin:0 0 4px;font-size:15px;font-weight:600;color:var(--ink-1)">Citas / Operacion</h3>
-        <p class="muted" style="margin:0 0 16px;font-size:12px">CSV exportado desde tu sistema de operaciones</p>
-        <form action="/cs/cargar-datos/citas" method="POST" enctype="multipart/form-data">
-            <div class="dropzone">
-                <input type="file" name="archivo" accept=".csv" required id="file-citas" style="display:none" onchange="document.getElementById('label-citas').textContent=this.files[0].name">
-                <label for="file-citas" style="cursor:pointer">
-                    <div class="dz-icon">{{ icon('upload', 24) }}</div>
-                    <h3>Seleccionar CSV de citas</h3>
-                    <p id="label-citas">Click para seleccionar archivo</p>
+        <p class="muted" style="margin:0 0 16px;font-size:12px">Sincroniza desde Zoho Analytics o sube un CSV</p>
+
+        <!-- Zoho Analytics Sync -->
+        {% if zoho_analytics_configured %}
+        <form action="/cs/cargar-datos/zoho-sync" method="POST" id="zoho-sync-form">
+            <div class="dropzone" style="border-color:var(--brand-400,#9171f5);background:var(--bg-sunken)" onclick="document.getElementById('zoho-sync-form').submit()">
+                <label style="cursor:pointer;text-align:center">
+                    <div class="dz-icon" style="color:var(--brand-500,#7c3aed)">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    </div>
+                    <h3 style="font-size:14px;margin:4px 0 2px">Sincronizar desde Zoho Analytics</h3>
+                    <p style="font-size:11px;color:var(--ink-3)" id="zoho-status">Click para jalar datos actualizados</p>
                 </label>
             </div>
-            <button type="submit" class="btn primary" style="width:100%;margin-top:12px;justify-content:center">Cargar Citas</button>
+            <button type="submit" class="btn primary" style="width:100%;margin-top:12px;justify-content:center" onclick="this.disabled=true;this.textContent='Sincronizando...';this.form.submit()">
+                Sincronizar Citas desde Zoho
+            </button>
         </form>
-        <div style="margin-top:12px;padding:10px;background:var(--bg-sunken);border-radius:7px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-                <div style="font-size:11px;font-weight:600;color:var(--ink-2)">Columnas esperadas:</div>
-                <a href="/cs/cargar-datos/plantilla-citas" download class="btn ghost" style="font-size:11px;padding:3px 8px;display:inline-flex;align-items:center;gap:4px">{{ icon('download', 13) }} Plantilla CSV</a>
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:3px">
-                {% for col in ['ID','Cliente','Propiedad','Dirección','Zona','Tecnico','Fecha de Inicio','Fecha de Terminación','Estatus','Titulo Servicio','Cantidad'] %}
-                <span class="tag">{{ col }}</span>
-                {% endfor %}
-            </div>
-            <div class="muted" style="font-size:10px;margin-top:6px">
-                Fechas: <code>dd/mm/yyyy hh:mm:ss</code> (o solo <code>dd/mm/yyyy</code>). UTF-8.<br>
-                <strong>ID</strong> = ID de la visita (no del cliente) → permite reimportar sin duplicar.<br>
-                <strong>Cliente</strong> = nombre del cliente → matchea con cuentas registradas.
-            </div>
+        <div style="margin:12px 0 0;padding:8px 10px;background:var(--bg-sunken);border-radius:7px;font-size:11px;color:var(--ink-3)">
+            Conectado a Zoho Analytics (vista {{ zoho_view_id }})
         </div>
+        <details style="margin-top:12px">
+            <summary style="font-size:12px;color:var(--ink-3);cursor:pointer">O subir CSV manualmente</summary>
+        {% else %}
+        <div style="padding:10px;background:#fef3c7;border-radius:7px;margin-bottom:12px;font-size:12px;color:#92400e">
+            <strong>Zoho Analytics no configurado.</strong> Configura las variables de entorno para sincronizar automáticamente.
+            <a href="#zoho-setup" onclick="document.getElementById('zoho-setup-info').style.display='block'" style="color:#92400e;text-decoration:underline">Ver instrucciones</a>
+        </div>
+        <div id="zoho-setup-info" style="display:none;padding:12px;background:var(--bg-sunken);border-radius:7px;margin-bottom:12px;font-size:11px;line-height:1.6">
+            <strong>Pasos para conectar Zoho Analytics:</strong><br>
+            1. Ve a <code>api-console.zoho.com</code> → Add Client → <strong>Self Client</strong><br>
+            2. Genera un código con scope: <code>ZohoAnalytics.data.read</code><br>
+            3. Configura en Render estas variables:<br>
+            <code>ZOHO_ANALYTICS_REFRESH_TOKEN</code>, <code>ZOHO_ANALYTICS_ORG_ID</code>,
+            <code>ZOHO_ANALYTICS_WORKSPACE_ID</code>, <code>ZOHO_ANALYTICS_VIEW_ID</code>
+        </div>
+        {% endif %}
+
+            <form action="/cs/cargar-datos/citas" method="POST" enctype="multipart/form-data" style="margin-top:8px">
+                <div class="dropzone">
+                    <input type="file" name="archivo" accept=".csv" required id="file-citas" style="display:none" onchange="document.getElementById('label-citas').textContent=this.files[0].name">
+                    <label for="file-citas" style="cursor:pointer">
+                        <div class="dz-icon">{{ icon('upload', 24) }}</div>
+                        <h3>Seleccionar CSV de citas</h3>
+                        <p id="label-citas">Click para seleccionar archivo</p>
+                    </label>
+                </div>
+                <button type="submit" class="btn primary" style="width:100%;margin-top:12px;justify-content:center">Cargar Citas (CSV)</button>
+            </form>
+            <div style="margin-top:12px;padding:10px;background:var(--bg-sunken);border-radius:7px">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                    <div style="font-size:11px;font-weight:600;color:var(--ink-2)">Columnas esperadas:</div>
+                    <a href="/cs/cargar-datos/plantilla-citas" download class="btn ghost" style="font-size:11px;padding:3px 8px;display:inline-flex;align-items:center;gap:4px">{{ icon('download', 13) }} Plantilla CSV</a>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:3px">
+                    {% for col in ['ID','Cliente','Propiedad','Dirección','Zona','Tecnico','Fecha de Inicio','Fecha de Terminación','Estatus','Titulo Servicio','Cantidad'] %}
+                    <span class="tag">{{ col }}</span>
+                    {% endfor %}
+                </div>
+                <div class="muted" style="font-size:10px;margin-top:6px">
+                    Fechas: <code>dd/mm/yyyy hh:mm:ss</code> (o solo <code>dd/mm/yyyy</code>). UTF-8.<br>
+                    <strong>ID</strong> = ID de la visita (no del cliente) → permite reimportar sin duplicar.<br>
+                    <strong>Cliente</strong> = nombre del cliente → matchea con cuentas registradas.
+                </div>
+            </div>
+
+        {% if zoho_analytics_configured %}
+        </details>
+        {% endif %}
     </div>
 </div>
 

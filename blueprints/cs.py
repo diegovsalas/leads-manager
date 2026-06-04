@@ -1214,14 +1214,17 @@ def _match_account(cliente_nombre, accounts_map, client_id_map=None):
 @cs_bp.route("/cargar-datos")
 def cargar_datos():
     """Vista para cargar CSVs de cobros y citas."""
+    import zoho_analytics
     accounts = CSAccount.query.order_by(CSAccount.nombre).all()
-    # Conteos actuales
     num_invoices = CSInvoice.query.count()
     num_appointments = CSAppointment.query.count()
     return render_template(
         "cs_cargar_datos.html",
         accounts=accounts, num_invoices=num_invoices,
-        num_appointments=num_appointments, **_ctx(),
+        num_appointments=num_appointments,
+        zoho_analytics_configured=zoho_analytics.is_configured(),
+        zoho_view_id=zoho_analytics.VIEW_ID,
+        **_ctx(),
     )
 
 
@@ -1384,11 +1387,11 @@ def cargar_citas():
         INSERT INTO cs_appointments
             (account_id, propiedad, direccion, zona, tecnico,
              fecha_inicio, fecha_terminacion, estatus, titulo_servicio,
-             cantidad, zoho_appointment_id)
+             cantidad, precio_unitario, zoho_appointment_id)
         VALUES
             (:account_id, :propiedad, :direccion, :zona, :tecnico,
              :fecha_inicio, :fecha_terminacion, :estatus, :titulo_servicio,
-             :cantidad, :zoho_appointment_id)
+             :cantidad, :precio_unitario, :zoho_appointment_id)
         ON CONFLICT (zoho_appointment_id) WHERE zoho_appointment_id IS NOT NULL
         DO UPDATE SET
             account_id = EXCLUDED.account_id,
@@ -1400,15 +1403,18 @@ def cargar_citas():
             fecha_terminacion = EXCLUDED.fecha_terminacion,
             estatus = EXCLUDED.estatus,
             titulo_servicio = EXCLUDED.titulo_servicio,
-            cantidad = EXCLUDED.cantidad
+            cantidad = EXCLUDED.cantidad,
+            precio_unitario = EXCLUDED.precio_unitario
     """)
     _SQL_INSERT = _text("""
         INSERT INTO cs_appointments
             (account_id, propiedad, direccion, zona, tecnico,
-             fecha_inicio, fecha_terminacion, estatus, titulo_servicio, cantidad)
+             fecha_inicio, fecha_terminacion, estatus, titulo_servicio,
+             cantidad, precio_unitario)
         VALUES
             (:account_id, :propiedad, :direccion, :zona, :tecnico,
-             :fecha_inicio, :fecha_terminacion, :estatus, :titulo_servicio, :cantidad)
+             :fecha_inicio, :fecha_terminacion, :estatus, :titulo_servicio,
+             :cantidad, :precio_unitario)
     """)
 
     def _flush(buf: list[dict]) -> tuple[int, int]:
@@ -1484,6 +1490,8 @@ def cargar_citas():
             continue
 
         try:
+            precio_raw = row.get("Precio UNITARIO con Descuento") or row.get("Precio Unitario") or None
+            precio = float(precio_raw) if precio_raw else None
             r_dict = {
                 "account_id": acc_id,
                 "propiedad": (row.get("Propiedad") or "").strip(),
@@ -1495,6 +1503,7 @@ def cargar_citas():
                 "estatus": (row.get("Estatus") or "").strip(),
                 "titulo_servicio": (row.get("Titulo Servicio") or row.get("Título Servicio") or "").strip(),
                 "cantidad": int(float(row.get("Cantidad") or 1)),
+                "precio_unitario": precio,
             }
             if has_zoho_col and visita_id:
                 r_dict["zoho_appointment_id"] = visita_id[:64]
@@ -1532,6 +1541,213 @@ def cargar_citas():
         debug_info=" | ".join(debug_parts),
         **_ctx(),
     )
+
+
+# ──────────────────────────────────────────────
+# Zoho Analytics → sync citas
+# ──────────────────────────────────────────────
+
+@cs_bp.route("/cargar-datos/zoho-sync", methods=["POST"])
+def zoho_sync_citas():
+    """Jala citas directamente desde Zoho Analytics API y las upsertea."""
+    import logging as _logging
+    from sqlalchemy import text as _text
+    import zoho_analytics
+
+    if not zoho_analytics.is_configured():
+        flash("Zoho Analytics no configurado. Configura las variables de entorno.", "error")
+        return redirect(url_for("cs.cargar_datos"))
+
+    try:
+        result = zoho_analytics.fetch_citas()
+    except Exception as e:
+        flash(f"Error conectando con Zoho Analytics: {e}", "error")
+        return redirect(url_for("cs.cargar_datos"))
+
+    if "error" in result:
+        flash(f"Zoho Analytics: {result['error']}", "error")
+        return redirect(url_for("cs.cargar_datos"))
+
+    rows = result.get("rows", [])
+    if not rows:
+        flash("Zoho Analytics devolvió 0 filas.", "error")
+        return redirect(url_for("cs.cargar_datos"))
+
+    accounts = CSAccount.query.all()
+    accounts_map = {a.nombre: str(a.id) for a in accounts}
+    has_zoho_col = _has_zoho_appointment_col()
+
+    insertados = 0
+    no_match = 0
+    errores = 0
+    samples_no_match: list[str] = []
+    samples_error: list[str] = []
+    batch: list[dict] = []
+    abort_upsert: bool = False
+
+    _SQL_UPSERT = _text("""
+        INSERT INTO cs_appointments
+            (account_id, propiedad, direccion, zona, tecnico,
+             fecha_inicio, fecha_terminacion, estatus, titulo_servicio,
+             cantidad, precio_unitario, zoho_appointment_id)
+        VALUES
+            (:account_id, :propiedad, :direccion, :zona, :tecnico,
+             :fecha_inicio, :fecha_terminacion, :estatus, :titulo_servicio,
+             :cantidad, :precio_unitario, :zoho_appointment_id)
+        ON CONFLICT (zoho_appointment_id) WHERE zoho_appointment_id IS NOT NULL
+        DO UPDATE SET
+            account_id = EXCLUDED.account_id,
+            propiedad = EXCLUDED.propiedad,
+            direccion = EXCLUDED.direccion,
+            zona = EXCLUDED.zona,
+            tecnico = EXCLUDED.tecnico,
+            fecha_inicio = EXCLUDED.fecha_inicio,
+            fecha_terminacion = EXCLUDED.fecha_terminacion,
+            estatus = EXCLUDED.estatus,
+            titulo_servicio = EXCLUDED.titulo_servicio,
+            cantidad = EXCLUDED.cantidad,
+            precio_unitario = EXCLUDED.precio_unitario
+    """)
+    _SQL_INSERT = _text("""
+        INSERT INTO cs_appointments
+            (account_id, propiedad, direccion, zona, tecnico,
+             fecha_inicio, fecha_terminacion, estatus, titulo_servicio,
+             cantidad, precio_unitario)
+        VALUES
+            (:account_id, :propiedad, :direccion, :zona, :tecnico,
+             :fecha_inicio, :fecha_terminacion, :estatus, :titulo_servicio,
+             :cantidad, :precio_unitario)
+    """)
+
+    def _flush_zoho(buf):
+        nonlocal abort_upsert
+        if not buf:
+            return 0, 0
+        if abort_upsert or not has_zoho_col:
+            rows_con_id = []
+            rows_sin_id = [{k: v for k, v in r.items() if k != "zoho_appointment_id"} for r in buf]
+        else:
+            rows_con_id = [r for r in buf if r.get("zoho_appointment_id")]
+            rows_sin_id = [{k: v for k, v in r.items() if k != "zoho_appointment_id"}
+                           for r in buf if not r.get("zoho_appointment_id")]
+        ok, fail = 0, 0
+        if rows_con_id:
+            try:
+                db.session.execute(_SQL_UPSERT, rows_con_id)
+                db.session.commit()
+                ok += len(rows_con_id)
+            except Exception as e:
+                db.session.rollback()
+                _logging.warning("[ZOHO-CITAS] upsert falló: %s", str(e)[:200])
+                abort_upsert = True
+                fallback = [{k: v for k, v in r.items() if k != "zoho_appointment_id"} for r in rows_con_id]
+                try:
+                    db.session.execute(_SQL_INSERT, fallback)
+                    db.session.commit()
+                    ok += len(fallback)
+                except Exception:
+                    db.session.rollback()
+                    fail += len(fallback)
+        if rows_sin_id:
+            try:
+                db.session.execute(_SQL_INSERT, rows_sin_id)
+                db.session.commit()
+                ok += len(rows_sin_id)
+            except Exception:
+                db.session.rollback()
+                for r in rows_sin_id:
+                    try:
+                        db.session.execute(_SQL_INSERT, r)
+                        db.session.commit()
+                        ok += 1
+                    except Exception:
+                        db.session.rollback()
+                        fail += 1
+        return ok, fail
+
+    for row in rows:
+        visita_id = str(row.get("ID", "")).strip()
+        cliente = str(row.get("Cliente", "")).strip()
+        acc_id = _match_account(cliente, accounts_map) if cliente else None
+        if not acc_id:
+            no_match += 1
+            if len(samples_no_match) < 5 and cliente:
+                samples_no_match.append(cliente)
+            continue
+
+        try:
+            precio_raw = row.get("Precio UNITARIO con Descuento") or row.get("Precio Unitario") or None
+            precio = float(precio_raw) if precio_raw else None
+
+            r_dict = {
+                "account_id": acc_id,
+                "propiedad": str(row.get("Propiedad", "")).strip(),
+                "direccion": str(row.get("Dirección", "") or row.get("Direccion", "")).strip(),
+                "zona": str(row.get("Zona", "")).strip(),
+                "tecnico": str(row.get("Tecnico", "") or row.get("Técnico", "")).strip(),
+                "fecha_inicio": _parse_datetime_citas(row.get("Fecha de Inicio")),
+                "fecha_terminacion": _parse_datetime_citas(
+                    row.get("Fecha de Terminación") or row.get("Fecha de Terminacion") or ""
+                ),
+                "estatus": str(row.get("Estatus", "")).strip(),
+                "titulo_servicio": str(
+                    row.get("Titulo Servicio", "") or row.get("Título Servicio", "")
+                ).strip(),
+                "cantidad": int(float(row.get("Cantidad") or 1)),
+                "precio_unitario": precio,
+            }
+            if has_zoho_col and visita_id:
+                r_dict["zoho_appointment_id"] = visita_id[:64]
+            batch.append(r_dict)
+
+            if len(batch) >= 500:
+                ins, fail = _flush_zoho(batch)
+                insertados += ins
+                errores += fail
+                batch = []
+        except (ValueError, TypeError) as e:
+            errores += 1
+            if len(samples_error) < 3:
+                samples_error.append(f"row parse: {str(e)[:120]}")
+
+    if batch:
+        ins, fail = _flush_zoho(batch)
+        insertados += ins
+        errores += fail
+
+    debug_parts = [f"Zoho Analytics: {result.get('count', 0)} filas recibidas"]
+    if samples_no_match:
+        debug_parts.append(f"clientes sin match: {samples_no_match}")
+    if samples_error:
+        debug_parts.append(f"errores: {samples_error}")
+
+    return render_template(
+        "cs_cargar_resultado.html",
+        tipo="Citas (Zoho Analytics)", insertados=insertados, no_match=no_match,
+        errores=errores, total=insertados + no_match + errores,
+        debug_info=" | ".join(debug_parts),
+        **_ctx(),
+    )
+
+
+@cs_bp.route("/api/zoho-analytics/workspaces")
+def zoho_analytics_workspaces():
+    """Discovery: lista workspaces disponibles en Zoho Analytics."""
+    import zoho_analytics
+    try:
+        return jsonify(zoho_analytics.get_workspaces())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@cs_bp.route("/api/zoho-analytics/views/<workspace_id>")
+def zoho_analytics_views(workspace_id):
+    """Discovery: lista vistas/tablas de un workspace."""
+    import zoho_analytics
+    try:
+        return jsonify(zoho_analytics.get_views(workspace_id))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ──────────────────────────────────────────────
