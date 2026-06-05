@@ -1333,7 +1333,7 @@ fbq('track','PageView');
       </div>
       <div class="nl-row" style="position:relative;">
         <label class="nl-label">Empresa</label>
-        <input class="nl-input" id="con-empresa" placeholder="Buscar empresa..." oninput="conEmpresaSearch()" autocomplete="off"/>
+        <input class="nl-input" id="con-empresa" placeholder="Buscar por ID (EMP-XXXX), nombre o RFC..." oninput="conEmpresaSearch()" autocomplete="off"/>
         <input type="hidden" id="con-account-id"/>
         <div id="con-empresa-list" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;max-height:160px;overflow-y:auto;z-index:10;box-shadow:var(--shadow-lg);"></div>
       </div>
@@ -4185,7 +4185,7 @@ function conEmpresaSearch(){
     if(q.length<2){list.style.display='none';return;}
     const items=await _api('/api/accounts/search?q='+encodeURIComponent(q))||[];
     if(!items.length){list.innerHTML='<div style="padding:8px;color:var(--text3);font-size:12px;">Sin resultados</div>';list.style.display='block';return;}
-    list.innerHTML=items.map(a=>`<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border-light);" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'" onclick='conPickEmpresa("${a.id}","${(a.nombre||'').replace(/"/g,"&quot;")}")'><strong>${a.nombre}</strong>${a.rfc?`<span style="color:var(--text3);font-size:11px;font-family:var(--mono);"> ${a.rfc}</span>`:''}</div>`).join('');
+    list.innerHTML=items.map(a=>`<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border-light);" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'" onclick='conPickEmpresa("${a.id}","${(a.nombre||'').replace(/"/g,"&quot;")}")'>${a.client_id?`<span style="font-family:var(--mono);font-size:10px;background:var(--bg-tag);color:var(--accent);padding:1px 5px;border-radius:3px;font-weight:600;margin-right:6px;">${a.client_id}</span>`:''}<strong>${a.nombre}</strong>${a.rfc?`<span style="color:var(--text3);font-size:11px;font-family:var(--mono);"> ${a.rfc}</span>`:''}</div>`).join('');
     list.style.display='block';
   },250);
 }
