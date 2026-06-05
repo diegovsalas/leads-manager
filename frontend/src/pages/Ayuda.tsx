@@ -1,6 +1,6 @@
 /**
- * Guía para vendedores. Usa "mock UI elements" inline (chips, botones)
- * en vez de capturas de pantalla — así se mantiene en sync con la app real.
+ * Guía para vendedores. Apunta al CRM legacy en / donde están los flujos
+ * de Empresas, Contactos, Leads y Oportunidades pulidos.
  */
 
 export default function Ayuda() {
@@ -8,108 +8,71 @@ export default function Ayuda() {
     <div className="max-w-3xl">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Guía para vendedores</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Cómo cargar clientes, leads y oportunidades en el CRM</p>
+        <p className="text-sm text-gray-500 mt-0.5">Cómo cargar empresas, contactos, leads y oportunidades en el CRM</p>
       </div>
 
-      {/* Los 4 conceptos */}
+      <div className="bg-amber-50 border-l-4 border-amber-400 rounded-r-lg p-4 mb-6">
+        <p className="text-sm text-amber-900">
+          <b>¿Dónde se gestiona?</b> Empresas, Contactos, Leads y Oportunidades viven en el <b>CRM principal</b> en{' '}
+          <a href="/" className="text-purple-700 font-semibold underline">la página inicial (/)</a>.
+          Esta sección de <b>/app/</b> es solo el Dashboard de Customer Success.
+        </p>
+      </div>
+
       <Card title="Los 4 conceptos que tenés que tener claros">
-        <ConceptRow
-          icon="🏢"
-          name="Empresa"
-          example='"Tec Milenio", "Walmart", "Coca-Cola"'
-          desc="Una sola ficha por compañía. Es la entidad que existe en el mundo."
-        />
-        <ConceptRow
-          icon="👤"
-          name="Contacto"
-          example='"Lic. Pérez, Gerente de Compras de Tec Milenio"'
-          desc="Cada persona con la que tratás. Una empresa puede tener varios contactos."
-        />
-        <ConceptRow
-          icon="📨"
-          name="Lead"
-          example="Mensaje entrante por WhatsApp o anuncio"
-          desc={
-            <>
-              Lo crea <b>automáticamente el bot</b> cuando alguien escribe al WhatsApp o llega
-              por una campaña. <b>Vos no creás leads a mano.</b> Tu trabajo es calificarlos y, si
-              valen la pena, convertirlos en Oportunidad.
-            </>
-          }
-        />
-        <ConceptRow
-          icon="💰"
-          name="Oportunidad"
-          example='"Tec Milenio - Aromatex 12 campus"'
-          desc="La venta concreta que estás trabajando. Es la tarjeta del kanban. La creás vos cuando hay algo real para vender (valor, sucursales, fecha)."
-        />
+        <ConceptRow icon="🏢" name="Empresa" example='"Tec Milenio", "Walmart", "Coca-Cola"'
+          desc="Una sola ficha por compañía. Es la entidad que existe en el mundo." />
+        <ConceptRow icon="👤" name="Contacto" example='"Lic. Pérez, Gerente de Compras"'
+          desc="Cada persona con la que tratás. Una empresa puede tener varios contactos." />
+        <ConceptRow icon="📨" name="Lead" example="Mensaje entrante por WhatsApp o anuncio"
+          desc={<>Lo crea <b>automáticamente el bot</b> cuando alguien escribe al WhatsApp o llega por una campaña. <b>Vos no creás leads a mano.</b> Tu trabajo es calificarlos y, si valen la pena, convertirlos en Oportunidad.</>} />
+        <ConceptRow icon="💰" name="Oportunidad" example='"Tec Milenio - Aromatex 12 campus"'
+          desc="La venta concreta que estás trabajando. Es la tarjeta del kanban. La creás vos cuando hay algo real para vender (valor, sucursales, fecha)." />
       </Card>
 
-      {/* Árbol de decisión */}
       <Card title='¿Por dónde empiezo? "Me interesa empezar a trabajar a una empresa"'>
-        <DecisionBranch
-          letter="A"
-          color="purple"
+        <DecisionBranch letter="A" color="purple"
           title="Caso outbound — vos prospectaste"
           subtitle="(LinkedIn, llamada en frío, referido, evento)"
           warning="No crees Lead. Lead es solo para entrada automática del bot."
           steps={[
-            <>Andá a <b>Empresas</b> en el menú lateral. Buscá la empresa por nombre/RFC. ¿Aparece? Cliqueala. ¿No? Usá <Button>+ Nueva empresa</Button>.</>,
-            <>Una vez en la página de la empresa, agregá el contacto con <Button>+ Agregar</Button> en la sección Contactos.</>,
-            <>En la sección Oportunidades de la misma página, tocá <Button>+ Agregar</Button> y completá: valor estimado, marca de interés (Aromatex/Pestex/Weldex), número de sucursales y fecha estimada de cierre.</>,
+            <>En <a href="/" className="text-purple-700 underline font-semibold">el CRM principal</a>, andá al sidebar y cliqueá <Chip color="purple">📦 Empresas</Chip>. Buscá la empresa por nombre/RFC. ¿Aparece? Usala. ¿No? Tocá <Button>+ Nueva empresa</Button>.</>,
+            <>Desde la ficha de la empresa, cliqueá <Chip color="purple">👥 Contactos</Chip> y agregá el contacto del decisor (nombre, puesto, teléfono, email).</>,
+            <>Andá al kanban de Oportunidades y creá una nueva <Chip color="green">Oportunidad</Chip> ligada a esa empresa, con valor estimado, marca de interés (Aromatex/Pestex/Weldex), sucursales y fecha estimada de cierre.</>,
             <>La oportunidad aparece automáticamente en el kanban en etapa <Chip color="yellow">Calificación</Chip>. De ahí la vas moviendo.</>,
-          ]}
-        />
+          ]} />
 
-        <DecisionBranch
-          letter="B"
-          color="blue"
+        <DecisionBranch letter="B" color="blue"
           title="Caso inbound — alguien te escribió por WhatsApp o vino de un anuncio"
           subtitle=""
           warning="El Lead ya existe (lo creó el bot con el teléfono). No crees uno nuevo."
           steps={[
-            <>Andá a <b>Leads</b> en el menú lateral. Encontrá el Lead correcto en la tabla y cliquealo para abrir el modal.</>,
-            <>En el modal, en el campo <b>Empresa</b>, buscala por nombre. Si existe → seleccionala. Si no → tocá <Button>+ Crear nueva: "..."</Button> desde el mismo buscador.</>,
-            <>Elegí el <b>contacto</b> de esa empresa. Si todavía no existe, tenés que ir a la página de la empresa primero, agregarlo ahí, y volver al Lead. Luego tocá <Button>Guardar vínculos</Button>.</>,
-            <>Si el Lead es serio: tocá <Chip color="green">→ Convertir a Oportunidad</Chip>. Eso crea un deal en etapa Calificación ligado a este Lead.</>,
-            <>Si no es serio: cambiá la etapa del Lead a <Chip color="red">Perdido</Chip> o dejalo en nurturing desde el kanban.</>,
-          ]}
-        />
+            <>Abrí el Lead en el kanban de Leads del <a href="/" className="text-purple-700 underline font-semibold">CRM principal</a>.</>,
+            <>Desde el panel de detalle del Lead, ligalo a la empresa correcta (buscala por nombre; si no existe, creala desde el mismo buscador).</>,
+            <>Ligalo al contacto (creando uno nuevo con el nombre y teléfono que viene en el Lead).</>,
+            <>Si el Lead califica: tocá <Chip color="green">Convertir a Oportunidad</Chip> desde el panel del Lead.</>,
+            <>Si no califica: cambiá la etapa del Lead a <Chip color="red">Perdido</Chip> o dejalo en nurturing.</>,
+          ]} />
 
-        <DecisionBranch
-          letter="C"
-          color="green"
+        <DecisionBranch letter="C" color="green"
           title="Caso cliente existente — la empresa ya te compró y querés venderle algo más"
           subtitle="(upsell, sucursal nueva, producto adicional)"
           warning=""
           steps={[
-            <>Andá a <b>Empresas</b> y cliqueá la empresa (ya existe).</>,
-            <>En la sección Oportunidades tocá <Button>+ Agregar</Button> — upsell, nueva sucursal, nuevo producto, lo que sea.</>,
+            <>En el CRM principal, andá a <Chip color="purple">📦 Empresas</Chip>, buscá la empresa y abrí su ficha.</>,
+            <>Creá una nueva <Chip color="green">Oportunidad</Chip> ligada a esa empresa — upsell, nueva sucursal, nuevo producto.</>,
             <>Reutilizá los contactos que ya están cargados ahí — no crees duplicados.</>,
-          ]}
-        />
+          ]} />
       </Card>
 
-      {/* Reglas */}
       <Card title="Reglas que no se rompen" tone="red">
-        <Rule>
-          <b>No crees una empresa dos veces.</b> Antes de crear, buscá. El sistema deduplica por nombre y RFC, pero ayudalo: revisá si aparece algo parecido (Tec Milenio = Tecmilenio = ITESM-Milenio).
-        </Rule>
-        <Rule>
-          <b>No crees un Contacto suelto sin empresa</b> si la empresa existe. Asociá siempre.
-        </Rule>
-        <Rule>
-          <b>No uses el campo "empresa" de la Oportunidad como texto libre.</b> Ligala al Account (la empresa real). El texto libre es legado y se va a deprecar.
-        </Rule>
-        <Rule>
-          <b>No abras una Oportunidad sin marca de interés</b> (Aromatex/Pestex/Weldex). Es lo que después permite reportar por línea de negocio.
-        </Rule>
-        <Rule>
-          <b>No muevas una Oportunidad a <Chip color="green">Cerrado Ganado</Chip> sin valor.</b> Si no hay monto, no hay venta para reportar.
-        </Rule>
+        <Rule><b>No crees una empresa dos veces.</b> Antes de crear, buscá. El sistema deduplica por nombre exacto y por RFC, pero ayudalo: revisá si aparece algo parecido (Tec Milenio = Tecmilenio = ITESM-Milenio).</Rule>
+        <Rule><b>No crees un Contacto suelto sin empresa</b> si la empresa existe. Asociá siempre.</Rule>
+        <Rule><b>No uses el campo "empresa" de la Oportunidad como texto libre.</b> Ligala al Account (la empresa real).</Rule>
+        <Rule><b>No abras una Oportunidad sin marca de interés</b> (Aromatex/Pestex/Weldex). Es lo que después permite reportar por línea de negocio.</Rule>
+        <Rule><b>No muevas una Oportunidad a <Chip color="green">Cerrado Ganado</Chip> sin valor.</b> Si no hay monto, no hay venta para reportar.</Rule>
       </Card>
 
-      {/* Resumen visual */}
       <Card title="Resumen visual">
         <pre className="text-xs text-gray-600 font-mono bg-gray-50 rounded-lg p-4 overflow-x-auto leading-relaxed">
 {`                  ¿Cómo llegó el contacto?
@@ -131,7 +94,6 @@ export default function Ayuda() {
         </pre>
       </Card>
 
-      {/* FAQ */}
       <Card title="¿Y si tengo dudas?">
         <Faq q="¿Creo la empresa o no?">
           Buscá primero. Si no estás 100% seguro de que existe, creala — el sistema deduplica por nombre y RFC.
@@ -141,6 +103,9 @@ export default function Ayuda() {
         </Faq>
         <Faq q="No sé el valor exacto de la Oportunidad">
           Poné el mejor estimado posible. Mejor un número aproximado que cero. Lo podés actualizar después.
+        </Faq>
+        <Faq q="¿Para qué sirve esta sección /app/?">
+          Solo Customer Success (MRR, salud de cuentas, KPIs por KAM). Toda la gestión comercial (Empresas/Contactos/Leads/Oportunidades) vive en <a href="/" className="text-purple-700 underline font-semibold">el CRM principal en /</a>.
         </Faq>
       </Card>
 
@@ -153,22 +118,16 @@ export default function Ayuda() {
 
 // ── Sub-componentes ─────────────────────────────────────────────
 
-function Card({
-  title, children, tone = 'default',
-}: { title: string; children: React.ReactNode; tone?: 'default' | 'red' }) {
+function Card({ title, children, tone = 'default' }: { title: string; children: React.ReactNode; tone?: 'default' | 'red' }) {
   return (
-    <div className={`bg-white rounded-2xl shadow-sm border p-5 mb-5 ${
-      tone === 'red' ? 'border-red-100' : 'border-gray-100'
-    }`}>
+    <div className={`bg-white rounded-2xl shadow-sm border p-5 mb-5 ${tone === 'red' ? 'border-red-100' : 'border-gray-100'}`}>
       <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-4">{title}</h2>
       <div className="space-y-3">{children}</div>
     </div>
   );
 }
 
-function ConceptRow({
-  icon, name, example, desc,
-}: { icon: string; name: string; example: string; desc: React.ReactNode }) {
+function ConceptRow({ icon, name, example, desc }: { icon: string; name: string; example: string; desc: React.ReactNode }) {
   return (
     <div className="flex gap-3 pb-3 border-b border-gray-50 last:border-b-0 last:pb-0">
       <div className="text-2xl shrink-0">{icon}</div>
@@ -183,15 +142,9 @@ function ConceptRow({
   );
 }
 
-function DecisionBranch({
-  letter, color, title, subtitle, warning, steps,
-}: {
-  letter: string;
-  color: 'purple' | 'blue' | 'green';
-  title: string;
-  subtitle: string;
-  warning: string;
-  steps: React.ReactNode[];
+function DecisionBranch({ letter, color, title, subtitle, warning, steps }: {
+  letter: string; color: 'purple' | 'blue' | 'green';
+  title: string; subtitle: string; warning: string; steps: React.ReactNode[];
 }) {
   const colors = {
     purple: 'bg-purple-100 text-purple-700 border-purple-200',
@@ -201,9 +154,7 @@ function DecisionBranch({
   return (
     <div className="border border-gray-100 rounded-xl p-4 bg-gray-50/50">
       <div className="flex items-center gap-3 mb-2">
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${colors[color]}`}>
-          {letter}
-        </div>
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${colors[color]}`}>{letter}</div>
         <div>
           <h3 className="font-semibold text-gray-900 text-sm">{title}</h3>
           {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
@@ -246,24 +197,18 @@ function Faq({ q, children }: { q: string; children: React.ReactNode }) {
 
 function Button({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-block px-2 py-0.5 text-xs font-semibold bg-purple-600 text-white rounded">
-      {children}
-    </span>
+    <span className="inline-block px-2 py-0.5 text-xs font-semibold bg-purple-600 text-white rounded">{children}</span>
   );
 }
 
-function Chip({
-  children, color,
-}: { children: React.ReactNode; color: 'green' | 'red' | 'yellow' }) {
+function Chip({ children, color }: { children: React.ReactNode; color: 'green' | 'red' | 'yellow' | 'purple' }) {
   const colors = {
     green: 'bg-green-100 text-green-700',
     red: 'bg-red-100 text-red-700',
     yellow: 'bg-yellow-100 text-yellow-700',
+    purple: 'bg-purple-100 text-purple-700',
   };
   return (
-    <span className={`inline-block px-1.5 py-0.5 text-[10px] font-semibold rounded ${colors[color]}`}>
-      {children}
-    </span>
+    <span className={`inline-block px-1.5 py-0.5 text-[10px] font-semibold rounded ${colors[color]}`}>{children}</span>
   );
 }
-
