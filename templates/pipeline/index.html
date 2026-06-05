@@ -1181,7 +1181,7 @@ fbq('track','PageView');
     <div class="page-desc">Una empresa puede tener N leads y N oportunidades. Sin duplicados.</div>
   </div>
   <div style="padding:20px 48px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-    <input class="form-input" id="acc-search" placeholder="Buscar nombre o RFC..." style="max-width:260px;font-size:13px;" oninput="loadAccountsDebounced()"/>
+    <input class="form-input" id="acc-search" placeholder="Buscar ID, nombre o RFC..." style="max-width:260px;font-size:13px;" oninput="loadAccountsDebounced()"/>
     <select class="form-input" id="acc-estado" onchange="loadAccounts()" style="max-width:160px;font-size:13px;">
       <option value="">Todos los estados</option>
     </select>
@@ -1195,7 +1195,7 @@ fbq('track','PageView');
       <div class="dash-card-title"><span id="acc-count">—</span> empresas</div>
       <div class="table-wrap"><table>
         <thead><tr>
-          <th>Nombre</th><th>RFC</th><th>Industria</th><th>Estado</th>
+          <th style="width:90px;">ID</th><th>Nombre</th><th>RFC</th><th>Industria</th><th>Estado</th>
           <th style="text-align:right;">Sucursales</th><th>Owner</th><th>Status</th><th></th>
         </tr></thead>
         <tbody id="acc-tbody"></tbody>
@@ -3918,10 +3918,12 @@ async function loadAccounts(){
   const rows=await _api('/api/accounts/'+(params.toString()?'?'+params:''))||[];
   document.getElementById('acc-count').textContent=_fmtNum(rows.length);
   const tb=document.getElementById('acc-tbody');tb.innerHTML='';
-  if(!rows.length){tb.innerHTML='<tr><td colspan="8" style="color:var(--text2);text-align:center;padding:14px;">Sin empresas — creá una con "+ Nueva empresa"</td></tr>';return;}
+  if(!rows.length){tb.innerHTML='<tr><td colspan="9" style="color:var(--text2);text-align:center;padding:14px;">Sin empresas — creá una con "+ Nueva empresa"</td></tr>';return;}
   for(const a of rows){
     const clienteBadge=a.is_cliente?'<span style="background:var(--green-bg);color:var(--green);padding:1px 8px;border-radius:99px;font-size:10px;font-weight:600;">CLIENTE</span>':'<span style="color:var(--text3);font-size:11px;">prospecto</span>';
+    const idBadge=a.client_id?`<span style="font-family:var(--mono);font-size:11px;background:var(--bg-tag);color:var(--accent);padding:2px 7px;border-radius:4px;font-weight:600;">${a.client_id}</span>`:'<span style="color:var(--text3);font-size:11px;">—</span>';
     tb.innerHTML+=`<tr style="cursor:pointer;" onclick='openAccountModal(${JSON.stringify(a).replace(/'/g,"&apos;")})'>
+      <td>${idBadge}</td>
       <td><strong>${a.nombre}</strong>${a.nombre_comercial?`<div style="color:var(--text3);font-size:11px;">${a.nombre_comercial}</div>`:''}</td>
       <td style="font-family:var(--mono);font-size:11px;">${a.rfc||'—'}</td>
       <td>${a.industria||'—'}</td>
