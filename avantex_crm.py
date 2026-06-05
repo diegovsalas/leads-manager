@@ -201,7 +201,7 @@ def create_app():
     @app.route("/")
     def index():
         from sqlalchemy.orm import joinedload
-        from models import Oportunidad
+        from models import Oportunidad, EtapaOportunidad
         q = Lead.query.options(joinedload(Lead.usuario_asignado))
 
         # Vendedores solo ven sus leads, Super Admin ve todo
@@ -224,6 +224,27 @@ def create_app():
             lead.oppo = oppos_by_lead.get(lead.id)  # atributo transient
             lead.has_oppo = lead.oppo is not None
 
+        # Pre-fetch oportunidades HUÉRFANAS (sin lead_id) para mostrarlas en el pipe
+        # mapeadas a la columna de Lead equivalente.
+        OPPO_TO_PIPE = {
+            EtapaOportunidad.CALIFICACION:   EtapaPipeline.COTIZACION,
+            EtapaOportunidad.ANALISIS:       EtapaPipeline.COTIZACION,
+            EtapaOportunidad.PROPUESTA:      EtapaPipeline.DEMO,
+            EtapaOportunidad.NEGOCIACION:    EtapaPipeline.NEGOCIACION,
+            EtapaOportunidad.CIERRE_GANADO:  EtapaPipeline.CIERRE_GANADO,
+            EtapaOportunidad.CIERRE_PERDIDO: EtapaPipeline.CIERRE_PERDIDO,
+        }
+        oppo_q = Oportunidad.query.filter(Oportunidad.lead_id.is_(None))
+        if user_rol.upper() == "VENDEDOR" and session.get("usuario_id"):
+            oppo_q = oppo_q.filter(Oportunidad.propietario_id == session.get("usuario_id"))
+        orphan_oppos = oppo_q.order_by(Oportunidad.fecha_actualizacion.desc()).all()
+        oppos_by_pipe_etapa = {}
+        for op in orphan_oppos:
+            if op.etapa:
+                mapped = OPPO_TO_PIPE.get(op.etapa)
+                if mapped:
+                    oppos_by_pipe_etapa.setdefault(mapped, []).append(op)
+
         leads_by_etapa = {}
         for lead in all_leads:
             leads_by_etapa.setdefault(lead.etapa_pipeline, []).append(lead)
@@ -238,6 +259,7 @@ def create_app():
                 "grupo":        grupo_nombre,
                 "grupo_color":  grupo_color,
                 "leads":        leads_by_etapa.get(etapa, []),
+                "oppos":        oppos_by_pipe_etapa.get(etapa, []),  # oppos huérfanos mapeados
             }
         from meta_conversions import get_pixel_ids
         return render_template(

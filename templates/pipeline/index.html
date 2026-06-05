@@ -121,6 +121,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .k-card.dragging{opacity:.4;}
 .k-card.is-converted{border-color:var(--green);background:linear-gradient(180deg,rgba(45,122,79,.04),var(--bg-card));}
 body.hide-converted .k-card.is-converted{display:none;}
+.k-card-oppo{border-left:4px solid #d97706;background:linear-gradient(180deg,rgba(217,119,6,.06),var(--bg-card));}
+.k-card-oppo:hover{border-color:#b45309;box-shadow:var(--shadow-lg);}
+.k-card-oppo-label{font-size:9px;font-weight:700;color:#b45309;letter-spacing:.6px;}
 .k-col.drag-over{background:var(--copper-soft);border-radius:14px;}
 .k-card-name{font-size:14px;font-weight:500;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .k-card-phone{font-size:12px;color:var(--text3);font-family:var(--mono);}
@@ -531,6 +534,24 @@ fbq('track','PageView');
           <div class="k-col-valor">${{ "{:,.0f}".format(ns.total) }}</div>
         </div>
         <div class="k-cards" id="kcards-{{ etapa.value }}">
+          {% for op in grupo.oppos %}
+          <div class="k-card k-card-oppo" data-oppo-id="{{ op.id }}"
+               data-nombre="{{ op.nombre or '' }}" data-telefono=""
+               data-marca="{{ op.marca_interes or '' }}"
+               onclick="openOppById('{{ op.id }}')">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
+              <span class="k-card-oppo-label">💰 OPORTUNIDAD</span>
+              {% if op.marca_interes %}<span class="tag tag-marca">{{ op.marca_interes }}</span>{% endif %}
+            </div>
+            <div class="k-card-name">{{ op.nombre }}</div>
+            {% if op.empresa %}<div style="font-size:11px;color:var(--text2);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ op.empresa }}</div>{% endif %}
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;gap:6px;">
+              <span style="font-size:10px;color:var(--text2);">{{ op.etapa.value if op.etapa else '' }} · {{ op.probabilidad or 0 }}%</span>
+              <span style="font-size:13px;font-weight:600;color:var(--green);font-family:var(--mono);">${{ "{:,.0f}".format(op.valor or 0) }}</span>
+            </div>
+            {% if op.fecha_cierre_esperada %}<div style="font-size:10px;color:var(--text3);margin-top:2px;">cierra {{ op.fecha_cierre_esperada }}</div>{% endif %}
+          </div>
+          {% endfor %}
           {% for lead in grupo.leads %}
           <div class="k-card{% if lead.has_oppo %} is-converted{% endif %}" id="kcard-{{ lead.id }}" data-lead-id="{{ lead.id }}"
                data-nombre="{{ lead.nombre or 'Sin nombre' }}" data-telefono="{{ lead.telefono or '' }}"
@@ -2600,6 +2621,16 @@ document.addEventListener('keydown',e=>{
   const last=overlays[overlays.length-1];
   last.classList.remove('open');
 });
+
+// Abrir modal de Oppo por id (usado por las cards de oppo en el Pipe unificado)
+async function openOppById(id){
+  try{
+    const r=await fetch('/api/oportunidades/'+id);
+    if(!r.ok)throw new Error('No se pudo cargar la oportunidad');
+    const op=await r.json();
+    await openOppModal(op);
+  }catch(e){_nlToast('Error: '+e.message,true);}
+}
 // Restaurar preferencia al cargar
 document.addEventListener('DOMContentLoaded',()=>{
   try{
