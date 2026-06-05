@@ -5,9 +5,11 @@ Zoho/HubSpot. Endpoints bajo /api/accounts/ y /api/contacts/.
 """
 import csv
 import io
+import re
 from datetime import datetime
 from flask import Blueprint, request, jsonify, session, Response
 from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 
 from extensions import db
 from models import Account, Contact, Lead, Oportunidad, CSAccount, Cotizacion
@@ -181,6 +183,27 @@ def update_account(account_id):
     if not acc:
         return jsonify({"error": "Account no encontrada"}), 404
     data = request.get_json() or {}
+
+    # client_id es editable pero valida formato y unicidad antes de tocar
+    if "client_id" in data:
+        new_cid = (data.get("client_id") or "").strip().upper() or None
+        if new_cid:
+            if len(new_cid) > 10:
+                return jsonify({"error": "client_id máximo 10 caracteres"}), 400
+            if not re.match(r"^[A-Z0-9\-]+$", new_cid):
+                return jsonify({"error": "client_id solo acepta letras, números y guiones"}), 400
+        # Si cambia, validar unicidad
+        if new_cid != acc.client_id:
+            if new_cid:
+                taken = Account.query.filter(
+                    Account.client_id == new_cid, Account.id != acc.id
+                ).first()
+                if taken:
+                    return jsonify({
+                        "error": f"client_id '{new_cid}' ya está en uso por '{taken.nombre}'"
+                    }), 409
+            acc.client_id = new_cid
+
     for fld in ("nombre", "nombre_comercial", "rfc", "industria", "tamano",
                 "num_sucursales", "website", "telefono", "direccion",
                 "ciudad", "estado", "pais", "owner_id", "is_cliente",
@@ -188,7 +211,11 @@ def update_account(account_id):
                 "customer_master_id"):
         if fld in data:
             setattr(acc, fld, data[fld])
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({"error": "Conflicto de unicidad: " + str(e.orig)[:200]}), 409
     return jsonify(acc.to_dict())
 
 

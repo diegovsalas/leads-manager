@@ -1267,6 +1267,10 @@ fbq('track','PageView');
   <div class="nl-card" style="width:580px;">
     <div class="nl-header"><h3 id="acc-modal-title">Nueva empresa</h3><span class="nl-kbd">Esc</span></div>
     <div class="nl-body">
+      <div class="nl-row">
+        <label class="nl-label">ID <span style="color:var(--text3);font-weight:400;font-size:10px;">(editable — usá AX-XXXX si querés matchear con CS Dashboard)</span></label>
+        <input class="nl-input" id="acc-client-id" style="text-transform:uppercase;font-family:var(--mono);font-size:12px;max-width:200px;" maxlength="10" placeholder="se asigna automáticamente al crear"/>
+      </div>
       <div class="nl-row two">
         <div><label class="nl-label">Nombre legal *</label><input class="nl-input" id="acc-nombre"/></div>
         <div><label class="nl-label">Nombre comercial</label><input class="nl-input" id="acc-comercial"/></div>
@@ -4038,11 +4042,16 @@ function openAccountModal(acc){
   _accEditing=acc||null;
   document.getElementById('acc-modal-title').textContent=acc?'Editar empresa':'Nueva empresa';
   document.getElementById('acc-delete-btn').style.display=acc?'':'none';
-  ['acc-nombre','acc-comercial','acc-rfc','acc-industria','acc-sucursales','acc-estado-input','acc-ciudad','acc-telefono','acc-website','acc-notas'].forEach(id=>document.getElementById(id).value='');
+  ['acc-client-id','acc-nombre','acc-comercial','acc-rfc','acc-industria','acc-sucursales','acc-estado-input','acc-ciudad','acc-telefono','acc-website','acc-notas'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('acc-tamano').value='';
   document.getElementById('acc-is-cliente').checked=false;
   document.getElementById('acc-detail-link').textContent='';
+  // ID solo editable cuando editás (al crear se auto-asigna)
+  const cidInput=document.getElementById('acc-client-id');
+  cidInput.disabled=!acc;
+  cidInput.style.opacity=acc?'1':'0.6';
   if(acc){
+    cidInput.value=acc.client_id||'';
     document.getElementById('acc-nombre').value=acc.nombre||'';
     document.getElementById('acc-comercial').value=acc.nombre_comercial||'';
     document.getElementById('acc-rfc').value=acc.rfc||'';
@@ -4078,6 +4087,10 @@ async function saveAccount(){
     notas:document.getElementById('acc-notas').value.trim()||null,
     is_cliente:document.getElementById('acc-is-cliente').checked,
   };
+  // client_id solo se envía si está editando (en alta lo asigna el backend)
+  if(_accEditing){
+    body.client_id=document.getElementById('acc-client-id').value.trim().toUpperCase()||null;
+  }
   try{
     const url=_accEditing?`/api/accounts/${_accEditing.id}`:'/api/accounts/';
     const method=_accEditing?'PATCH':'POST';
