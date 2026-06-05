@@ -3575,16 +3575,21 @@ applyRoleVisibility();
         <input class="nl-input" id="nl-phone" type="tel" placeholder="52 81 1234 5678" autocomplete="off"/>
         <div id="nl-dup-banner" style="display:none;"></div>
       </div>
-      <div class="nl-row two">
-        <div>
-          <label class="nl-label">Nombre del contacto *</label>
-          <input class="nl-input" id="nl-nombre" type="text" autocomplete="off"/>
-        </div>
-        <div style="position:relative;">
-          <label class="nl-label">Empresa</label>
-          <input class="nl-input" id="nl-empresa" type="text" autocomplete="off" oninput="nlEmpresaSearch()"/>
-          <div id="nl-empresa-list" class="nl-empresa-list" style="display:none;"></div>
-        </div>
+      <div class="nl-row">
+        <label class="nl-label">Nombre del contacto *</label>
+        <input class="nl-input" id="nl-nombre" type="text" autocomplete="off"/>
+      </div>
+      <div class="nl-row">
+        <label class="nl-checkbox">
+          <input type="checkbox" id="nl-b2c" onchange="nlToggleB2C()"/>
+          <span>👤 <strong>Uso personal / sin empresa</strong> <span style="color:var(--text3);font-weight:400;font-size:11px;">(ej: aromatizar su propia casa)</span></span>
+        </label>
+      </div>
+      <div class="nl-row" id="nl-empresa-row" style="position:relative;">
+        <label class="nl-label">Empresa <span style="color:var(--text3);font-weight:400;font-size:10px;">(tipeá 3+ letras para buscar)</span></label>
+        <input class="nl-input" id="nl-empresa" type="text" autocomplete="off" oninput="nlEmpresaSearch()" placeholder="Ej: Tec Milenio, EMP-0042, RFC..."/>
+        <input type="hidden" id="nl-account-id"/>
+        <div id="nl-empresa-list" class="nl-empresa-list" style="display:none;"></div>
       </div>
       <div class="nl-row two">
         <div>
@@ -4096,8 +4101,16 @@ async function saveAccount(){
     const method=_accEditing?'PATCH':'POST';
     const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(!r.ok){const e=await r.json();throw new Error(e.error||'Error');}
+    const newAcc=await r.json();
     _nlToast(_accEditing?'Actualizada: '+nombre:'Creada: '+nombre);
-    closeAccountModal();loadAccounts();loadSidebarCounts();
+    closeAccountModal();
+    // Si veníamos del modal de Lead: autoseleccionar la nueva empresa
+    if(_creatingEmpresaFromLead){
+      _creatingEmpresaFromLead=false;
+      document.getElementById('nl-empresa').value=newAcc.nombre||'';
+      document.getElementById('nl-account-id').value=newAcc.id||'';
+    }
+    loadAccounts();loadSidebarCounts();
   }catch(e){_nlToast('Error: '+e.message,true);}
 }
 
@@ -4259,12 +4272,15 @@ async function openLeadModal(){
   const overlay=document.getElementById('nl-overlay');
   overlay.classList.add('open');
   // Reset
-  ['nl-phone','nl-nombre','nl-empresa','nl-sucursales','nl-cantidad','nl-precio','nl-notas'].forEach(id=>document.getElementById(id).value='');
+  ['nl-phone','nl-nombre','nl-empresa','nl-account-id','nl-sucursales','nl-cantidad','nl-precio','nl-notas'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('nl-estado').value='';
   document.getElementById('nl-industria').value='';
   document.getElementById('nl-tamano').value='';
   document.getElementById('nl-tipo-cliente').value='';
   document.getElementById('nl-calificado').checked=false;
+  document.getElementById('nl-b2c').checked=false;
+  document.getElementById('nl-empresa-row').style.display='';
+  document.getElementById('nl-empresa-list').style.display='none';
   document.getElementById('nl-dup-banner').style.display='none';
   // Estados
   const estSel=document.getElementById('nl-estado');
@@ -4362,17 +4378,46 @@ function nlEmpresaSearch(){
   _nlEmpresaTimer=setTimeout(async()=>{
     const q=document.getElementById('nl-empresa').value.trim();
     const list=document.getElementById('nl-empresa-list');
-    if(q.length<2){list.style.display='none';return;}
+    // Limpiar account_id linkeado mientras se está tipeando
+    document.getElementById('nl-account-id').value='';
+    if(q.length<3){list.style.display='none';return;}
     try{
-      const r=await fetch('/api/leads/empresa-search?q='+encodeURIComponent(q));
-      const items=await r.json();
-      if(!items.length){list.style.display='none';return;}
-      list.innerHTML=items.map(it=>`<div class="nl-empresa-item" onclick="nlPickEmpresa('${it.replace(/'/g,"&apos;")}')">${it}</div>`).join('');
+      const items=await _api('/api/accounts/search?q='+encodeURIComponent(q))||[];
+      let html='';
+      if(items.length){
+        html=items.map(a=>`<div class="nl-empresa-item" onclick='nlPickEmpresa("${a.id}",${JSON.stringify(a.nombre||"")})'>${a.client_id?`<span style="font-family:var(--mono);font-size:10px;background:var(--bg-tag);color:var(--accent);padding:1px 5px;border-radius:3px;font-weight:600;margin-right:6px;">${a.client_id}</span>`:''}<strong>${a.nombre}</strong>${a.rfc?` <span style="color:var(--text3);font-size:11px;font-family:var(--mono);">${a.rfc}</span>`:''}${a.is_cliente?` <span style="background:var(--green-bg);color:var(--green);padding:0 5px;border-radius:99px;font-size:9px;font-weight:600;margin-left:4px;">CLIENTE</span>`:''}</div>`).join('');
+      }else{
+        html='<div style="padding:8px 11px;color:var(--text3);font-size:12px;font-style:italic;">Sin resultados</div>';
+      }
+      html+=`<div class="nl-empresa-item" style="border-top:1px solid var(--border);color:var(--accent);font-weight:600;background:var(--copper-soft);" onclick="nlCreateNewEmpresa()">+ Agregar "${q}" como nueva empresa →</div>`;
+      list.innerHTML=html;
       list.style.display='block';
     }catch(e){list.style.display='none';}
   },200);
 }
-function nlPickEmpresa(name){document.getElementById('nl-empresa').value=name;document.getElementById('nl-empresa-list').style.display='none';}
+function nlPickEmpresa(id,name){
+  document.getElementById('nl-empresa').value=name;
+  document.getElementById('nl-account-id').value=id;
+  document.getElementById('nl-empresa-list').style.display='none';
+}
+function nlCreateNewEmpresa(){
+  const typed=document.getElementById('nl-empresa').value.trim();
+  document.getElementById('nl-empresa-list').style.display='none';
+  _creatingEmpresaFromLead=true;
+  openAccountModal();  // creation mode (sin acc)
+  document.getElementById('acc-nombre').value=typed;
+  setTimeout(()=>document.getElementById('acc-rfc').focus(),60);
+}
+function nlToggleB2C(){
+  const checked=document.getElementById('nl-b2c').checked;
+  document.getElementById('nl-empresa-row').style.display=checked?'none':'';
+  if(checked){
+    document.getElementById('nl-empresa').value='';
+    document.getElementById('nl-account-id').value='';
+    document.getElementById('nl-empresa-list').style.display='none';
+  }
+}
+let _creatingEmpresaFromLead=false;
 
 function _nlUpdateIcp(){
   // Heurística simple para preview (la real corre server-side al guardar)
@@ -4419,8 +4464,12 @@ async function nlSubmit(mode){
 
   const phoneNorm=phone.length===10?'52'+phone:phone;
 
+  const isB2C=document.getElementById('nl-b2c').checked;
+  const accountIdLinked=document.getElementById('nl-account-id').value||null;
   const body={
-    telefono:phoneNorm, nombre, empresa_nombre:empresa||null,
+    telefono:phoneNorm, nombre,
+    empresa_nombre: isB2C ? null : (empresa||null),
+    account_id: isB2C ? null : accountIdLinked,
     estado_cliente:estado||null,
     marca_interes:unidad, origen,
     num_sucursales:sucursales?parseInt(sucursales):null,
@@ -4441,8 +4490,10 @@ async function nlSubmit(mode){
     if(mode==='close'){closeLeadModal();setTimeout(()=>{if(typeof loadKanban==='function')loadKanban();else location.reload();},400);}
     else if(mode==='add-another'){
       // Reset y reabrir
-      ['nl-phone','nl-nombre','nl-empresa','nl-sucursales','nl-cantidad','nl-precio','nl-notas'].forEach(id=>document.getElementById(id).value='');
+      ['nl-phone','nl-nombre','nl-empresa','nl-account-id','nl-sucursales','nl-cantidad','nl-precio','nl-notas'].forEach(id=>document.getElementById(id).value='');
       document.getElementById('nl-tipo-cliente').value='';
+      document.getElementById('nl-b2c').checked=false;
+      document.getElementById('nl-empresa-row').style.display='';
       document.getElementById('nl-dup-banner').style.display='none';
       _nlUpdateIcp();
       setTimeout(()=>document.getElementById('nl-phone').focus(),100);
