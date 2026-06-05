@@ -1188,7 +1188,9 @@ fbq('track','PageView');
     <label style="display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer;">
       <input type="checkbox" id="acc-cliente" onchange="loadAccounts()"/> Solo clientes
     </label>
-    <button class="btn btn-filled" onclick="openAccountModal()" style="font-size:13px;margin-left:auto;">+ Nueva empresa</button>
+    <a href="/api/accounts/export" download class="btn" style="font-size:13px;margin-left:auto;text-decoration:none;color:var(--text);background:#fff;border:1px solid var(--border);padding:7px 12px;border-radius:var(--r);">↓ Exportar CSV</a>
+    <button class="btn" onclick="openImportAccountsModal()" style="font-size:13px;background:#fff;border:1px solid var(--border);color:var(--text);">↑ Importar CSV</button>
+    <button class="btn btn-filled" onclick="openAccountModal()" style="font-size:13px;">+ Nueva empresa</button>
   </div>
   <div style="padding:0 48px 20px;">
     <div class="dash-card">
@@ -1224,6 +1226,38 @@ fbq('track','PageView');
         </tr></thead>
         <tbody id="con-tbody"></tbody>
       </table></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Importar Empresas (CSV) -->
+<div class="nl-overlay" id="acc-import-overlay" onclick="if(event.target===this)closeImportAccountsModal()">
+  <div class="nl-card" style="width:520px;">
+    <div class="nl-header"><h3>Importar empresas desde CSV</h3><span class="nl-kbd">Esc</span></div>
+    <div class="nl-body">
+      <div style="background:var(--bg-tag);border-left:3px solid var(--accent);padding:10px 12px;border-radius:4px;margin-bottom:14px;font-size:12px;color:var(--text);">
+        <p style="margin:0 0 6px;"><strong>Formato CSV (UTF-8):</strong></p>
+        <p style="font-family:var(--mono);font-size:11px;margin:0 0 6px;color:var(--text2);overflow-x:auto;">nombre,rfc,nombre_comercial,industria,tamano,num_sucursales,telefono,website,ciudad,estado,pais,is_cliente,notas</p>
+        <p style="margin:0;color:var(--text2);">Solo <strong>nombre</strong> es obligatorio. El ID (EMP-XXXX) se asigna solo. Duplicados (mismo RFC o nombre exacto) se omiten.</p>
+      </div>
+      <div class="nl-row">
+        <label class="nl-label">Archivo CSV</label>
+        <input class="nl-input" id="acc-import-file" type="file" accept=".csv,text/csv"/>
+      </div>
+      <div class="nl-row">
+        <label class="nl-checkbox">
+          <input type="checkbox" id="acc-import-mark-cliente"/>
+          <span>Marcar todas las empresas importadas como <strong>cliente</strong></span>
+        </label>
+      </div>
+      <div id="acc-import-result" style="display:none;margin-top:12px;padding:12px;background:var(--bg-tag);border-radius:6px;font-size:12px;"></div>
+    </div>
+    <div class="nl-foot">
+      <div></div>
+      <div class="nl-btns">
+        <button class="nl-btn" onclick="closeImportAccountsModal()">Cerrar</button>
+        <button class="nl-btn primary" id="acc-import-btn" onclick="submitImportAccounts()">Importar</button>
+      </div>
     </div>
   </div>
 </div>
@@ -3933,6 +3967,55 @@ async function loadAccounts(){
       <td>${clienteBadge}</td>
       <td onclick="event.stopPropagation();openAccountDetail('${a.id}')" style="cursor:pointer;color:var(--copper);font-size:11px;">Ver detalle →</td>
     </tr>`;
+  }
+}
+
+function openImportAccountsModal(){
+  document.getElementById('acc-import-file').value='';
+  document.getElementById('acc-import-mark-cliente').checked=false;
+  document.getElementById('acc-import-result').style.display='none';
+  document.getElementById('acc-import-result').innerHTML='';
+  document.getElementById('acc-import-btn').disabled=false;
+  document.getElementById('acc-import-btn').textContent='Importar';
+  document.getElementById('acc-import-overlay').classList.add('open');
+}
+function closeImportAccountsModal(){document.getElementById('acc-import-overlay').classList.remove('open');}
+async function submitImportAccounts(){
+  const fileInput=document.getElementById('acc-import-file');
+  const file=fileInput.files[0];
+  if(!file){_nlToast('Elegí un archivo CSV',true);return;}
+  const fd=new FormData();
+  fd.append('file',file);
+  fd.append('mark_all_as_clients',document.getElementById('acc-import-mark-cliente').checked?'true':'false');
+  const btn=document.getElementById('acc-import-btn');
+  btn.disabled=true;btn.textContent='Importando...';
+  try{
+    const res=await fetch('/api/accounts/import',{method:'POST',body:fd});
+    const data=await res.json();
+    if(!res.ok){
+      _nlToast(data.error||'Error en importación',true);
+      btn.disabled=false;btn.textContent='Importar';return;
+    }
+    const result=document.getElementById('acc-import-result');
+    let html=`<div style="display:flex;gap:18px;margin-bottom:6px;">
+      <div><strong style="color:var(--green);font-size:18px;">${data.created}</strong> <span style="color:var(--text2);font-size:10px;">CREADAS</span></div>
+      <div><strong style="color:var(--text2);font-size:18px;">${data.skipped}</strong> <span style="color:var(--text2);font-size:10px;">OMITIDAS (dup)</span></div>
+      <div><strong style="color:${data.failed.length?'var(--red)':'var(--text2)'};font-size:18px;">${data.failed.length}</strong> <span style="color:var(--text2);font-size:10px;">ERRORES</span></div>
+    </div>`;
+    if(data.failed.length){
+      html+='<div style="max-height:140px;overflow-y:auto;border-top:1px solid var(--border);padding-top:6px;margin-top:4px;">';
+      html+='<p style="margin:0 0 4px;font-weight:600;color:var(--text);">Filas con error:</p>';
+      data.failed.slice(0,50).forEach(f=>{html+=`<div style="color:var(--red);font-size:11px;">línea ${f.row}: ${f.error}</div>`;});
+      if(data.failed.length>50)html+=`<div style="color:var(--text3);font-size:11px;font-style:italic;">... y ${data.failed.length-50} más</div>`;
+      html+='</div>';
+    }
+    result.innerHTML=html;
+    result.style.display='block';
+    btn.disabled=false;btn.textContent='Importar otro';
+    loadAccounts();
+  }catch(e){
+    _nlToast('Error de red: '+(e.message||e),true);
+    btn.disabled=false;btn.textContent='Importar';
   }
 }
 
