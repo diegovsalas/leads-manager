@@ -3,8 +3,10 @@
 Accounts (empresas) y Contacts (personas) — entidades reutilizables tipo
 Zoho/HubSpot. Endpoints bajo /api/accounts/ y /api/contacts/.
 """
+import csv
+import io
 from datetime import datetime
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, Response
 from sqlalchemy import func, or_
 
 from extensions import db
@@ -37,6 +39,7 @@ def list_accounts():
             Account.nombre.ilike(like),
             Account.nombre_comercial.ilike(like),
             Account.rfc.ilike(like),
+            Account.client_id.ilike(like),
         ))
     if owner:
         q = q.filter(Account.owner_id == owner)
@@ -62,11 +65,13 @@ def search_accounts():
             Account.nombre.ilike(like),
             Account.nombre_comercial.ilike(like),
             Account.rfc.ilike(like),
+            Account.client_id.ilike(like),
         ))
         .order_by(Account.nombre.asc()).limit(15).all()
     )
     return jsonify([{
-        "id": str(r.id), "nombre": r.nombre, "rfc": r.rfc,
+        "id": str(r.id), "client_id": r.client_id or "",
+        "nombre": r.nombre, "rfc": r.rfc,
         "nombre_comercial": r.nombre_comercial,
         "is_cliente": r.is_cliente,
     } for r in rows])
@@ -198,6 +203,153 @@ def delete_account(account_id):
     db.session.delete(acc)
     db.session.commit()
     return jsonify({"ok": True})
+
+
+# ── EXPORT / IMPORT CSV ────────────────────────────────────────────
+
+EXPORT_COLUMNS = [
+    "client_id", "nombre", "nombre_comercial", "rfc",
+    "industria", "tamano", "num_sucursales",
+    "telefono", "website", "ciudad", "estado", "pais",
+    "is_cliente", "notas", "fecha_creacion",
+]
+
+
+@accounts_bp.route("/export", methods=["GET"])
+def export_accounts():
+    """Descarga CSV con todas las empresas. Acepta los mismos filtros que list_accounts."""
+    q = Account.query
+    search = (request.args.get("search") or "").strip()
+    if search:
+        like = f"%{search}%"
+        q = q.filter(or_(
+            Account.nombre.ilike(like),
+            Account.nombre_comercial.ilike(like),
+            Account.rfc.ilike(like),
+            Account.client_id.ilike(like),
+        ))
+    rows = q.order_by(Account.client_id.asc().nulls_last(), Account.nombre.asc()).all()
+
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(EXPORT_COLUMNS)
+    for r in rows:
+        writer.writerow([
+            r.client_id or "",
+            r.nombre,
+            r.nombre_comercial or "",
+            r.rfc or "",
+            r.industria or "",
+            r.tamano or "",
+            r.num_sucursales if r.num_sucursales is not None else "",
+            r.telefono or "",
+            r.website or "",
+            r.ciudad or "",
+            r.estado or "",
+            r.pais or "",
+            "true" if r.is_cliente else "false",
+            (r.notas or "").replace("\n", " "),
+            r.fecha_creacion.isoformat() if r.fecha_creacion else "",
+        ])
+
+    csv_data = out.getvalue()
+    filename = f"empresas_{datetime.utcnow().strftime('%Y%m%d_%H%M')}.csv"
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _truthy(v):
+    return str(v).strip().lower() in ("true", "1", "yes", "si", "sí", "x")
+
+
+@accounts_bp.route("/import", methods=["POST"])
+def import_accounts():
+    """Importa CSV. Headers aceptados (case-insensitive): nombre (obligatorio),
+    rfc, nombre_comercial, industria, tamano, num_sucursales, telefono,
+    website, ciudad, estado, pais, is_cliente, notas.
+
+    Dedupa por RFC y por nombre exacto (case-insensitive).
+    Form fields: file=<csv>, mark_all_as_clients=true|false (opcional).
+    Devuelve: {created, skipped, failed[{row, error}]}.
+    """
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "Falta el archivo CSV (field 'file')"}), 400
+
+    mark_all = _truthy(request.form.get("mark_all_as_clients", ""))
+
+    try:
+        content = f.read().decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return jsonify({"error": "El CSV debe estar en UTF-8"}), 400
+
+    reader = csv.DictReader(io.StringIO(content))
+    # Normalize headers to lowercase stripped
+    if reader.fieldnames:
+        reader.fieldnames = [(h or "").strip().lower() for h in reader.fieldnames]
+
+    if not reader.fieldnames or "nombre" not in reader.fieldnames:
+        return jsonify({"error": "El CSV debe tener al menos la columna 'nombre'"}), 400
+
+    created = 0
+    skipped = 0
+    failed = []
+
+    for i, row in enumerate(reader, start=2):  # start=2 para que coincida con la línea del archivo (1 = header)
+        try:
+            nombre = (row.get("nombre") or "").strip()
+            if not nombre:
+                failed.append({"row": i, "error": "nombre vacío"})
+                continue
+
+            rfc = (row.get("rfc") or "").strip().upper() or None
+            # Dedup por RFC
+            if rfc:
+                existing = Account.query.filter(Account.rfc == rfc).first()
+                if existing:
+                    skipped += 1
+                    continue
+            # Dedup por nombre exacto (case-insensitive)
+            existing = Account.query.filter(
+                func.lower(Account.nombre) == nombre.lower()
+            ).first()
+            if existing:
+                skipped += 1
+                continue
+
+            def _int(v):
+                v = (v or "").strip()
+                if not v: return None
+                try: return int(v)
+                except ValueError: return None
+
+            acc = Account(
+                nombre=nombre,
+                nombre_comercial=(row.get("nombre_comercial") or "").strip() or None,
+                rfc=rfc,
+                industria=(row.get("industria") or "").strip() or None,
+                tamano=(row.get("tamano") or "").strip() or None,
+                num_sucursales=_int(row.get("num_sucursales")),
+                telefono=(row.get("telefono") or "").strip() or None,
+                website=(row.get("website") or "").strip() or None,
+                ciudad=(row.get("ciudad") or "").strip() or None,
+                estado=(row.get("estado") or "").strip() or None,
+                pais=(row.get("pais") or "").strip() or "México",
+                is_cliente=mark_all or _truthy(row.get("is_cliente", "")),
+                notas=(row.get("notas") or "").strip() or None,
+            )
+            db.session.add(acc)
+            db.session.flush()  # asigna client_id vía before_insert listener
+            created += 1
+        except Exception as e:
+            db.session.rollback()
+            failed.append({"row": i, "error": str(e)})
+
+    db.session.commit()
+    return jsonify({"created": created, "skipped": skipped, "failed": failed})
 
 
 # ── CONTACTS ───────────────────────────────────────────────────────

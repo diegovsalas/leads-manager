@@ -36,6 +36,19 @@ export const accountsApi = {
     apiFetch<AccountSearchHit>('/api/accounts/', {
       method: 'POST', body: JSON.stringify(data),
     }),
+  exportUrl: (search?: string) =>
+    `/api/accounts/export${search ? `?search=${encodeURIComponent(search)}` : ''}`,
+  importCsv: async (file: File, markAllAsClients: boolean) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('mark_all_as_clients', markAllAsClients ? 'true' : 'false');
+    const res = await fetch('/api/accounts/import', { method: 'POST', body: fd });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return res.json() as Promise<{
+      created: number; skipped: number;
+      failed: { row: number; error: string }[];
+    }>;
+  },
 };
 
 export const contactsApi = {
@@ -146,7 +159,8 @@ export interface OpTrendPoint {
 
 // ── Accounts (empresas) ──────────────────────────────
 export interface AccountSearchHit {
-  id: string; nombre: string; rfc: string | null;
+  id: string; client_id: string;
+  nombre: string; rfc: string | null;
   nombre_comercial: string | null; is_cliente: boolean;
 }
 
@@ -186,7 +200,8 @@ export interface CotizacionLite {
 }
 
 export interface AccountFull {
-  id: string; nombre: string; nombre_comercial: string | null;
+  id: string; client_id: string;
+  nombre: string; nombre_comercial: string | null;
   rfc: string | null; industria: string | null; tamano: string | null;
   num_sucursales: number | null; website: string | null;
   telefono: string | null; direccion: string | null;

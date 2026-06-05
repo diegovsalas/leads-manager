@@ -1803,6 +1803,7 @@ class Account(db.Model):
     __tablename__ = "accounts"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    client_id = db.Column(db.String(10), unique=True, nullable=True, index=True)  # EMP-0001, EMP-0002, ...
     nombre = db.Column(db.String(255), nullable=False, unique=True, index=True)
     nombre_comercial = db.Column(db.String(255), nullable=True)
     rfc = db.Column(db.String(20), nullable=True, unique=True, index=True)
@@ -1832,7 +1833,8 @@ class Account(db.Model):
 
     def to_dict(self):
         return {
-            "id": str(self.id), "nombre": self.nombre,
+            "id": str(self.id), "client_id": self.client_id or "",
+            "nombre": self.nombre,
             "nombre_comercial": self.nombre_comercial,
             "rfc": self.rfc, "industria": self.industria,
             "tamano": self.tamano, "num_sucursales": self.num_sucursales,
@@ -1848,6 +1850,23 @@ class Account(db.Model):
             "fecha_creacion": self.fecha_creacion.isoformat() if self.fecha_creacion else None,
             "fecha_actualizacion": self.fecha_actualizacion.isoformat() if self.fecha_actualizacion else None,
         }
+
+
+@db.event.listens_for(Account, "before_insert")
+def _auto_account_client_id(mapper, connection, target):
+    """Auto-asigna client_id secuencial EMP-XXXX si no se proporcionó."""
+    if not target.client_id:
+        result = connection.execute(
+            db.text("SELECT MAX(client_id) FROM accounts WHERE client_id LIKE 'EMP-%'")
+        ).scalar()
+        if result:
+            try:
+                num = int(result.split("-")[1]) + 1
+            except (IndexError, ValueError):
+                num = 1
+        else:
+            num = 1
+        target.client_id = f"EMP-{num:04d}"
 
 
 class Contact(db.Model):

@@ -112,7 +112,12 @@ export default function AccountPicker({ value, onChange, placeholder, autoFocus 
               className="w-full text-left px-3 py-2 text-sm hover:bg-purple-50"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-gray-800 truncate">{r.nombre}</span>
+                <span className="font-medium text-gray-800 truncate">
+                  {r.client_id && (
+                    <span className="font-mono text-xs text-gray-400 mr-2">{r.client_id}</span>
+                  )}
+                  {r.nombre}
+                </span>
                 {r.is_cliente && (
                   <span className="text-[10px] font-semibold uppercase text-green-600">Cliente</span>
                 )}

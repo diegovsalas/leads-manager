@@ -44,6 +44,11 @@ export default function AccountDetail() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <div className="flex items-center gap-3 mb-1">
+            {data.client_id && (
+              <span className="font-mono text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
+                {data.client_id}
+              </span>
+            )}
             <h1 className="text-2xl font-bold text-gray-900">{data.nombre}</h1>
             <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${
               data.is_cliente ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
