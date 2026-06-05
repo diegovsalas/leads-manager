@@ -213,13 +213,16 @@ def create_app():
 
         all_leads = q.order_by(Lead.fecha_actualizacion.desc()).all()
 
-        # Pre-fetch lead_ids que tienen Oportunidad linkeada para mostrar badge 💰
-        lead_ids_with_oppo = {
-            row[0] for row in db.session.query(Oportunidad.lead_id)
-            .filter(Oportunidad.lead_id.isnot(None)).all()
-        }
+        # Pre-fetch oppo más reciente por lead para mostrar badge 💰 + info
+        oppos_by_lead = {}
+        for op in (Oportunidad.query
+                   .filter(Oportunidad.lead_id.isnot(None))
+                   .order_by(Oportunidad.fecha_creacion.desc()).all()):
+            if op.lead_id not in oppos_by_lead:
+                oppos_by_lead[op.lead_id] = op  # primer match = más reciente
         for lead in all_leads:
-            lead.has_oppo = lead.id in lead_ids_with_oppo  # atributo transient (no DB)
+            lead.oppo = oppos_by_lead.get(lead.id)  # atributo transient
+            lead.has_oppo = lead.oppo is not None
 
         leads_by_etapa = {}
         for lead in all_leads:

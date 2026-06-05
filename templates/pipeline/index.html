@@ -542,6 +542,12 @@ fbq('track','PageView');
               {{ lead.nombre or 'Sin nombre' }}
             </div>
             <div class="k-card-phone">{{ lead.telefono or '' }}</div>
+            {% if lead.has_oppo %}
+            <div class="k-card-detail" style="background:var(--green-bg);color:var(--green);padding:4px 7px;border-radius:6px;margin-top:5px;font-weight:500;display:flex;justify-content:space-between;gap:6px;" title="{{ lead.oppo.nombre }}">
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">💰 {{ lead.oppo.etapa.value }}</span>
+              <span style="font-family:var(--mono);font-weight:600;">${{ "{:,.0f}".format(lead.oppo.valor or 0) }}</span>
+            </div>
+            {% endif %}
             {% if lead.cantidad_productos and lead.precio_unitario %}
             <div class="k-card-detail">{{ lead.cantidad_productos }} x ${{ "{:,.0f}".format(lead.precio_unitario) }}</div>
             {% endif %}
@@ -1315,6 +1321,20 @@ fbq('track','PageView');
           <span>Marcar como <strong>cliente</strong> (ya cerró venta)</span>
         </label>
       </div>
+
+      <details class="nl-collapse" id="acc-contact-section" style="margin-top:10px;">
+        <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);">+ Agregar contacto principal (opcional)</summary>
+        <div style="padding:10px 0 4px;">
+          <div class="nl-row two">
+            <div><label class="nl-label">Nombre contacto</label><input class="nl-input" id="acc-c-nombre"/></div>
+            <div><label class="nl-label">Puesto</label><input class="nl-input" id="acc-c-puesto" placeholder="ej: Gerente de Compras"/></div>
+          </div>
+          <div class="nl-row two">
+            <div><label class="nl-label">Teléfono</label><input class="nl-input" id="acc-c-telefono" type="tel"/></div>
+            <div><label class="nl-label">Email</label><input class="nl-input" id="acc-c-email" type="email"/></div>
+          </div>
+        </div>
+      </details>
     </div>
     <div class="nl-foot">
       <div class="nl-assign" id="acc-detail-link" style="font-size:11px;"></div>
@@ -2571,6 +2591,15 @@ function toggleHideConverted(checked){
   document.body.classList.toggle('hide-converted',checked);
   try{localStorage.setItem('pipeHideConverted',checked?'1':'0');}catch(e){}
 }
+
+// Esc cierra el último modal abierto
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape')return;
+  const overlays=document.querySelectorAll('.nl-overlay.open');
+  if(!overlays.length)return;
+  const last=overlays[overlays.length-1];
+  last.classList.remove('open');
+});
 // Restaurar preferencia al cargar
 document.addEventListener('DOMContentLoaded',()=>{
   try{
@@ -4077,7 +4106,10 @@ function openAccountModal(acc){
   _accEditing=acc||null;
   document.getElementById('acc-modal-title').textContent=acc?'Editar empresa':'Nueva empresa';
   document.getElementById('acc-delete-btn').style.display=acc?'':'none';
-  ['acc-client-id','acc-nombre','acc-comercial','acc-rfc','acc-industria','acc-sucursales','acc-estado-input','acc-ciudad','acc-telefono','acc-website','acc-notas'].forEach(id=>document.getElementById(id).value='');
+  ['acc-client-id','acc-nombre','acc-comercial','acc-rfc','acc-industria','acc-sucursales','acc-estado-input','acc-ciudad','acc-telefono','acc-website','acc-notas','acc-c-nombre','acc-c-puesto','acc-c-telefono','acc-c-email'].forEach(id=>document.getElementById(id).value='');
+  // La sección de contacto principal solo tiene sentido al crear (al editar usás el módulo Contactos)
+  const cSec=document.getElementById('acc-contact-section');
+  if(cSec){cSec.style.display=acc?'none':'';cSec.open=false;}
   document.getElementById('acc-tamano').value='';
   document.getElementById('acc-is-cliente').checked=false;
   document.getElementById('acc-detail-link').textContent='';
@@ -4132,6 +4164,22 @@ async function saveAccount(){
     const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(!r.ok){const e=await r.json();throw new Error(e.error||'Error');}
     const newAcc=await r.json();
+    // Si es alta y se llenó la sección de contacto principal, crearlo ligado
+    if(!_accEditing){
+      const cn=document.getElementById('acc-c-nombre').value.trim();
+      const ct=document.getElementById('acc-c-telefono').value.trim();
+      const ce=document.getElementById('acc-c-email').value.trim().toLowerCase();
+      if(cn && (ct || ce)){
+        try{
+          await fetch('/api/contacts/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+            nombre:cn,
+            puesto:document.getElementById('acc-c-puesto').value.trim()||null,
+            telefono:ct||null, email:ce||null,
+            account_id:newAcc.id, is_primary:true,
+          })});
+        }catch(e){_nlToast('Empresa creada, pero falló el contacto: '+e.message,true);}
+      }
+    }
     _nlToast(_accEditing?'Actualizada: '+nombre:'Creada: '+nombre);
     closeAccountModal();
     // Si veníamos de otro modal, autoseleccionar la nueva empresa allá

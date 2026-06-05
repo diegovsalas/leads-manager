@@ -13,7 +13,7 @@ from sqlalchemy import func, or_
 from extensions import db
 from models import (
     Oportunidad, EtapaOportunidad, PROBABILIDAD_OPORTUNIDAD,
-    Lead, EtapaPipeline, Usuario,
+    Lead, EtapaPipeline, Usuario, Contact,
 )
 
 oportunidades_bp = Blueprint("oportunidades", __name__)
@@ -176,12 +176,43 @@ def create_oportunidad():
         return jsonify({"error": "nombre es requerido"}), 400
     etapa = _parse_etapa(data.get("etapa")) or EtapaOportunidad.CALIFICACION
 
+    # Auto-vincular/crear Contact si vienen datos suficientes y no se pasó contact_id
+    contact_id = data.get("contact_id")
+    account_id = data.get("account_id")
+    contacto_nombre = (data.get("contacto_nombre") or "").strip()
+    contacto_telefono = (data.get("contacto_telefono") or "").strip()
+    contacto_email = (data.get("contacto_email") or "").strip().lower() or None
+    if not contact_id and contacto_nombre and (contacto_telefono or contacto_email):
+        # Dedup por email primero, después por teléfono dentro del mismo account
+        existing_c = None
+        if contacto_email:
+            existing_c = Contact.query.filter(
+                db.func.lower(Contact.email) == contacto_email
+            ).first()
+        if not existing_c and contacto_telefono:
+            q_dup = Contact.query.filter(Contact.telefono == contacto_telefono)
+            if account_id:
+                q_dup = q_dup.filter(Contact.account_id == account_id)
+            existing_c = q_dup.first()
+        if existing_c:
+            contact_id = existing_c.id
+        else:
+            new_c = Contact(
+                nombre=contacto_nombre,
+                telefono=contacto_telefono or None,
+                email=contacto_email,
+                account_id=account_id,
+            )
+            db.session.add(new_c)
+            db.session.flush()
+            contact_id = new_c.id
+
     op = Oportunidad(
         nombre=data["nombre"],
         empresa=data.get("empresa"),
-        contacto_nombre=data.get("contacto_nombre"),
-        contacto_telefono=data.get("contacto_telefono"),
-        contacto_email=data.get("contacto_email"),
+        contacto_nombre=contacto_nombre or None,
+        contacto_telefono=contacto_telefono or None,
+        contacto_email=contacto_email,
         valor=_to_decimal(data.get("valor")) or Decimal("0"),
         moneda=data.get("moneda") or "MXN",
         fecha_cierre_esperada=_parse_date(data.get("fecha_cierre_esperada")),
@@ -195,8 +226,8 @@ def create_oportunidad():
         notas=data.get("notas"),
         lead_id=data.get("lead_id"),
         zoho_deal_id=data.get("zoho_deal_id"),
-        account_id=data.get("account_id"),
-        contact_id=data.get("contact_id"),
+        account_id=account_id,
+        contact_id=contact_id,
     )
     if "probabilidad" in data:
         try:
