@@ -21,6 +21,41 @@ from extensions import db, socketio
 # ──────────────────────────────────────────────
 # Factory function — patrón recomendado con Blueprints
 # ──────────────────────────────────────────────
+def _run_pending_migrations(app):
+    """Migraciones de columna idempotentes que corren en cada boot.
+    Cada bloque verifica si el cambio ya está aplicado antes de tocar la DB.
+    Si algo falla, loguea y sigue — la app igual arranca."""
+    from sqlalchemy import text
+    with app.app_context():
+        # ─── accounts.client_id (EMP-XXXX) ───
+        try:
+            with db.engine.begin() as conn:
+                exists = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'accounts' AND column_name = 'client_id'
+                """)).first()
+                if not exists:
+                    app.logger.info("[auto-migrate] adding accounts.client_id...")
+                    conn.execute(text("ALTER TABLE accounts ADD COLUMN client_id VARCHAR(10)"))
+                    conn.execute(text(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS ix_accounts_client_id "
+                        "ON accounts (client_id)"
+                    ))
+                    # Backfill EMP-XXXX en orden de fecha_creacion
+                    rows = conn.execute(text(
+                        "SELECT id FROM accounts WHERE client_id IS NULL "
+                        "ORDER BY fecha_creacion ASC NULLS LAST, nombre ASC"
+                    )).fetchall()
+                    for i, row in enumerate(rows, start=1):
+                        conn.execute(
+                            text("UPDATE accounts SET client_id = :cid WHERE id = :id"),
+                            {"cid": f"EMP-{i:04d}", "id": row[0]},
+                        )
+                    app.logger.info("[auto-migrate] backfilled %d empresas with EMP-XXXX", len(rows))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] accounts.client_id failed (retry on next boot): %s", e)
+
+
 def create_app():
     app = Flask(__name__)
 
@@ -43,6 +78,9 @@ def create_app():
     # ── Extensiones ────────────────────────────
     db.init_app(app)
     socketio.init_app(app, cors_allowed_origins="*", async_mode="gevent")
+
+    # ── Auto-migrations (idempotente, corre en cada boot) ──
+    _run_pending_migrations(app)
 
     # ── Blueprints ─────────────────────────────
     from blueprints.auth       import auth_bp
