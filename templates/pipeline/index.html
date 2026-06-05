@@ -329,8 +329,8 @@ fbq('track','PageView');
     <div class="slink" onclick="showView('pipeline',this)">&#128203; <span class="sl-text">Pipeline</span></div>
     <div class="slink" onclick="openLeadModal()" style="background:rgba(255,255,255,.12);color:#fff;font-weight:600;">&#10133; <span class="sl-text">Nuevo Lead</span> <kbd style="float:right;font-size:9px;color:rgba(255,255,255,.5);background:rgba(255,255,255,.1);padding:1px 4px;border-radius:3px;border:1px solid rgba(255,255,255,.2);">⌘N</kbd></div>
     <div class="slink" onclick="showView('opps',this)">&#127919; <span class="sl-text">Oportunidades</span></div>
-    <div class="slink" onclick="showView('accounts',this)">&#127970; <span class="sl-text">Empresas</span></div>
-    <div class="slink" onclick="showView('contacts',this)">&#128101; <span class="sl-text">Contactos</span></div>
+    <div class="slink" onclick="showView('accounts',this)">&#127970; <span class="sl-text">Empresas</span> <span class="slink-badge" id="sidebar-acc-count"></span></div>
+    <div class="slink" onclick="showView('contacts',this)">&#128101; <span class="sl-text">Contactos</span> <span class="slink-badge" id="sidebar-con-count"></span></div>
     <div class="slink" onclick="showView('leads',this)">&#128101; <span class="sl-text">Leads</span></div>
     <div class="slink admin-only" onclick="showView('vendedores',this)">&#128100; <span class="sl-text">Vendedores</span></div>
     <div class="slink" onclick="showView('proyecto',this)">&#128221; <span class="sl-text">Proyecto</span></div>
@@ -3970,6 +3970,21 @@ async function loadAccounts(){
   }
 }
 
+async function loadSidebarCounts(){
+  try{
+    const [accs,cons]=await Promise.all([
+      _api('/api/accounts/'),
+      _api('/api/contacts/'),
+    ]);
+    const a=Array.isArray(accs)?accs.length:0;
+    const c=Array.isArray(cons)?cons.length:0;
+    const accEl=document.getElementById('sidebar-acc-count');
+    const conEl=document.getElementById('sidebar-con-count');
+    if(accEl)accEl.textContent=a?a:'';
+    if(conEl)conEl.textContent=c?c:'';
+  }catch(e){}
+}
+
 function openImportAccountsModal(){
   document.getElementById('acc-import-file').value='';
   document.getElementById('acc-import-mark-cliente').checked=false;
@@ -4012,7 +4027,7 @@ async function submitImportAccounts(){
     result.innerHTML=html;
     result.style.display='block';
     btn.disabled=false;btn.textContent='Importar otro';
-    loadAccounts();
+    loadAccounts();loadSidebarCounts();
   }catch(e){
     _nlToast('Error de red: '+(e.message||e),true);
     btn.disabled=false;btn.textContent='Importar';
@@ -4069,7 +4084,7 @@ async function saveAccount(){
     const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(!r.ok){const e=await r.json();throw new Error(e.error||'Error');}
     _nlToast(_accEditing?'Actualizada: '+nombre:'Creada: '+nombre);
-    closeAccountModal();loadAccounts();
+    closeAccountModal();loadAccounts();loadSidebarCounts();
   }catch(e){_nlToast('Error: '+e.message,true);}
 }
 
@@ -4078,7 +4093,7 @@ async function deleteAccount(){
   if(!confirm(`¿Eliminar empresa "${_accEditing.nombre}"? Los leads y oportunidades vinculados quedarán sin empresa.`))return;
   try{
     await fetch(`/api/accounts/${_accEditing.id}`,{method:'DELETE'});
-    _nlToast('Eliminada');closeAccountModal();loadAccounts();
+    _nlToast('Eliminada');closeAccountModal();loadAccounts();loadSidebarCounts();
   }catch(e){_nlToast('Error: '+e.message,true);}
 }
 
@@ -4199,7 +4214,7 @@ async function saveContact(){
     const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(!r.ok){const e=await r.json();throw new Error(e.error||'Error');}
     _nlToast(_conEditing?'Actualizado':'Creado: '+nombre);
-    closeContactModal();loadContacts();
+    closeContactModal();loadContacts();loadSidebarCounts();
   }catch(e){_nlToast('Error: '+e.message,true);}
 }
 
@@ -4208,7 +4223,7 @@ async function deleteContact(){
   if(!confirm(`¿Eliminar contacto "${_conEditing.nombre_completo}"?`))return;
   try{
     await fetch(`/api/contacts/${_conEditing.id}`,{method:'DELETE'});
-    _nlToast('Eliminado');closeContactModal();loadContacts();
+    _nlToast('Eliminado');closeContactModal();loadContacts();loadSidebarCounts();
   }catch(e){_nlToast('Error: '+e.message,true);}
 }
 </script>
@@ -4276,6 +4291,7 @@ function closeLeadModal(){document.getElementById('nl-overlay').classList.remove
 
 // Phone format + duplicate check on blur
 document.addEventListener('DOMContentLoaded',()=>{
+  loadSidebarCounts();
   const phoneEl=document.getElementById('nl-phone');
   if(phoneEl){
     phoneEl.addEventListener('blur',async e=>{
