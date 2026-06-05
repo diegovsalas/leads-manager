@@ -1996,6 +1996,8 @@ class Oportunidad(db.Model):
             "motivo_perdida": self.motivo_perdida,
             "lead_id": str(self.lead_id) if self.lead_id else None,
             "zoho_deal_id": self.zoho_deal_id,
+            "account_id": str(self.account_id) if self.account_id else None,
+            "contact_id": str(self.contact_id) if self.contact_id else None,
             "fecha_creacion": self.fecha_creacion.isoformat() if self.fecha_creacion else None,
             "fecha_actualizacion": self.fecha_actualizacion.isoformat() if self.fecha_actualizacion else None,
             "fecha_cierre_real": self.fecha_cierre_real.isoformat() if self.fecha_cierre_real else None,

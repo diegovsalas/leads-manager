@@ -179,6 +179,8 @@ def create_oportunidad():
         notas=data.get("notas"),
         lead_id=data.get("lead_id"),
         zoho_deal_id=data.get("zoho_deal_id"),
+        account_id=data.get("account_id"),
+        contact_id=data.get("contact_id"),
     )
     if "probabilidad" in data:
         try:
@@ -203,7 +205,7 @@ def update_oportunidad(opp_id):
     for fld in ("nombre", "empresa", "contacto_nombre", "contacto_telefono",
                 "contacto_email", "moneda", "marca_interes", "estado_cliente",
                 "num_sucursales", "sale_type", "notas", "motivo_perdida",
-                "propietario_id"):
+                "propietario_id", "account_id", "contact_id"):
         if fld in data:
             setattr(op, fld, data[fld])
 

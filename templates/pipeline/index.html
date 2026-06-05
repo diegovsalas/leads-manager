@@ -3696,15 +3696,15 @@ applyRoleVisibility();
         <label class="nl-label">Nombre de la oportunidad *</label>
         <input class="nl-input" id="opp-nombre" placeholder="ej: Aromatex - Walmart Norte 50 sucursales"/>
       </div>
-      <div class="nl-row two">
-        <div>
-          <label class="nl-label">Empresa</label>
-          <input class="nl-input" id="opp-empresa"/>
-        </div>
-        <div>
-          <label class="nl-label">Estado</label>
-          <input class="nl-input" id="opp-estado"/>
-        </div>
+      <div class="nl-row" style="position:relative;">
+        <label class="nl-label">Empresa * <span style="color:var(--text3);font-weight:400;font-size:10px;">(toda oportunidad se liga a una empresa)</span></label>
+        <input class="nl-input" id="opp-empresa" type="text" autocomplete="off" oninput="oppEmpresaSearch()" placeholder="Buscar por ID, nombre o RFC (3+ letras)..."/>
+        <input type="hidden" id="opp-account-id"/>
+        <div id="opp-empresa-list" class="nl-empresa-list" style="display:none;"></div>
+      </div>
+      <div class="nl-row">
+        <label class="nl-label">Estado</label>
+        <input class="nl-input" id="opp-estado"/>
       </div>
       <div class="nl-row two">
         <div>
@@ -3803,6 +3803,8 @@ async function convertirLeadAOportunidad(leadId){
     document.getElementById('opp-delete-btn').style.display='none';
     document.getElementById('opp-nombre').value=`${lead.empresa_nombre||lead.nombre} - ${lead.marca_interes||''}`.replace(/ - $/,'');
     document.getElementById('opp-empresa').value=lead.empresa_nombre||'';
+    document.getElementById('opp-account-id').value=lead.account_id||'';
+    document.getElementById('opp-empresa-list').style.display='none';
     document.getElementById('opp-estado').value=lead.estado_cliente||'';
     document.getElementById('opp-contacto-nombre').value=lead.nombre||'';
     document.getElementById('opp-contacto-telefono').value=lead.telefono||'';
@@ -3849,12 +3851,14 @@ async function openOppModal(opp){
   document.getElementById('opp-modal-title').textContent=opp?'Editar oportunidad':'Nueva oportunidad';
   document.getElementById('opp-delete-btn').style.display=opp?'':'none';
   // Reset
-  ['opp-nombre','opp-empresa','opp-estado','opp-contacto-nombre','opp-contacto-telefono','opp-contacto-email','opp-valor','opp-monthly','opp-fecha-cierre','opp-sucursales','opp-notas','opp-motivo-perdida'].forEach(id=>document.getElementById(id).value='');
+  ['opp-nombre','opp-empresa','opp-account-id','opp-estado','opp-contacto-nombre','opp-contacto-telefono','opp-contacto-email','opp-valor','opp-monthly','opp-fecha-cierre','opp-sucursales','opp-notas','opp-motivo-perdida'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('opp-empresa-list').style.display='none';
   document.querySelectorAll('#opp-marca-pills .nl-pill').forEach((p,i)=>{p.classList.remove('active');p.onclick=()=>{p.parentElement.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');};});
   document.querySelectorAll('#opp-etapa-pills .nl-pill').forEach((p,i)=>{p.classList.remove('active');p.onclick=()=>{p.parentElement.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');_oppToggleMotivo();};});
   if(opp){
     document.getElementById('opp-nombre').value=opp.nombre||'';
     document.getElementById('opp-empresa').value=opp.empresa||'';
+    document.getElementById('opp-account-id').value=opp.account_id||'';
     document.getElementById('opp-estado').value=opp.estado_cliente||'';
     document.getElementById('opp-contacto-nombre').value=opp.contacto_nombre||'';
     document.getElementById('opp-contacto-telefono').value=opp.contacto_telefono||'';
@@ -3888,13 +3892,17 @@ function _oppToggleMotivo(){
 
 async function saveOpp(){
   const nombre=document.getElementById('opp-nombre').value.trim();
+  const empresaName=document.getElementById('opp-empresa').value.trim();
+  const empresaId=document.getElementById('opp-account-id').value||null;
   const marca=document.querySelector('#opp-marca-pills .nl-pill.active')?.dataset.val;
   const etapa=document.querySelector('#opp-etapa-pills .nl-pill.active')?.dataset.val;
   const valor=parseFloat(document.getElementById('opp-valor').value)||0;
   if(!nombre){_nlToast('Falta el nombre de la oportunidad',true);return;}
+  if(!empresaName){_nlToast('Toda oportunidad debe ligarse a una empresa',true);document.getElementById('opp-empresa').focus();return;}
+  if(!empresaId){_nlToast('Elegí una empresa del listado o creala con "+ Agregar"',true);document.getElementById('opp-empresa').focus();return;}
   if(!marca){_nlToast('Seleccioná una marca',true);return;}
   const body={
-    nombre, empresa:document.getElementById('opp-empresa').value.trim()||null,
+    nombre, empresa:empresaName, account_id:empresaId,
     estado_cliente:document.getElementById('opp-estado').value.trim()||null,
     contacto_nombre:document.getElementById('opp-contacto-nombre').value.trim()||null,
     contacto_telefono:document.getElementById('opp-contacto-telefono').value.trim()||null,
@@ -4104,12 +4112,15 @@ async function saveAccount(){
     const newAcc=await r.json();
     _nlToast(_accEditing?'Actualizada: '+nombre:'Creada: '+nombre);
     closeAccountModal();
-    // Si veníamos del modal de Lead: autoseleccionar la nueva empresa
-    if(_creatingEmpresaFromLead){
-      _creatingEmpresaFromLead=false;
+    // Si veníamos de otro modal, autoseleccionar la nueva empresa allá
+    if(_empresaCreateReturnTo==='lead'){
       document.getElementById('nl-empresa').value=newAcc.nombre||'';
       document.getElementById('nl-account-id').value=newAcc.id||'';
+    }else if(_empresaCreateReturnTo==='opp'){
+      document.getElementById('opp-empresa').value=newAcc.nombre||'';
+      document.getElementById('opp-account-id').value=newAcc.id||'';
     }
+    _empresaCreateReturnTo=null;
     loadAccounts();loadSidebarCounts();
   }catch(e){_nlToast('Error: '+e.message,true);}
 }
@@ -4403,7 +4414,7 @@ function nlPickEmpresa(id,name){
 function nlCreateNewEmpresa(){
   const typed=document.getElementById('nl-empresa').value.trim();
   document.getElementById('nl-empresa-list').style.display='none';
-  _creatingEmpresaFromLead=true;
+  _empresaCreateReturnTo='lead';
   openAccountModal();  // creation mode (sin acc)
   document.getElementById('acc-nombre').value=typed;
   setTimeout(()=>document.getElementById('acc-rfc').focus(),60);
@@ -4417,7 +4428,46 @@ function nlToggleB2C(){
     document.getElementById('nl-empresa-list').style.display='none';
   }
 }
-let _creatingEmpresaFromLead=false;
+// Flag para coordinar cross-modal cuando se crea empresa desde otro modal
+// 'lead' = vuelve al modal de lead | 'opp' = vuelve al modal de oportunidad | null
+let _empresaCreateReturnTo=null;
+
+// ── Empresa autocomplete del modal de Oportunidad ──
+let _oppEmpresaTimer;
+function oppEmpresaSearch(){
+  clearTimeout(_oppEmpresaTimer);
+  _oppEmpresaTimer=setTimeout(async()=>{
+    const q=document.getElementById('opp-empresa').value.trim();
+    const list=document.getElementById('opp-empresa-list');
+    document.getElementById('opp-account-id').value='';  // limpiar link al tipear
+    if(q.length<3){list.style.display='none';return;}
+    try{
+      const items=await _api('/api/accounts/search?q='+encodeURIComponent(q))||[];
+      let html='';
+      if(items.length){
+        html=items.map(a=>`<div class="nl-empresa-item" onclick='oppPickEmpresa("${a.id}",${JSON.stringify(a.nombre||"")})'>${a.client_id?`<span style="font-family:var(--mono);font-size:10px;background:var(--bg-tag);color:var(--accent);padding:1px 5px;border-radius:3px;font-weight:600;margin-right:6px;">${a.client_id}</span>`:''}<strong>${a.nombre}</strong>${a.rfc?` <span style="color:var(--text3);font-size:11px;font-family:var(--mono);">${a.rfc}</span>`:''}${a.is_cliente?` <span style="background:var(--green-bg);color:var(--green);padding:0 5px;border-radius:99px;font-size:9px;font-weight:600;margin-left:4px;">CLIENTE</span>`:''}</div>`).join('');
+      }else{
+        html='<div style="padding:8px 11px;color:var(--text3);font-size:12px;font-style:italic;">Sin resultados</div>';
+      }
+      html+=`<div class="nl-empresa-item" style="border-top:1px solid var(--border);color:var(--accent);font-weight:600;background:var(--copper-soft);" onclick="oppCreateNewEmpresa()">+ Agregar "${q}" como nueva empresa →</div>`;
+      list.innerHTML=html;
+      list.style.display='block';
+    }catch(e){list.style.display='none';}
+  },200);
+}
+function oppPickEmpresa(id,name){
+  document.getElementById('opp-empresa').value=name;
+  document.getElementById('opp-account-id').value=id;
+  document.getElementById('opp-empresa-list').style.display='none';
+}
+function oppCreateNewEmpresa(){
+  const typed=document.getElementById('opp-empresa').value.trim();
+  document.getElementById('opp-empresa-list').style.display='none';
+  _empresaCreateReturnTo='opp';
+  openAccountModal();
+  document.getElementById('acc-nombre').value=typed;
+  setTimeout(()=>document.getElementById('acc-rfc').focus(),60);
+}
 
 function _nlUpdateIcp(){
   // Heurística simple para preview (la real corre server-side al guardar)
