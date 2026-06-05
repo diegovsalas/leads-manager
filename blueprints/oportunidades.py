@@ -41,7 +41,23 @@ def _parse_etapa(s):
 
 
 def _current_user_id():
-    return session.get("usuario_id") or session.get("user_id")
+    # Solo usuario_id (FK a tabla `usuarios`). user_id es FK a `users` y
+    # rompe la FK violation cuando se usa como propietario_id (ver commit e71dd92).
+    return session.get("usuario_id")
+
+
+def _valid_user_id(uid):
+    """Devuelve el uid si existe en la tabla usuarios. Si la sesión trae
+    un UUID stale (usuario borrado, login por otro sistema, etc.) devuelve
+    None para evitar FK violations."""
+    if not uid:
+        return None
+    try:
+        if db.session.get(Usuario, uid):
+            return uid
+    except Exception:
+        pass
+    return None
 
 
 def _to_decimal(v):
@@ -170,7 +186,7 @@ def create_oportunidad():
         moneda=data.get("moneda") or "MXN",
         fecha_cierre_esperada=_parse_date(data.get("fecha_cierre_esperada")),
         etapa=etapa,
-        propietario_id=data.get("propietario_id") or _current_user_id(),
+        propietario_id=_valid_user_id(data.get("propietario_id") or _current_user_id()),
         marca_interes=data.get("marca_interes"),
         estado_cliente=data.get("estado_cliente"),
         num_sucursales=data.get("num_sucursales"),
@@ -287,9 +303,11 @@ def from_lead(lead_id):
         moneda=data.get("moneda") or "MXN",
         fecha_cierre_esperada=_parse_date(data.get("fecha_cierre_esperada")),
         etapa=_parse_etapa(data.get("etapa")) or EtapaOportunidad.CALIFICACION,
-        propietario_id=(data.get("propietario_id")
-                        or str(lead.usuario_asignado_id) if lead.usuario_asignado_id else None
-                        or _current_user_id()),
+        propietario_id=_valid_user_id(
+            data.get("propietario_id")
+            or (str(lead.usuario_asignado_id) if lead.usuario_asignado_id else None)
+            or _current_user_id()
+        ),
         marca_interes=data.get("marca_interes") or lead.marca_interes,
         estado_cliente=data.get("estado_cliente") or lead.estado_cliente,
         num_sucursales=data.get("num_sucursales") or lead.num_sucursales,
