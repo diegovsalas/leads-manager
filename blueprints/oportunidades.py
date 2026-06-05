@@ -235,6 +235,7 @@ def update_oportunidad(opp_id):
         new_etapa = _parse_etapa(data["etapa"])
         if new_etapa:
             op.etapa = new_etapa
+            _propagate_close_to_lead(op)
     if "probabilidad" in data:
         try:
             op.probabilidad = max(0, min(100, int(data["probabilidad"])))
@@ -243,6 +244,23 @@ def update_oportunidad(opp_id):
 
     db.session.commit()
     return jsonify(op.to_dict())
+
+
+def _propagate_close_to_lead(op):
+    """Cuando la Oportunidad pasa a Cerrado Ganado/Perdido, mueve el Lead
+    linkeado a la misma etapa. Si el Lead ya está cerrado, no toca."""
+    if not op.lead_id:
+        return
+    if op.etapa not in (EtapaOportunidad.CIERRE_GANADO, EtapaOportunidad.CIERRE_PERDIDO):
+        return
+    lead = db.session.get(Lead, op.lead_id)
+    if not lead or not lead.etapa_pipeline:
+        return
+    if lead.etapa_pipeline in (EtapaPipeline.CIERRE_GANADO, EtapaPipeline.CIERRE_PERDIDO):
+        return  # ya cerrado, no piso
+    lead.etapa_pipeline = (EtapaPipeline.CIERRE_GANADO
+                            if op.etapa == EtapaOportunidad.CIERRE_GANADO
+                            else EtapaPipeline.CIERRE_PERDIDO)
 
 
 @oportunidades_bp.route("/<uuid:opp_id>/mover", methods=["PATCH"])
@@ -256,6 +274,7 @@ def mover_oportunidad(opp_id):
     if not nueva:
         return jsonify({"error": "Etapa inválida"}), 400
     op.etapa = nueva
+    _propagate_close_to_lead(op)
     db.session.commit()
     return jsonify(op.to_dict())
 

@@ -201,6 +201,7 @@ def create_app():
     @app.route("/")
     def index():
         from sqlalchemy.orm import joinedload
+        from models import Oportunidad
         q = Lead.query.options(joinedload(Lead.usuario_asignado))
 
         # Vendedores solo ven sus leads, Super Admin ve todo
@@ -211,6 +212,15 @@ def create_app():
                 q = q.filter(Lead.usuario_asignado_id == usuario_id)
 
         all_leads = q.order_by(Lead.fecha_actualizacion.desc()).all()
+
+        # Pre-fetch lead_ids que tienen Oportunidad linkeada para mostrar badge 💰
+        lead_ids_with_oppo = {
+            row[0] for row in db.session.query(Oportunidad.lead_id)
+            .filter(Oportunidad.lead_id.isnot(None)).all()
+        }
+        for lead in all_leads:
+            lead.has_oppo = lead.id in lead_ids_with_oppo  # atributo transient (no DB)
+
         leads_by_etapa = {}
         for lead in all_leads:
             leads_by_etapa.setdefault(lead.etapa_pipeline, []).append(lead)

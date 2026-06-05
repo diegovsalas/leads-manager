@@ -119,6 +119,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .k-card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:10px 12px;cursor:pointer;transition:box-shadow 120ms,border-color 120ms,transform 120ms;user-select:none;box-shadow:var(--shadow);}
 .k-card:hover{box-shadow:var(--shadow-lg);border-color:#d0c8be;transform:translateY(-1px);}
 .k-card.dragging{opacity:.4;}
+.k-card.is-converted{border-color:var(--green);background:linear-gradient(180deg,rgba(45,122,79,.04),var(--bg-card));}
+body.hide-converted .k-card.is-converted{display:none;}
 .k-col.drag-over{background:var(--copper-soft);border-radius:14px;}
 .k-card-name{font-size:14px;font-weight:500;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .k-card-phone{font-size:12px;color:var(--text3);font-family:var(--mono);}
@@ -498,7 +500,11 @@ fbq('track','PageView');
 <div class="view" id="view-pipeline">
   <div class="toolbar">
     <input class="toolbar-search" type="text" placeholder="Buscar lead..." id="search-input" oninput="filterCards(this.value)"/>
-    <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+    <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
+      <label style="display:flex;gap:5px;align-items:center;font-size:12px;color:var(--text2);cursor:pointer;user-select:none;">
+        <input type="checkbox" id="hide-converted-toggle" onchange="toggleHideConverted(this.checked)"/>
+        Ocultar convertidos
+      </label>
       <span style="font-size:13px;color:var(--text2);">Pipe total:</span>
       <span style="font-size:14px;font-weight:600;color:var(--green);" id="pipe-total">$0</span>
       <button class="btn btn-filled" onclick="openLeadModal()">+ Nuevo lead</button>
@@ -526,12 +532,15 @@ fbq('track','PageView');
         </div>
         <div class="k-cards" id="kcards-{{ etapa.value }}">
           {% for lead in grupo.leads %}
-          <div class="k-card" id="kcard-{{ lead.id }}" data-lead-id="{{ lead.id }}"
+          <div class="k-card{% if lead.has_oppo %} is-converted{% endif %}" id="kcard-{{ lead.id }}" data-lead-id="{{ lead.id }}"
                data-nombre="{{ lead.nombre or 'Sin nombre' }}" data-telefono="{{ lead.telefono or '' }}"
                data-marca="{{ lead.marca_interes or '' }}"
                draggable="true" ondragstart="onDragStart(event,'{{ lead.id }}')" ondragend="this.classList.remove('dragging')"
                onclick="abrirLeadPanel('{{ lead.id }}')">
-            <div class="k-card-name">{{ lead.nombre or 'Sin nombre' }}</div>
+            <div class="k-card-name">
+              {% if lead.has_oppo %}<span title="Lead convertido en Oportunidad" style="margin-right:4px;">💰</span>{% endif %}
+              {{ lead.nombre or 'Sin nombre' }}
+            </div>
             <div class="k-card-phone">{{ lead.telefono or '' }}</div>
             {% if lead.cantidad_productos and lead.precio_unitario %}
             <div class="k-card-detail">{{ lead.cantidad_productos }} x ${{ "{:,.0f}".format(lead.precio_unitario) }}</div>
@@ -2558,6 +2567,19 @@ function updateCounts(){
   document.getElementById('pipe-total').textContent=fmt$(total);
 }
 function filterCards(q){const ql=q.toLowerCase();document.querySelectorAll('.k-card').forEach(c=>{const n=(c.dataset.nombre||'').toLowerCase(),p=(c.dataset.telefono||'').toLowerCase();c.style.display=(n.includes(ql)||p.includes(ql))?'':'none';});}
+function toggleHideConverted(checked){
+  document.body.classList.toggle('hide-converted',checked);
+  try{localStorage.setItem('pipeHideConverted',checked?'1':'0');}catch(e){}
+}
+// Restaurar preferencia al cargar
+document.addEventListener('DOMContentLoaded',()=>{
+  try{
+    if(localStorage.getItem('pipeHideConverted')==='1'){
+      const el=document.getElementById('hide-converted-toggle');
+      if(el){el.checked=true;document.body.classList.add('hide-converted');}
+    }
+  }catch(e){}
+});
 
 // Dashboard (from API)
 async function loadDashboard(){
