@@ -1,5 +1,6 @@
 # blueprints/leads.py
 import re
+import uuid
 from flask import Blueprint, request, jsonify, session
 from sqlalchemy import or_, func
 from extensions import db, socketio
@@ -282,12 +283,26 @@ def actualizar_lead(lead_id):
         return jsonify({"error": "Lead no encontrado"}), 404
 
     data = request.get_json() or {}
+
+    # Validar UUIDs antes de asignar para no romper la query
+    for uuid_field in ("account_id", "contact_id"):
+        if uuid_field in data and data[uuid_field] not in (None, ""):
+            try:
+                uuid.UUID(str(data[uuid_field]))
+            except (ValueError, TypeError):
+                return jsonify({"error": f"{uuid_field} inválido"}), 400
+
     for campo in ["nombre", "telefono", "marca_interes", "cantidad_productos",
                    "precio_unitario", "valor_estimado", "motivo_perdida",
                    "usuario_asignado_id", "tipo_industria", "tamano_empresa",
-                   "num_sucursales", "tipo_cliente", "notas"]:
+                   "num_sucursales", "tipo_cliente", "notas",
+                   "account_id", "contact_id"]:
         if campo in data:
-            setattr(lead, campo, data[campo])
+            # Normalizar empty string a None para UUIDs
+            value = data[campo]
+            if campo in ("account_id", "contact_id") and value == "":
+                value = None
+            setattr(lead, campo, value)
 
     if "etapa_pipeline" in data:
         try:

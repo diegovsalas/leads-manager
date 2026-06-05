@@ -2,10 +2,13 @@ import { NavLink } from 'react-router-dom';
 
 const links = [
   { to: '/app', icon: '📊', label: 'Dashboard', end: true },
-  { to: '/app/clientes', icon: '🏢', label: 'Clientes' },
+  { to: '/app/empresas', icon: '🏢', label: 'Empresas' },
+  { to: '/app/leads', icon: '📨', label: 'Leads' },
+  { to: '/app/clientes', icon: '⭐', label: 'Clientes' },
   { to: '/app/contactos', icon: '👥', label: 'Contactos' },
   { to: '/app/kams', icon: '👤', label: 'KAMs' },
   { to: '/app/alertas', icon: '🔔', label: 'Alertas' },
+  { to: '/app/ayuda', icon: '📖', label: 'Ayuda' },
 ];
 
 export default function Sidebar({ user }: { user: { nombre: string; rol: string } }) {

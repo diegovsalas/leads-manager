@@ -8,7 +8,7 @@ from flask import Blueprint, request, jsonify, session
 from sqlalchemy import func, or_
 
 from extensions import db
-from models import Account, Contact, Lead, Oportunidad
+from models import Account, Contact, Lead, Oportunidad, CSAccount, Cotizacion
 
 accounts_bp = Blueprint("accounts", __name__)
 contacts_bp = Blueprint("contacts", __name__)
@@ -79,14 +79,27 @@ def get_account(account_id):
         return jsonify({"error": "Account no encontrada"}), 404
     payload = acc.to_dict()
     # Include linked entities counts and lists
-    leads_count = Lead.query.filter(Lead.account_id == acc.id).count()
+    leads = (
+        Lead.query.filter(Lead.account_id == acc.id)
+        .order_by(Lead.fecha_creacion.desc()).all()
+    )
     opps = Oportunidad.query.filter(Oportunidad.account_id == acc.id).all()
     contacts = Contact.query.filter(Contact.account_id == acc.id).all()
+    cotizaciones = []
+    if leads:
+        cotizaciones = (
+            Cotizacion.query
+            .filter(Cotizacion.lead_id.in_([l.id for l in leads]))
+            .order_by(Cotizacion.fecha.desc()).all()
+        )
     payload["counts"] = {
-        "leads": leads_count, "oportunidades": len(opps), "contactos": len(contacts),
+        "leads": len(leads), "oportunidades": len(opps),
+        "contactos": len(contacts), "cotizaciones": len(cotizaciones),
     }
+    payload["leads"] = [l.to_dict() for l in leads]
     payload["oportunidades"] = [o.to_dict() for o in opps]
     payload["contactos"] = [c.to_dict() for c in contacts]
+    payload["cotizaciones"] = [c.to_dict() for c in cotizaciones]
     payload["valor_pipe_abierto"] = sum(
         float(o.valor or 0) for o in opps
         if o.etapa and o.etapa.value not in ("Cerrado Ganado", "Cerrado Perdido")
@@ -95,6 +108,23 @@ def get_account(account_id):
         float(o.valor or 0) for o in opps
         if o.etapa and o.etapa.value == "Cerrado Ganado"
     )
+
+    # MRR y datos de Customer Success (si la Account está enlazada a CSAccount)
+    payload["cs"] = None
+    if acc.cs_account_id:
+        cs = db.session.get(CSAccount, acc.cs_account_id)
+        if cs:
+            payload["cs"] = {
+                "id": str(cs.id),
+                "client_id": cs.client_id or "",
+                "mrr": float(cs.mrr or 0),
+                "arr_proyectado": float(cs.arr_proyectado or 0),
+                "sucursales": cs.sucursales or 0,
+                "unidades_contratadas": cs.unidades_contratadas or "",
+                "tier": cs.tier or "",
+                "nps": cs.nps,
+                "pulso": cs.pulso,
+            }
     return jsonify(payload)
 
 
