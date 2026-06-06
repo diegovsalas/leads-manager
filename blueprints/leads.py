@@ -160,6 +160,7 @@ def crear_lead():
         tamano_empresa=data.get("tamano_empresa"),
         num_sucursales=data.get("num_sucursales"),
         tipo_cliente=data.get("tipo_cliente"),
+        tipo_venta=data.get("tipo_venta"),
         notas=data.get("notas"),
     )
     _apply_icp(lead)
@@ -295,7 +296,7 @@ def actualizar_lead(lead_id):
     for campo in ["nombre", "telefono", "marca_interes", "cantidad_productos",
                    "precio_unitario", "valor_estimado", "motivo_perdida",
                    "usuario_asignado_id", "tipo_industria", "tamano_empresa",
-                   "num_sucursales", "tipo_cliente", "notas",
+                   "num_sucursales", "tipo_cliente", "tipo_venta", "notas",
                    "account_id", "contact_id"]:
         if campo in data:
             # Normalizar empty string a None para UUIDs

@@ -55,6 +55,20 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] accounts.client_id failed (retry on next boot): %s", e)
 
+        # ─── leads.tipo_venta (Eventual / Recurrente) ───
+        try:
+            with db.engine.begin() as conn:
+                exists = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'leads' AND column_name = 'tipo_venta'
+                """)).first()
+                if not exists:
+                    app.logger.info("[auto-migrate] adding leads.tipo_venta...")
+                    conn.execute(text("ALTER TABLE leads ADD COLUMN tipo_venta VARCHAR(40)"))
+                    app.logger.info("[auto-migrate] leads.tipo_venta added.")
+        except Exception as e:
+            app.logger.warning("[auto-migrate] leads.tipo_venta failed (retry on next boot): %s", e)
+
 
 def create_app():
     app = Flask(__name__)

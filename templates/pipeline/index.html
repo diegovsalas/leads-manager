@@ -3702,6 +3702,15 @@ applyRoleVisibility();
       </div>
 
       <div class="nl-row">
+        <label class="nl-label">Tipo de venta</label>
+        <div class="nl-pills" id="nl-tipo-venta-pills">
+          <div class="nl-pill" data-val="">Sin definir</div>
+          <div class="nl-pill" data-val="Eventual">Eventual<small style="display:block;font-size:9px;opacity:.6;font-weight:400;margin-top:1px">Compra única / ocasional</small></div>
+          <div class="nl-pill" data-val="Recurrente">Recurrente<small style="display:block;font-size:9px;opacity:.6;font-weight:400;margin-top:1px">Servicio mensual / suscripción</small></div>
+        </div>
+      </div>
+
+      <div class="nl-row">
         <label class="nl-label">Información importante</label>
         <textarea class="nl-input" id="nl-notas" rows="3" style="resize:vertical;" placeholder="Contexto clave del lead: dolor, urgencia, decisor, presupuesto, próximos pasos…"></textarea>
       </div>
@@ -4413,6 +4422,11 @@ async function openLeadModal(){
   document.getElementById('nl-origen-pills').querySelectorAll('.nl-pill').forEach((p,i)=>{
     p.onclick=()=>{p.parentElement.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');};
   });
+  // Tipo de venta pills (default "Sin definir" activo)
+  document.getElementById('nl-tipo-venta-pills').querySelectorAll('.nl-pill').forEach((p,i)=>{
+    p.classList.toggle('active',i===0);
+    p.onclick=()=>{p.parentElement.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');};
+  });
   // Industria + tamaño desde la API ya cargada
   const indSel=document.getElementById('nl-industria'),tamSel=document.getElementById('nl-tamano');
   if(indSel.children.length<=1){
@@ -4608,6 +4622,7 @@ async function nlSubmit(mode){
   const calificado=document.getElementById('nl-calificado').checked;
   const unidad=document.querySelector('#nl-unidad-pills .nl-pill.active')?.dataset.val||'';
   const origen=document.querySelector('#nl-origen-pills .nl-pill.active')?.dataset.val||'Prospeccion';
+  const tipoVenta=document.querySelector('#nl-tipo-venta-pills .nl-pill.active')?.dataset.val||'';
 
   if(!phone||phone.length<10){_nlToast('Teléfono inválido (mínimo 10 dígitos)',true);return;}
   if(!nombre){_nlToast('Falta nombre del contacto',true);return;}
@@ -4628,6 +4643,7 @@ async function nlSubmit(mode){
     cantidad_productos:cantidad?parseInt(cantidad):null,
     precio_unitario:precio?parseFloat(precio):null,
     tipo_cliente:tipoCliente||null,
+    tipo_venta:tipoVenta||null,
     notas:notas||null,
     etapa_pipeline: calificado ? 'Cotización' : 'Nuevo Lead',
   };

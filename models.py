@@ -173,6 +173,7 @@ class Lead(db.Model):
 
     # Seguimiento y clasificacion
     tipo_cliente = db.Column(db.Text, nullable=True)
+    tipo_venta = db.Column(db.String(40), nullable=True)  # Eventual / Recurrente
     fecha_ultimo_contacto = db.Column(db.DateTime(timezone=True), default=_utcnow)
     proximo_contacto = db.Column(db.DateTime(timezone=True), nullable=True)
     en_nurturing = db.Column(db.Boolean, default=False, nullable=False)
@@ -251,6 +252,7 @@ class Lead(db.Model):
             "tipo_industria": self.tipo_industria,
             "tamano_empresa": self.tamano_empresa,
             "notas": self.notas,
+            "tipo_venta": self.tipo_venta,
             "empresa_nombre": self.empresa_nombre,
             "account_id": str(self.account_id) if self.account_id else None,
             "contact_id": str(self.contact_id) if self.contact_id else None,
