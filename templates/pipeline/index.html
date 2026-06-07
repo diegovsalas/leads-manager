@@ -555,13 +555,24 @@ fbq('track','PageView');
           {% for lead in grupo.leads %}
           <div class="k-card{% if lead.has_oppo %} is-converted{% endif %}" id="kcard-{{ lead.id }}" data-lead-id="{{ lead.id }}"
                data-nombre="{{ lead.nombre or 'Sin nombre' }}" data-telefono="{{ lead.telefono or '' }}"
+               data-empresa="{{ lead.empresa_nombre or '' }}"
                data-marca="{{ lead.marca_interes or '' }}"
                draggable="true" ondragstart="onDragStart(event,'{{ lead.id }}')" ondragend="this.classList.remove('dragging')"
                onclick="abrirLeadPanel('{{ lead.id }}')">
+            {% if lead.empresa_nombre %}
+            <div class="k-card-name">
+              {% if lead.has_oppo %}<span title="Lead convertido en Oportunidad" style="margin-right:4px;">💰</span>{% endif %}
+              {{ lead.empresa_nombre }}
+            </div>
+            <div style="font-size:12px;color:var(--text2);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              👤 {{ lead.nombre or 'Sin nombre' }}
+            </div>
+            {% else %}
             <div class="k-card-name">
               {% if lead.has_oppo %}<span title="Lead convertido en Oportunidad" style="margin-right:4px;">💰</span>{% endif %}
               {{ lead.nombre or 'Sin nombre' }}
             </div>
+            {% endif %}
             <div class="k-card-phone">{{ lead.telefono or '' }}</div>
             {% if lead.has_oppo %}
             <div class="k-card-detail" style="background:var(--green-bg);color:var(--green);padding:4px 7px;border-radius:6px;margin-top:5px;font-weight:500;display:flex;justify-content:space-between;gap:6px;" title="{{ lead.oppo.nombre }}">
@@ -575,8 +586,10 @@ fbq('track','PageView');
             <div class="k-card-tags">
               {% if lead.marca_interes %}<span class="tag tag-marca">{{ lead.marca_interes }}</span>{% endif %}
               {% if lead.valor_calculado %}<span class="tag tag-valor">${{ "{:,.0f}".format(lead.valor_calculado) }}</span>{% endif %}
-              {% if lead.tipo_cliente == 'Recurrente' %}<span class="tag" style="background:#dcfce7;color:#16a34a;">Recurrente</span>{% endif %}
-              {% if lead.tipo_cliente == 'Eventual' %}<span class="tag" style="background:#dbeafe;color:#2563eb;">Eventual</span>{% endif %}
+              {% if lead.tipo_cliente == 'Recurrente' %}<span class="tag" style="background:#dcfce7;color:#16a34a;">Cliente recurrente</span>{% endif %}
+              {% if lead.tipo_cliente == 'Eventual' %}<span class="tag" style="background:#dbeafe;color:#2563eb;">Cliente eventual</span>{% endif %}
+              {% if lead.tipo_venta == 'Recurrente' %}<span class="tag" style="background:#fef3c7;color:#b45309;">🔁 Venta recurrente</span>{% endif %}
+              {% if lead.tipo_venta == 'Eventual' %}<span class="tag" style="background:#ede9fe;color:#6d28d9;">📅 Venta eventual</span>{% endif %}
             </div>
             <div class="k-card-foot">
               <span class="tag tag-origen">{{ lead.origen.value if lead.origen else 'Manual' }}</span>
@@ -2620,7 +2633,7 @@ function updateCounts(){
   document.querySelectorAll('.k-card').forEach(c=>{if(c.style.display!=='none'){const v=c.querySelector('.tag-valor');if(v)total+=parseFloat(v.textContent.replace(/[$,]/g,''))||0;}});
   document.getElementById('pipe-total').textContent=fmt$(total);
 }
-function filterCards(q){const ql=q.toLowerCase();document.querySelectorAll('.k-card').forEach(c=>{const n=(c.dataset.nombre||'').toLowerCase(),p=(c.dataset.telefono||'').toLowerCase();c.style.display=(n.includes(ql)||p.includes(ql))?'':'none';});}
+function filterCards(q){const ql=q.toLowerCase();document.querySelectorAll('.k-card').forEach(c=>{const n=(c.dataset.nombre||'').toLowerCase(),p=(c.dataset.telefono||'').toLowerCase(),emp=(c.dataset.empresa||'').toLowerCase();c.style.display=(n.includes(ql)||p.includes(ql)||emp.includes(ql))?'':'none';});}
 function toggleHideConverted(checked){
   document.body.classList.toggle('hide-converted',checked);
   try{localStorage.setItem('pipeHideConverted',checked?'1':'0');}catch(e){}
