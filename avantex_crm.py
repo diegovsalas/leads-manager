@@ -237,6 +237,8 @@ def create_app():
         for lead in all_leads:
             lead.oppo = oppos_by_lead.get(lead.id)  # atributo transient
             lead.has_oppo = lead.oppo is not None
+            # Necesita calificación ICP si falta industria o tamaño
+            lead.needs_icp = not (lead.tipo_industria and lead.tamano_empresa)
 
         # Pre-fetch oportunidades HUÉRFANAS (sin lead_id) para mostrarlas en el pipe
         # mapeadas a la columna de Lead equivalente.

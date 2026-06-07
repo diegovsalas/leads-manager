@@ -120,7 +120,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .k-card:hover{box-shadow:var(--shadow-lg);border-color:#d0c8be;transform:translateY(-1px);}
 .k-card.dragging{opacity:.4;}
 .k-card.is-converted{border-color:var(--green);background:linear-gradient(180deg,rgba(45,122,79,.04),var(--bg-card));}
+.k-card.needs-icp{border-left:3px solid #f59e0b;}
 body.hide-converted .k-card.is-converted{display:none;}
+body.show-uncalified-only .k-card:not(.needs-icp){display:none;}
 .k-card-oppo{border-left:4px solid #d97706;background:linear-gradient(180deg,rgba(217,119,6,.06),var(--bg-card));}
 .k-card-oppo:hover{border-color:#b45309;box-shadow:var(--shadow-lg);}
 .k-card-oppo-label{font-size:9px;font-weight:700;color:#b45309;letter-spacing:.6px;}
@@ -504,6 +506,10 @@ fbq('track','PageView');
   <div class="toolbar">
     <input class="toolbar-search" type="text" placeholder="Buscar lead..." id="search-input" oninput="filterCards(this.value)"/>
     <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
+      <label style="display:flex;gap:5px;align-items:center;font-size:12px;color:var(--text2);cursor:pointer;user-select:none;" title="Solo leads con industria o tamaño sin definir">
+        <input type="checkbox" id="show-uncalified-toggle" onchange="toggleShowUncalifiedOnly(this.checked)"/>
+        Solo sin calificar ⚠
+      </label>
       <label style="display:flex;gap:5px;align-items:center;font-size:12px;color:var(--text2);cursor:pointer;user-select:none;">
         <input type="checkbox" id="hide-converted-toggle" onchange="toggleHideConverted(this.checked)"/>
         Ocultar convertidos
@@ -553,10 +559,11 @@ fbq('track','PageView');
           </div>
           {% endfor %}
           {% for lead in grupo.leads %}
-          <div class="k-card{% if lead.has_oppo %} is-converted{% endif %}" id="kcard-{{ lead.id }}" data-lead-id="{{ lead.id }}"
+          <div class="k-card{% if lead.has_oppo %} is-converted{% endif %}{% if lead.needs_icp %} needs-icp{% endif %}" id="kcard-{{ lead.id }}" data-lead-id="{{ lead.id }}"
                data-nombre="{{ lead.nombre or 'Sin nombre' }}" data-telefono="{{ lead.telefono or '' }}"
                data-empresa="{{ lead.empresa_nombre or '' }}"
                data-marca="{{ lead.marca_interes or '' }}"
+               {% if lead.needs_icp %}data-needs-icp="true"{% endif %}
                draggable="true" ondragstart="onDragStart(event,'{{ lead.id }}')" ondragend="this.classList.remove('dragging')"
                onclick="abrirLeadPanel('{{ lead.id }}')">
             {% if lead.empresa_nombre %}
@@ -598,6 +605,7 @@ fbq('track','PageView');
               {% set icp_c = icp_colors.get(lead.icp_nivel, ('var(--bg-tag)', 'var(--text3)')) %}
               <span class="tag" style="background:{{ icp_c[0] }};color:{{ icp_c[1] }};font-weight:600;">ICP {{ lead.icp_nivel }}</span>
               {% endif %}
+              {% if lead.needs_icp %}<span class="tag" style="background:#fef3c7;color:#92400e;font-weight:600;" title="Falta industria o tamaño — calificalo para subir el ICP">⚠ Sin calificar</span>{% endif %}
               {% if lead.usuario_asignado %}<span class="tag tag-vendedor">{{ lead.usuario_asignado.nombre.split(' ')[0] }}</span>{% endif %}
               {% set has_cotizar = etapa.value in ['Cotización', 'Demo', 'Negociación'] %}
               {% set has_opp = etapa.value in ['Cotización', 'Demo', 'Negociación', '2do Contacto', '3er Contacto', '4to Contacto'] %}
@@ -2638,6 +2646,10 @@ function toggleHideConverted(checked){
   document.body.classList.toggle('hide-converted',checked);
   try{localStorage.setItem('pipeHideConverted',checked?'1':'0');}catch(e){}
 }
+function toggleShowUncalifiedOnly(checked){
+  document.body.classList.toggle('show-uncalified-only',checked);
+  try{localStorage.setItem('pipeShowUncalified',checked?'1':'0');}catch(e){}
+}
 
 // Esc cierra el último modal abierto
 document.addEventListener('keydown',e=>{
@@ -2720,12 +2732,16 @@ function lpCreateNewEmpresaFromPanel(){
   document.getElementById('acc-nombre').value=typed;
   setTimeout(()=>document.getElementById('acc-rfc').focus(),60);
 }
-// Restaurar preferencia al cargar
+// Restaurar preferencias de toggles al cargar
 document.addEventListener('DOMContentLoaded',()=>{
   try{
     if(localStorage.getItem('pipeHideConverted')==='1'){
       const el=document.getElementById('hide-converted-toggle');
       if(el){el.checked=true;document.body.classList.add('hide-converted');}
+    }
+    if(localStorage.getItem('pipeShowUncalified')==='1'){
+      const el=document.getElementById('show-uncalified-toggle');
+      if(el){el.checked=true;document.body.classList.add('show-uncalified-only');}
     }
   }catch(e){}
 });
