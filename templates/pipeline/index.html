@@ -3263,22 +3263,15 @@ function closeLeadPanel(){
   document.getElementById('lp-overlay').classList.remove('open');
 }
 
-function editLeadFromPanel(){
+async function editLeadFromPanel(){
   const id=document.getElementById('lp-id').value;
-  // For now show a prompt-based edit (TODO: full edit modal)
-  const campo=prompt('Que campo quieres editar?\n\n1) tipo_industria\n2) tamano_empresa\n3) num_sucursales\n4) tipo_cliente\n5) nombre\n6) notas (información importante)\n\nEscribe el numero:');
-  const campos={1:'tipo_industria',2:'tamano_empresa',3:'num_sucursales',4:'tipo_cliente',5:'nombre',6:'notas'};
-  const field=campos[campo];
-  if(!field)return;
-  const actual=field==='notas'?document.getElementById('lp-notas').textContent:'';
-  const valor=field==='notas'
-    ?prompt('Información importante del lead:\n(contexto clave, decisor, urgencia, presupuesto…)',actual&&actual.startsWith('Sin notas')?'':actual)
-    :prompt('Nuevo valor para '+field+':');
-  if(valor===null)return;
-  const body={};
-  body[field]=field==='num_sucursales'?parseInt(valor):valor;
-  fetch('/api/leads/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
-    .then(r=>r.json()).then(()=>{abrirLeadPanel(id);showToast('Actualizado',field);}).catch(()=>showToast('Error','No se pudo actualizar'));
+  if(!id)return;
+  try{
+    const r=await fetch('/api/leads/'+id);
+    if(!r.ok)throw new Error('No se pudo cargar el lead');
+    const lead=await r.json();
+    await openLeadModal(lead);
+  }catch(e){_nlToast('Error: '+e.message,true);}
 }
 
 // ─── Cotizaciones ───
@@ -3745,7 +3738,7 @@ applyRoleVisibility();
 <div class="nl-overlay" id="nl-overlay" onclick="if(event.target===this)closeLeadModal()">
   <div class="nl-card">
     <div class="nl-header">
-      <h3>Nuevo Lead</h3>
+      <h3 id="nl-modal-title">Nuevo Lead</h3>
       <span class="nl-kbd">Esc para cerrar</span>
     </div>
     <div class="nl-body">
@@ -3861,7 +3854,7 @@ applyRoleVisibility();
       <div class="nl-assign" id="nl-assign-preview">Se asignará a vos</div>
       <div class="nl-btns">
         <button class="nl-btn" onclick="closeLeadModal()">Cancelar</button>
-        <button class="nl-btn" onclick="nlSubmit('add-another')">Guardar + nuevo<span class="nl-kbd">⌘⇧↵</span></button>
+        <button class="nl-btn" id="nl-save-add-btn" onclick="nlSubmit('add-another')">Guardar + nuevo<span class="nl-kbd">⌘⇧↵</span></button>
         <button class="nl-btn primary" id="nl-save-btn" onclick="nlSubmit('close')">Guardar<span class="nl-kbd">⌘↵</span></button>
       </div>
     </div>
@@ -4489,6 +4482,7 @@ const _NL_ESTADOS = ["Aguascalientes","Baja California","Baja California Sur","C
 
 const _NL_ICP_THRESHOLDS = {A:75,B:50,C:25};
 let _nlMe = null;
+let _nlEditingLead = null;  // Si está seteado, el modal está en modo edición
 
 async function _nlLoadMe(){
   if(_nlMe)return _nlMe;
@@ -4496,10 +4490,15 @@ async function _nlLoadMe(){
   catch(e){_nlMe={nombre:'Usuario',marcas:[],is_admin:false};return _nlMe;}
 }
 
-async function openLeadModal(){
+async function openLeadModal(leadToEdit){
+  _nlEditingLead = leadToEdit || null;
   const me=await _nlLoadMe();
   const overlay=document.getElementById('nl-overlay');
   overlay.classList.add('open');
+  // Título + botones según modo
+  document.getElementById('nl-modal-title').textContent = _nlEditingLead ? 'Editar Lead' : 'Nuevo Lead';
+  document.getElementById('nl-save-add-btn').style.display = _nlEditingLead ? 'none' : '';
+  document.getElementById('nl-phone').disabled = !!_nlEditingLead;
   // Reset
   ['nl-phone','nl-nombre','nl-empresa','nl-account-id','nl-sucursales','nl-cantidad','nl-precio','nl-notas'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('nl-estado').value='';
@@ -4545,9 +4544,62 @@ async function openLeadModal(){
   }
   // Asignación preview
   document.getElementById('nl-assign-preview').innerHTML=`Se asignará a <strong>${me.nombre||'vos'}</strong>`;
+
+  // ── Modo edición: prellenar todos los campos con los datos del lead ──
+  if(_nlEditingLead){
+    const l = _nlEditingLead;
+    document.getElementById('nl-phone').value = l.telefono || '';
+    document.getElementById('nl-nombre').value = l.nombre || '';
+    // Empresa linkeada
+    if(l.account_id && l.empresa_nombre){
+      document.getElementById('nl-empresa').value = l.empresa_nombre;
+      document.getElementById('nl-account-id').value = l.account_id;
+      document.getElementById('nl-b2c').checked = false;
+      document.getElementById('nl-empresa-row').style.display = '';
+    }else if(l.empresa_nombre){
+      document.getElementById('nl-empresa').value = l.empresa_nombre;
+      document.getElementById('nl-account-id').value = '';
+    }else{
+      document.getElementById('nl-empresa').value = '';
+      document.getElementById('nl-account-id').value = '';
+    }
+    if(l.estado_cliente) document.getElementById('nl-estado').value = l.estado_cliente;
+    if(l.num_sucursales) document.getElementById('nl-sucursales').value = l.num_sucursales;
+    if(l.tipo_industria) document.getElementById('nl-industria').value = l.tipo_industria;
+    if(l.tamano_empresa) document.getElementById('nl-tamano').value = l.tamano_empresa;
+    if(l.cantidad_productos) document.getElementById('nl-cantidad').value = l.cantidad_productos;
+    if(l.precio_unitario) document.getElementById('nl-precio').value = l.precio_unitario;
+    if(l.tipo_cliente) document.getElementById('nl-tipo-cliente').value = l.tipo_cliente;
+    document.getElementById('nl-notas').value = l.notas || '';
+    // Marca pill
+    if(l.marca_interes){
+      const p=document.querySelector(`#nl-unidad-pills .nl-pill[data-val="${l.marca_interes}"]`);
+      if(p){
+        document.querySelectorAll('#nl-unidad-pills .nl-pill').forEach(x=>x.classList.remove('active'));
+        p.classList.add('active');
+      }
+    }
+    // Origen pill
+    if(l.origen){
+      const p=document.querySelector(`#nl-origen-pills .nl-pill[data-val="${l.origen}"]`);
+      if(p){
+        document.querySelectorAll('#nl-origen-pills .nl-pill').forEach(x=>x.classList.remove('active'));
+        p.classList.add('active');
+      }
+    }
+    // Tipo de venta pill
+    if(l.tipo_venta){
+      const p=document.querySelector(`#nl-tipo-venta-pills .nl-pill[data-val="${l.tipo_venta}"]`);
+      if(p){
+        document.querySelectorAll('#nl-tipo-venta-pills .nl-pill').forEach(x=>x.classList.remove('active'));
+        p.classList.add('active');
+      }
+    }
+  }
+
   // Reset ICP badge
   _nlUpdateIcp();
-  setTimeout(()=>document.getElementById('nl-phone').focus(),50);
+  setTimeout(()=>document.getElementById(_nlEditingLead?'nl-nombre':'nl-phone').focus(),50);
 }
 
 function closeLeadModal(){document.getElementById('nl-overlay').classList.remove('open');}
@@ -4758,20 +4810,38 @@ async function nlSubmit(mode){
 
   const btn=document.getElementById('nl-save-btn');btn.disabled=true;
   try{
-    const r=await fetch('/api/leads/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!r.ok){const err=await r.json();throw new Error(err.error||'Error');}
-    const lead=await r.json();
-    _nlToast('Lead creado: '+nombre);
-    if(mode==='close'){closeLeadModal();setTimeout(()=>{if(typeof loadKanban==='function')loadKanban();else location.reload();},400);}
-    else if(mode==='add-another'){
-      // Reset y reabrir
-      ['nl-phone','nl-nombre','nl-empresa','nl-account-id','nl-sucursales','nl-cantidad','nl-precio','nl-notas'].forEach(id=>document.getElementById(id).value='');
-      document.getElementById('nl-tipo-cliente').value='';
-      document.getElementById('nl-b2c').checked=false;
-      document.getElementById('nl-empresa-row').style.display='';
-      document.getElementById('nl-dup-banner').style.display='none';
-      _nlUpdateIcp();
-      setTimeout(()=>document.getElementById('nl-phone').focus(),100);
+    let r, lead;
+    if(_nlEditingLead){
+      // PUT — modo edición. No mandamos etapa (se cambia por drag) ni teléfono (read-only).
+      delete body.telefono;
+      delete body.etapa_pipeline;
+      r=await fetch('/api/leads/'+_nlEditingLead.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(!r.ok){const err=await r.json();throw new Error(err.error||'Error');}
+      lead=await r.json();
+      _nlToast('Lead actualizado: '+nombre);
+      closeLeadModal();
+      // Refrescar el panel si está abierto y kanban
+      if(document.getElementById('lead-panel').classList.contains('open')){
+        abrirLeadPanel(lead.id);
+      }
+      setTimeout(()=>{if(typeof loadKanban==='function')loadKanban();else location.reload();},400);
+    }else{
+      // POST — modo alta
+      r=await fetch('/api/leads/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(!r.ok){const err=await r.json();throw new Error(err.error||'Error');}
+      lead=await r.json();
+      _nlToast('Lead creado: '+nombre);
+      if(mode==='close'){closeLeadModal();setTimeout(()=>{if(typeof loadKanban==='function')loadKanban();else location.reload();},400);}
+      else if(mode==='add-another'){
+        // Reset y reabrir
+        ['nl-phone','nl-nombre','nl-empresa','nl-account-id','nl-sucursales','nl-cantidad','nl-precio','nl-notas'].forEach(id=>document.getElementById(id).value='');
+        document.getElementById('nl-tipo-cliente').value='';
+        document.getElementById('nl-b2c').checked=false;
+        document.getElementById('nl-empresa-row').style.display='';
+        document.getElementById('nl-dup-banner').style.display='none';
+        _nlUpdateIcp();
+        setTimeout(()=>document.getElementById('nl-phone').focus(),100);
+      }
     }
   }catch(e){_nlToast('Error: '+e.message,true);}
   finally{btn.disabled=false;}
