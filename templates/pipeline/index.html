@@ -3234,6 +3234,11 @@ async function abrirLeadPanel(id){
       fetch('/api/accounts/'+l.account_id).then(r=>r.ok?r.json():null).then(acc=>{
         if(!acc){empresaEl.innerHTML='<span style="color:var(--orange);">Linkeada pero no se pudo cargar</span>';return;}
         empresaEl.innerHTML=`${acc.client_id?`<span style="font-family:var(--mono);font-size:11px;background:var(--bg-tag);color:var(--accent);padding:1px 6px;border-radius:3px;font-weight:600;margin-right:6px;">${acc.client_id}</span>`:''}<a href="#" onclick="showView('accounts',document.querySelector('.slink[onclick*=accounts]'));return false;" style="color:var(--accent);font-weight:600;text-decoration:none;">${acc.nombre}</a>${acc.is_cliente?' <span style="background:var(--green-bg);color:var(--green);padding:1px 6px;border-radius:99px;font-size:9px;font-weight:600;margin-left:4px;">CLIENTE</span>':''}`;
+        // Override ICP fields con los datos de la Empresa (cuando los tiene)
+        const FROM_EMP_BADGE='<span style="color:var(--text3);font-size:10px;margin-left:6px;font-style:italic;">(de empresa)</span>';
+        if(acc.industria){document.getElementById('lp-industria').innerHTML=acc.industria+FROM_EMP_BADGE;}
+        if(acc.tamano){document.getElementById('lp-tamano').innerHTML=acc.tamano+FROM_EMP_BADGE;}
+        if(acc.num_sucursales!=null){document.getElementById('lp-sucursales').innerHTML=acc.num_sucursales+FROM_EMP_BADGE;}
       }).catch(()=>{empresaEl.textContent=l.empresa_nombre||'(linkeada)';});
     }else if(l.empresa_nombre){
       empresaEl.innerHTML=`<span style="color:var(--text2);">${l.empresa_nombre}</span> <span style="color:var(--orange);font-size:11px;font-weight:600;">⚠ texto sin vincular</span>`;

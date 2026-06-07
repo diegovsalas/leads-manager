@@ -16,11 +16,25 @@ ORIGENES_AUTO_ASSIGN = {"Meta Ads"}
 
 
 def _apply_icp(lead):
-    """Calcula y aplica ICP score/nivel al lead. Auto-flag nurturing."""
+    """Calcula y aplica ICP score/nivel al lead. Auto-flag nurturing.
+    Si el lead tiene Empresa linkeada, prefiere los datos de la Empresa
+    (industria, tamaño, sucursales) por sobre los del lead. Eso evita
+    el doble-data y permite que actualizar la empresa recalcule el ICP
+    de todos sus leads."""
+    industria = lead.tipo_industria
+    tamano = lead.tamano_empresa
+    sucursales = lead.num_sucursales
+    if lead.account_id:
+        from models import Account
+        acc = db.session.get(Account, lead.account_id)
+        if acc:
+            industria = acc.industria or industria
+            tamano = acc.tamano or tamano
+            sucursales = acc.num_sucursales if acc.num_sucursales is not None else sucursales
     score, nivel = calcular_icp(
-        tipo_industria=lead.tipo_industria,
-        tamano_empresa=lead.tamano_empresa,
-        num_sucursales=lead.num_sucursales,
+        tipo_industria=industria,
+        tamano_empresa=tamano,
+        num_sucursales=sucursales,
         tipo_cliente=lead.tipo_cliente,
         respondio_ultimo_contacto=lead.respondio_ultimo_contacto,
     )
