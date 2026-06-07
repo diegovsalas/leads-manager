@@ -1776,6 +1776,19 @@ fbq('track','PageView');
     </div>
 
     <div class="lp-section">
+      <div class="lp-section-title">Empresa vinculada</div>
+      <div id="lp-empresa-current" style="font-size:13px;color:var(--text);margin-bottom:8px;line-height:1.5;">—</div>
+      <div id="lp-empresa-picker" style="display:none;position:relative;margin-bottom:6px;">
+        <input class="form-input" id="lp-empresa-search" type="text" placeholder="Buscar ID (EMP-XXXX), nombre o RFC — 3+ letras" oninput="lpEmpresaSearch()" style="width:100%;font-size:12px;"/>
+        <div id="lp-empresa-list" class="nl-empresa-list" style="display:none;"></div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn" onclick="lpToggleEmpresaPicker()" id="lp-empresa-toggle-btn" style="font-size:11px;padding:4px 10px;">🔗 Vincular / Cambiar</button>
+        <button class="btn" onclick="lpClearEmpresa()" id="lp-empresa-clear-btn" style="font-size:11px;padding:4px 10px;display:none;color:var(--red);">Desvincular</button>
+      </div>
+    </div>
+
+    <div class="lp-section">
       <div class="lp-section-title">Valor comercial</div>
       <div class="lp-field"><span class="lp-field-label">Cantidad</span><span class="lp-field-value" id="lp-cantidad"></span></div>
       <div class="lp-field"><span class="lp-field-label">Precio unitario</span><span class="lp-field-value" id="lp-precio"></span></div>
@@ -2631,6 +2644,69 @@ async function openOppById(id){
     await openOppModal(op);
   }catch(e){_nlToast('Error: '+e.message,true);}
 }
+
+// ── Lead panel: vincular/cambiar/desvincular empresa ──
+let _lpEmpresaTimer;
+function lpToggleEmpresaPicker(){
+  const p=document.getElementById('lp-empresa-picker');
+  const visible=p.style.display!=='none';
+  p.style.display=visible?'none':'';
+  if(!visible)setTimeout(()=>document.getElementById('lp-empresa-search').focus(),50);
+}
+function lpEmpresaSearch(){
+  clearTimeout(_lpEmpresaTimer);
+  _lpEmpresaTimer=setTimeout(async()=>{
+    const q=document.getElementById('lp-empresa-search').value.trim();
+    const list=document.getElementById('lp-empresa-list');
+    if(q.length<3){list.style.display='none';return;}
+    try{
+      const items=await _api('/api/accounts/search?q='+encodeURIComponent(q))||[];
+      let html='';
+      if(items.length){
+        html=items.map(a=>`<div class="nl-empresa-item" onclick='lpPickEmpresa("${a.id}",${JSON.stringify(a.nombre||"")})'>${a.client_id?`<span style="font-family:var(--mono);font-size:10px;background:var(--bg-tag);color:var(--accent);padding:1px 5px;border-radius:3px;font-weight:600;margin-right:6px;">${a.client_id}</span>`:''}<strong>${a.nombre}</strong>${a.rfc?` <span style="color:var(--text3);font-size:11px;font-family:var(--mono);">${a.rfc}</span>`:''}${a.is_cliente?` <span style="background:var(--green-bg);color:var(--green);padding:0 5px;border-radius:99px;font-size:9px;font-weight:600;margin-left:4px;">CLIENTE</span>`:''}</div>`).join('');
+      }else{
+        html='<div style="padding:8px 11px;color:var(--text3);font-size:12px;font-style:italic;">Sin resultados</div>';
+      }
+      html+=`<div class="nl-empresa-item" style="border-top:1px solid var(--border);color:var(--accent);font-weight:600;background:var(--copper-soft);" onclick="lpCreateNewEmpresaFromPanel()">+ Agregar "${q}" como nueva empresa →</div>`;
+      list.innerHTML=html;list.style.display='block';
+    }catch(e){list.style.display='none';}
+  },200);
+}
+async function lpPickEmpresa(accountId,accountNombre){
+  const leadId=document.getElementById('lp-id').value;
+  if(!leadId)return;
+  try{
+    const r=await fetch('/api/leads/'+leadId,{
+      method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({account_id:accountId,empresa_nombre:accountNombre})
+    });
+    if(!r.ok){const e=await r.json();throw new Error(e.error||'Error');}
+    _nlToast('Vinculada a '+accountNombre);
+    abrirLeadPanel(leadId);
+  }catch(e){_nlToast('Error: '+e.message,true);}
+}
+async function lpClearEmpresa(){
+  const leadId=document.getElementById('lp-id').value;
+  if(!leadId)return;
+  if(!confirm('¿Desvincular la empresa de este lead?'))return;
+  try{
+    const r=await fetch('/api/leads/'+leadId,{
+      method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({account_id:null,empresa_nombre:null})
+    });
+    if(!r.ok){const e=await r.json();throw new Error(e.error||'Error');}
+    _nlToast('Desvinculada');
+    abrirLeadPanel(leadId);
+  }catch(e){_nlToast('Error: '+e.message,true);}
+}
+function lpCreateNewEmpresaFromPanel(){
+  const typed=document.getElementById('lp-empresa-search').value.trim();
+  document.getElementById('lp-empresa-list').style.display='none';
+  _empresaCreateReturnTo='leadPanel';
+  openAccountModal();
+  document.getElementById('acc-nombre').value=typed;
+  setTimeout(()=>document.getElementById('acc-rfc').focus(),60);
+}
 // Restaurar preferencia al cargar
 document.addEventListener('DOMContentLoaded',()=>{
   try{
@@ -3116,6 +3192,27 @@ async function abrirLeadPanel(id){
     document.getElementById('lp-tipo-cliente').textContent=l.tipo_cliente||'—';
     document.getElementById('lp-creado').textContent=fmtDateTime(l.fecha_creacion);
     document.getElementById('lp-actualizado').textContent=fmtDateTime(l.fecha_actualizacion);
+
+    // Empresa vinculada
+    const empresaEl=document.getElementById('lp-empresa-current');
+    const clearBtn=document.getElementById('lp-empresa-clear-btn');
+    document.getElementById('lp-empresa-picker').style.display='none';
+    document.getElementById('lp-empresa-search').value='';
+    document.getElementById('lp-empresa-list').style.display='none';
+    if(l.account_id){
+      empresaEl.innerHTML='<span style="color:var(--text3);">Cargando...</span>';
+      clearBtn.style.display='';
+      fetch('/api/accounts/'+l.account_id).then(r=>r.ok?r.json():null).then(acc=>{
+        if(!acc){empresaEl.innerHTML='<span style="color:var(--orange);">Linkeada pero no se pudo cargar</span>';return;}
+        empresaEl.innerHTML=`${acc.client_id?`<span style="font-family:var(--mono);font-size:11px;background:var(--bg-tag);color:var(--accent);padding:1px 6px;border-radius:3px;font-weight:600;margin-right:6px;">${acc.client_id}</span>`:''}<a href="#" onclick="showView('accounts',document.querySelector('.slink[onclick*=accounts]'));return false;" style="color:var(--accent);font-weight:600;text-decoration:none;">${acc.nombre}</a>${acc.is_cliente?' <span style="background:var(--green-bg);color:var(--green);padding:1px 6px;border-radius:99px;font-size:9px;font-weight:600;margin-left:4px;">CLIENTE</span>':''}`;
+      }).catch(()=>{empresaEl.textContent=l.empresa_nombre||'(linkeada)';});
+    }else if(l.empresa_nombre){
+      empresaEl.innerHTML=`<span style="color:var(--text2);">${l.empresa_nombre}</span> <span style="color:var(--orange);font-size:11px;font-weight:600;">⚠ texto sin vincular</span>`;
+      clearBtn.style.display='none';
+    }else{
+      empresaEl.innerHTML='<span style="color:var(--text3);font-style:italic;">Sin empresa vinculada</span>';
+      clearBtn.style.display='none';
+    }
 
     // Valor
     document.getElementById('lp-cantidad').textContent=l.cantidad_productos||'—';
@@ -4229,6 +4326,17 @@ async function saveAccount(){
     }else if(_empresaCreateReturnTo==='opp'){
       document.getElementById('opp-empresa').value=newAcc.nombre||'';
       document.getElementById('opp-account-id').value=newAcc.id||'';
+    }else if(_empresaCreateReturnTo==='leadPanel'){
+      const leadId=document.getElementById('lp-id').value;
+      if(leadId){
+        try{
+          await fetch('/api/leads/'+leadId,{
+            method:'PUT',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({account_id:newAcc.id,empresa_nombre:newAcc.nombre})
+          });
+          abrirLeadPanel(leadId);
+        }catch(e){_nlToast('Empresa creada pero falló el link al lead',true);}
+      }
     }
     _empresaCreateReturnTo=null;
     loadAccounts();loadSidebarCounts();
