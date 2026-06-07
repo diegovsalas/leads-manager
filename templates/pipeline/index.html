@@ -3814,6 +3814,11 @@ applyRoleVisibility();
       </div>
 
       <div class="nl-row">
+        <label class="nl-label">Valor estimado del deal <span style="color:var(--text3);font-weight:400;font-size:10px;">(MXN — opcional pero recomendado)</span></label>
+        <input class="nl-input" id="nl-valor-estimado" type="number" min="0" step="0.01" placeholder="ej: 50000" style="max-width:240px;"/>
+      </div>
+
+      <div class="nl-row">
         <label class="nl-label">Información importante</label>
         <textarea class="nl-input" id="nl-notas" rows="3" style="resize:vertical;" placeholder="Contexto clave del lead: dolor, urgencia, decisor, presupuesto, próximos pasos…"></textarea>
       </div>
@@ -4513,7 +4518,7 @@ async function openLeadModal(leadToEdit){
   document.getElementById('nl-save-add-btn').style.display = _nlEditingLead ? 'none' : '';
   document.getElementById('nl-phone').disabled = !!_nlEditingLead;
   // Reset
-  ['nl-phone','nl-nombre','nl-empresa','nl-account-id','nl-sucursales','nl-cantidad','nl-precio','nl-notas'].forEach(id=>document.getElementById(id).value='');
+  ['nl-phone','nl-nombre','nl-empresa','nl-account-id','nl-sucursales','nl-cantidad','nl-precio','nl-valor-estimado','nl-notas'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('nl-estado').value='';
   document.getElementById('nl-industria').value='';
   document.getElementById('nl-tamano').value='';
@@ -4582,6 +4587,7 @@ async function openLeadModal(leadToEdit){
     if(l.tamano_empresa) document.getElementById('nl-tamano').value = l.tamano_empresa;
     if(l.cantidad_productos) document.getElementById('nl-cantidad').value = l.cantidad_productos;
     if(l.precio_unitario) document.getElementById('nl-precio').value = l.precio_unitario;
+    if(l.valor_estimado) document.getElementById('nl-valor-estimado').value = l.valor_estimado;
     if(l.tipo_cliente) document.getElementById('nl-tipo-cliente').value = l.tipo_cliente;
     document.getElementById('nl-notas').value = l.notas || '';
     // Marca pill
@@ -4790,6 +4796,7 @@ async function nlSubmit(mode){
   const tamano=document.getElementById('nl-tamano').value;
   const cantidad=document.getElementById('nl-cantidad').value;
   const precio=document.getElementById('nl-precio').value;
+  const valorEstimado=document.getElementById('nl-valor-estimado').value;
   const notas=document.getElementById('nl-notas').value.trim();
   const tipoCliente=document.getElementById('nl-tipo-cliente').value;
   const calificado=document.getElementById('nl-calificado').checked;
@@ -4815,6 +4822,7 @@ async function nlSubmit(mode){
     tipo_industria:industria||null, tamano_empresa:tamano||null,
     cantidad_productos:cantidad?parseInt(cantidad):null,
     precio_unitario:precio?parseFloat(precio):null,
+    valor_estimado:valorEstimado?parseFloat(valorEstimado):null,
     tipo_cliente:tipoCliente||null,
     tipo_venta:tipoVenta||null,
     notas:notas||null,
