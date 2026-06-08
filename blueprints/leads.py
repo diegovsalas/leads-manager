@@ -334,6 +334,43 @@ def actualizar_lead(lead_id):
     return jsonify(lead.to_dict())
 
 
+@leads_bp.route("/<uuid:lead_id>", methods=["DELETE"])
+def eliminar_lead(lead_id):
+    """Elimina un lead y sus dependencias estrictas (mensajes, cotizaciones,
+    conversaciones). Las oportunidades vinculadas se preservan pero pierden el link."""
+    lead = db.session.get(Lead, lead_id)
+    if not lead:
+        return jsonify({"error": "Lead no encontrado"}), 404
+
+    lead_nombre = lead.nombre or "(sin nombre)"
+    from models import (Oportunidad, ActividadLog, MensajeWhatsapp,
+                        Conversacion, Cotizacion, SdrDirSuggestion)
+
+    # Soltar FKs no estrictos (nullable)
+    Oportunidad.query.filter(Oportunidad.lead_id == lead_id).update(
+        {"lead_id": None}, synchronize_session=False)
+    ActividadLog.query.filter(ActividadLog.lead_contexto_id == lead_id).update(
+        {"lead_contexto_id": None}, synchronize_session=False)
+    try:
+        SdrDirSuggestion.query.filter(SdrDirSuggestion.lead_id == lead_id).update(
+            {"lead_id": None}, synchronize_session=False)
+    except Exception:
+        pass  # SdrDirSuggestion column might not exist in older deploys
+
+    # Hard-delete dependencias estrictas (FK NOT NULL)
+    MensajeWhatsapp.query.filter(MensajeWhatsapp.lead_id == lead_id).delete(
+        synchronize_session=False)
+    Conversacion.query.filter(Conversacion.lead_id == lead_id).delete(
+        synchronize_session=False)
+    Cotizacion.query.filter(Cotizacion.lead_id == lead_id).delete(
+        synchronize_session=False)
+
+    db.session.delete(lead)
+    db.session.commit()
+    log_actividad("eliminar", "lead", None, f"Lead eliminado: {lead_nombre}")
+    return jsonify({"ok": True, "lead_nombre": lead_nombre})
+
+
 @leads_bp.route("/mis-leads-hoy", methods=["GET"])
 def mis_leads_hoy():
     """

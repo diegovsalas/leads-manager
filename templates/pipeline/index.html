@@ -1847,6 +1847,7 @@ fbq('track','PageView');
     <button class="btn btn-filled" onclick="closeLeadPanel();abrirChat(document.getElementById('lp-id').value,document.getElementById('lp-nombre').textContent,document.getElementById('lp-telefono').textContent)">Chat</button>
     <button class="btn btn-blue" onclick="closeLeadPanel();abrirCotizacion(document.getElementById('lp-id').value)">Cotizar</button>
     <button class="btn" onclick="editLeadFromPanel()">Editar</button>
+    <button class="btn" onclick="deleteLeadFromPanel()" style="color:var(--red);border-color:var(--red-bg);">Eliminar</button>
     <span style="margin-left:auto;font-size:11px;color:var(--text3);" id="lp-lead-id-display"></span>
   </div>
 </div>
@@ -3305,6 +3306,20 @@ async function editLeadFromPanel(){
     if(!r.ok)throw new Error('No se pudo cargar el lead');
     const lead=await r.json();
     await openLeadModal(lead);
+  }catch(e){_nlToast('Error: '+e.message,true);}
+}
+
+async function deleteLeadFromPanel(){
+  const id=document.getElementById('lp-id').value;
+  if(!id)return;
+  const nombre=document.getElementById('lp-nombre').textContent||'(sin nombre)';
+  if(!confirm(`¿Eliminar el lead "${nombre}"?\n\nEsto borra TAMBIÉN:\n- Sus mensajes de WhatsApp\n- Sus cotizaciones\n- Sus conversaciones\n\nLas Oportunidades vinculadas NO se borran, pero pierden el link al lead.\n\nNo se puede deshacer.`))return;
+  try{
+    const r=await fetch('/api/leads/'+id,{method:'DELETE'});
+    if(!r.ok){const e=await r.json();throw new Error(e.error||'Error');}
+    _nlToast('Lead eliminado: '+nombre);
+    closeLeadPanel();
+    setTimeout(()=>location.reload(),500);
   }catch(e){_nlToast('Error: '+e.message,true);}
 }
 
