@@ -345,12 +345,13 @@ def actualizar_lead(lead_id):
 
 @leads_bp.route("/<uuid:lead_id>", methods=["DELETE"])
 def eliminar_lead(lead_id):
-    """Elimina un lead y sus dependencias.
-    Cada cleanup va en un savepoint: si la tabla/columna no existe en DB
-    (schema drift legacy), se saltea y se sigue con el resto."""
+    """Elimina un lead. Descubre dinámicamente todos los FKs a leads.id
+    desde information_schema de la DB real y aplica SET NULL o DELETE
+    según si la columna del child es nullable. Sirve cualquier schema."""
     from sqlalchemy import text
     from sqlalchemy.exc import IntegrityError, SQLAlchemyError
     from flask import current_app
+    import traceback
     lead = db.session.get(Lead, lead_id)
     if not lead:
         return jsonify({"error": "Lead no encontrado"}), 404
@@ -358,29 +359,57 @@ def eliminar_lead(lead_id):
     lead_nombre = lead.nombre or "(sin nombre)"
     lid_str = str(lead_id)
 
-    # Cada operación en su propio savepoint. Si falla (columna/tabla inexistente),
-    # rollback parcial y seguimos. El delete final del lead da el veredicto.
-    cleanup_ops = [
-        # (label, SQL, params)
-        ("oportunidades.lead_id → NULL", "UPDATE oportunidades SET lead_id = NULL WHERE lead_id = :id"),
-        ("sales.lead_id → NULL",          "UPDATE sales SET lead_id = NULL WHERE lead_id = :id"),
-        ("estado_bot.lead_contexto → NULL","UPDATE estado_bot_interno SET lead_contexto_id = NULL WHERE lead_contexto_id = :id"),
-        ("sdr_dir_suggestions.lead → NULL","UPDATE sdr_dir_suggestions SET lead_id = NULL WHERE lead_id = :id"),
-        ("DELETE mensajes_whatsapp",      "DELETE FROM mensajes_whatsapp WHERE lead_id = :id"),
-        ("DELETE conversaciones",         "DELETE FROM conversaciones WHERE lead_id = :id"),
-        ("DELETE cotizaciones",           "DELETE FROM cotizaciones WHERE lead_id = :id"),
-    ]
-    skipped = []
-    for label, sql in cleanup_ops:
+    # Descubrir todos los FKs que apuntan a leads.id
+    fk_discovery = text("""
+        SELECT
+            tc.table_name AS child_table,
+            kcu.column_name AS child_column,
+            c.is_nullable
+        FROM information_schema.table_constraints AS tc
+        JOIN information_schema.key_column_usage AS kcu
+            ON tc.constraint_name = kcu.constraint_name
+           AND tc.table_schema = kcu.table_schema
+        JOIN information_schema.constraint_column_usage AS ccu
+            ON ccu.constraint_name = tc.constraint_name
+           AND ccu.table_schema = tc.table_schema
+        JOIN information_schema.columns c
+            ON c.table_name = tc.table_name
+           AND c.column_name = kcu.column_name
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+          AND ccu.table_name = 'leads'
+          AND ccu.column_name = 'id'
+    """)
+    try:
+        fks = db.session.execute(fk_discovery).fetchall()
+    except Exception as e:
+        current_app.logger.error("[delete-lead] FK discovery falló: %s", e)
+        fks = []
+
+    current_app.logger.info(
+        "[delete-lead] %s FKs reales a leads.id: %s",
+        len(fks), [(r[0], r[1], r[2]) for r in fks],
+    )
+
+    cleanups_done = []
+    cleanups_skipped = []
+    for child_table, child_col, is_nullable in fks:
+        if is_nullable == "YES":
+            sql = f'UPDATE "{child_table}" SET "{child_col}" = NULL WHERE "{child_col}" = :id'
+            label = f"NULL {child_table}.{child_col}"
+        else:
+            sql = f'DELETE FROM "{child_table}" WHERE "{child_col}" = :id'
+            label = f"DEL {child_table}"
+
         sp = db.session.begin_nested()
         try:
             db.session.execute(text(sql), {"id": lid_str})
             sp.commit()
+            cleanups_done.append(label)
         except SQLAlchemyError as e:
             sp.rollback()
             err_msg = str(getattr(e, "orig", e))[:120]
             current_app.logger.warning("[delete-lead] skip %s: %s", label, err_msg)
-            skipped.append(label)
+            cleanups_skipped.append(f"{label} ({err_msg[:50]})")
 
     # Delete final del lead
     try:
@@ -389,16 +418,31 @@ def eliminar_lead(lead_id):
     except IntegrityError as e:
         db.session.rollback()
         msg = str(e.orig)[:300] if e.orig else str(e)[:300]
-        return jsonify({"error": f"FK constraint impide borrar: {msg}", "skipped_cleanups": skipped}), 409
+        current_app.logger.error("[delete-lead] IntegrityError: %s\n%s", msg, traceback.format_exc())
+        return jsonify({
+            "error": f"FK constraint impide borrar: {msg}",
+            "cleanups_done": cleanups_done,
+            "cleanups_skipped": cleanups_skipped,
+        }), 409
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": f"Error inesperado: {type(e).__name__}: {str(e)[:200]}", "skipped_cleanups": skipped}), 500
+        msg = str(getattr(e, "orig", e))[:300]
+        current_app.logger.error("[delete-lead] error: %s\n%s", e, traceback.format_exc())
+        return jsonify({
+            "error": f"Error inesperado: {type(e).__name__}: {msg}",
+            "cleanups_done": cleanups_done,
+            "cleanups_skipped": cleanups_skipped,
+        }), 500
 
     try:
         log_actividad("eliminar", "lead", None, f"Lead eliminado: {lead_nombre}")
     except Exception:
         pass
-    return jsonify({"ok": True, "lead_nombre": lead_nombre, "skipped_cleanups": skipped})
+    return jsonify({
+        "ok": True, "lead_nombre": lead_nombre,
+        "cleanups_done": cleanups_done,
+        "cleanups_skipped": cleanups_skipped,
+    })
 
 
 @leads_bp.route("/mis-leads-hoy", methods=["GET"])
