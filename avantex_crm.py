@@ -215,7 +215,7 @@ def create_app():
     @app.route("/")
     def index():
         from sqlalchemy.orm import joinedload
-        from models import Oportunidad, EtapaOportunidad
+        from models import Oportunidad, EtapaOportunidad, Usuario
         q = Lead.query.options(joinedload(Lead.usuario_asignado))
 
         # Vendedores solo ven sus leads, Super Admin ve todo
@@ -224,6 +224,19 @@ def create_app():
             usuario_id = session.get("usuario_id")
             if usuario_id:
                 q = q.filter(Lead.usuario_asignado_id == usuario_id)
+
+        # Admin filter por vendedor explícito vía query string ?vendedor=<uuid>
+        filtro_vendedor = (request.args.get("vendedor") or "").strip()
+        if filtro_vendedor and user_rol.upper() != "VENDEDOR":
+            if filtro_vendedor == "sin_asignar":
+                q = q.filter(Lead.usuario_asignado_id.is_(None))
+            else:
+                q = q.filter(Lead.usuario_asignado_id == filtro_vendedor)
+
+        # Lista de vendedores para el dropdown (solo admins lo usan)
+        vendedores_list = []
+        if user_rol.upper() != "VENDEDOR":
+            vendedores_list = Usuario.query.order_by(Usuario.nombre.asc()).all()
 
         all_leads = q.order_by(Lead.fecha_actualizacion.desc()).all()
 
@@ -286,6 +299,8 @@ def create_app():
             user_rol=session.get("user_rol", ""),
             usuario_id=session.get("usuario_id", ""),
             meta_pixels=get_pixel_ids(),
+            vendedores_list=vendedores_list,
+            filtro_vendedor=filtro_vendedor,
         )
 
     # ── Crear tablas en primera ejecución ──────

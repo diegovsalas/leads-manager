@@ -505,6 +505,15 @@ fbq('track','PageView');
 <div class="view" id="view-pipeline">
   <div class="toolbar">
     <input class="toolbar-search" type="text" placeholder="Buscar lead..." id="search-input" oninput="filterCards(this.value)"/>
+    {% if vendedores_list %}
+    <select class="form-input" id="filtro-vendedor" onchange="cambiarFiltroVendedor(this.value)" style="font-size:12px;max-width:180px;margin-left:8px;" title="Filtrar pipe por vendedor">
+      <option value="" {% if not filtro_vendedor %}selected{% endif %}>👥 Todo el equipo</option>
+      <option value="sin_asignar" {% if filtro_vendedor == 'sin_asignar' %}selected{% endif %}>— Sin asignar —</option>
+      {% for v in vendedores_list %}
+      <option value="{{ v.id }}" {% if filtro_vendedor == v.id|string %}selected{% endif %}>{{ v.nombre }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
     <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
       <label style="display:flex;gap:5px;align-items:center;font-size:12px;color:var(--text2);cursor:pointer;user-select:none;" title="Solo leads con industria o tamaño sin definir">
         <input type="checkbox" id="show-uncalified-toggle" onchange="toggleShowUncalifiedOnly(this.checked)"/>
@@ -2650,6 +2659,11 @@ function toggleHideConverted(checked){
 function toggleShowUncalifiedOnly(checked){
   document.body.classList.toggle('show-uncalified-only',checked);
   try{localStorage.setItem('pipeShowUncalified',checked?'1':'0');}catch(e){}
+}
+function cambiarFiltroVendedor(uuid){
+  const url=new URL(location.href);
+  if(uuid){url.searchParams.set('vendedor',uuid);}else{url.searchParams.delete('vendedor');}
+  location.href=url.toString();
 }
 
 // Esc cierra el último modal abierto
