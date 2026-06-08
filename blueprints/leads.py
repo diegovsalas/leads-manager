@@ -338,41 +338,56 @@ def actualizar_lead(lead_id):
 def eliminar_lead(lead_id):
     """Elimina un lead y sus dependencias estrictas (mensajes, cotizaciones,
     conversaciones). Las oportunidades vinculadas se preservan pero pierden el link."""
+    from sqlalchemy.exc import IntegrityError
     lead = db.session.get(Lead, lead_id)
     if not lead:
         return jsonify({"error": "Lead no encontrado"}), 404
 
     lead_nombre = lead.nombre or "(sin nombre)"
-    from models import (Oportunidad, EstadoBotInterno, MensajeWhatsapp,
-                        Conversacion, Cotizacion, Sale)
 
-    # Soltar FKs nullable (set NULL para que el delete del lead no rompa)
-    Oportunidad.query.filter(Oportunidad.lead_id == lead_id).update(
-        {"lead_id": None}, synchronize_session=False)
-    Sale.query.filter(Sale.lead_id == lead_id).update(
-        {"lead_id": None}, synchronize_session=False)
-    EstadoBotInterno.query.filter(EstadoBotInterno.lead_contexto_id == lead_id).update(
-        {"lead_contexto_id": None}, synchronize_session=False)
-    # SdrDirSuggestion.lead_id puede no existir en algunos schemas
     try:
-        from models import SdrDirSuggestion
-        if hasattr(SdrDirSuggestion, "lead_id"):
-            SdrDirSuggestion.query.filter(SdrDirSuggestion.lead_id == lead_id).update(
-                {"lead_id": None}, synchronize_session=False)
+        from models import (Oportunidad, EstadoBotInterno, MensajeWhatsapp,
+                            Conversacion, Cotizacion, Sale)
+
+        # Soltar FKs nullable (set NULL para que el delete del lead no rompa)
+        Oportunidad.query.filter(Oportunidad.lead_id == lead_id).update(
+            {"lead_id": None}, synchronize_session=False)
+        Sale.query.filter(Sale.lead_id == lead_id).update(
+            {"lead_id": None}, synchronize_session=False)
+        EstadoBotInterno.query.filter(EstadoBotInterno.lead_contexto_id == lead_id).update(
+            {"lead_contexto_id": None}, synchronize_session=False)
+        try:
+            from models import SdrDirSuggestion
+            if hasattr(SdrDirSuggestion, "lead_id"):
+                SdrDirSuggestion.query.filter(SdrDirSuggestion.lead_id == lead_id).update(
+                    {"lead_id": None}, synchronize_session=False)
+        except Exception:
+            pass
+
+        # Hard-delete dependencias estrictas (FK NOT NULL)
+        MensajeWhatsapp.query.filter(MensajeWhatsapp.lead_id == lead_id).delete(
+            synchronize_session=False)
+        Conversacion.query.filter(Conversacion.lead_id == lead_id).delete(
+            synchronize_session=False)
+        Cotizacion.query.filter(Cotizacion.lead_id == lead_id).delete(
+            synchronize_session=False)
+
+        db.session.delete(lead)
+        db.session.commit()
+    except IntegrityError as e:
+        db.session.rollback()
+        # Tipicamente significa que hay otra tabla con FK estricta a leads
+        # que no está cubierta. Devolvemos el detalle de Postgres.
+        msg = str(e.orig)[:300] if e.orig else str(e)[:300]
+        return jsonify({"error": f"FK constraint impide borrar: {msg}"}), 409
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Error inesperado: {type(e).__name__}: {str(e)[:200]}"}), 500
+
+    try:
+        log_actividad("eliminar", "lead", None, f"Lead eliminado: {lead_nombre}")
     except Exception:
-        pass
-
-    # Hard-delete dependencias estrictas (FK NOT NULL)
-    MensajeWhatsapp.query.filter(MensajeWhatsapp.lead_id == lead_id).delete(
-        synchronize_session=False)
-    Conversacion.query.filter(Conversacion.lead_id == lead_id).delete(
-        synchronize_session=False)
-    Cotizacion.query.filter(Cotizacion.lead_id == lead_id).delete(
-        synchronize_session=False)
-
-    db.session.delete(lead)
-    db.session.commit()
-    log_actividad("eliminar", "lead", None, f"Lead eliminado: {lead_nombre}")
+        pass  # Log no crítico
     return jsonify({"ok": True, "lead_nombre": lead_nombre})
 
 
