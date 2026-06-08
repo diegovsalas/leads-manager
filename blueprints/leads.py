@@ -336,59 +336,60 @@ def actualizar_lead(lead_id):
 
 @leads_bp.route("/<uuid:lead_id>", methods=["DELETE"])
 def eliminar_lead(lead_id):
-    """Elimina un lead y sus dependencias estrictas (mensajes, cotizaciones,
-    conversaciones). Las oportunidades vinculadas se preservan pero pierden el link."""
-    from sqlalchemy.exc import IntegrityError
+    """Elimina un lead y sus dependencias.
+    Cada cleanup va en un savepoint: si la tabla/columna no existe en DB
+    (schema drift legacy), se saltea y se sigue con el resto."""
+    from sqlalchemy import text
+    from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+    from flask import current_app
     lead = db.session.get(Lead, lead_id)
     if not lead:
         return jsonify({"error": "Lead no encontrado"}), 404
 
     lead_nombre = lead.nombre or "(sin nombre)"
+    lid_str = str(lead_id)
 
-    try:
-        from models import (Oportunidad, EstadoBotInterno, MensajeWhatsapp,
-                            Conversacion, Cotizacion, Sale)
-
-        # Soltar FKs nullable (set NULL para que el delete del lead no rompa)
-        Oportunidad.query.filter(Oportunidad.lead_id == lead_id).update(
-            {"lead_id": None}, synchronize_session=False)
-        Sale.query.filter(Sale.lead_id == lead_id).update(
-            {"lead_id": None}, synchronize_session=False)
-        EstadoBotInterno.query.filter(EstadoBotInterno.lead_contexto_id == lead_id).update(
-            {"lead_contexto_id": None}, synchronize_session=False)
+    # Cada operación en su propio savepoint. Si falla (columna/tabla inexistente),
+    # rollback parcial y seguimos. El delete final del lead da el veredicto.
+    cleanup_ops = [
+        # (label, SQL, params)
+        ("oportunidades.lead_id → NULL", "UPDATE oportunidades SET lead_id = NULL WHERE lead_id = :id"),
+        ("sales.lead_id → NULL",          "UPDATE sales SET lead_id = NULL WHERE lead_id = :id"),
+        ("estado_bot.lead_contexto → NULL","UPDATE estado_bot_interno SET lead_contexto_id = NULL WHERE lead_contexto_id = :id"),
+        ("sdr_dir_suggestions.lead → NULL","UPDATE sdr_dir_suggestions SET lead_id = NULL WHERE lead_id = :id"),
+        ("DELETE mensajes_whatsapp",      "DELETE FROM mensajes_whatsapp WHERE lead_id = :id"),
+        ("DELETE conversaciones",         "DELETE FROM conversaciones WHERE lead_id = :id"),
+        ("DELETE cotizaciones",           "DELETE FROM cotizaciones WHERE lead_id = :id"),
+    ]
+    skipped = []
+    for label, sql in cleanup_ops:
+        sp = db.session.begin_nested()
         try:
-            from models import SdrDirSuggestion
-            if hasattr(SdrDirSuggestion, "lead_id"):
-                SdrDirSuggestion.query.filter(SdrDirSuggestion.lead_id == lead_id).update(
-                    {"lead_id": None}, synchronize_session=False)
-        except Exception:
-            pass
+            db.session.execute(text(sql), {"id": lid_str})
+            sp.commit()
+        except SQLAlchemyError as e:
+            sp.rollback()
+            err_msg = str(getattr(e, "orig", e))[:120]
+            current_app.logger.warning("[delete-lead] skip %s: %s", label, err_msg)
+            skipped.append(label)
 
-        # Hard-delete dependencias estrictas (FK NOT NULL)
-        MensajeWhatsapp.query.filter(MensajeWhatsapp.lead_id == lead_id).delete(
-            synchronize_session=False)
-        Conversacion.query.filter(Conversacion.lead_id == lead_id).delete(
-            synchronize_session=False)
-        Cotizacion.query.filter(Cotizacion.lead_id == lead_id).delete(
-            synchronize_session=False)
-
+    # Delete final del lead
+    try:
         db.session.delete(lead)
         db.session.commit()
     except IntegrityError as e:
         db.session.rollback()
-        # Tipicamente significa que hay otra tabla con FK estricta a leads
-        # que no está cubierta. Devolvemos el detalle de Postgres.
         msg = str(e.orig)[:300] if e.orig else str(e)[:300]
-        return jsonify({"error": f"FK constraint impide borrar: {msg}"}), 409
+        return jsonify({"error": f"FK constraint impide borrar: {msg}", "skipped_cleanups": skipped}), 409
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": f"Error inesperado: {type(e).__name__}: {str(e)[:200]}"}), 500
+        return jsonify({"error": f"Error inesperado: {type(e).__name__}: {str(e)[:200]}", "skipped_cleanups": skipped}), 500
 
     try:
         log_actividad("eliminar", "lead", None, f"Lead eliminado: {lead_nombre}")
     except Exception:
-        pass  # Log no crítico
-    return jsonify({"ok": True, "lead_nombre": lead_nombre})
+        pass
+    return jsonify({"ok": True, "lead_nombre": lead_nombre, "skipped_cleanups": skipped})
 
 
 @leads_bp.route("/mis-leads-hoy", methods=["GET"])
