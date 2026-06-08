@@ -343,19 +343,24 @@ def eliminar_lead(lead_id):
         return jsonify({"error": "Lead no encontrado"}), 404
 
     lead_nombre = lead.nombre or "(sin nombre)"
-    from models import (Oportunidad, ActividadLog, MensajeWhatsapp,
-                        Conversacion, Cotizacion, SdrDirSuggestion)
+    from models import (Oportunidad, EstadoBotInterno, MensajeWhatsapp,
+                        Conversacion, Cotizacion, Sale)
 
-    # Soltar FKs no estrictos (nullable)
+    # Soltar FKs nullable (set NULL para que el delete del lead no rompa)
     Oportunidad.query.filter(Oportunidad.lead_id == lead_id).update(
         {"lead_id": None}, synchronize_session=False)
-    ActividadLog.query.filter(ActividadLog.lead_contexto_id == lead_id).update(
+    Sale.query.filter(Sale.lead_id == lead_id).update(
+        {"lead_id": None}, synchronize_session=False)
+    EstadoBotInterno.query.filter(EstadoBotInterno.lead_contexto_id == lead_id).update(
         {"lead_contexto_id": None}, synchronize_session=False)
+    # SdrDirSuggestion.lead_id puede no existir en algunos schemas
     try:
-        SdrDirSuggestion.query.filter(SdrDirSuggestion.lead_id == lead_id).update(
-            {"lead_id": None}, synchronize_session=False)
+        from models import SdrDirSuggestion
+        if hasattr(SdrDirSuggestion, "lead_id"):
+            SdrDirSuggestion.query.filter(SdrDirSuggestion.lead_id == lead_id).update(
+                {"lead_id": None}, synchronize_session=False)
     except Exception:
-        pass  # SdrDirSuggestion column might not exist in older deploys
+        pass
 
     # Hard-delete dependencias estrictas (FK NOT NULL)
     MensajeWhatsapp.query.filter(MensajeWhatsapp.lead_id == lead_id).delete(
