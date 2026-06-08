@@ -34,6 +34,7 @@ class EtapaPipeline(enum.Enum):
     CONTACTO_2     = "2do Contacto"
     CONTACTO_3     = "3er Contacto"
     CONTACTO_4     = "4to Contacto"
+    PRESENTACION   = "Presentación"
     COTIZACION     = "Cotización"
     DEMO           = "Demo"
     NEGOCIACION    = "Negociación"

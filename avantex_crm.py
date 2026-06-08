@@ -69,6 +69,28 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] leads.tipo_venta failed (retry on next boot): %s", e)
 
+        # ─── EtapaPipeline enum: agregar 'Presentación' ───
+        try:
+            # ALTER TYPE ADD VALUE no soporta IF NOT EXISTS en algunas versiones —
+            # validar antes via pg_enum
+            with db.engine.begin() as conn:
+                exists = conn.execute(text("""
+                    SELECT 1 FROM pg_enum e
+                    JOIN pg_type t ON e.enumtypid = t.oid
+                    WHERE t.typname = 'etapa_pipeline_enum'
+                      AND e.enumlabel = 'Presentación'
+                """)).first()
+                if not exists:
+                    app.logger.info("[auto-migrate] adding 'Presentación' to etapa_pipeline_enum...")
+                    # ALTER TYPE ADD VALUE no puede correr dentro de un block transaction
+                    # de algunos drivers. Usamos autocommit aislado.
+                    conn.execute(text(
+                        "ALTER TYPE etapa_pipeline_enum ADD VALUE 'Presentación' AFTER '4to Contacto'"
+                    ))
+                    app.logger.info("[auto-migrate] 'Presentación' added to etapa_pipeline_enum.")
+        except Exception as e:
+            app.logger.warning("[auto-migrate] etapa_pipeline 'Presentación' failed (retry on next boot): %s", e)
+
 
 def create_app():
     app = Flask(__name__)
@@ -190,6 +212,7 @@ def create_app():
         EtapaPipeline.CONTACTO_2:     "#9333ea",
         EtapaPipeline.CONTACTO_3:     "#9333ea",
         EtapaPipeline.CONTACTO_4:     "#9333ea",
+        EtapaPipeline.PRESENTACION:   "#ea580c",
         EtapaPipeline.COTIZACION:     "#2563eb",
         EtapaPipeline.DEMO:           "#0891b2",
         EtapaPipeline.NEGOCIACION:    "#d97706",
@@ -205,6 +228,7 @@ def create_app():
         EtapaPipeline.CONTACTO_2:     ("En contacto",  "#9333ea"),
         EtapaPipeline.CONTACTO_3:     ("En contacto",  "#9333ea"),
         EtapaPipeline.CONTACTO_4:     ("En contacto",  "#9333ea"),
+        EtapaPipeline.PRESENTACION:   ("Negociando",   "#d97706"),
         EtapaPipeline.COTIZACION:     ("Negociando",   "#d97706"),
         EtapaPipeline.DEMO:           ("Negociando",   "#d97706"),
         EtapaPipeline.NEGOCIACION:    ("Negociando",   "#d97706"),
