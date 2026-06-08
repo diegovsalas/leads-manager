@@ -104,12 +104,15 @@ def embudo():
         rev_q = rev_q.filter(Lead.usuario_asignado_id == vid)
     revenue = float(rev_q.scalar() or 0)
 
-    # Pipe total
+    # Pipe Activo: SIN filtro de fecha (es snapshot actual, no del mes) y
+    # SIN cerrados (ni ganado ni perdido) para que cuadre con las barras de
+    # etapas abiertas del dashboard.
     pipe_q = db.session.query(func.coalesce(func.sum(func.coalesce(
         Lead.cantidad_productos * Lead.precio_unitario, Lead.valor_estimado, 0,
     )), 0)).filter(
-        Lead.fecha_creacion >= inicio_mes, Lead.fecha_creacion < fin_mes,
-        Lead.etapa_pipeline.notin_([EtapaPipeline.CIERRE_PERDIDO]),
+        Lead.etapa_pipeline.notin_([
+            EtapaPipeline.CIERRE_PERDIDO, EtapaPipeline.CIERRE_GANADO,
+        ]),
     )
     if vid:
         pipe_q = pipe_q.filter(Lead.usuario_asignado_id == vid)
