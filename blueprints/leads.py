@@ -177,16 +177,25 @@ def crear_lead():
         tipo_venta=data.get("tipo_venta"),
         notas=data.get("notas"),
     )
-    _apply_icp(lead)
+    try:
+        _apply_icp(lead)
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.warning("[crear_lead] _apply_icp falló (continúo igual): %s", e)
     db.session.add(lead)
     try:
         db.session.commit()
-    except Exception:
+    except Exception as e:
+        from flask import current_app
+        import traceback
         db.session.rollback()
+        current_app.logger.error("[crear_lead] commit falló: %s\n%s", e, traceback.format_exc())
         existing = Lead.query.filter_by(telefono=data.get("telefono")).first()
         if existing:
             return jsonify({"error": f"Ya existe un lead con este teléfono: {existing.nombre}", "lead": existing.to_dict()}), 409
-        return jsonify({"error": "Error al crear el lead"}), 500
+        # Devolvemos el detalle del error real para no requerir mirar los logs
+        msg = str(getattr(e, "orig", e))[:300]
+        return jsonify({"error": f"Error al crear lead: {type(e).__name__}: {msg}"}), 500
 
     log_actividad("crear", "lead", lead.id, f"Lead creado: {lead.nombre} ({lead.telefono})")
     socketio.emit("nuevo_lead", lead.to_dict())
