@@ -86,6 +86,51 @@ def crear_lead():
 
     # Solo auto-asignar para campanas digitales (Meta Ads)
     if origen_valor in ORIGENES_AUTO_ASSIGN and marca:
+        # Override: si está seteada META_LEADS_ASSIGNEE_USUARIO_ID, todos los
+        # leads de Meta van directo a ese usuario (no Round-Robin).
+        import os as _os
+        from models import Usuario
+        override_uid = _os.environ.get("META_LEADS_ASSIGNEE_USUARIO_ID", "").strip()
+        if override_uid:
+            target_user = db.session.get(Usuario, override_uid)
+            if target_user:
+                # Asignar directo y crear el lead manualmente
+                etapa = EtapaPipeline.NUEVO_LEAD
+                lead = Lead(
+                    nombre=data.get("nombre", "Sin nombre"),
+                    telefono=data.get("telefono"),
+                    empresa_nombre=data.get("empresa_nombre") or data.get("empresa"),
+                    estado_cliente=data.get("estado_cliente") or data.get("estado"),
+                    origen=origen_enum,
+                    marca_interes=marca,
+                    etapa_pipeline=etapa,
+                    cantidad_productos=cantidad,
+                    precio_unitario=precio,
+                    valor_estimado=valor,
+                    usuario_asignado_id=target_user.id,
+                    tipo_industria=data.get("tipo_industria"),
+                    tamano_empresa=data.get("tamano_empresa"),
+                    num_sucursales=data.get("num_sucursales"),
+                    tipo_cliente=data.get("tipo_cliente"),
+                    tipo_venta=data.get("tipo_venta"),
+                    notas=data.get("notas"),
+                )
+                try:
+                    _apply_icp(lead)
+                except Exception:
+                    pass
+                db.session.add(lead)
+                try:
+                    db.session.commit()
+                    socketio.emit("nuevo_lead", lead.to_dict())
+                    return jsonify(lead.to_dict()), 201
+                except Exception as e:
+                    db.session.rollback()
+                    from flask import current_app
+                    current_app.logger.warning("[crear_lead Meta override] falló, fallback RR: %s", e)
+                    # Cae al fallback round-robin de abajo
+
+        # Fallback: Round-Robin tradicional
         from asignacion import asignar_lead_comercial
         try:
             lead = asignar_lead_comercial({
