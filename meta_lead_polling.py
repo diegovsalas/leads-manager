@@ -146,7 +146,7 @@ def _create_lead_from_api(lead_data, page_name=""):
     if nombre and "dummy" in nombre.lower():
         nombre = f"Lead Meta {meta_lead_id[-6:]}"
 
-    # Campos extra como notas en motivo_perdida (campo Text sin constraint)
+    # Campos extra del formulario → notas (información importante del lead)
     campos_mapeados = {"full_name", "nombre", "nombre_completo", "phone_number", "telefono", "tel",
                        "email", "correo", "marca_interes", "brand", "company_name", "empresa",
                        "state", "estado", "city", "ciudad", "número_de_whatsapp",
@@ -164,7 +164,7 @@ def _create_lead_from_api(lead_data, page_name=""):
             "marca_interes": marca,
             "empresa_nombre": empresa[:200] if empresa else None,
             "estado_cliente": estado[:100] if estado else None,
-            "motivo_perdida": notas_formulario or None,
+            "notas": notas_formulario or None,
             "meta_lead_id": meta_lead_id,
             "meta_form_id": form_id,
             "meta_ad_id": ad_id,
@@ -179,7 +179,7 @@ def _create_lead_from_api(lead_data, page_name=""):
             marca_interes=marca,
             empresa_nombre=empresa[:200] if empresa else None,
             estado_cliente=estado[:100] if estado else None,
-            motivo_perdida=notas_formulario or None,
+            notas=notas_formulario or None,
             etapa_pipeline=EtapaPipeline.NUEVO_LEAD,
             meta_lead_id=meta_lead_id,
             meta_form_id=form_id,

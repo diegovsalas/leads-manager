@@ -189,7 +189,7 @@ def _create_lead(lead_data, linkedin_lead_id, marca, question_map):
             "marca_interes": marca,
             "empresa_nombre": empresa[:200] if empresa else None,
             "estado_cliente": estado[:100] if estado else None,
-            "motivo_perdida": f"[LinkedIn] {notas}" if notas else None,
+            "notas": f"[LinkedIn] {notas}" if notas else None,
             "meta_lead_id": f"li-{linkedin_lead_id}",
             "meta_campaign": f"LinkedIn: {campaign_name}" if campaign_name else "LinkedIn Ads",
         })
@@ -202,7 +202,7 @@ def _create_lead(lead_data, linkedin_lead_id, marca, question_map):
             marca_interes=marca,
             empresa_nombre=empresa[:200] if empresa else None,
             estado_cliente=estado[:100] if estado else None,
-            motivo_perdida=f"[LinkedIn] {notas}" if notas else None,
+            notas=f"[LinkedIn] {notas}" if notas else None,
             etapa_pipeline=EtapaPipeline.NUEVO_LEAD,
             meta_lead_id=f"li-{linkedin_lead_id}",
             meta_campaign=f"LinkedIn: {campaign_name}" if campaign_name else "LinkedIn Ads",
