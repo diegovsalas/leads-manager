@@ -1825,6 +1825,14 @@ fbq('track','PageView');
       <div class="lp-field"><span class="lp-field-label">Valor estimado</span><span class="lp-field-value" style="font-size:16px;color:var(--green);" id="lp-valor"></span></div>
     </div>
 
+    <div class="lp-section" id="lp-meta-section" style="display:none;">
+      <div class="lp-section-title">Atribución Meta Ads</div>
+      <div class="lp-field"><span class="lp-field-label">Campaña</span><span class="lp-field-value" style="font-family:var(--mono);font-size:11px;" id="lp-meta-campaign"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Formulario</span><span class="lp-field-value" style="font-family:var(--mono);font-size:11px;" id="lp-meta-form"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Ad ID</span><span class="lp-field-value" style="font-family:var(--mono);font-size:11px;" id="lp-meta-ad"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Lead ID Meta</span><span class="lp-field-value" style="font-family:var(--mono);font-size:11px;" id="lp-meta-lead"></span></div>
+    </div>
+
     <div class="lp-section">
       <div class="lp-section-title">ICP Score</div>
       <div class="lp-field"><span class="lp-field-label">Score</span><span class="lp-field-value" id="lp-icp-score"></span></div>
@@ -3267,6 +3275,16 @@ async function abrirLeadPanel(id){
     document.getElementById('lp-cantidad').textContent=l.cantidad_productos||'—';
     document.getElementById('lp-precio').textContent=l.precio_unitario?fmt$(l.precio_unitario):'—';
     document.getElementById('lp-valor').textContent=l.valor_estimado?fmt$(l.valor_estimado):'—';
+
+    // Meta Ads attribution (solo si vino de la API real)
+    const hasMetaData=l.meta_lead_id||l.meta_form_id||l.meta_campaign||l.meta_ad_id;
+    document.getElementById('lp-meta-section').style.display=hasMetaData?'':'none';
+    if(hasMetaData){
+      document.getElementById('lp-meta-campaign').textContent=l.meta_campaign||'—';
+      document.getElementById('lp-meta-form').textContent=l.meta_form_id||'—';
+      document.getElementById('lp-meta-ad').textContent=l.meta_ad_id||'—';
+      document.getElementById('lp-meta-lead').textContent=l.meta_lead_id||'—';
+    }
 
     // ICP
     document.getElementById('lp-icp-score').textContent=l.icp_score!=null?l.icp_score+'/100':'Sin calcular';
