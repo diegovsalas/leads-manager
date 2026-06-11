@@ -31,6 +31,82 @@ function switchTab(name){
 }
 </script>
     <link rel="stylesheet" href="/static/css/avantex_cs.css"/>
+    <style id="pipe-theme-overrides">
+        /* ─── Override de avantex_cs.css para matchear el Pipe (legacy /) ─── */
+        :root, [data-theme="light"] {
+            /* Paleta del Pipe — sobreescribe los OKLCH del CS */
+            --bg-app: #eff3f8;
+            --bg-surface: #ffffff;
+            --bg-card: #ffffff;
+            --bg-hover: rgba(0,0,0,.04);
+            --bg-tag: #e8eaf6;
+
+            --ink-1: #1e293b;
+            --ink-2: #475569;
+            --ink-3: #64748b;
+            --ink-4: #94a3b8;
+
+            --border: #dfe7ef;
+            --border-subtle: #e8edf3;
+
+            --copper: #3f4994;
+            --copper-soft: rgba(63,73,148,.08);
+            --accent: #3f4994;
+            --ok: #2d7a4f;
+            --warn: #cb912f;
+            --danger: #c4412b;
+            --info: #0389cb;
+
+            /* Sidebar Pipe-style (azul oscuro) */
+            --side-bg: #3f4994;
+            --side-border: transparent;
+            --side-section: rgba(255,255,255,.5);
+            --side-item: rgba(255,255,255,.8);
+            --side-item-hover: #ffffff;
+            --side-item-active: #ffffff;
+            --side-item-active-bg: rgba(255,255,255,.15);
+            --side-bar-accent: #8bb8f8;
+        }
+
+        /* Familia tipográfica: Poppins en todo el módulo CS */
+        body, .shell, .side-link, .topbar, .content { font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif; }
+
+        /* Sidebar: forzar texto blanco y barras estilo Pipe */
+        .sidebar { background: var(--side-bg); color: rgba(255,255,255,.85); border-right: 1px solid transparent; box-shadow: 0 4px 50px #d9ddfc; }
+        .sidebar .side-section { color: var(--side-section); font-size: 10px; letter-spacing: .12em; padding: 16px 14px 6px; }
+        .sidebar .side-link { color: var(--side-item); padding: 7px 10px; margin: 1px 6px; border-radius: 6px; transition: all 120ms; }
+        .sidebar .side-link:hover { background: rgba(255,255,255,.1); color: var(--side-item-hover); }
+        .sidebar .side-link.active { background: var(--side-item-active-bg); color: var(--side-item-active); font-weight: 550; position: relative; }
+        .sidebar .side-link.active::before { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: var(--side-bar-accent); }
+        .sidebar .side-brand { padding: 14px 16px 16px; border-bottom: 1px solid rgba(255,255,255,.1); }
+        .sidebar .side-brand .wm-steel { color: #ffffff; font-size: 15px; font-weight: 700; }
+        .sidebar .side-brand .wm-x { color: var(--side-bar-accent); font-size: 15px; font-weight: 700; }
+        .sidebar .side-brand .tag-grupo { color: var(--side-bar-accent); font-size: 8px; letter-spacing: .14em; }
+        .sidebar .side-brand small { color: rgba(255,255,255,.5); }
+        .sidebar .side-user { border-top: 1px solid rgba(255,255,255,.12); padding: 10px 12px; }
+        .sidebar .side-user .name { color: rgba(255,255,255,.9); }
+        .sidebar .side-user .role { color: rgba(255,255,255,.5); }
+        .sidebar .side-user .avatar { background: linear-gradient(135deg, #0075b7, #8bb8f8); }
+        .sidebar .side-user .exit { color: rgba(255,255,255,.4); }
+        .sidebar .side-user .exit:hover { color: rgba(255,255,255,.7); }
+
+        /* Topbar y content adaptan al fondo claro tipo Pipe */
+        .topbar { background: var(--bg-surface); border-bottom: 1px solid var(--border); }
+        .content { background: var(--bg-app); }
+        .breadcrumb .cur { color: var(--ink-1); font-weight: 600; }
+        .breadcrumb .sep { color: var(--ink-3); }
+
+        /* Cards: bordes y radius del Pipe */
+        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 1px 2px rgba(30,41,59,.05); }
+        .card:hover { box-shadow: 0 4px 12px rgba(30,41,59,.08); }
+
+        /* Botones primarios: copper accent del Pipe */
+        .btn.primary, .btn-filled { background: var(--copper); color: #fff; border-color: var(--copper); }
+        .btn.primary:hover, .btn-filled:hover { background: #2f3677; }
+
+        /* Iconos en sidebar más chicos como en el Pipe */
+        .sidebar .ico { width: 16px; height: 16px; stroke-width: 1.5; }
+    </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded',()=>{
