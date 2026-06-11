@@ -445,19 +445,31 @@ def eliminar_lead(lead_id):
             sql = f'DELETE FROM "{child_table}" WHERE "{child_col}" = :id'
             label = f"DEL {child_table}"
 
-        sp = db.session.begin_nested()
+        # Cada cleanup en su propia conexión: si falla, no envenena la
+        # sesión principal (evita PendingRollbackError - SQLAlchemy f405).
         try:
-            db.session.execute(text(sql), {"id": lid_str})
-            sp.commit()
+            with db.engine.begin() as conn:
+                conn.execute(text(sql), {"id": lid_str})
             cleanups_done.append(label)
         except SQLAlchemyError as e:
-            sp.rollback()
             err_msg = str(getattr(e, "orig", e))[:120]
             current_app.logger.warning("[delete-lead] skip %s: %s", label, err_msg)
             cleanups_skipped.append(f"{label} ({err_msg[:50]})")
 
+    # Refrescar la session porque trabajamos en otras conexiones
+    db.session.expire_all()
+
     # Delete final del lead
     try:
+        # Re-fetchear el lead por si la session se confundió
+        lead = db.session.get(Lead, lead_id)
+        if not lead:
+            return jsonify({
+                "ok": True, "lead_nombre": lead_nombre,
+                "cleanups_done": cleanups_done,
+                "cleanups_skipped": cleanups_skipped,
+                "note": "Lead ya no existía al momento del delete final (ok)",
+            })
         db.session.delete(lead)
         db.session.commit()
     except IntegrityError as e:
