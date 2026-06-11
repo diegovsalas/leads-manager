@@ -456,24 +456,28 @@ def eliminar_lead(lead_id):
             current_app.logger.warning("[delete-lead] skip %s: %s", label, err_msg)
             cleanups_skipped.append(f"{label} ({err_msg[:50]})")
 
-    # Refrescar la session porque trabajamos en otras conexiones
-    db.session.expire_all()
+    # Expirar la session para que no intente walking de relationships
+    # con tablas que tienen schema drift (ej. conversaciones sin lead_id/id).
+    db.session.expunge_all()
 
-    # Delete final del lead
+    # Delete final del lead via RAW SQL en conexión fresca.
+    # Evita que el ORM walke relaciones (Lead.conversaciones lazy=dynamic)
+    # y dispare SELECT internos que rompen por columnas inexistentes
+    # en tablas con schema drift (SQLAlchemy f405 / UndefinedColumn).
     try:
-        # Re-fetchear el lead por si la session se confundió
-        lead = db.session.get(Lead, lead_id)
-        if not lead:
-            return jsonify({
-                "ok": True, "lead_nombre": lead_nombre,
-                "cleanups_done": cleanups_done,
-                "cleanups_skipped": cleanups_skipped,
-                "note": "Lead ya no existía al momento del delete final (ok)",
-            })
-        db.session.delete(lead)
-        db.session.commit()
+        with db.engine.begin() as conn:
+            result = conn.execute(
+                text("DELETE FROM leads WHERE id = :id"),
+                {"id": lid_str},
+            )
+            if result.rowcount == 0:
+                return jsonify({
+                    "ok": True, "lead_nombre": lead_nombre,
+                    "cleanups_done": cleanups_done,
+                    "cleanups_skipped": cleanups_skipped,
+                    "note": "Lead ya no existía al momento del delete final",
+                })
     except IntegrityError as e:
-        db.session.rollback()
         msg = str(e.orig)[:300] if e.orig else str(e)[:300]
         current_app.logger.error("[delete-lead] IntegrityError: %s\n%s", msg, traceback.format_exc())
         return jsonify({
@@ -482,7 +486,6 @@ def eliminar_lead(lead_id):
             "cleanups_skipped": cleanups_skipped,
         }), 409
     except Exception as e:
-        db.session.rollback()
         msg = str(getattr(e, "orig", e))[:300]
         current_app.logger.error("[delete-lead] error: %s\n%s", e, traceback.format_exc())
         return jsonify({
