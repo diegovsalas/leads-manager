@@ -1799,7 +1799,22 @@ fbq('track','PageView');
       <div class="lp-field"><span class="lp-field-label">Etapa</span><span class="lp-field-value" id="lp-etapa"></span></div>
       <div class="lp-field"><span class="lp-field-label">Origen</span><span class="lp-field-value" id="lp-origen"></span></div>
       <div class="lp-field"><span class="lp-field-label">Unidad</span><span class="lp-field-value" id="lp-marca"></span></div>
-      <div class="lp-field"><span class="lp-field-label">Vendedor</span><span class="lp-field-value" id="lp-vendedor"></span></div>
+      <div class="lp-field" id="lp-vendedor-row">
+        <span class="lp-field-label">Vendedor</span>
+        <span class="lp-field-value" id="lp-vendedor"></span>
+        {% if vendedores_list %}
+        <span class="admin-only" style="margin-left:auto;">
+          <select id="lp-vendedor-select" onchange="lpReasignarVendedor(this.value)"
+                  style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);max-width:160px;">
+            <option value="">— Reasignar a... —</option>
+            <option value="__null">Sin asignar</option>
+            {% for v in vendedores_list %}
+            <option value="{{ v.id }}">{{ v.nombre }}</option>
+            {% endfor %}
+          </select>
+        </span>
+        {% endif %}
+      </div>
       <div class="lp-field"><span class="lp-field-label">Tipo cliente</span><span class="lp-field-value" id="lp-tipo-cliente"></span></div>
       <div class="lp-field"><span class="lp-field-label">Creado</span><span class="lp-field-value" id="lp-creado"></span></div>
       <div class="lp-field"><span class="lp-field-label">Actualizado</span><span class="lp-field-value" id="lp-actualizado"></span></div>
@@ -3241,6 +3256,9 @@ async function abrirLeadPanel(id){
     document.getElementById('lp-origen').textContent=l.origen||'Manual';
     document.getElementById('lp-marca').innerHTML=l.marca_interes?`<span class="tag tag-marca">${l.marca_interes}</span>`:'—';
     document.getElementById('lp-vendedor').textContent=l.usuario_asignado?l.usuario_asignado.nombre:'Sin asignar';
+    // Reset el select de reasignación al abrir un lead
+    const venSel=document.getElementById('lp-vendedor-select');
+    if(venSel)venSel.value='';
     document.getElementById('lp-tipo-cliente').textContent=l.tipo_cliente||'—';
     document.getElementById('lp-creado').textContent=fmtDateTime(l.fecha_creacion);
     document.getElementById('lp-actualizado').textContent=fmtDateTime(l.fecha_actualizacion);
@@ -3339,6 +3357,30 @@ async function editLeadFromPanel(){
     const lead=await r.json();
     await openLeadModal(lead);
   }catch(e){_nlToast('Error: '+e.message,true);}
+}
+
+async function lpReasignarVendedor(vendedorId){
+  if(!vendedorId)return;
+  const leadId=document.getElementById('lp-id').value;
+  if(!leadId)return;
+  const sel=document.getElementById('lp-vendedor-select');
+  const nuevoNombre=sel.options[sel.selectedIndex].text;
+  if(!confirm(`¿Reasignar este lead a "${nuevoNombre}"?`)){
+    sel.value='';
+    return;
+  }
+  const body={usuario_asignado_id: vendedorId==='__null'?null:vendedorId};
+  try{
+    const r=await fetch('/api/leads/'+leadId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok){const e=await r.json();throw new Error(e.error||'Error');}
+    _nlToast('Reasignado a '+nuevoNombre);
+    abrirLeadPanel(leadId);  // refresca el panel
+    // Refrescar el kanban si es visible
+    if(typeof loadKanban==='function')setTimeout(loadKanban,300);
+  }catch(e){
+    _nlToast('Error: '+e.message,true);
+    sel.value='';
+  }
 }
 
 async function deleteLeadFromPanel(){
