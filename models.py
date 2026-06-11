@@ -215,7 +215,10 @@ class Lead(db.Model):
 
     # Relaciones
     mensajes = db.relationship("MensajeWhatsapp", back_populates="lead", order_by="MensajeWhatsapp.timestamp", lazy="dynamic")
-    conversaciones = db.relationship("Conversacion", back_populates="lead", lazy="dynamic")
+    # Relación a Conversacion deshabilitada — la tabla `conversaciones` en
+    # Supabase es legacy de otro sistema (chat externo) y no matchea este
+    # modelo. Reactivar solo si se crea la tabla correcta o se renombra.
+    # conversaciones = db.relationship("Conversacion", back_populates="lead", lazy="dynamic")
     cotizaciones_rel = db.relationship("Cotizacion", back_populates="lead", lazy="dynamic")
 
     def __repr__(self):
@@ -301,28 +304,20 @@ class MensajeWhatsapp(db.Model):
 
 
 # ──────────────────────────────────────────────
-# Tabla: conversaciones (nuevo historial de chat)
+# NOTA: clase Conversacion eliminada.
+#
+# La tabla `conversaciones` en la DB de Supabase pertenece a un sistema
+# legacy (Baileys / chat externo) con schema completamente distinto:
+#   telefono, modo, agente, nombre_cliente, empresa_cliente,
+#   etiqueta, agente_asignado, prioridad_cliente, folio_activo, updated_at
+# No tiene `id` ni `lead_id`, así que el modelo SQLAlchemy original
+# nunca pudo funcionar — y rompía el delete de leads porque el ORM
+# walke la relación Lead.conversaciones al hacer cascade-check.
+#
+# Si en el futuro se quiere historial de chat propio del CRM, crear
+# una tabla nueva (ej. `crm_conversaciones`) con otro nombre y declarar
+# el modelo acá.
 # ──────────────────────────────────────────────
-class Conversacion(db.Model):
-    __tablename__ = "conversaciones"
-
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
-    lead_id = db.Column(UUID(as_uuid=True), db.ForeignKey("leads.id"), nullable=False)
-    lead = db.relationship("Lead", back_populates="conversaciones")
-    direccion = db.Column(db.Text, nullable=False)  # 'entrante' | 'saliente'
-    mensaje = db.Column(db.Text, nullable=False)
-    enviado_por = db.Column(db.Text, nullable=True)  # 'bot' | nombre del usuario
-    timestamp = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
-
-    def to_dict(self):
-        return {
-            "id": str(self.id),
-            "lead_id": str(self.lead_id),
-            "direccion": self.direccion,
-            "mensaje": self.mensaje,
-            "enviado_por": self.enviado_por,
-            "timestamp": self.timestamp.isoformat(),
-        }
 
 
 # ──────────────────────────────────────────────
