@@ -160,91 +160,118 @@ def crear_lead():
     # Solo usuario_id (FK a usuarios). NO caer a user_id (es FK a users, FK violation).
     asignado = data.get("usuario_asignado_id") or session.get("usuario_id")
 
+    # Validar tipo_cliente contra el CHECK del DB (Recurrente|Eventual) — todo
+    # lo demás (incluido "Nuevo" del modal viejo) se mapea a NULL para evitar
+    # IntegrityError silencioso.
+    tipo_cliente_raw = data.get("tipo_cliente")
+    tipo_cliente_val = tipo_cliente_raw if tipo_cliente_raw in ("Recurrente", "Eventual") else None
+
     # Auto-vincular Account si viene empresa_nombre o explicit account_id
     from models import Account, Contact
+    from flask import current_app
+    import traceback as _tb
+
     account_id = data.get("account_id")
-    empresa_str = data.get("empresa_nombre") or data.get("empresa")
-    if not account_id and empresa_str:
-        # Buscar account existente por nombre exacto, crear si no existe
-        existing = Account.query.filter(
-            db.func.lower(Account.nombre) == empresa_str.lower()
-        ).first()
-        if existing:
-            account_id = existing.id
-        else:
-            new_acc = Account(
-                nombre=empresa_str.strip(),
-                estado=data.get("estado_cliente") or data.get("estado"),
-                num_sucursales=data.get("num_sucursales"),
-                industria=data.get("tipo_industria"),
-                tamano=data.get("tamano_empresa"),
-                owner_id=asignado,
-            )
-            db.session.add(new_acc)
-            db.session.flush()
-            account_id = new_acc.id
-
-    # Auto-vincular Contact si viene nombre+telefono y no existe
-    contact_id = data.get("contact_id")
-    nombre_contacto = data.get("nombre")
-    if not contact_id and nombre_contacto and data.get("telefono"):
-        existing_c = Contact.query.filter(Contact.telefono == data["telefono"]).first()
-        if existing_c:
-            contact_id = existing_c.id
-        else:
-            new_c = Contact(
-                nombre=nombre_contacto, telefono=data["telefono"],
-                whatsapp=data["telefono"], account_id=account_id,
-            )
-            db.session.add(new_c)
-            db.session.flush()
-            contact_id = new_c.id
-
-    # Crear lead con asignacion manual (o sin asignar)
-    lead = Lead(
-        nombre=data.get("nombre", "Sin nombre"),
-        telefono=data.get("telefono"),
-        empresa_nombre=empresa_str,  # legacy compat
-        account_id=account_id,
-        contact_id=contact_id,
-        estado_cliente=data.get("estado_cliente") or data.get("estado"),
-        origen=origen_enum,
-        marca_interes=marca,
-        etapa_pipeline=etapa,
-        cantidad_productos=cantidad,
-        precio_unitario=precio,
-        valor_estimado=valor,
-        usuario_asignado_id=asignado,
-        tipo_industria=data.get("tipo_industria"),
-        tamano_empresa=data.get("tamano_empresa"),
-        num_sucursales=data.get("num_sucursales"),
-        tipo_cliente=data.get("tipo_cliente"),
-        tipo_venta=data.get("tipo_venta"),
-        notas=data.get("notas"),
-    )
+    empresa_str = (data.get("empresa_nombre") or data.get("empresa") or "").strip()
+    step = "init"
     try:
-        _apply_icp(lead)
-    except Exception as e:
-        from flask import current_app
-        current_app.logger.warning("[crear_lead] _apply_icp falló (continúo igual): %s", e)
-    db.session.add(lead)
-    try:
+        if not account_id and empresa_str:
+            step = "buscar_account"
+            existing = Account.query.filter(
+                db.func.lower(Account.nombre) == empresa_str.lower()
+            ).first()
+            if existing:
+                account_id = existing.id
+            else:
+                step = "crear_account"
+                new_acc = Account(
+                    nombre=empresa_str,
+                    estado=data.get("estado_cliente") or data.get("estado"),
+                    num_sucursales=data.get("num_sucursales"),
+                    industria=data.get("tipo_industria"),
+                    tamano=data.get("tamano_empresa"),
+                    owner_id=asignado,
+                )
+                db.session.add(new_acc)
+                db.session.flush()
+                account_id = new_acc.id
+
+        # Auto-vincular Contact si viene nombre+telefono y no existe
+        contact_id = data.get("contact_id")
+        nombre_contacto = data.get("nombre")
+        if not contact_id and nombre_contacto and data.get("telefono"):
+            step = "buscar_contact"
+            existing_c = Contact.query.filter(Contact.telefono == data["telefono"]).first()
+            if existing_c:
+                contact_id = existing_c.id
+            else:
+                step = "crear_contact"
+                new_c = Contact(
+                    nombre=nombre_contacto, telefono=data["telefono"],
+                    whatsapp=data["telefono"], account_id=account_id,
+                )
+                db.session.add(new_c)
+                db.session.flush()
+                contact_id = new_c.id
+
+        step = "construir_lead"
+        lead = Lead(
+            nombre=data.get("nombre", "Sin nombre"),
+            telefono=data.get("telefono"),
+            empresa_nombre=empresa_str or None,  # legacy compat
+            account_id=account_id,
+            contact_id=contact_id,
+            estado_cliente=data.get("estado_cliente") or data.get("estado"),
+            origen=origen_enum,
+            marca_interes=marca,
+            etapa_pipeline=etapa,
+            cantidad_productos=cantidad,
+            precio_unitario=precio,
+            valor_estimado=valor,
+            usuario_asignado_id=asignado,
+            tipo_industria=data.get("tipo_industria"),
+            tamano_empresa=data.get("tamano_empresa"),
+            num_sucursales=data.get("num_sucursales"),
+            tipo_cliente=tipo_cliente_val,
+            tipo_venta=data.get("tipo_venta"),
+            notas=data.get("notas"),
+        )
+
+        step = "icp"
+        try:
+            _apply_icp(lead)
+        except Exception as icp_err:
+            current_app.logger.warning("[crear_lead] _apply_icp falló (continúo): %s", icp_err)
+
+        step = "commit"
+        db.session.add(lead)
         db.session.commit()
-    except Exception as e:
-        from flask import current_app
-        import traceback
-        db.session.rollback()
-        current_app.logger.error("[crear_lead] commit falló: %s\n%s", e, traceback.format_exc())
-        existing = Lead.query.filter_by(telefono=data.get("telefono")).first()
-        if existing:
-            return jsonify({"error": f"Ya existe un lead con este teléfono: {existing.nombre}", "lead": existing.to_dict()}), 409
-        # Devolvemos el detalle del error real para no requerir mirar los logs
-        msg = str(getattr(e, "orig", e))[:300]
-        return jsonify({"error": f"Error al crear lead: {type(e).__name__}: {msg}"}), 500
 
-    log_actividad("crear", "lead", lead.id, f"Lead creado: {lead.nombre} ({lead.telefono})")
-    socketio.emit("nuevo_lead", lead.to_dict())
-    return jsonify(lead.to_dict()), 201
+        step = "post_commit"
+        try:
+            log_actividad("crear", "lead", lead.id, f"Lead creado: {lead.nombre} ({lead.telefono})")
+        except Exception as e:
+            current_app.logger.warning("[crear_lead] log_actividad falló: %s", e)
+        try:
+            socketio.emit("nuevo_lead", lead.to_dict())
+        except Exception as e:
+            current_app.logger.warning("[crear_lead] socketio.emit falló: %s", e)
+
+        return jsonify(lead.to_dict()), 201
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error("[crear_lead] step=%s falló: %s\n%s", step, e, _tb.format_exc())
+        # Caso típico: dup por teléfono
+        if step == "commit":
+            existing = Lead.query.filter_by(telefono=data.get("telefono")).first()
+            if existing:
+                return jsonify({"error": f"Ya existe un lead con este teléfono: {existing.nombre}", "lead": existing.to_dict()}), 409
+        msg = str(getattr(e, "orig", e))[:400]
+        return jsonify({
+            "error": f"Error en paso '{step}': {type(e).__name__}: {msg}",
+            "step": step,
+        }), 500
 
 
 @leads_bp.route("/check-duplicate", methods=["GET"])
