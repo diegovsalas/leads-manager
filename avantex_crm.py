@@ -411,7 +411,9 @@ def _start_scheduler(app):
                     app.logger.warning(f"sdr engine ({unit}): {e}")
 
         scheduler = BackgroundScheduler(daemon=True)
-        scheduler.add_job(_run_cadencia, "interval", minutes=15, id="cadencia_followup")
+        # Cadencia automática PAUSADA mientras se afina la automatización de campañas.
+        # Reactivar descomentando la línea siguiente cuando los mappings campaign→marca/zona estén listos.
+        # scheduler.add_job(_run_cadencia, "interval", minutes=15, id="cadencia_followup")
         # Notificaciones diarias a las 9:00 AM CST (UTC-6 = 15:00 UTC)
         scheduler.add_job(
             _run_notificaciones, "cron",
@@ -484,7 +486,7 @@ def _start_scheduler(app):
             app.logger.info("LinkedIn Lead Gen polling activo (cada 5 min)")
 
         scheduler.start()
-        app.logger.info("Scheduler iniciado: cadencia (15 min) + notificaciones (9am) + backup (3am)")
+        app.logger.info("Scheduler iniciado: cadencia PAUSADA + notificaciones (9am) + backup (3am)")
     except Exception as e:
         app.logger.warning(f"No se pudo iniciar scheduler: {e}")
 
