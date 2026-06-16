@@ -378,6 +378,9 @@ def _start_scheduler(app):
                 try:
                     savio_sync.sync_invoices()
                     savio_sync.sync_payments()
+                    # Bridge Savio → CSInvoice cada hora para que el dashboard CS
+                    # vea pagos/facturas nuevas sin esperar al job de 6h.
+                    savio_sync.sync_savio_to_cs_invoices()
                 except Exception as e:
                     app.logger.warning(f"savio hourly: {e}")
 
@@ -388,7 +391,6 @@ def _start_scheduler(app):
                     savio_sync.sync_subscriptions()
                     savio_sync.sync_customers()
                     savio_sync.bridge_savio_to_cs_mrr()
-                    savio_sync.sync_savio_to_cs_invoices()
                 except Exception as e:
                     app.logger.warning(f"savio 6h: {e}")
 

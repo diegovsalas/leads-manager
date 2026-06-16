@@ -18,6 +18,7 @@ Pipeline:
 Diseño: idempotente. Cada sync se puede correr varias veces sin duplicar.
 """
 
+import os
 import sys
 import logging
 from datetime import date, datetime, timedelta, timezone
@@ -38,6 +39,11 @@ from savio_classifier import classify_subscription
 log = logging.getLogger("savio_sync")
 
 UEN_CUSTOM_FIELD_ID = 235
+
+# Ventana por defecto para sync incremental (invoices/payments). Antes 90d;
+# se amplió a 365d para que facturas viejas con pagos tardíos se refresquen.
+# Override via env: SAVIO_SYNC_WINDOW_DAYS.
+DEFAULT_SYNC_WINDOW_DAYS = int(os.getenv("SAVIO_SYNC_WINDOW_DAYS", "365"))
 
 
 def _extract_uen(record: dict) -> Optional[str]:
@@ -61,7 +67,7 @@ def _parse_date(value) -> Optional[date]:
         return None
 
 
-def _date_range_from(month: Optional[str], fallback_days: int = 90) -> tuple[str, str]:
+def _date_range_from(month: Optional[str], fallback_days: int = DEFAULT_SYNC_WINDOW_DAYS) -> tuple[str, str]:
     """Devuelve (start_date, end_date) en formato YYYY-MM-DD.
     Si month='YYYY-MM' usa el mes completo; si no, los últimos `fallback_days`."""
     if month and len(month) == 7 and month[4] == "-":
@@ -250,8 +256,8 @@ def sync_subscriptions() -> dict:
 
 
 def sync_invoices(month: Optional[str] = None) -> dict:
-    """Cursor-paginated. Filtro por mes (YYYY-MM) o últimos 90d."""
-    start_date, end_date = _date_range_from(month, fallback_days=90)
+    """Cursor-paginated. Filtro por mes (YYYY-MM) o por ventana DEFAULT_SYNC_WINDOW_DAYS."""
+    start_date, end_date = _date_range_from(month)
     count = 0
     for i in savio_client.list_invoices(start_date=start_date, end_date=end_date):
         iid = str(i.get("invoice_id"))
@@ -307,7 +313,7 @@ def sync_invoices(month: Optional[str] = None) -> dict:
 def sync_payments(month: Optional[str] = None) -> dict:
     """Cursor-paginated. Un payment puede aplicar a varias invoices; guardamos
     la primera invoice_id (el monto total queda en la fila del payment)."""
-    start_date, end_date = _date_range_from(month, fallback_days=90)
+    start_date, end_date = _date_range_from(month)
     count = 0
     for p in savio_client.list_payments(start_date=start_date, end_date=end_date):
         pid = str(p.get("payment_id"))
