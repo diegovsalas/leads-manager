@@ -176,12 +176,20 @@ def active_clients():
 # ── Sync trigger manual ────────────────────────────────────────────
 
 
-@savio_bp.route("/sync", methods=["POST"])
+@savio_bp.route("/sync", methods=["POST", "GET"])
 def trigger_sync():
-    """Dispara sync_all() on-demand. ?month=YYYY-MM filtra invoices+payments."""
+    """Dispara sync_all() on-demand.
+    Query params:
+      ?month=YYYY-MM   → filtra invoices+payments a ese mes
+      ?days=N          → override de ventana en días (default 365). Útil para
+                         rebuild histórico (ej. ?days=730).
+    Acepta GET para que sea pegable desde el navegador (sesión activa).
+    """
     month = request.args.get("month")
+    days_raw = request.args.get("days")
+    days = int(days_raw) if days_raw and days_raw.isdigit() else None
     try:
-        return jsonify(savio_sync.sync_all(month))
+        return jsonify(savio_sync.sync_all(month=month, days=days))
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500

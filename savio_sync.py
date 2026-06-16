@@ -255,9 +255,9 @@ def sync_subscriptions() -> dict:
     return {"count": count}
 
 
-def sync_invoices(month: Optional[str] = None) -> dict:
-    """Cursor-paginated. Filtro por mes (YYYY-MM) o por ventana DEFAULT_SYNC_WINDOW_DAYS."""
-    start_date, end_date = _date_range_from(month)
+def sync_invoices(month: Optional[str] = None, days: Optional[int] = None) -> dict:
+    """Cursor-paginated. Filtro por mes (YYYY-MM) o por `days` días (default DEFAULT_SYNC_WINDOW_DAYS)."""
+    start_date, end_date = _date_range_from(month, fallback_days=days or DEFAULT_SYNC_WINDOW_DAYS)
     count = 0
     for i in savio_client.list_invoices(start_date=start_date, end_date=end_date):
         iid = str(i.get("invoice_id"))
@@ -310,10 +310,10 @@ def sync_invoices(month: Optional[str] = None) -> dict:
     return {"count": count, "start_date": start_date, "end_date": end_date}
 
 
-def sync_payments(month: Optional[str] = None) -> dict:
+def sync_payments(month: Optional[str] = None, days: Optional[int] = None) -> dict:
     """Cursor-paginated. Un payment puede aplicar a varias invoices; guardamos
     la primera invoice_id (el monto total queda en la fila del payment)."""
-    start_date, end_date = _date_range_from(month)
+    start_date, end_date = _date_range_from(month, fallback_days=days or DEFAULT_SYNC_WINDOW_DAYS)
     count = 0
     for p in savio_client.list_payments(start_date=start_date, end_date=end_date):
         pid = str(p.get("payment_id"))
@@ -518,16 +518,18 @@ def sync_savio_to_cs_invoices(account_id: Optional[str] = None) -> dict:
     return summary
 
 
-def sync_all(month: Optional[str] = None) -> dict:
-    """Orquesta los 4 syncs en orden seguro. No corta si uno falla."""
+def sync_all(month: Optional[str] = None, days: Optional[int] = None) -> dict:
+    """Orquesta los syncs en orden seguro + propaga al espejo CS.
+    No corta si uno falla. `days` override de ventana solo aplica a invoices+payments."""
     t0 = datetime.now(timezone.utc)
     result = {}
     for name, fn, args in [
-        ("invoices", sync_invoices, (month,)),
-        ("payments", sync_payments, (month,)),
-        ("subscriptions", sync_subscriptions, ()),
-        ("customers", sync_customers, ()),
-        ("bridge_cs_mrr", bridge_savio_to_cs_mrr, ()),
+        ("invoices",          sync_invoices,             (month, days)),
+        ("payments",          sync_payments,             (month, days)),
+        ("subscriptions",     sync_subscriptions,        ()),
+        ("customers",         sync_customers,            ()),
+        ("bridge_cs_mrr",     bridge_savio_to_cs_mrr,    ()),
+        ("cs_invoices_mirror", sync_savio_to_cs_invoices, ()),
     ]:
         try:
             result[name] = fn(*args)
