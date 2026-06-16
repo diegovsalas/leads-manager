@@ -1460,9 +1460,12 @@ fbq('track','PageView');
       <div class="dash-card-title">Cuentas CS bajo gestion</div>
       <div class="table-wrap"><table>
         <thead><tr>
-          <th>Cuenta</th><th>RFCs vinculados</th><th style="text-align:right;">Facturado</th>
-          <th style="text-align:right;">Pagado</th><th style="text-align:right;">Pendiente</th>
-          <th style="text-align:right;"># facturas</th><th>Acciones</th>
+          <th>Cuenta</th><th>RFCs vinculados</th>
+          <th style="text-align:right;">Facturado<br><span style="font-weight:400;font-size:10px;color:var(--text3);">Histórico · Este mes</span></th>
+          <th style="text-align:right;">Pagado<br><span style="font-weight:400;font-size:10px;color:var(--text3);">Histórico · Este mes</span></th>
+          <th style="text-align:right;">Pendiente<br><span style="font-weight:400;font-size:10px;color:var(--text3);">Histórico · Este mes</span></th>
+          <th style="text-align:right;"># facturas<br><span style="font-weight:400;font-size:10px;color:var(--text3);">Histórico · Este mes</span></th>
+          <th>Acciones</th>
         </tr></thead>
         <tbody id="vinc-tbody"></tbody>
       </table></div>
@@ -2201,13 +2204,26 @@ async function loadVincular(){
   if(!data){tb.innerHTML='<tr><td colspan="7" style="color:var(--red);text-align:center;padding:12px;">Error cargando</td></tr>';return;}
   for(const a of data){
     const rfcsTxt=a.rfcs.length?a.rfcs.map(r=>`<span style="font-family:var(--mono);font-size:11px;background:var(--bg-tag);padding:2px 6px;border-radius:4px;margin-right:4px;">${r.rfc}</span>`).join(''):'<span style="color:var(--text3);font-size:11px;">— sin vincular —</span>';
+    const mesLbl = a.mes_label || '';
     tb.innerHTML+=`<tr>
       <td><strong>${a.nombre}</strong> <span style="font-family:var(--mono);font-size:10px;color:var(--text3);">${a.client_id||''}</span></td>
       <td>${rfcsTxt}</td>
-      <td style="text-align:right;">${_fmtMxn(a.facturacion_q1)}</td>
-      <td style="text-align:right;color:var(--green);">${_fmtMxn(a.pagado_q1)}</td>
-      <td style="text-align:right;color:var(--orange);">${_fmtMxn(a.pendiente_q1)}</td>
-      <td style="text-align:right;">${a.num_facturas_q1}</td>
+      <td style="text-align:right;">
+        <div>${_fmtMxn(a.facturacion_q1)}</div>
+        <div style="font-size:11px;color:var(--text2);" title="Facturado en ${mesLbl}">${_fmtMxn(a.facturacion_mes)}</div>
+      </td>
+      <td style="text-align:right;color:var(--green);">
+        <div>${_fmtMxn(a.pagado_q1)}</div>
+        <div style="font-size:11px;opacity:.8;" title="Pagado en ${mesLbl}">${_fmtMxn(a.pagado_mes)}</div>
+      </td>
+      <td style="text-align:right;color:var(--orange);">
+        <div>${_fmtMxn(a.pendiente_q1)}</div>
+        <div style="font-size:11px;opacity:.8;" title="Pendiente en ${mesLbl}">${_fmtMxn(a.pendiente_mes)}</div>
+      </td>
+      <td style="text-align:right;">
+        <div>${a.num_facturas_q1}</div>
+        <div style="font-size:11px;color:var(--text2);" title="Facturas en ${mesLbl}">${a.num_facturas_mes}</div>
+      </td>
       <td>
         <button class="btn" onclick='openVincModal(${JSON.stringify({id:a.id,nombre:a.nombre,rfcs:a.rfcs}).replace(/'/g,"&apos;")})' style="font-size:11px;padding:4px 8px;">Vincular RFCs</button>
         <button class="btn" onclick='syncOneCs("${a.id}","${a.nombre}")' style="font-size:11px;padding:4px 8px;">Sync</button>

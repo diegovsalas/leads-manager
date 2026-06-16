@@ -9,14 +9,14 @@ Customer master CRUD. Webhook receiver con HMAC.
 import hashlib
 import hmac
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from flask import Blueprint, request, jsonify
 from sqlalchemy import func, or_
 
 from extensions import db
 from models import (
     SavioCustomer, SavioSubscription, SavioInvoice, SavioPayment,
-    CustomerMaster, CustomerRfc,
+    CustomerMaster, CustomerRfc, CSInvoice,
 )
 from savio_mrr import mrr_report
 import savio_sync
@@ -244,21 +244,74 @@ def merge_masters(master_id):
 
 @savio_bp.route("/cs-accounts", methods=["GET"])
 def list_cs_accounts_with_links():
-    """Devuelve las cuentas CS con su vínculo Savio actual (master + RFCs +
-    rollups). Para la UI de vinculación."""
+    """Devuelve las cuentas CS con su vínculo Savio actual (master + RFCs).
+    Incluye dos rollups de facturación por cuenta:
+      - histórico: todos los cs_invoices (campo legacy facturacion_q1 etc.)
+      - mes: filtrado a un mes específico (default = mes actual, override ?month=YYYY-MM)
+    """
     from models import CSAccount as _CSA
+
+    # Calcular ventana del mes
+    month_param = (request.args.get("month") or "").strip()
+    hoy = date.today()
+    if len(month_param) == 7 and month_param[4] == "-":
+        try:
+            y, m = int(month_param[:4]), int(month_param[5:7])
+            mes_inicio = date(y, m, 1)
+        except ValueError:
+            mes_inicio = hoy.replace(day=1)
+    else:
+        mes_inicio = hoy.replace(day=1)
+    if mes_inicio.month == 12:
+        mes_fin = date(mes_inicio.year + 1, 1, 1)
+    else:
+        mes_fin = date(mes_inicio.year, mes_inicio.month + 1, 1)
+
     accounts = _CSA.query.order_by(_CSA.nombre.asc()).all()
+
+    # Rollups del mes en una sola query agrupada para evitar N+1
+    mes_rows = (
+        db.session.query(
+            CSInvoice.account_id,
+            func.coalesce(func.sum(CSInvoice.total), 0),
+            func.coalesce(func.sum(CSInvoice.pagado), 0),
+            func.coalesce(func.sum(CSInvoice.pendiente), 0),
+            func.count(CSInvoice.id),
+        )
+        .filter(CSInvoice.fecha_cobro >= mes_inicio, CSInvoice.fecha_cobro < mes_fin)
+        .group_by(CSInvoice.account_id)
+        .all()
+    )
+    mes_map = {
+        str(r[0]): {
+            "facturacion": float(r[1] or 0),
+            "pagado": float(r[2] or 0),
+            "pendiente": float(r[3] or 0),
+            "num_facturas": int(r[4] or 0),
+        }
+        for r in mes_rows
+    }
+    mes_vacio = {"facturacion": 0.0, "pagado": 0.0, "pendiente": 0.0, "num_facturas": 0}
+
     out = []
     for acc in accounts:
         master = CustomerMaster.query.filter_by(cs_account_id=acc.id).first()
         rfcs = master.rfcs if master else []
+        mes = mes_map.get(str(acc.id), mes_vacio)
         out.append({
             "id": str(acc.id), "client_id": acc.client_id or "",
             "nombre": acc.nombre,
+            # Histórico global (todas las cs_invoices)
             "facturacion_q1": float(acc.facturacion_q1 or 0),
             "pagado_q1": float(acc.pagado_q1 or 0),
             "pendiente_q1": float(acc.pendiente_q1 or 0),
             "num_facturas_q1": int(acc.num_facturas_q1 or 0),
+            # Mes (default = mes actual)
+            "facturacion_mes": mes["facturacion"],
+            "pagado_mes": mes["pagado"],
+            "pendiente_mes": mes["pendiente"],
+            "num_facturas_mes": mes["num_facturas"],
+            "mes_label": mes_inicio.strftime("%Y-%m"),
             "master_id": master.id if master else None,
             "rfcs": [r.to_dict() for r in rfcs],
         })
