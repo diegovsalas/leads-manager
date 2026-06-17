@@ -141,7 +141,11 @@ def asignar_lead_comercial(datos_lead: dict) -> Lead:
       4. Desempate: mejor % conversión
     """
     marca = datos_lead.get("marca_interes", "")
-    estado = normalizar_estado(datos_lead.get("estado", ""))
+    # Aceptar tanto "estado" como "estado_cliente" (el polling y el modal
+    # usan distinta key — ambas son válidas y representan el mismo dato).
+    estado = normalizar_estado(
+        datos_lead.get("estado") or datos_lead.get("estado_cliente") or ""
+    )
 
     # ── 1. Filtrar por marca + en_turno ──
     candidatos = (

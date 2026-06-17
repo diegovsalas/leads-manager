@@ -28,8 +28,12 @@ DIRECTOR_MAX_TOKENS = 1500
 CLAUDE_PRICE_IN_PER_MTOK = 3.0
 CLAUDE_PRICE_OUT_PER_MTOK = 15.0
 
-META_ACCOUNTS = ["aromatex_b2c", "aromatex_b2b"]  # weldu excluido (spec legacy)
-META_UNIT_BY_ACCOUNT = {"aromatex_b2c": "aromatex_b2c", "aromatex_b2b": "aromatex_b2b"}
+META_ACCOUNTS = ["aromatex_b2c", "aromatex_b2b", "weldu"]
+META_UNIT_BY_ACCOUNT = {
+    "aromatex_b2c": "aromatex_b2c",
+    "aromatex_b2b": "aromatex_b2b",
+    "weldu":        "weldex",
+}
 
 GOOGLE_CUSTOMER_IDS = {
     "aromatex_business": "4237414897",

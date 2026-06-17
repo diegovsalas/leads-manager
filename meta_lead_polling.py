@@ -114,6 +114,7 @@ def _create_lead_from_api(lead_data, page_name=""):
     from extensions import db, socketio
     from models import Lead, EtapaPipeline, OrigenLead
     from asignacion import asignar_lead_comercial
+    import meta_campaign_registry
 
     meta_lead_id = lead_data.get("id")
     form_id = lead_data.get("form_id")
@@ -156,35 +157,44 @@ def _create_lead_from_api(lead_data, page_name=""):
     if extras:
         notas_formulario = " | ".join(f"{k}: {v}" for k, v in extras.items())
 
+    # Payload base
+    datos = {
+        "telefono": telefono,
+        "nombre": nombre,
+        "origen": OrigenLead.META_ADS.value,
+        "marca_interes": marca,
+        "empresa_nombre": empresa[:200] if empresa else None,
+        "estado_cliente": estado[:100] if estado else None,
+        "notas": notas_formulario or None,
+        "meta_lead_id": meta_lead_id,
+        "meta_form_id": form_id,
+        "meta_ad_id": ad_id,
+        "meta_campaign": campaign_id,
+    }
+
+    # Enriquecer con el registry de campañas (override marca, default estado,
+    # tag de unidad para reporting). No-op si la campaña no está registrada.
+    meta_campaign_registry.aplicar_a_lead(datos, campaign_id)
+    if datos.get("meta_campaign_nombre"):
+        log.info(f"Lead {meta_lead_id} matcheó campaña registrada: {datos['meta_campaign_nombre']}")
+
     try:
-        nuevo_lead = asignar_lead_comercial({
-            "telefono": telefono,
-            "nombre": nombre,
-            "origen": OrigenLead.META_ADS.value,
-            "marca_interes": marca,
-            "empresa_nombre": empresa[:200] if empresa else None,
-            "estado_cliente": estado[:100] if estado else None,
-            "notas": notas_formulario or None,
-            "meta_lead_id": meta_lead_id,
-            "meta_form_id": form_id,
-            "meta_ad_id": ad_id,
-            "meta_campaign": campaign_id,
-        })
+        nuevo_lead = asignar_lead_comercial(datos)
         log.info(f"Lead polling creado: {nuevo_lead.id} ({nombre})")
     except ValueError:
         nuevo_lead = Lead(
-            telefono=telefono,
-            nombre=nombre,
+            telefono=datos["telefono"],
+            nombre=datos["nombre"],
             origen=OrigenLead.META_ADS,
-            marca_interes=marca,
-            empresa_nombre=empresa[:200] if empresa else None,
-            estado_cliente=estado[:100] if estado else None,
-            notas=notas_formulario or None,
+            marca_interes=datos.get("marca_interes") or "",
+            empresa_nombre=datos.get("empresa_nombre"),
+            estado_cliente=datos.get("estado_cliente"),
+            notas=datos.get("notas"),
             etapa_pipeline=EtapaPipeline.NUEVO_LEAD,
-            meta_lead_id=meta_lead_id,
-            meta_form_id=form_id,
-            meta_ad_id=ad_id,
-            meta_campaign=campaign_id,
+            meta_lead_id=datos.get("meta_lead_id"),
+            meta_form_id=datos.get("meta_form_id"),
+            meta_ad_id=datos.get("meta_ad_id"),
+            meta_campaign=datos.get("meta_campaign"),
         )
         db.session.add(nuevo_lead)
         db.session.commit()
