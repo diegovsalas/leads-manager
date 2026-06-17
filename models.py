@@ -230,10 +230,36 @@ class Lead(db.Model):
             return self.cantidad_productos * self.precio_unitario
         return self.valor_estimado
 
+    @property
+    def meta_campaign_info(self):
+        """Devuelve dict con nombre y unidad de la campaña Meta (resuelto via
+        registry), o None si la campaña no está registrada."""
+        if not self.meta_campaign:
+            return None
+        try:
+            import meta_campaign_registry
+            return meta_campaign_registry.lookup(self.meta_campaign)
+        except Exception:
+            return None
+
     def to_dict(self):
         vendedor = self.usuario_asignado.to_dict() if self.usuario_asignado else None
         ultimo_msg = self.mensajes.order_by(MensajeWhatsapp.timestamp.desc()).first()
         valor = self.valor_calculado
+
+        # Resolver nombre + unidad de la campaña Meta desde el registry
+        meta_campaign_nombre = None
+        meta_campaign_unit = None
+        if self.meta_campaign:
+            try:
+                import meta_campaign_registry
+                _meta = meta_campaign_registry.lookup(self.meta_campaign)
+                if _meta:
+                    meta_campaign_nombre = _meta.get("nombre")
+                    meta_campaign_unit = _meta.get("unidad")
+            except Exception:
+                pass
+
         return {
             "id": str(self.id),
             "telefono": self.telefono,
@@ -264,6 +290,8 @@ class Lead(db.Model):
             "meta_form_id": self.meta_form_id,
             "meta_ad_id": self.meta_ad_id,
             "meta_campaign": self.meta_campaign,
+            "meta_campaign_nombre": meta_campaign_nombre,
+            "meta_campaign_unit": meta_campaign_unit,
             "usuario_asignado": vendedor,
             "fecha_creacion": self.fecha_creacion.isoformat(),
             "fecha_actualizacion": self.fecha_actualizacion.isoformat(),

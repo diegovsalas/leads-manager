@@ -601,6 +601,7 @@ fbq('track','PageView');
             {% endif %}
             <div class="k-card-tags">
               {% if lead.marca_interes %}<span class="tag tag-marca">{{ lead.marca_interes }}</span>{% endif %}
+              {% if lead.meta_campaign_info %}<span class="tag" style="background:#e0e7ff;color:#3730a3;font-weight:600;" title="{{ lead.meta_campaign_info.nombre }}">📣 {{ lead.meta_campaign_info.nombre }}</span>{% elif lead.meta_campaign %}<span class="tag" style="background:#f3f4f6;color:#6b7280;font-family:var(--mono);font-size:10px;" title="Campaign ID Meta (no registrada)">📣 {{ lead.meta_campaign[-10:] }}</span>{% endif %}
               {% if lead.valor_calculado %}<span class="tag tag-valor">${{ "{:,.0f}".format(lead.valor_calculado) }}</span>{% endif %}
               {% if lead.tipo_cliente == 'Recurrente' %}<span class="tag" style="background:#dcfce7;color:#16a34a;">Cliente recurrente</span>{% endif %}
               {% if lead.tipo_cliente == 'Eventual' %}<span class="tag" style="background:#dbeafe;color:#2563eb;">Cliente eventual</span>{% endif %}
@@ -1845,7 +1846,9 @@ fbq('track','PageView');
 
     <div class="lp-section" id="lp-meta-section" style="display:none;">
       <div class="lp-section-title">Atribución Meta Ads</div>
-      <div class="lp-field"><span class="lp-field-label">Campaña</span><span class="lp-field-value" style="font-family:var(--mono);font-size:11px;" id="lp-meta-campaign"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Campaña</span><span class="lp-field-value" id="lp-meta-campaign-nombre" style="font-weight:600;"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Unidad</span><span class="lp-field-value" id="lp-meta-campaign-unit"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Campaign ID</span><span class="lp-field-value" style="font-family:var(--mono);font-size:11px;color:var(--text3);" id="lp-meta-campaign"></span></div>
       <div class="lp-field"><span class="lp-field-label">Formulario</span><span class="lp-field-value" style="font-family:var(--mono);font-size:11px;" id="lp-meta-form"></span></div>
       <div class="lp-field"><span class="lp-field-label">Ad ID</span><span class="lp-field-value" style="font-family:var(--mono);font-size:11px;" id="lp-meta-ad"></span></div>
       <div class="lp-field"><span class="lp-field-label">Lead ID Meta</span><span class="lp-field-value" style="font-family:var(--mono);font-size:11px;" id="lp-meta-lead"></span></div>
@@ -3314,6 +3317,8 @@ async function abrirLeadPanel(id){
     const hasMetaData=l.meta_lead_id||l.meta_form_id||l.meta_campaign||l.meta_ad_id;
     document.getElementById('lp-meta-section').style.display=hasMetaData?'':'none';
     if(hasMetaData){
+      document.getElementById('lp-meta-campaign-nombre').textContent=l.meta_campaign_nombre||'(campaña no registrada)';
+      document.getElementById('lp-meta-campaign-unit').textContent=l.meta_campaign_unit||'—';
       document.getElementById('lp-meta-campaign').textContent=l.meta_campaign||'—';
       document.getElementById('lp-meta-form').textContent=l.meta_form_id||'—';
       document.getElementById('lp-meta-ad').textContent=l.meta_ad_id||'—';
