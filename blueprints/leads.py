@@ -156,9 +156,19 @@ def crear_lead():
         except ValueError:
             pass
 
-    # Asignación: si manual y no viene usuario_asignado_id, usar el usuario en sesión.
-    # Solo usuario_id (FK a usuarios). NO caer a user_id (es FK a users, FK violation).
+    # Asignación: orden de prioridad
+    #   1. usuario_asignado_id explícito en el payload
+    #   2. session["usuario_id"] (perfil comercial, populado en login)
+    #   3. Fallback: derivar de users_crm.usuario_id usando session["user_id"]
+    #      Esto evita que un usuario con sesión "stale" (logueado antes de
+    #      vincular su perfil) cree leads sin asignar.
     asignado = data.get("usuario_asignado_id") or session.get("usuario_id")
+    if not asignado and session.get("user_id"):
+        from models import UserCRM
+        uc = db.session.get(UserCRM, session["user_id"])
+        if uc and uc.usuario_id:
+            asignado = str(uc.usuario_id)
+            session["usuario_id"] = asignado  # refresca para próximas requests
 
     # Validar tipo_cliente contra el CHECK del DB (Recurrente|Eventual) — todo
     # lo demás (incluido "Nuevo" del modal viejo) se mapea a NULL para evitar
@@ -173,6 +183,10 @@ def crear_lead():
 
     account_id = data.get("account_id")
     empresa_str = (data.get("empresa_nombre") or data.get("empresa") or "").strip()
+    _estado_in     = data.get("estado_cliente") or data.get("estado")
+    _industria_in  = data.get("tipo_industria")
+    _tamano_in     = data.get("tamano_empresa")
+    _sucursales_in = data.get("num_sucursales")
     step = "init"
     try:
         if not account_id and empresa_str:
@@ -182,14 +196,21 @@ def crear_lead():
             ).first()
             if existing:
                 account_id = existing.id
+                # Backfill: si la cuenta vieja no tenía estos datos y el modal
+                # los provee ahora, llenarlos (no overwrite si ya hay valor).
+                if _estado_in     and not existing.estado:           existing.estado          = _estado_in
+                if _industria_in  and not existing.industria:        existing.industria       = _industria_in
+                if _tamano_in     and not existing.tamano:           existing.tamano          = _tamano_in
+                if _sucursales_in and not existing.num_sucursales:   existing.num_sucursales  = _sucursales_in
+                if asignado       and not existing.owner_id:         existing.owner_id        = asignado
             else:
                 step = "crear_account"
                 new_acc = Account(
                     nombre=empresa_str,
-                    estado=data.get("estado_cliente") or data.get("estado"),
-                    num_sucursales=data.get("num_sucursales"),
-                    industria=data.get("tipo_industria"),
-                    tamano=data.get("tamano_empresa"),
+                    estado=_estado_in,
+                    num_sucursales=_sucursales_in,
+                    industria=_industria_in,
+                    tamano=_tamano_in,
                     owner_id=asignado,
                 )
                 db.session.add(new_acc)

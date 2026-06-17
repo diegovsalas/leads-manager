@@ -3904,8 +3904,8 @@ applyRoleVisibility();
       </div>
       <div class="nl-row two">
         <div>
-          <label class="nl-label">Estado</label>
-          <select class="nl-input" id="nl-estado">
+          <label class="nl-label">Estado *</label>
+          <select class="nl-input" id="nl-estado" required>
             <option value="">— Seleccionar —</option>
           </select>
         </div>
@@ -3917,6 +3917,16 @@ applyRoleVisibility();
       <div class="nl-row">
         <label class="nl-label">Unidad de negocio *</label>
         <div class="nl-pills" id="nl-unidad-pills"></div>
+      </div>
+      <div class="nl-row two">
+        <div>
+          <label class="nl-label">Industria *</label>
+          <select class="nl-input" id="nl-industria" required><option value="">— Seleccionar —</option></select>
+        </div>
+        <div>
+          <label class="nl-label">Tamaño empresa</label>
+          <select class="nl-input" id="nl-tamano"><option value="">—</option></select>
+        </div>
       </div>
       <div class="nl-row">
         <label class="nl-label">Origen</label>
@@ -3952,16 +3962,6 @@ applyRoleVisibility();
       <details class="nl-collapse">
         <summary>Calificar más (opcional) — ICP <span class="nl-icp D" id="nl-icp-badge">D</span></summary>
         <div style="padding-top:8px;">
-          <div class="nl-row two">
-            <div>
-              <label class="nl-label">Industria</label>
-              <select class="nl-input" id="nl-industria"><option value="">—</option></select>
-            </div>
-            <div>
-              <label class="nl-label">Tamaño empresa</label>
-              <select class="nl-input" id="nl-tamano"><option value="">—</option></select>
-            </div>
-          </div>
           <div class="nl-row two">
             <div>
               <label class="nl-label">Cantidad productos</label>
@@ -4932,6 +4932,11 @@ async function nlSubmit(mode){
   if(!phone||phone.length<10){_nlToast('Teléfono inválido (mínimo 10 dígitos)',true);return;}
   if(!nombre){_nlToast('Falta nombre del contacto',true);return;}
   if(!unidad){_nlToast('Seleccioná una unidad de negocio',true);return;}
+  const isB2C_check=document.getElementById('nl-b2c').checked;
+  if(!isB2C_check){
+    if(!estado){_nlToast('Seleccioná el Estado del cliente',true);document.getElementById('nl-estado').focus();return;}
+    if(!industria){_nlToast('Seleccioná la Industria del cliente',true);document.getElementById('nl-industria').focus();return;}
+  }
 
   const phoneNorm=phone.length===10?'52'+phone:phone;
 
