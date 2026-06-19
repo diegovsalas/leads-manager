@@ -432,6 +432,54 @@ class EstadoBotInterno(db.Model):
 
 
 # ──────────────────────────────────────────────
+# Tabla: sales_emails — correos salientes de vendedores (monitoreo Gmail)
+# ──────────────────────────────────────────────
+class SalesEmail(db.Model):
+    """Correo enviado por un vendedor desde su Gmail corporativo a un destinatario
+    EXTERNO (no @grupoavantex.com). Populado por gmail_monitor.poll() cada 5 min.
+
+    No se vincula a leads — el propósito es auditar volumen y contenido del
+    seguimiento que cada vendedor da (cotizaciones, follow-ups, etc.).
+    """
+    __tablename__ = "sales_emails"
+
+    id               = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    vendedor_id      = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id", ondelete="CASCADE"),
+                                 nullable=False, index=True)
+    gmail_message_id = db.Column(db.Text, nullable=False, unique=True)
+    gmail_thread_id  = db.Column(db.Text, nullable=True, index=True)
+    sent_at          = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
+    from_email       = db.Column(db.Text, nullable=False)
+    to_emails        = db.Column(ARRAY(db.Text), nullable=False, default=list, server_default="{}")
+    cc_emails        = db.Column(ARRAY(db.Text), nullable=False, default=list, server_default="{}")
+    subject          = db.Column(db.Text, nullable=True)
+    snippet          = db.Column(db.Text, nullable=True)  # primeros 200 chars del body
+    has_attachment   = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
+    created_at       = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    vendedor = db.relationship("Usuario", foreign_keys=[vendedor_id])
+
+    def to_dict(self):
+        return {
+            "id":              str(self.id),
+            "vendedor_id":     str(self.vendedor_id),
+            "vendedor_nombre": self.vendedor.nombre if self.vendedor else None,
+            "gmail_message_id": self.gmail_message_id,
+            "gmail_thread_id": self.gmail_thread_id,
+            "sent_at":         self.sent_at.isoformat() if self.sent_at else None,
+            "from_email":      self.from_email,
+            "to_emails":       list(self.to_emails or []),
+            "cc_emails":       list(self.cc_emails or []),
+            "subject":         self.subject,
+            "snippet":         self.snippet,
+            "has_attachment":  self.has_attachment,
+            # Deep-link al hilo en Gmail para que el admin abra el correo completo
+            "gmail_url":       (f"https://mail.google.com/mail/u/0/#all/{self.gmail_thread_id}"
+                                if self.gmail_thread_id else None),
+        }
+
+
+# ──────────────────────────────────────────────
 # Tabla: meta_campaigns — registry editable de campañas Meta Ads
 # ──────────────────────────────────────────────
 class MetaCampaign(db.Model):

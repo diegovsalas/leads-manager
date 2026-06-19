@@ -360,6 +360,7 @@ fbq('track','PageView');
     <div class="slink admin-only" onclick="showView('roi',this)">&#128202; <span class="sl-text">Marketing ROI</span></div>
     <div class="slink admin-only" onclick="showView('scip',this)">&#127919; <span class="sl-text">SCIP Director</span></div>
     <div class="slink admin-only" onclick="showView('campanas',this)">&#128226; <span class="sl-text">Campañas Meta</span></div>
+    <div class="slink admin-only" onclick="showView('correos',this)">&#128231; <span class="sl-text">Correos vendedores</span></div>
 
     <div class="sidebar-divider admin-only"></div>
     <div class="sidebar-section admin-only">Administracion</div>
@@ -1708,6 +1709,61 @@ fbq('track','PageView');
   </div>
 </div>
 
+<!-- ===== CORREOS VENDEDORES ===== -->
+<div class="view" id="view-correos" style="overflow-y:auto;">
+  <div class="page-header">
+    <div class="page-emoji">&#128231;</div>
+    <div class="page-title">Correos vendedores</div>
+    <div class="page-desc">Monitoreo de correos salientes a destinatarios externos (excluyendo @grupoavantex.com). Datos: asunto + snippet 200 chars + destinatario, no el cuerpo completo. Click en cualquier correo para abrir el hilo en Gmail.</div>
+  </div>
+  <div style="padding:20px 48px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <button class="btn btn-filled" onclick="loadCorreos()" style="font-size:13px;">Refrescar</button>
+    <button class="btn" onclick="triggerCorreosPoll()" style="font-size:13px;">Forzar poll ahora</button>
+    <span id="correos-status" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
+  </div>
+  <div style="padding:0 48px 20px;">
+    <!-- KPI row -->
+    <div class="grid g-4 mb-4" id="correos-totales" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;"></div>
+    <div class="dash-card">
+      <div class="dash-card-title">Por vendedor</div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Vendedor</th><th>Email Gmail</th>
+          <th style="text-align:right;">Hoy</th>
+          <th style="text-align:right;">7 días</th>
+          <th style="text-align:right;">30 días</th>
+          <th>Último envío</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="correos-tbody"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<!-- Drawer: lista de correos de un vendedor -->
+<div id="correos-drawer" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;align-items:center;justify-content:flex-end;">
+  <div style="background:var(--bg-card);width:760px;max-width:96%;height:100vh;display:flex;flex-direction:column;">
+    <div style="padding:16px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:11px;color:var(--text3);">Correos enviados</div>
+        <h3 id="correos-drawer-title" style="margin:2px 0 0;font-size:18px;">Vendedor</h3>
+      </div>
+      <button class="btn" onclick="closeCorreosDrawer()" style="font-size:11px;">Cerrar</button>
+    </div>
+    <div style="padding:12px 22px;border-bottom:1px solid var(--border-light);display:flex;gap:10px;align-items:center;font-size:12px;">
+      <span>Ventana:</span>
+      <select id="correos-days" onchange="loadCorreosDeUnVendedor()" style="font-size:12px;padding:3px 8px;">
+        <option value="1">Hoy</option>
+        <option value="7" selected>7 días</option>
+        <option value="30">30 días</option>
+      </select>
+      <span id="correos-drawer-status" style="margin-left:auto;color:var(--text2);"></span>
+    </div>
+    <div id="correos-drawer-list" style="flex:1;overflow-y:auto;padding:8px 22px 22px;"></div>
+  </div>
+</div>
+
 <!-- ===== SCIP DIRECTOR ===== -->
 <div class="view" id="view-scip" style="overflow-y:auto;">
   <div class="page-header">
@@ -2144,6 +2200,7 @@ function showView(name,el){
   if(name==='roi')loadRoi();
   if(name==='scip')loadScip();
   if(name==='campanas')loadCampanas();
+  if(name==='correos')loadCorreos();
   if(name==='opps')loadOpps();
   if(name==='accounts')loadAccounts();
   if(name==='contacts')loadContacts();
@@ -2540,6 +2597,110 @@ async function deleteCampana(cid, nombre){
 }
 
 function _esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+// ── Correos vendedores (Gmail monitoring) ──
+let _correosVendedorActual = null;
+
+async function loadCorreos(){
+  const status=document.getElementById('correos-status');
+  status.textContent='Cargando...';
+  try{
+    const r=await fetch('/api/sales-emails/stats');
+    if(r.status===403){status.textContent='Solo Super Admin';return;}
+    const d=await r.json();
+    if(!d.configurado){
+      status.innerHTML='<span style="color:var(--orange);">⚠ GMAIL_SERVICE_ACCOUNT_JSON no configurado en Render</span>';
+    }else{
+      status.textContent=`${d.vendedores.length} vendedores monitoreados · excluyendo @${d.internal_dom}`;
+    }
+
+    // KPI totales
+    const t=d.totales||{hoy:0,'7d':0,'30d':0};
+    const totalesEl=document.getElementById('correos-totales');
+    totalesEl.innerHTML=`
+      <div class="kpi"><div class="label">Hoy</div><div class="value">${t.hoy}</div><div class="foot"><span class="muted">correos externos</span></div></div>
+      <div class="kpi"><div class="label">Últimos 7 días</div><div class="value">${t['7d']}</div><div class="foot"><span class="muted">promedio ${(t['7d']/7).toFixed(1)}/día</span></div></div>
+      <div class="kpi"><div class="label">Últimos 30 días</div><div class="value">${t['30d']}</div><div class="foot"><span class="muted">promedio ${(t['30d']/30).toFixed(1)}/día</span></div></div>
+      <div class="kpi"><div class="label">Vendedores</div><div class="value">${d.vendedores.length}</div><div class="foot"><span class="muted">con Gmail vinculado</span></div></div>
+    `;
+
+    const tb=document.getElementById('correos-tbody');tb.innerHTML='';
+    for(const v of (d.vendedores||[])){
+      const ultimo = v.ultimo_envio ? new Date(v.ultimo_envio).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'}) : '<span style="color:var(--text3);">—</span>';
+      tb.innerHTML+=`<tr>
+        <td><strong>${_esc(v.vendedor)}</strong><br><span style="font-size:10px;color:var(--text3);">${(v.marcas||[]).join(', ')}</span></td>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--text2);">${_esc(v.gmail_address)}</td>
+        <td style="text-align:right;font-weight:600;">${v.hoy}</td>
+        <td style="text-align:right;">${v['7d']}</td>
+        <td style="text-align:right;">${v['30d']}</td>
+        <td style="font-size:12px;color:var(--text2);">${ultimo}</td>
+        <td><button class="btn" onclick="openCorreosDrawer('${v.vendedor_id}','${_esc(v.vendedor)}')" style="font-size:11px;padding:4px 10px;">Ver correos</button></td>
+      </tr>`;
+    }
+    if(!tb.innerHTML)tb.innerHTML='<tr><td colspan="7" style="color:var(--text2);text-align:center;padding:14px;">Sin vendedores con Gmail vinculado</td></tr>';
+  }catch(e){status.textContent='Error: '+e.message;}
+}
+
+async function triggerCorreosPoll(){
+  const status=document.getElementById('correos-status');
+  status.textContent='Polling Gmail...';
+  try{
+    const r=await fetch('/api/sales-emails/poll?lookback_min=60',{method:'POST'});
+    const d=await r.json();
+    if(d.error){status.textContent='Error: '+d.error;return;}
+    status.textContent=`Poll OK: ${d.total_saved||0} correos nuevos guardados`;
+    setTimeout(loadCorreos, 800);
+  }catch(e){status.textContent='Error: '+e.message;}
+}
+
+function openCorreosDrawer(vendedorId, vendedorNombre){
+  _correosVendedorActual = vendedorId;
+  document.getElementById('correos-drawer-title').textContent=vendedorNombre;
+  document.getElementById('correos-drawer').style.display='flex';
+  loadCorreosDeUnVendedor();
+}
+function closeCorreosDrawer(){
+  document.getElementById('correos-drawer').style.display='none';
+  _correosVendedorActual=null;
+}
+
+async function loadCorreosDeUnVendedor(){
+  if(!_correosVendedorActual)return;
+  const days=document.getElementById('correos-days').value;
+  const status=document.getElementById('correos-drawer-status');
+  const list=document.getElementById('correos-drawer-list');
+  status.textContent='Cargando...';list.innerHTML='';
+  try{
+    const r=await fetch(`/api/sales-emails/?vendedor_id=${_correosVendedorActual}&days=${days}&limit=200`);
+    const d=await r.json();
+    const emails=d.emails||[];
+    status.textContent=`${emails.length} correos`;
+    if(!emails.length){
+      list.innerHTML='<div style="color:var(--text3);text-align:center;padding:30px;font-size:13px;">Sin correos en este periodo</div>';
+      return;
+    }
+    list.innerHTML=emails.map(e=>{
+      const fecha=new Date(e.sent_at).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'});
+      const to=(e.to_emails||[]).join(', ');
+      const cc=(e.cc_emails||[]).length?` <span style="color:var(--text3);">+${e.cc_emails.length} CC</span>`:'';
+      const att=e.has_attachment?' 📎':'';
+      const subjectEsc=_esc(e.subject||'(sin asunto)');
+      const snippetEsc=_esc(e.snippet||'');
+      const linkHtml = e.gmail_url
+        ? `<a href="${e.gmail_url}" target="_blank" style="font-size:11px;color:var(--accent);text-decoration:none;">Abrir en Gmail →</a>`
+        : '';
+      return `<div style="border-bottom:1px solid var(--border-light);padding:12px 0;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:4px;">
+          <div style="font-size:11px;color:var(--text2);">📨 Para: <strong>${_esc(to)}</strong>${cc}</div>
+          <div style="font-size:11px;color:var(--text3);white-space:nowrap;">${fecha}${att}</div>
+        </div>
+        <div style="font-size:13px;font-weight:600;color:var(--ink-1);margin-bottom:3px;">${subjectEsc}</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.4;margin-bottom:6px;">${snippetEsc}</div>
+        ${linkHtml}
+      </div>`;
+    }).join('');
+  }catch(e){status.textContent='Error: '+e.message;}
+}
 
 // ── Marketing ROI ──
 async function loadRoi(){

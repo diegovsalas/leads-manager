@@ -146,6 +146,7 @@ def create_app():
     from blueprints.oportunidades import oportunidades_bp
     from blueprints.accounts      import accounts_bp, contacts_bp
     from blueprints.meta_campaigns import meta_campaigns_bp
+    from blueprints.sales_emails    import sales_emails_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp,      url_prefix="/webhook")
@@ -179,6 +180,7 @@ def create_app():
     app.register_blueprint(accounts_bp,      url_prefix="/api/accounts")
     app.register_blueprint(contacts_bp,      url_prefix="/api/contacts")
     app.register_blueprint(meta_campaigns_bp, url_prefix="/api/meta-campaigns")
+    app.register_blueprint(sales_emails_bp,   url_prefix="/api/sales-emails")
 
     # Serve React app at /app/
     @app.route("/app/")
@@ -464,6 +466,32 @@ def _start_scheduler(app):
                     )
         except Exception as e:
             app.logger.warning(f"SDR engine scheduler setup: {e}")
+
+        # Gmail monitoring de vendedores (cada 5 min) + purge histórico diario.
+        # Solo se activa si GMAIL_SERVICE_ACCOUNT_JSON está set en env.
+        if os.getenv("GMAIL_SERVICE_ACCOUNT_JSON"):
+            def _run_gmail_poll():
+                with app.app_context():
+                    try:
+                        import gmail_monitor
+                        result = gmail_monitor.poll_all()
+                        if result.get("total_saved", 0) > 0:
+                            app.logger.info(f"Gmail polling: {result.get('total_saved')} correos nuevos")
+                    except Exception as e:
+                        app.logger.warning(f"gmail polling: {e}")
+
+            def _run_gmail_purge():
+                with app.app_context():
+                    try:
+                        import gmail_monitor
+                        gmail_monitor.purge_old()
+                    except Exception as e:
+                        app.logger.warning(f"gmail purge: {e}")
+
+            scheduler.add_job(_run_gmail_poll,  "interval", minutes=5, id="gmail_poll")
+            # Purge diario a las 4am CST (10am UTC) — fuera de horario laboral
+            scheduler.add_job(_run_gmail_purge, "cron", hour=10, minute=0, id="gmail_purge")
+            app.logger.info("Gmail monitoring activo (poll 5 min + purge diario)")
 
         # Meta Lead Ads polling (cada 5 min) — alternativa al webhook mientras la App no está publicada
         if os.getenv("META_PAGE_TOKEN"):
