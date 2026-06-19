@@ -2607,6 +2607,15 @@ async function loadCorreos(){
   try{
     const r=await fetch('/api/sales-emails/stats');
     if(r.status===403){status.textContent='Solo Super Admin';return;}
+    if(r.status===404){status.innerHTML='<span style="color:var(--red);">Endpoint no existe — Render aún no termina deploy</span>';return;}
+    if(r.status===302||r.status===301){status.innerHTML='<span style="color:var(--orange);">Sesión expirada — recarga la página</span>';return;}
+    const ct=(r.headers.get('content-type')||'').toLowerCase();
+    if(!ct.includes('json')){
+      const txt=await r.text();
+      const preview=txt.slice(0,80).replace(/</g,'&lt;');
+      status.innerHTML=`<span style="color:var(--red);">Respuesta no es JSON (HTTP ${r.status}): ${preview}…</span>`;
+      return;
+    }
     const d=await r.json();
     if(!d.configurado){
       status.innerHTML='<span style="color:var(--orange);">⚠ GMAIL_SERVICE_ACCOUNT_JSON no configurado en Render</span>';
