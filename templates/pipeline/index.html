@@ -1463,6 +1463,7 @@ fbq('track','PageView');
       <div class="table-wrap"><table>
         <thead><tr>
           <th>Cuenta</th><th>RFCs vinculados</th>
+          <th style="text-align:right;">MRR<br><span style="font-weight:400;font-size:10px;color:var(--text3);">Suscripciones activas</span></th>
           <th style="text-align:right;">Facturado<br><span style="font-weight:400;font-size:10px;color:var(--text3);">Histórico · Este mes</span></th>
           <th style="text-align:right;">Pagado<br><span style="font-weight:400;font-size:10px;color:var(--text3);">Histórico · Este mes</span></th>
           <th style="text-align:right;">Pendiente<br><span style="font-weight:400;font-size:10px;color:var(--text3);">Histórico · Este mes</span></th>
@@ -2305,13 +2306,19 @@ let _vincState = {accountId:null, accountName:'', currentRfcs:[], pendingAdd:[]}
 async function loadVincular(){
   const data=await _api('/api/savio/cs-accounts');
   const tb=document.getElementById('vinc-tbody');tb.innerHTML='';
-  if(!data){tb.innerHTML='<tr><td colspan="7" style="color:var(--red);text-align:center;padding:12px;">Error cargando</td></tr>';return;}
+  if(!data){tb.innerHTML='<tr><td colspan="8" style="color:var(--red);text-align:center;padding:12px;">Error cargando</td></tr>';return;}
   for(const a of data){
     const rfcsTxt=a.rfcs.length?a.rfcs.map(r=>`<span style="font-family:var(--mono);font-size:11px;background:var(--bg-tag);padding:2px 6px;border-radius:4px;margin-right:4px;">${r.rfc}</span>`).join(''):'<span style="color:var(--text3);font-size:11px;">— sin vincular —</span>';
     const mesLbl = a.mes_label || '';
+    const mrr = a.mrr || 0;
+    const arr = a.arr_proyectado || 0;
     tb.innerHTML+=`<tr>
       <td><strong>${a.nombre}</strong> <span style="font-family:var(--mono);font-size:10px;color:var(--text3);">${a.client_id||''}</span></td>
       <td>${rfcsTxt}</td>
+      <td style="text-align:right;color:${mrr>0?'var(--accent)':'var(--text3)'};">
+        <div style="font-weight:600;">${_fmtMxn(mrr)}</div>
+        <div style="font-size:11px;color:var(--text2);" title="ARR proyectado (MRR × 12)">ARR ${_fmtMxn(arr)}</div>
+      </td>
       <td style="text-align:right;">
         <div>${_fmtMxn(a.facturacion_q1)}</div>
         <div style="font-size:11px;color:var(--text2);" title="Facturado en ${mesLbl}">${_fmtMxn(a.facturacion_mes)}</div>
@@ -2334,7 +2341,7 @@ async function loadVincular(){
       </td>
     </tr>`;
   }
-  if(!tb.innerHTML)tb.innerHTML='<tr><td colspan="7" style="color:var(--text2);text-align:center;padding:12px;">Sin cuentas CS</td></tr>';
+  if(!tb.innerHTML)tb.innerHTML='<tr><td colspan="8" style="color:var(--text2);text-align:center;padding:12px;">Sin cuentas CS</td></tr>';
 }
 function openVincModal(acc){
   _vincState.accountId=acc.id;_vincState.accountName=acc.nombre;
