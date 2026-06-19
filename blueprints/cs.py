@@ -279,6 +279,30 @@ def dashboard():
     for item in account_scores:
         cat_counts[item["health"]["categoria"]] += 1
 
+    # ── KPIs avanzados ────────────────────────────────────────────────
+    num_acc = max(len(accounts), 1)
+    cuentas_con_mrr = [a for a in accounts if (a.mrr or 0) > 0]
+    arpa = mrr_total / num_acc if num_acc else 0
+    pct_cobranza = (pagado_periodo / facturado_periodo * 100) if facturado_periodo > 0 else 0
+    pct_riesgo = (cat_counts["Riesgo"] / num_acc * 100) if num_acc else 0
+    pct_atencion = (cat_counts["Atención"] / num_acc * 100) if num_acc else 0
+    hs_avg = round(sum(item["health"]["score"] for item in account_scores) / num_acc, 1) if num_acc else 0
+
+    # NPS promedio del portafolio (de los CSAccount.nps si está populado)
+    nps_vals = [float(a.nps) for a in accounts if a.nps is not None]
+    nps_avg = round(sum(nps_vals) / len(nps_vals), 1) if nps_vals else None
+
+    # Concentración: top 5 cuentas por MRR / total
+    top_mrr_sorted = sorted(accounts, key=lambda a: float(a.mrr or 0), reverse=True)[:5]
+    top5_mrr = sum(float(a.mrr or 0) for a in top_mrr_sorted)
+    top5_concentracion = (top5_mrr / mrr_total * 100) if mrr_total > 0 else 0
+    top_cuentas_mrr = [
+        {"account": a, "mrr": float(a.mrr or 0),
+         "pct_total": (float(a.mrr or 0) / mrr_total * 100) if mrr_total > 0 else 0,
+         "health": scores_map[str(a.id)]}
+        for a in top_mrr_sorted
+    ]
+
     kams = _get_kams()
     kam_data = []
     for k in kams:
@@ -325,6 +349,13 @@ def dashboard():
         delta_facturado=delta_facturado, delta_pagado=delta_pagado,
         delta_pendiente=delta_pendiente,
         top_riesgo=top_riesgo, cat_counts=cat_counts,
+        # KPIs avanzados
+        arpa=arpa, pct_cobranza=pct_cobranza,
+        pct_riesgo=pct_riesgo, pct_atencion=pct_atencion,
+        hs_avg=hs_avg, nps_avg=nps_avg,
+        top5_concentracion=top5_concentracion,
+        top_cuentas_mrr=top_cuentas_mrr,
+        cuentas_con_mrr_n=len(cuentas_con_mrr),
         kam_data=kam_data, cuentas_onboarding=cuentas_onboarding,
         alertas=alertas, alertas_criticas=alertas_criticas,
         pipeline=pipeline, account_scores=account_scores,

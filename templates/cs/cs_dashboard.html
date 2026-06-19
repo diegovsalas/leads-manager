@@ -58,6 +58,33 @@
     </div>
 </div>
 
+<!-- KPIs de Customer Success (advanced) -->
+<div class="grid g-4 mb-4">
+    <div class="kpi">
+        <div class="label">ARPA <span class="muted" style="font-size:10px;font-weight:400;">(MRR / cuenta)</span></div>
+        <div class="value" style="font-size:26px">${{ "{:,.0f}".format(arpa) }}</div>
+        <div class="foot"><span class="muted">{{ cuentas_con_mrr_n }} de {{ num_cuentas }} cuentas con MRR</span></div>
+    </div>
+    <div class="kpi" {% if pct_cobranza < 70 %}style="border-left:3px solid var(--warn)"{% endif %}>
+        <div class="label">% Cobranza · {{ periodo_label }}</div>
+        <div class="value" style="font-size:26px;color:{% if pct_cobranza >= 80 %}var(--ok-ink){% elif pct_cobranza >= 50 %}var(--warn-ink){% else %}var(--danger-ink){% endif %}">{{ "{:.1f}".format(pct_cobranza) }}%</div>
+        <div class="foot"><span class="muted">Pagado / Facturado</span></div>
+    </div>
+    <div class="kpi" {% if pct_riesgo > 20 %}style="border-left:3px solid var(--danger)"{% endif %}>
+        <div class="label">Cuentas en Riesgo</div>
+        <div class="value" style="font-size:26px;color:{% if pct_riesgo > 20 %}var(--danger-ink){% elif pct_riesgo > 10 %}var(--warn-ink){% else %}var(--ok-ink){% endif %}">{{ "{:.0f}".format(pct_riesgo) }}%</div>
+        <div class="foot"><span class="muted">{{ cat_counts['Riesgo'] }} / {{ num_cuentas }} · Atención: {{ cat_counts['Atención'] }}</span></div>
+    </div>
+    <div class="kpi">
+        <div class="label">Health Score promedio</div>
+        <div class="value" style="font-size:26px;color:{% if hs_avg >= 70 %}var(--ok-ink){% elif hs_avg >= 40 %}var(--warn-ink){% else %}var(--danger-ink){% endif %}">{{ hs_avg }}</div>
+        <div class="foot">
+            {% if nps_avg is not none %}<span class="muted">NPS: <strong>{{ nps_avg }}</strong></span>
+            {% else %}<span class="muted">Sin NPS registrado</span>{% endif %}
+        </div>
+    </div>
+</div>
+
 <!-- Facturacion KPIs -->
 <div class="grid g-4 mb-4">
     <div class="kpi">
@@ -156,6 +183,67 @@
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+</div>
+
+<!-- Top cuentas por MRR + concentración -->
+<div class="grid g-2 mb-4">
+    <div class="card">
+        <div class="card-head">
+            <h3>Top 5 cuentas por MRR</h3>
+            <div class="meta">{{ "{:.0f}".format(top5_concentracion) }}% del MRR total</div>
+        </div>
+        <table class="tbl">
+            <thead><tr><th>Cuenta</th><th>KAM</th><th class="r">MRR</th><th class="r">% Total</th><th class="c">Salud</th></tr></thead>
+            <tbody>
+                {% for item in top_cuentas_mrr %}
+                {% set acc = item.account %}
+                {% set hs = item.health %}
+                {% set st = 'ok' if hs.score >= 70 else 'warn' if hs.score >= 40 else 'danger' %}
+                <tr>
+                    <td class="primary"><a href="/cs/account/{{ acc.id }}">{% if acc.client_id %}<span style="font-size:10px;font-weight:700;color:var(--copper);margin-right:4px">{{ acc.client_id }}</span>{% endif %}{{ acc.nombre }}</a></td>
+                    <td><div class="hstack"><span class="ava">{{ acc.kam.nombre[:2]|upper if acc.kam else '?' }}</span><span class="muted">{{ acc.kam.nombre.split(' ')[0] if acc.kam else '-' }}</span></div></td>
+                    <td class="r"><strong>${{ "{:,.0f}".format(item.mrr) }}</strong></td>
+                    <td class="r">{{ "{:.1f}".format(item.pct_total) }}%</td>
+                    <td class="c"><span class="score {{ st }}">{{ hs.score }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="card">
+        <div class="card-head"><h3>Concentración de revenue</h3><div class="meta">riesgo por cuenta</div></div>
+        <div class="card-body">
+            <div style="display:flex;flex-direction:column;gap:14px;padding:8px 0;">
+                {% set conc_color = 'var(--danger)' if top5_concentracion >= 70 else 'var(--warn)' if top5_concentracion >= 50 else 'var(--ok)' %}
+                <div>
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+                        <span style="font-size:13px;color:var(--ink-1);font-weight:500;">Top 5 cuentas concentran</span>
+                        <span style="font-size:22px;font-weight:700;color:{{ conc_color }};">{{ "{:.0f}".format(top5_concentracion) }}%</span>
+                    </div>
+                    <div class="bar" style="height:8px;"><span style="width:{{ top5_concentracion|int }}%;background:{{ conc_color }};"></span></div>
+                    <div style="font-size:11px;color:var(--ink-3);margin-top:4px;">
+                        {% if top5_concentracion >= 70 %}⚠ Concentración alta — un churn top duele mucho.
+                        {% elif top5_concentracion >= 50 %}Concentración moderada — vigila los tops.
+                        {% else %}Diversificación sana del portafolio.{% endif %}
+                    </div>
+                </div>
+                <div style="border-top:1px solid var(--border);padding-top:14px;">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                        <span style="font-size:12px;color:var(--ink-2);">% Cuentas en atención</span>
+                        <span style="font-size:14px;font-weight:600;color:var(--warn-ink);">{{ "{:.0f}".format(pct_atencion) }}%</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                        <span style="font-size:12px;color:var(--ink-2);">% Cuentas en riesgo</span>
+                        <span style="font-size:14px;font-weight:600;color:var(--danger-ink);">{{ "{:.0f}".format(pct_riesgo) }}%</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                        <span style="font-size:12px;color:var(--ink-2);">% Cobranza ({{ periodo_label }})</span>
+                        <span style="font-size:14px;font-weight:600;color:{% if pct_cobranza >= 80 %}var(--ok-ink){% else %}var(--warn-ink){% endif %};">{{ "{:.1f}".format(pct_cobranza) }}%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 

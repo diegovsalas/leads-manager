@@ -351,24 +351,39 @@ def sync_payments(month: Optional[str] = None, days: Optional[int] = None) -> di
 
 
 def bridge_savio_to_cs_mrr() -> dict:
-    """Para cada CSAccount con RFC, busca SavioSubscriptions activas (sum_mrr=True)
-    matcheando por tax_id y actualiza CSAccount.mrr con el total."""
+    """Actualiza CSAccount.mrr y CSAccount.arr_proyectado sumando las
+    SavioSubscriptions activas (sum_mrr=True) de los SavioCustomers vinculados
+    vía CustomerMaster → CustomerRfc.
+
+    El path correcto es:
+      CSAccount.id → CustomerMaster.cs_account_id → CustomerRfc.savio_customer_id
+                  → SavioSubscription (filtrada por customer_id, sum_mrr, fechas)
+
+    La versión vieja intentaba matchear por CSAccount.rfc (columna que no
+    existe), por eso TODAS las cuentas quedaban en MRR=0.
+    """
     today = datetime.now(timezone.utc).date()
     matched = 0
-    unmatched = 0
+    no_master = 0
+    no_subs = 0
     accounts = db.session.query(CSAccount).all()
     for acc in accounts:
-        rfc = getattr(acc, "rfc", None) or getattr(acc, "tax_id", None)
-        if not rfc:
-            unmatched += 1
+        master = CustomerMaster.query.filter_by(cs_account_id=acc.id).first()
+        if not master:
+            no_master += 1
+            if hasattr(acc, "mrr"):
+                acc.mrr = Decimal("0")
             continue
-        savio_customer = SavioCustomer.query.filter_by(tax_id=rfc).first()
-        if not savio_customer:
-            unmatched += 1
+        rfcs = CustomerRfc.query.filter_by(master_id=master.id).all()
+        savio_cids = [r.savio_customer_id for r in rfcs if r.savio_customer_id]
+        if not savio_cids:
+            no_subs += 1
+            if hasattr(acc, "mrr"):
+                acc.mrr = Decimal("0")
             continue
         total = (
             db.session.query(db.func.coalesce(db.func.sum(SavioSubscription.mrr), 0))
-            .filter(SavioSubscription.customer_id == savio_customer.customer_id)
+            .filter(SavioSubscription.customer_id.in_(savio_cids))
             .filter(SavioSubscription.sum_mrr.is_(True))
             .filter(SavioSubscription.start_date <= today)
             .filter(
@@ -377,11 +392,14 @@ def bridge_savio_to_cs_mrr() -> dict:
             )
             .scalar()
         )
+        mrr_total = Decimal(str(total or 0))
         if hasattr(acc, "mrr"):
-            acc.mrr = Decimal(str(total or 0))
-            matched += 1
+            acc.mrr = mrr_total
+        if hasattr(acc, "arr_proyectado"):
+            acc.arr_proyectado = mrr_total * Decimal("12")
+        matched += 1
     db.session.commit()
-    return {"matched": matched, "unmatched": unmatched}
+    return {"matched": matched, "no_master": no_master, "no_subs": no_subs}
 
 
 def sync_savio_to_cs_invoices(account_id: Optional[str] = None) -> dict:
