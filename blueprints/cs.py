@@ -235,8 +235,12 @@ def dashboard():
     scores_map = calcular_health_scores_batch(accounts)
 
     mrr_total = sum(float(a.mrr or 0) for a in accounts)
+    mrr_observado_total = sum(float(getattr(a, "mrr_observado", 0) or 0) for a in accounts)
     arr_total = sum(float(a.arr_proyectado or 0) for a in accounts)
+    arr_observado_total = mrr_observado_total * 12
     total_sucursales = sum(a.sucursales for a in accounts)
+    # Gap % (qué tan desactualizado está Savio respecto al recurrente real)
+    gap_pct = ((mrr_observado_total - mrr_total) / mrr_total * 100) if mrr_total > 0 else 0
 
     # Facturación del periodo
     facturado_periodo = sum(f["facturado"] for f in fact_periodo.values())
@@ -292,13 +296,15 @@ def dashboard():
     nps_vals = [float(a.nps) for a in accounts if a.nps is not None]
     nps_avg = round(sum(nps_vals) / len(nps_vals), 1) if nps_vals else None
 
-    # Concentración: top 5 cuentas por MRR / total
-    top_mrr_sorted = sorted(accounts, key=lambda a: float(a.mrr or 0), reverse=True)[:5]
-    top5_mrr = sum(float(a.mrr or 0) for a in top_mrr_sorted)
-    top5_concentracion = (top5_mrr / mrr_total * 100) if mrr_total > 0 else 0
+    # Concentración: top 5 cuentas por MRR OBSERVADO (la realidad operativa) / total
+    top_mrr_sorted = sorted(accounts, key=lambda a: float(getattr(a, "mrr_observado", 0) or 0), reverse=True)[:5]
+    top5_mrr = sum(float(getattr(a, "mrr_observado", 0) or 0) for a in top_mrr_sorted)
+    top5_concentracion = (top5_mrr / mrr_observado_total * 100) if mrr_observado_total > 0 else 0
     top_cuentas_mrr = [
-        {"account": a, "mrr": float(a.mrr or 0),
-         "pct_total": (float(a.mrr or 0) / mrr_total * 100) if mrr_total > 0 else 0,
+        {"account": a,
+         "mrr": float(a.mrr or 0),
+         "mrr_observado": float(getattr(a, "mrr_observado", 0) or 0),
+         "pct_total": ((float(getattr(a, "mrr_observado", 0) or 0)) / mrr_observado_total * 100) if mrr_observado_total > 0 else 0,
          "health": scores_map[str(a.id)]}
         for a in top_mrr_sorted
     ]
@@ -311,6 +317,7 @@ def dashboard():
             "id": str(k.id), "nombre": k.nombre,
             "num_cuentas": len(accs_kam),
             "mrr": sum(float(a.mrr or 0) for a in accs_kam),
+            "mrr_observado": sum(float(getattr(a, "mrr_observado", 0) or 0) for a in accs_kam),
             "sucursales": sum(a.sucursales for a in accs_kam),
         })
 
@@ -341,6 +348,8 @@ def dashboard():
     return render_template(
         "cs_dashboard.html",
         mrr_total=mrr_total, arr_total=arr_total,
+        mrr_observado_total=mrr_observado_total, arr_observado_total=arr_observado_total,
+        gap_pct=gap_pct,
         num_cuentas=len(accounts), total_sucursales=total_sucursales,
         suc_aromatex=suc_aromatex, suc_pestex=suc_pestex,
         facturado_periodo=facturado_periodo, pagado_periodo=pagado_periodo,

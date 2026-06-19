@@ -351,23 +351,51 @@ def sync_payments(month: Optional[str] = None, days: Optional[int] = None) -> di
 
 
 def bridge_savio_to_cs_mrr() -> dict:
-    """Actualiza CSAccount.mrr y CSAccount.arr_proyectado sumando las
-    SavioSubscriptions activas (sum_mrr=True) de los SavioCustomers vinculados
-    vía CustomerMaster → CustomerRfc.
+    """Actualiza CSAccount.mrr, CSAccount.mrr_observado y CSAccount.arr_proyectado.
 
-    El path correcto es:
+    Dos métricas complementarias:
+      mrr           = MRR contratado: suma de SavioSubscription.mrr activas
+                      (sum_mrr=true) vinculadas vía CustomerMaster → CustomerRfc.
+                      Refleja lo que Savio formalmente reconoce como recurrente.
+      mrr_observado = MRR real: promedio mensual de facturación con UEN
+                      RECURRENTE/POLIZAS de los últimos N meses (ventana de
+                      cs_invoices). Captura el recurrente que el equipo
+                      timbra factura por factura sin sub formal.
+
+    El gap entre ambos identifica cuentas donde Savio está desactualizado
+    operativamente (ej. Elektra factura $727k/mes pero solo tiene 1 sub
+    registrada de $10k).
+
+    El path para mrr es:
       CSAccount.id → CustomerMaster.cs_account_id → CustomerRfc.savio_customer_id
                   → SavioSubscription (filtrada por customer_id, sum_mrr, fechas)
-
-    La versión vieja intentaba matchear por CSAccount.rfc (columna que no
-    existe), por eso TODAS las cuentas quedaban en MRR=0.
     """
     today = datetime.now(timezone.utc).date()
     matched = 0
     no_master = 0
     no_subs = 0
+    OBS_MONTHS = 5  # ventana para mrr_observado
+
+    # ── Precalcular mrr_observado en bulk (una sola query) ─────────────
+    from sqlalchemy import text as _sa_text
+    obs_rows = db.session.execute(_sa_text("""
+        SELECT
+          account_id,
+          ROUND(SUM(total) / :months, 2) AS mrr_obs
+        FROM cs_invoices
+        WHERE fecha_cobro >= (CURRENT_DATE - (:months || ' months')::interval)
+          AND (uen ILIKE '%RECURRENTE%' OR uen ILIKE '%POLIZA%')
+        GROUP BY account_id
+    """), {"months": OBS_MONTHS}).fetchall()
+    mrr_obs_map = {str(r[0]): Decimal(str(r[1] or 0)) for r in obs_rows}
+
     accounts = db.session.query(CSAccount).all()
     for acc in accounts:
+        # mrr_observado (siempre, aunque no tenga master)
+        if hasattr(acc, "mrr_observado"):
+            acc.mrr_observado = mrr_obs_map.get(str(acc.id), Decimal("0"))
+
+        # mrr contratado
         master = CustomerMaster.query.filter_by(cs_account_id=acc.id).first()
         if not master:
             no_master += 1
@@ -399,7 +427,8 @@ def bridge_savio_to_cs_mrr() -> dict:
             acc.arr_proyectado = mrr_total * Decimal("12")
         matched += 1
     db.session.commit()
-    return {"matched": matched, "no_master": no_master, "no_subs": no_subs}
+    return {"matched": matched, "no_master": no_master, "no_subs": no_subs,
+            "mrr_observado_accounts": len(mrr_obs_map)}
 
 
 def sync_savio_to_cs_invoices(account_id: Optional[str] = None) -> dict:

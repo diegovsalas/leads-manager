@@ -301,8 +301,10 @@ def list_cs_accounts_with_links():
         out.append({
             "id": str(acc.id), "client_id": acc.client_id or "",
             "nombre": acc.nombre,
-            # MRR (suma de subs activas, populado por bridge_savio_to_cs_mrr)
+            # MRR contratado (suma de subs activas) + MRR observado (promedio
+            # facturación recurrente últimos 5m, captura el recurrente sin sub formal)
             "mrr": float(acc.mrr or 0),
+            "mrr_observado": float(getattr(acc, "mrr_observado", 0) or 0),
             "arr_proyectado": float(acc.arr_proyectado or 0),
             # Histórico global (todas las cs_invoices)
             "facturacion_q1": float(acc.facturacion_q1 or 0),

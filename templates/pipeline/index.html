@@ -1463,7 +1463,7 @@ fbq('track','PageView');
       <div class="table-wrap"><table>
         <thead><tr>
           <th>Cuenta</th><th>RFCs vinculados</th>
-          <th style="text-align:right;">MRR<br><span style="font-weight:400;font-size:10px;color:var(--text3);">Suscripciones activas</span></th>
+          <th style="text-align:right;">MRR<br><span style="font-weight:400;font-size:10px;color:var(--text3);">Real · Contratado</span></th>
           <th style="text-align:right;">Facturado<br><span style="font-weight:400;font-size:10px;color:var(--text3);">Histórico · Este mes</span></th>
           <th style="text-align:right;">Pagado<br><span style="font-weight:400;font-size:10px;color:var(--text3);">Histórico · Este mes</span></th>
           <th style="text-align:right;">Pendiente<br><span style="font-weight:400;font-size:10px;color:var(--text3);">Histórico · Este mes</span></th>
@@ -2311,13 +2311,15 @@ async function loadVincular(){
     const rfcsTxt=a.rfcs.length?a.rfcs.map(r=>`<span style="font-family:var(--mono);font-size:11px;background:var(--bg-tag);padding:2px 6px;border-radius:4px;margin-right:4px;">${r.rfc}</span>`).join(''):'<span style="color:var(--text3);font-size:11px;">— sin vincular —</span>';
     const mesLbl = a.mes_label || '';
     const mrr = a.mrr || 0;
-    const arr = a.arr_proyectado || 0;
+    const mrrObs = a.mrr_observado || 0;
+    const ratio = mrr > 0 ? (mrrObs / mrr) : 0;
+    const gapWarn = ratio >= 2;
     tb.innerHTML+=`<tr>
       <td><strong>${a.nombre}</strong> <span style="font-family:var(--mono);font-size:10px;color:var(--text3);">${a.client_id||''}</span></td>
       <td>${rfcsTxt}</td>
-      <td style="text-align:right;color:${mrr>0?'var(--accent)':'var(--text3)'};">
-        <div style="font-weight:600;">${_fmtMxn(mrr)}</div>
-        <div style="font-size:11px;color:var(--text2);" title="ARR proyectado (MRR × 12)">ARR ${_fmtMxn(arr)}</div>
+      <td style="text-align:right;">
+        <div style="font-weight:600;color:${mrrObs>0?'var(--accent)':'var(--text3)'};">${_fmtMxn(mrrObs)}</div>
+        <div style="font-size:11px;color:${gapWarn?'var(--orange)':'var(--text2)'};" title="${gapWarn?'Savio desactualizado: real es '+ratio.toFixed(1)+'× el contratado':'MRR contratado en Savio'}">${gapWarn?'⚠ ':''}${_fmtMxn(mrr)}</div>
       </td>
       <td style="text-align:right;">
         <div>${_fmtMxn(a.facturacion_q1)}</div>
