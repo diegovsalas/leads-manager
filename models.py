@@ -122,6 +122,7 @@ class Usuario(db.Model):
     en_turno = db.Column(db.Boolean, default=True, nullable=False)
     baileys_session = db.Column(db.String(50), nullable=True)  # ej: "janeth", "azael" — para /scan/{session}
     zona_cobertura = db.Column(ARRAY(db.String(80)), nullable=False, default=list, server_default="{}")  # ej: {"Nuevo León", "Tamaulipas"}
+    gmail_address = db.Column(db.String(200), nullable=True)  # Gmail corp para monitoreo (gmail_monitor.py)
 
     # Relaciones
     leads = db.relationship("Lead", back_populates="usuario_asignado", lazy="dynamic")
@@ -142,6 +143,7 @@ class Usuario(db.Model):
             "en_turno": self.en_turno,
             "baileys_session": self.baileys_session,
             "zona_cobertura": self.zona_cobertura or [],
+            "gmail_address": self.gmail_address,
         }
 
 
