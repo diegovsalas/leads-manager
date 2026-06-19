@@ -359,6 +359,7 @@ fbq('track','PageView');
     <div class="slink admin-only" onclick="showView('vincular',this)">&#128279; <span class="sl-text">Vincular Savio&#8594;CS</span></div>
     <div class="slink admin-only" onclick="showView('roi',this)">&#128202; <span class="sl-text">Marketing ROI</span></div>
     <div class="slink admin-only" onclick="showView('scip',this)">&#127919; <span class="sl-text">SCIP Director</span></div>
+    <div class="slink admin-only" onclick="showView('campanas',this)">&#128226; <span class="sl-text">Campañas Meta</span></div>
 
     <div class="sidebar-divider admin-only"></div>
     <div class="sidebar-section admin-only">Administracion</div>
@@ -1607,6 +1608,105 @@ fbq('track','PageView');
   </div>
 </div>
 
+<!-- ===== CAMPAÑAS META (registry editable) ===== -->
+<div class="view" id="view-campanas" style="overflow-y:auto;">
+  <div class="page-header">
+    <div class="page-emoji">&#128226;</div>
+    <div class="page-title">Campañas Meta</div>
+    <div class="page-desc">Registry de campañas activas con asignación dirigida: marca, zona, vendedor y unidad. Los leads que entren con un campaign_id registrado se enrutan automáticamente.</div>
+  </div>
+  <div style="padding:20px 48px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <button class="btn btn-filled" onclick="openCampanaModal()" style="font-size:13px;">+ Nueva campaña</button>
+    <button class="btn" onclick="loadCampanas()" style="font-size:13px;">Refrescar</button>
+    <span id="campanas-status" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
+  </div>
+  <div style="padding:0 48px 20px;">
+    <div class="dash-card">
+      <div class="dash-card-title">Registry actual</div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Campaign ID</th><th>Nombre</th><th>Marca</th><th>Unidad</th>
+          <th>Estado default</th><th>Zonas</th><th>Leads</th><th>Estado</th><th></th>
+        </tr></thead>
+        <tbody id="campanas-tbody"></tbody>
+      </table></div>
+    </div>
+    <div class="dash-card" style="margin-top:20px;">
+      <div class="dash-card-title">📥 Campañas detectadas sin registrar</div>
+      <p style="font-size:12px;color:var(--text2);padding:0 16px 8px;">Campaign IDs que aparecen en leads recibidos pero NO están en el registry. Daloas de alta para que se enruten correctamente.</p>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Campaign ID</th><th style="text-align:right;">Leads</th><th>Último lead</th><th></th>
+        </tr></thead>
+        <tbody id="campanas-unreg-tbody"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: nueva/editar campaña -->
+<div id="campana-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:var(--bg-card);border-radius:var(--r2);padding:20px;max-width:680px;width:92%;max-height:88vh;display:flex;flex-direction:column;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h3 id="campana-modal-title" style="margin:0;">Nueva campaña Meta</h3>
+      <button class="btn" onclick="closeCampanaModal()" style="font-size:11px;">Cerrar</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Campaign ID * <span style="color:var(--text3);font-weight:400;font-size:10px;">(de Meta Graph API, ej. 120248752029380246)</span></label>
+      <input class="form-input" id="cmp-id" type="text" style="font-family:var(--mono);font-size:13px;"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Nombre *</label>
+      <input class="form-input" id="cmp-nombre" type="text" placeholder="ej: [AX-B2B] Contactos Norte · Julio 2026"/>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Marca *</label>
+        <select class="form-select" id="cmp-marca">
+          <option value="Aromatex">Aromatex</option>
+          <option value="Pestex">Pestex</option>
+          <option value="Weldex">Weldex</option>
+          <option value="Aromatex Home">Aromatex Home</option>
+          <option value="Nexo">Nexo</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Unidad *</label>
+        <select class="form-select" id="cmp-unidad">
+          <option value="aromatex_b2c">aromatex_b2c</option>
+          <option value="aromatex_b2b">aromatex_b2b</option>
+          <option value="weldex">weldex</option>
+          <option value="pestex">pestex</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Estado default <span style="color:var(--text3);font-weight:400;font-size:10px;">(se usa si el formulario no trae uno)</span></label>
+      <input class="form-input" id="cmp-estado" type="text" placeholder="ej: Nuevo León (vacío si la campaña es multi-zona)"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Zonas (estados a las que se pauta) *</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+        <button type="button" class="btn" onclick="cmpLoadPreset('Norte')" style="font-size:11px;padding:4px 10px;">⬇️ Cargar Norte</button>
+        <button type="button" class="btn" onclick="cmpLoadPreset('Centro')" style="font-size:11px;padding:4px 10px;">⬇️ Cargar Centro</button>
+        <button type="button" class="btn" onclick="cmpLoadPreset('Sur')" style="font-size:11px;padding:4px 10px;">⬇️ Cargar Sur</button>
+        <button type="button" class="btn" onclick="document.getElementById('cmp-zonas').value=''" style="font-size:11px;padding:4px 10px;color:var(--red);">Limpiar</button>
+      </div>
+      <textarea class="form-input" id="cmp-zonas" rows="4" style="resize:vertical;font-family:var(--mono);font-size:12px;" placeholder="Un estado por línea, ej:&#10;Nuevo León&#10;Tamaulipas&#10;Coahuila"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-checkbox" style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="cmp-activa" checked/>
+        <span>Activa (recibe leads y aparece en routing)</span>
+      </label>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
+      <button class="btn" onclick="closeCampanaModal()">Cancelar</button>
+      <button class="btn btn-filled" onclick="saveCampana()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== SCIP DIRECTOR ===== -->
 <div class="view" id="view-scip" style="overflow-y:auto;">
   <div class="page-header">
@@ -2042,6 +2142,7 @@ function showView(name,el){
   if(name==='vincular')loadVincular();
   if(name==='roi')loadRoi();
   if(name==='scip')loadScip();
+  if(name==='campanas')loadCampanas();
   if(name==='opps')loadOpps();
   if(name==='accounts')loadAccounts();
   if(name==='contacts')loadContacts();
@@ -2317,6 +2418,119 @@ async function syncAllCs(){
     loadVincular();
   }catch(e){document.getElementById('vinc-status').textContent='Error: '+e.message;}
 }
+
+// ── Campañas Meta (registry editable) ──
+let _campanasPresets = {};
+let _campanaEditing = null;
+
+async function loadCampanas(){
+  const status=document.getElementById('campanas-status');
+  status.textContent='Cargando...';
+  try{
+    const r=await fetch('/api/meta-campaigns');
+    const d=await r.json();
+    _campanasPresets = d.presets || {};
+    const tb=document.getElementById('campanas-tbody');tb.innerHTML='';
+    for(const c of (d.campaigns||[])){
+      const zonasStr=(c.zonas||[]).slice(0,5).join(', ')+((c.zonas||[]).length>5?` +${c.zonas.length-5}`:'');
+      const activoBadge=c.activa
+        ? '<span class="tag" style="background:#dcfce7;color:#16a34a;font-size:10px;">activa</span>'
+        : '<span class="tag" style="background:#fef3c7;color:#92400e;font-size:10px;">inactiva</span>';
+      tb.innerHTML+=`<tr>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--text2);">${c.campaign_id}</td>
+        <td><strong>${_esc(c.nombre)}</strong></td>
+        <td><span class="tag tag-marca">${_esc(c.marca)}</span></td>
+        <td style="font-family:var(--mono);font-size:11px;">${_esc(c.unidad)}</td>
+        <td>${c.estado_default?_esc(c.estado_default):'<span style="color:var(--text3);">—</span>'}</td>
+        <td style="font-size:11px;color:var(--text2);max-width:280px;" title="${_esc((c.zonas||[]).join(', '))}">${_esc(zonasStr)||'<span style="color:var(--text3);">sin zonas</span>'}</td>
+        <td style="text-align:right;font-weight:600;">${c.leads_count||0}</td>
+        <td>${activoBadge}</td>
+        <td>
+          <button class="btn" onclick='editCampana(${JSON.stringify(c).replace(/'/g,"&apos;")})' style="font-size:11px;padding:4px 8px;">Editar</button>
+          <button class="btn" onclick='deleteCampana("${c.campaign_id}","${_esc(c.nombre)}")' style="font-size:11px;padding:4px 8px;color:var(--red);">Borrar</button>
+        </td>
+      </tr>`;
+    }
+    if(!tb.innerHTML)tb.innerHTML='<tr><td colspan="9" style="color:var(--text2);text-align:center;padding:14px;">No hay campañas registradas. Da de alta una nueva con + Nueva campaña.</td></tr>';
+    status.textContent=`${(d.campaigns||[]).length} campañas`;
+    loadCampanasUnregistered();
+  }catch(e){status.textContent='Error: '+e.message;}
+}
+
+async function loadCampanasUnregistered(){
+  try{
+    const r=await fetch('/api/meta-campaigns/unregistered');
+    const d=await r.json();
+    const tb=document.getElementById('campanas-unreg-tbody');tb.innerHTML='';
+    for(const u of (d.unregistered||[])){
+      const fecha=u.ultimo_lead?u.ultimo_lead.slice(0,10):'—';
+      tb.innerHTML+=`<tr>
+        <td style="font-family:var(--mono);font-size:11px;">${u.campaign_id}</td>
+        <td style="text-align:right;font-weight:600;">${u.leads_count}</td>
+        <td style="color:var(--text2);font-size:11px;">${fecha}</td>
+        <td><button class="btn btn-filled" onclick='openCampanaModal(null,"${u.campaign_id}")' style="font-size:11px;padding:4px 10px;">+ Dar de alta</button></td>
+      </tr>`;
+    }
+    if(!tb.innerHTML)tb.innerHTML='<tr><td colspan="4" style="color:var(--green);text-align:center;padding:14px;">✓ Todas las campañas con leads están registradas</td></tr>';
+  }catch(e){}
+}
+
+function openCampanaModal(campaign, prefillId){
+  _campanaEditing = campaign || null;
+  document.getElementById('campana-modal-title').textContent = campaign ? 'Editar campaña Meta' : 'Nueva campaña Meta';
+  document.getElementById('cmp-id').value      = campaign ? campaign.campaign_id  : (prefillId||'');
+  document.getElementById('cmp-id').readOnly   = !!campaign;
+  document.getElementById('cmp-nombre').value  = campaign ? campaign.nombre       : '';
+  document.getElementById('cmp-marca').value   = campaign ? campaign.marca        : 'Aromatex';
+  document.getElementById('cmp-unidad').value  = campaign ? campaign.unidad       : 'aromatex_b2c';
+  document.getElementById('cmp-estado').value  = campaign ? (campaign.estado_default||'') : '';
+  document.getElementById('cmp-zonas').value   = campaign ? (campaign.zonas||[]).join('\n') : '';
+  document.getElementById('cmp-activa').checked = campaign ? !!campaign.activa : true;
+  document.getElementById('campana-modal').style.display='flex';
+}
+function closeCampanaModal(){document.getElementById('campana-modal').style.display='none';_campanaEditing=null;}
+function editCampana(c){openCampanaModal(c);}
+
+function cmpLoadPreset(presetName){
+  const states = _campanasPresets[presetName] || [];
+  document.getElementById('cmp-zonas').value = states.join('\n');
+}
+
+async function saveCampana(){
+  const cid    = document.getElementById('cmp-id').value.trim();
+  const nombre = document.getElementById('cmp-nombre').value.trim();
+  const marca  = document.getElementById('cmp-marca').value;
+  const unidad = document.getElementById('cmp-unidad').value;
+  const estado = document.getElementById('cmp-estado').value.trim();
+  const zonas  = document.getElementById('cmp-zonas').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const activa = document.getElementById('cmp-activa').checked;
+  if(!cid||!nombre){showToast('Error','Campaign ID y nombre son requeridos');return;}
+
+  const body = {campaign_id: cid, nombre, marca, unidad, estado_default: estado||null, zonas, activa};
+  try{
+    const url = _campanaEditing ? `/api/meta-campaigns/${cid}` : '/api/meta-campaigns';
+    const method = _campanaEditing ? 'PUT' : 'POST';
+    const r = await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d = await r.json();
+    if(!r.ok)throw new Error(d.error||'error');
+    closeCampanaModal();
+    loadCampanas();
+    showToast('OK', _campanaEditing ? 'Campaña actualizada' : 'Campaña creada');
+  }catch(e){showToast('Error', e.message);}
+}
+
+async function deleteCampana(cid, nombre){
+  if(!confirm(`¿Borrar la campaña "${nombre}"? Los leads ya existentes con este campaign_id no se borran, solo dejan de enrutarse.`))return;
+  try{
+    const r = await fetch(`/api/meta-campaigns/${cid}`,{method:'DELETE'});
+    const d = await r.json();
+    if(!r.ok)throw new Error(d.error||'error');
+    loadCampanas();
+    showToast('OK','Campaña borrada');
+  }catch(e){showToast('Error', e.message);}
+}
+
+function _esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
 // ── Marketing ROI ──
 async function loadRoi(){

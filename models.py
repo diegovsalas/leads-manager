@@ -432,6 +432,42 @@ class EstadoBotInterno(db.Model):
 
 
 # ──────────────────────────────────────────────
+# Tabla: meta_campaigns — registry editable de campañas Meta Ads
+# ──────────────────────────────────────────────
+class MetaCampaign(db.Model):
+    """Registry de campañas Meta Ads con metadata de enrutamiento.
+
+    Cuando llega un lead vía meta_lead_polling, se consulta esta tabla por
+    campaign_id para resolver marca/unidad/zona y dirigir la asignación.
+    Editable vía /api/meta-campaigns (UI admin).
+    """
+    __tablename__ = "meta_campaigns"
+
+    campaign_id    = db.Column(db.String(40), primary_key=True)  # ID de Meta Graph API
+    nombre         = db.Column(db.String(300), nullable=False)
+    marca          = db.Column(db.String(80), nullable=False)    # Aromatex / Pestex / Weldex
+    unidad         = db.Column(db.String(60), nullable=False)    # aromatex_b2c / aromatex_b2b / weldex
+    estado_default = db.Column(db.String(80), nullable=True)     # estado a usar si el form no trae
+    zonas          = db.Column(ARRAY(db.String(80)), nullable=False, default=list, server_default="{}")
+    activa         = db.Column(db.Boolean, nullable=False, default=True, server_default="true")
+    fecha_creacion      = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+    fecha_actualizacion = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "campaign_id":    self.campaign_id,
+            "nombre":         self.nombre,
+            "marca":          self.marca,
+            "unidad":         self.unidad,
+            "estado_default": self.estado_default,
+            "zonas":          list(self.zonas or []),
+            "activa":         bool(self.activa),
+            "fecha_creacion":      self.fecha_creacion.isoformat() if self.fecha_creacion else None,
+            "fecha_actualizacion": self.fecha_actualizacion.isoformat() if self.fecha_actualizacion else None,
+        }
+
+
+# ──────────────────────────────────────────────
 # Tabla: gastos_publicidad
 # ──────────────────────────────────────────────
 class GastoPublicidad(db.Model):

@@ -1,7 +1,8 @@
 """
 Registry de campañas Meta con asignación dirigida.
 
-Mapeo campaign_id → marca + zona + unidad. Cuando llega un lead vía
+Mapeo campaign_id → marca + zona + unidad. Lee de la tabla `meta_campaigns`
+(editable vía UI admin en /api/meta-campaigns). Cuando llega un lead vía
 meta_lead_polling.py, este registry decide:
   - qué marca poner (override del form, porque la campaña ES la marca)
   - qué estado default usar si el form no trae uno
@@ -9,16 +10,14 @@ meta_lead_polling.py, este registry decide:
   - en qué zonas geográficas se está pautando (para validar/filtrar
     candidatos al asignar)
 
-Para añadir una campaña nueva: agrega un entry con la campaign_id de Meta
-como key. Si tiene zona única (ej. MTY) → lista de un solo estado. Si pauta
-en varios estados, lista todos.
-
-Zonas AX-B2B (Norte/Centro/Sur) usan la convención comercial estándar.
-Ajustar si cambian.
+Cache TTL corto (60s) para no martillar BD desde el polling. invalidate()
+fuerza recarga inmediata después de un edit en UI.
 """
+import time
 from typing import Optional
 
-
+# Convenciones de zona comerciales estándar de México — útiles como presets
+# en la UI cuando se da de alta una campaña nueva.
 ZONA_NORTE = [
     "Nuevo León", "Coahuila", "Tamaulipas", "Chihuahua", "Durango",
     "Sonora", "Baja California", "Baja California Sur", "Sinaloa",
@@ -35,55 +34,55 @@ ZONA_SUR = [
     "Campeche", "Yucatán", "Quintana Roo",
 ]
 
+ZONA_PRESETS = {"Norte": ZONA_NORTE, "Centro": ZONA_CENTRO, "Sur": ZONA_SUR}
 
-# campaign_id (string, como lo devuelve la Graph API) → metadata
-CAMPAIGNS = {
-    # ── Weldex (Weldu) — Monterrey ───────────────────────────────
-    "120248752029380246": {
-        "nombre":          "Weldu - Servicios - MTY",
-        "marca":           "Weldex",
-        "unidad":          "weldex",
-        "estado_default":  "Nuevo León",
-        "zonas":           ["Nuevo León"],
-    },
-    "120248749817010246": {
-        "nombre":          "Weldu - Limpieza Carrusel - MTY",
-        "marca":           "Weldex",
-        "unidad":          "weldex",
-        "estado_default":  "Nuevo León",
-        "zonas":           ["Nuevo León"],
-    },
 
-    # ── Aromatex B2B — Formularios Junio 2026 ────────────────────
-    "120245034081530080": {
-        "nombre":          "[AX-B2B] Contactos Sur · Formularios · Junio 2026",
-        "marca":           "Aromatex",
-        "unidad":          "aromatex_b2b",
-        "estado_default":  None,  # depende del form
-        "zonas":           ZONA_SUR,
-    },
-    "120245032865400080": {
-        "nombre":          "[AX-B2B] Contactos Norte · Formularios · Junio 2026",
-        "marca":           "Aromatex",
-        "unidad":          "aromatex_b2b",
-        "estado_default":  None,
-        "zonas":           ZONA_NORTE,
-    },
-    "120245034025690080": {
-        "nombre":          "[AX-B2B] Contactos Centro · Formularios · Junio 2026",
-        "marca":           "Aromatex",
-        "unidad":          "aromatex_b2b",
-        "estado_default":  None,
-        "zonas":           ZONA_CENTRO,
-    },
-}
+_cache: dict = {}
+_cache_expires: float = 0.0
+_CACHE_TTL = 60  # segundos
+
+
+def _load_from_db() -> dict:
+    """Lee meta_campaigns y arma el dict {campaign_id: meta}."""
+    try:
+        from models import MetaCampaign
+        rows = MetaCampaign.query.filter_by(activa=True).all()
+        return {
+            r.campaign_id: {
+                "nombre":         r.nombre,
+                "marca":          r.marca,
+                "unidad":         r.unidad,
+                "estado_default": r.estado_default,
+                "zonas":          list(r.zonas or []),
+            }
+            for r in rows
+        }
+    except Exception:
+        # BD no disponible (ej. en pruebas o boot) — devolver dict vacío
+        return {}
+
+
+def _get_cache() -> dict:
+    global _cache, _cache_expires
+    now = time.time()
+    if now > _cache_expires:
+        _cache = _load_from_db()
+        _cache_expires = now + _CACHE_TTL
+    return _cache
+
+
+def invalidate():
+    """Fuerza recarga inmediata desde BD en el siguiente lookup.
+    Llamar después de crear/editar/borrar una campaña en la UI."""
+    global _cache_expires
+    _cache_expires = 0.0
 
 
 def lookup(campaign_id: Optional[str]) -> Optional[dict]:
-    """Devuelve metadata de la campaña o None si no está registrada."""
+    """Devuelve metadata de la campaña o None si no está registrada o inactiva."""
     if not campaign_id:
         return None
-    return CAMPAIGNS.get(str(campaign_id))
+    return _get_cache().get(str(campaign_id))
 
 
 def aplicar_a_lead(datos_lead: dict, campaign_id: Optional[str]) -> dict:
