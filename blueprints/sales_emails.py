@@ -117,8 +117,11 @@ def listar():
 # ── Disparar poll manual (debug / forzar refresh) ──────────────────
 
 
-@sales_emails_bp.route("/poll", methods=["POST"])
+@sales_emails_bp.route("/poll", methods=["POST", "GET"])
 def trigger_poll():
+    """Dispara poll manual. Acepta GET para ser pegable desde el navegador
+    (sesión activa). Query param ?lookback_min=N override de ventana.
+    Recomendados: 1440 = 24h, 10080 = 7d, 43200 = 30d."""
     err = _require_admin()
     if err: return err
     lookback = int(request.args.get("lookback_min") or gmail_monitor.LOOKBACK_MIN)
