@@ -126,3 +126,52 @@ def trigger_poll():
         return jsonify(gmail_monitor.poll_all(lookback_min=lookback))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@sales_emails_bp.route("/test", methods=["GET"])
+def test_auth():
+    """Prueba autenticación con un email específico. Devuelve OK + perfil del
+    user impersonado, o el error exacto de Google.
+    Uso: GET /api/sales-emails/test?email=katyagomez@grupoavantex.com
+    """
+    err = _require_admin()
+    if err: return err
+
+    email = (request.args.get("email") or "").strip()
+    if not email:
+        return jsonify({"error": "Falta ?email=..."}), 400
+    if not gmail_monitor.is_configured():
+        return jsonify({"error": "GMAIL_SERVICE_ACCOUNT_JSON no configurado en Render"}), 500
+
+    try:
+        svc = gmail_monitor._build_service(email)
+        profile = svc.users().getProfile(userId="me").execute()
+        return jsonify({
+            "ok": True,
+            "email_probado": email,
+            "profile": {
+                "emailAddress":     profile.get("emailAddress"),
+                "messagesTotal":    profile.get("messagesTotal"),
+                "threadsTotal":     profile.get("threadsTotal"),
+                "historyId":        profile.get("historyId"),
+            }
+        })
+    except Exception as e:
+        # Aplanamos el error de Google para que sea legible en el UI
+        from google.auth.exceptions import RefreshError
+        from googleapiclient.errors import HttpError
+        if isinstance(e, RefreshError):
+            return jsonify({
+                "ok": False,
+                "tipo_error": "auth/impersonation",
+                "mensaje": str(e),
+                "diagnostico": "Casi seguro: delegación no autorizada en admin.google.com, o el email no existe en Workspace, o domain-wide delegation no marcada en el service account.",
+            }), 500
+        if isinstance(e, HttpError):
+            return jsonify({
+                "ok": False,
+                "tipo_error": "gmail_api",
+                "status": e.resp.status,
+                "mensaje": str(e),
+            }), 500
+        return jsonify({"ok": False, "tipo_error": "desconocido", "mensaje": str(e)}), 500
