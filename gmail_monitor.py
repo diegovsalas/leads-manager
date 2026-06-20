@@ -124,11 +124,12 @@ def _parse_gmail_message(msg: dict) -> Optional[dict]:
     if not sent_at:
         sent_at = datetime.now(timezone.utc)
 
-    # has_attachment: si alguna parte tiene filename no vacío
-    has_attachment = _has_attachment(payload)
-
     # snippet: Gmail lo provee directo (típicamente ~100-200 chars)
     snippet = (msg.get("snippet") or "")[:200]
+
+    # Body completo + adjuntos
+    bodies = _extract_bodies(payload)
+    has_attachment = bool(bodies["attachments"]) or _has_attachment(payload)
 
     return {
         "gmail_message_id": msg.get("id"),
@@ -139,6 +140,9 @@ def _parse_gmail_message(msg: dict) -> Optional[dict]:
         "cc_emails":        cc_list,
         "subject":          subject[:500] if subject else None,
         "snippet":          snippet,
+        "body_text":        bodies["text"] or None,
+        "body_html":        bodies["html"] or None,
+        "attachments":      bodies["attachments"],
         "has_attachment":   has_attachment,
     }
 
@@ -154,6 +158,55 @@ def _has_attachment(payload: dict) -> bool:
     return False
 
 
+_BODY_TEXT_MAX = 200_000   # ~200KB tope para body_text
+_BODY_HTML_MAX = 500_000   # ~500KB tope para body_html (puede traer imágenes inline base64)
+
+
+def _decode_body(data_b64url: str) -> str:
+    if not data_b64url:
+        return ""
+    try:
+        return base64.urlsafe_b64decode(data_b64url).decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+def _extract_bodies(payload: dict, acc: dict = None) -> dict:
+    """Recorre el payload MIME del mensaje, acumula body_text y body_html.
+    Retorna {'text': str, 'html': str, 'attachments': [{filename,mime,size}]}.
+    Solo procesa partes inline; los adjuntos solo se listan, no se descargan."""
+    if acc is None:
+        acc = {"text": "", "html": "", "attachments": []}
+    if not payload:
+        return acc
+
+    mime = (payload.get("mimeType") or "").lower()
+    filename = payload.get("filename") or ""
+    body = payload.get("body") or {}
+    parts = payload.get("parts") or []
+
+    # Adjunto: tiene filename y attachmentId (data está en body.attachmentId, no inline)
+    if filename:
+        acc["attachments"].append({
+            "filename": filename,
+            "mime_type": mime,
+            "size":      body.get("size", 0),
+        })
+    else:
+        data = body.get("data")
+        if data and mime == "text/plain" and len(acc["text"]) < _BODY_TEXT_MAX:
+            decoded = _decode_body(data)
+            acc["text"] = (acc["text"] + "\n" + decoded)[:_BODY_TEXT_MAX] if acc["text"] else decoded[:_BODY_TEXT_MAX]
+        elif data and mime == "text/html" and len(acc["html"]) < _BODY_HTML_MAX:
+            decoded = _decode_body(data)
+            acc["html"] = (acc["html"] + "\n" + decoded)[:_BODY_HTML_MAX] if acc["html"] else decoded[:_BODY_HTML_MAX]
+
+    for part in parts:
+        _extract_bodies(part, acc)
+
+    return acc
+
+
 def _query_for_lookback(minutes: int) -> str:
     """Gmail query: enviados en los últimos N minutos, excluyendo destinatarios
     internos. `newer_than` con unidad mínima h; para minutos usamos `after:`."""
@@ -163,9 +216,16 @@ def _query_for_lookback(minutes: int) -> str:
     return f"in:sent after:{after_ts} -to:@{INTERNAL_DOMAIN}"
 
 
-def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN) -> dict:
-    """Pull correos salientes de un vendedor. Retorna stats."""
-    stats = {"vendedor": vendedor.nombre, "fetched": 0, "saved": 0, "skipped_internal": 0, "errors": 0}
+def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN,
+                backfill_bodies: bool = True) -> dict:
+    """Pull correos salientes de un vendedor.
+
+    backfill_bodies=True (default): si encuentra un correo ya guardado pero
+    sin body_text/body_html, lo re-fetcha con format=full y actualiza la fila.
+    Útil para upgradar correos importados antes con format=metadata.
+    """
+    stats = {"vendedor": vendedor.nombre, "fetched": 0, "saved": 0,
+             "skipped_internal": 0, "backfilled": 0, "errors": 0}
     if not vendedor.gmail_address:
         return stats
 
@@ -178,7 +238,7 @@ def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN) -> dict:
 
     query = _query_for_lookback(lookback_min)
     try:
-        resp = svc.users().messages().list(userId="me", q=query, maxResults=100).execute()
+        resp = svc.users().messages().list(userId="me", q=query, maxResults=500).execute()
     except Exception as e:
         log.exception(f"list falló para {vendedor.gmail_address}: {e}")
         stats["errors"] = 1
@@ -191,16 +251,18 @@ def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN) -> dict:
         mid = m.get("id")
         if not mid:
             continue
-        # Skip si ya está en BD
-        if db.session.query(SalesEmail.id).filter_by(gmail_message_id=mid).first():
+
+        existing = SalesEmail.query.filter_by(gmail_message_id=mid).first()
+        # Si existe y ya tiene body, skip
+        if existing and (existing.body_text or existing.body_html):
+            continue
+        # Si existe pero NO tiene body y backfill desactivado, skip
+        if existing and not backfill_bodies:
             continue
 
         try:
-            # metadata solo: ahorra ancho de banda y respeta privacidad
-            msg = svc.users().messages().get(
-                userId="me", id=mid, format="metadata",
-                metadataHeaders=["To", "Cc", "From", "Subject", "Date"],
-            ).execute()
+            # format=full: trae body + adjuntos + headers
+            msg = svc.users().messages().get(userId="me", id=mid, format="full").execute()
         except Exception as e:
             log.warning(f"get message {mid} falló: {e}")
             stats["errors"] += 1
@@ -211,17 +273,22 @@ def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN) -> dict:
             stats["skipped_internal"] += 1
             continue
 
-        email = SalesEmail(
-            vendedor_id=vendedor.id,
-            **parsed,
-        )
-        db.session.add(email)
         try:
+            if existing:
+                # UPDATE: backfill body en correo viejo
+                for k, v in parsed.items():
+                    if k != "gmail_message_id":  # no toques el PK lógico
+                        setattr(existing, k, v)
+                stats["backfilled"] += 1
+            else:
+                # INSERT nuevo
+                email = SalesEmail(vendedor_id=vendedor.id, **parsed)
+                db.session.add(email)
+                stats["saved"] += 1
             db.session.flush()
-            stats["saved"] += 1
         except Exception as e:
             db.session.rollback()
-            log.warning(f"insert msg {mid} falló (probable dup): {e}")
+            log.warning(f"persist msg {mid} falló: {e}")
             stats["errors"] += 1
 
     try:
@@ -234,7 +301,7 @@ def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN) -> dict:
     return stats
 
 
-def poll_all(lookback_min: int = LOOKBACK_MIN) -> dict:
+def poll_all(lookback_min: int = LOOKBACK_MIN, backfill_bodies: bool = True) -> dict:
     """Itera todos los vendedores con gmail_address y los polea."""
     if not is_configured():
         return {"error": "GMAIL_SERVICE_ACCOUNT_JSON no configurado"}
@@ -246,12 +313,14 @@ def poll_all(lookback_min: int = LOOKBACK_MIN) -> dict:
 
     results = []
     for v in vendedores:
-        results.append(poll_vendor(v, lookback_min=lookback_min))
+        results.append(poll_vendor(v, lookback_min=lookback_min,
+                                    backfill_bodies=backfill_bodies))
     return {
-        "vendedores": len(vendedores),
-        "total_saved": sum(r["saved"] for r in results),
-        "total_fetched": sum(r["fetched"] for r in results),
-        "detalle": results,
+        "vendedores":         len(vendedores),
+        "total_saved":        sum(r["saved"] for r in results),
+        "total_backfilled":   sum(r.get("backfilled", 0) for r in results),
+        "total_fetched":      sum(r["fetched"] for r in results),
+        "detalle":            results,
     }
 
 

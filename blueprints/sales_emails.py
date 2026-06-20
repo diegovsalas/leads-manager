@@ -114,6 +114,17 @@ def listar():
     return jsonify({"emails": [r.to_dict() for r in rows], "count": len(rows)})
 
 
+@sales_emails_bp.route("/<uuid:email_id>", methods=["GET"])
+def get_email(email_id):
+    """Devuelve un correo con body_text + body_html completos."""
+    err = _require_admin()
+    if err: return err
+    email = SalesEmail.query.get(str(email_id))
+    if not email:
+        return jsonify({"error": "Correo no encontrado"}), 404
+    return jsonify(email.to_dict(include_body=True))
+
+
 # ── Disparar poll manual (debug / forzar refresh) ──────────────────
 
 

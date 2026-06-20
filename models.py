@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from sqlalchemy.dialects.postgresql import UUID, ARRAY, JSONB
 from extensions import db
 
 
@@ -456,13 +456,16 @@ class SalesEmail(db.Model):
     cc_emails        = db.Column(ARRAY(db.Text), nullable=False, default=list, server_default="{}")
     subject          = db.Column(db.Text, nullable=True)
     snippet          = db.Column(db.Text, nullable=True)  # primeros 200 chars del body
+    body_text        = db.Column(db.Text, nullable=True)  # cuerpo del correo en texto plano
+    body_html        = db.Column(db.Text, nullable=True)  # cuerpo en HTML (renderiza en iframe sandbox)
+    attachments      = db.Column(JSONB, nullable=False, default=list, server_default="[]")
     has_attachment   = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
     created_at       = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
 
     vendedor = db.relationship("Usuario", foreign_keys=[vendedor_id])
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_body: bool = False):
+        d = {
             "id":              str(self.id),
             "vendedor_id":     str(self.vendedor_id),
             "vendedor_nombre": self.vendedor.nombre if self.vendedor else None,
@@ -475,10 +478,15 @@ class SalesEmail(db.Model):
             "subject":         self.subject,
             "snippet":         self.snippet,
             "has_attachment":  self.has_attachment,
+            "attachments":     self.attachments or [],
             # Deep-link al hilo en Gmail para que el admin abra el correo completo
             "gmail_url":       (f"https://mail.google.com/mail/u/0/#all/{self.gmail_thread_id}"
                                 if self.gmail_thread_id else None),
         }
+        if include_body:
+            d["body_text"] = self.body_text
+            d["body_html"] = self.body_html
+        return d
 
 
 # ──────────────────────────────────────────────

@@ -2598,6 +2598,40 @@ async function deleteCampana(cid, nombre){
 
 function _esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
+// ── Correos vendedores: visualizar cuerpo completo ──
+async function viewEmailBody(emailId){
+  const container=document.getElementById('email-body-'+emailId);
+  if(!container)return;
+  // Toggle: si ya está abierto, cierra
+  if(container.style.display==='block'){
+    container.style.display='none';container.innerHTML='';return;
+  }
+  container.style.display='block';
+  container.innerHTML='<div style="color:var(--text3);font-size:12px;padding:8px;">Cargando...</div>';
+  try{
+    const r=await fetch('/api/sales-emails/'+emailId);
+    const d=await r.json();
+    if(!r.ok){container.innerHTML='<div style="color:var(--red);font-size:12px;">'+_esc(d.error||'Error')+'</div>';return;}
+
+    let html='';
+    if(d.body_html){
+      // Render HTML en iframe sandbox — bloquea scripts, navegación, plugins
+      const safeHtml = d.body_html;
+      html=`<div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Vista HTML (sandbox)</div>
+        <iframe sandbox srcdoc="${safeHtml.replace(/"/g,'&quot;')}"
+          style="width:100%;min-height:300px;border:1px solid var(--border);border-radius:4px;background:#fff;"></iframe>`;
+    }else if(d.body_text){
+      html=`<div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Vista texto plano</div>
+        <pre style="white-space:pre-wrap;font-family:var(--mono);font-size:11px;background:var(--bg-soft);padding:10px;border-radius:4px;max-height:400px;overflow:auto;margin:0;">${_esc(d.body_text)}</pre>`;
+    }else{
+      html='<div style="color:var(--text3);font-size:12px;padding:8px;">Body no disponible — click "Backfill bodies" para re-jalar de Gmail.</div>';
+    }
+    container.innerHTML=html;
+  }catch(e){
+    container.innerHTML='<div style="color:var(--red);font-size:12px;">Error: '+_esc(e.message)+'</div>';
+  }
+}
+
 // ── Correos vendedores (Gmail monitoring) ──
 let _correosVendedorActual = null;
 
@@ -2693,6 +2727,9 @@ async function loadCorreosDeUnVendedor(){
       const to=(e.to_emails||[]).join(', ');
       const cc=(e.cc_emails||[]).length?` <span style="color:var(--text3);">+${e.cc_emails.length} CC</span>`:'';
       const att=e.has_attachment?' 📎':'';
+      const attList=(e.attachments||[]).length
+        ? `<div style="font-size:11px;color:var(--text3);margin-top:4px;">📎 ${(e.attachments||[]).map(a=>_esc(a.filename||'archivo')).join(', ')}</div>`
+        : '';
       const subjectEsc=_esc(e.subject||'(sin asunto)');
       const snippetEsc=_esc(e.snippet||'');
       const linkHtml = e.gmail_url
@@ -2705,7 +2742,12 @@ async function loadCorreosDeUnVendedor(){
         </div>
         <div style="font-size:13px;font-weight:600;color:var(--ink-1);margin-bottom:3px;">${subjectEsc}</div>
         <div style="font-size:12px;color:var(--text2);line-height:1.4;margin-bottom:6px;">${snippetEsc}</div>
-        ${linkHtml}
+        ${attList}
+        <div style="display:flex;gap:12px;align-items:center;margin-top:6px;">
+          <button class="btn" onclick="viewEmailBody('${e.id}')" style="font-size:11px;padding:4px 10px;">Ver completo</button>
+          ${linkHtml}
+        </div>
+        <div id="email-body-${e.id}" style="display:none;margin-top:10px;border-top:1px dashed var(--border-light);padding-top:10px;"></div>
       </div>`;
     }).join('');
   }catch(e){status.textContent='Error: '+e.message;}
