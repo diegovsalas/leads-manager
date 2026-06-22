@@ -147,6 +147,74 @@ def trigger_poll():
         return jsonify({"error": str(e)}), 500
 
 
+@sales_emails_bp.route("/refresh-all", methods=["GET", "POST"])
+def refresh_all():
+    """Itera TODOS los SalesEmail en BD y los re-fetcha individualmente desde
+    Gmail. Útil para refrescar attachment_id u otros campos del schema sin
+    depender del filtro Gmail/lookback.
+    """
+    err = _require_admin()
+    if err: return err
+    if not gmail_monitor.is_configured():
+        return jsonify({"error": "GMAIL_SERVICE_ACCOUNT_JSON no configurado"}), 500
+
+    # Si ?missing_att_id_only=1, solo procesa los que tienen attachment sin id
+    only_missing = (request.args.get("missing_att_id_only") or "").strip() in ("1", "true", "yes")
+
+    stats = {"total": 0, "refreshed": 0, "errors": 0, "skipped": 0}
+
+    # Cache de servicio por vendedora (evita rebuilding por cada correo)
+    svc_cache = {}
+
+    rows = SalesEmail.query.order_by(SalesEmail.sent_at.desc()).all()
+    stats["total"] = len(rows)
+
+    for row in rows:
+        if only_missing:
+            atts = row.attachments or []
+            has_unfilled = any(a.get("filename") and not a.get("attachment_id") for a in atts)
+            if not has_unfilled:
+                stats["skipped"] += 1
+                continue
+
+        vendedor = row.vendedor
+        if not vendedor or not vendedor.gmail_address:
+            stats["errors"] += 1
+            continue
+        addr = vendedor.gmail_address
+        try:
+            if addr not in svc_cache:
+                svc_cache[addr] = gmail_monitor._build_service(addr)
+            svc = svc_cache[addr]
+            msg = svc.users().messages().get(userId="me", id=row.gmail_message_id, format="full").execute()
+        except Exception as e:
+            stats["errors"] += 1
+            continue
+
+        parsed = gmail_monitor._parse_gmail_message(msg)
+        if not parsed:
+            stats["skipped"] += 1
+            continue
+
+        try:
+            for k, v in parsed.items():
+                if k != "gmail_message_id":
+                    setattr(row, k, v)
+            db.session.flush()
+            stats["refreshed"] += 1
+        except Exception:
+            db.session.rollback()
+            stats["errors"] += 1
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e), **stats}), 500
+
+    return jsonify(stats)
+
+
 @sales_emails_bp.route("/<uuid:email_id>/attachment/<int:idx>", methods=["GET"])
 def download_attachment(email_id, idx):
     """Descarga un adjunto on-demand desde Gmail. NO se guarda en BD.
