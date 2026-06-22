@@ -1986,17 +1986,79 @@ fbq('track','PageView');
   <div class="modal-actions"><button class="btn" onclick="closeGastoModal()">Cancelar</button><button class="btn btn-filled" onclick="crearGasto()">Registrar</button></div>
 </div></div>
 
-<!-- Modal: Vendedor -->
-<div class="modal-overlay" id="modal-vendedor" onclick="if(event.target===this)closeVendedorModal()"><div class="modal">
-  <div class="modal-title" id="mv-title">Agregar vendedor</div>
+<!-- Modal: Vendedor (completo: perfil + login) -->
+<div class="modal-overlay" id="modal-vendedor" onclick="if(event.target===this)closeVendedorModal()"><div class="modal" style="max-width:640px;width:96%;max-height:90vh;overflow-y:auto;">
+  <div class="modal-title" id="mv-title">Nuevo vendedor</div>
   <input type="hidden" id="mv-id" value=""/>
-  <div class="form-group"><label class="form-label">Nombre</label><input class="form-input" id="mv-nombre" type="text" placeholder="Nombre completo"/></div>
-  <div class="form-group"><label class="form-label">WhatsApp</label><input class="form-input" id="mv-tel" type="text" placeholder="+52 55 ..."/></div>
-  <div class="form-group"><label class="form-label">Rol</label><select class="form-select" id="mv-rol"><option>Asesor Comercial</option><option>SDR</option><option>Líder Comercial</option><option>Gerente de Ventas</option></select></div>
-  <div class="form-group"><label class="form-label">Especialidad (marcas, separadas por coma)</label><input class="form-input" id="mv-marcas" type="text" placeholder="Weldex, Aromatex, Nexo"/></div>
-  <div class="form-group"><label class="form-label" style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="mv-turno" checked/> En turno (recibe leads automaticos)</label></div>
-  <div class="modal-actions"><button class="btn" onclick="closeVendedorModal()">Cancelar</button><button class="btn btn-filled" onclick="guardarVendedor()">Guardar</button></div>
+
+  <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 6px;">Datos personales</div>
+  <div class="form-row">
+    <div class="form-group"><label class="form-label">Nombre completo *</label><input class="form-input" id="mv-nombre" type="text"/></div>
+    <div class="form-group"><label class="form-label">WhatsApp</label><input class="form-input" id="mv-tel" type="text" placeholder="+52 81 1234 5678"/></div>
+  </div>
+
+  <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px;">Cuenta de acceso al CRM</div>
+  <div class="form-row">
+    <div class="form-group"><label class="form-label">Correo (email login) *</label><input class="form-input" id="mv-correo" type="email" placeholder="nombre@grupoavantex.com"/></div>
+    <div class="form-group"><label class="form-label">Rol del sistema</label>
+      <select class="form-select" id="mv-rol-login">
+        <option value="Vendedor">Vendedor (ve solo sus leads)</option>
+        <option value="KAM">KAM (CS dashboard)</option>
+        <option value="Super Admin">Super Admin (ve todo)</option>
+      </select>
+    </div>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Contraseña <span style="color:var(--text3);font-weight:400;font-size:10px;">(deja vacío para generar una temporal de 12 chars)</span></label>
+    <input class="form-input" id="mv-password" type="text" placeholder="(se genera automáticamente)"/>
+  </div>
+
+  <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px;">Perfil comercial — routing de leads</div>
+  <div class="form-group">
+    <label class="form-label">Rol comercial</label>
+    <select class="form-select" id="mv-rol-com">
+      <option>Asesor Comercial</option>
+      <option>SDR</option>
+      <option>Líder Comercial</option>
+      <option>Gerente de Ventas</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Marcas que atiende *</label>
+    <div id="mv-marcas-pills" style="display:flex;gap:6px;flex-wrap:wrap;">
+      <label class="mv-chip"><input type="checkbox" value="Aromatex"/><span>Aromatex</span></label>
+      <label class="mv-chip"><input type="checkbox" value="Aromatex Home"/><span>Aromatex Home</span></label>
+      <label class="mv-chip"><input type="checkbox" value="Pestex"/><span>Pestex</span></label>
+      <label class="mv-chip"><input type="checkbox" value="Weldex"/><span>Weldex</span></label>
+      <label class="mv-chip"><input type="checkbox" value="Nexo"/><span>Nexo</span></label>
+    </div>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Zona de cobertura <span style="color:var(--text3);font-weight:400;font-size:10px;">(estados que atiende — separados por coma, vacío = nacional)</span></label>
+    <textarea class="form-input" id="mv-zonas" rows="2" style="resize:vertical;" placeholder="Nuevo León, Tamaulipas, Coahuila"></textarea>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Gmail corporativo <span style="color:var(--text3);font-weight:400;font-size:10px;">(opcional, para monitoreo de correos)</span></label>
+    <input class="form-input" id="mv-gmail" type="email" placeholder="nombre@grupoavantex.com"/>
+  </div>
+  <div class="form-group">
+    <label class="form-label" style="display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="mv-turno" checked/> En turno (recibe leads automáticos vía round-robin)
+    </label>
+  </div>
+
+  <div class="modal-actions">
+    <button class="btn" onclick="closeVendedorModal()">Cancelar</button>
+    <button class="btn btn-filled" onclick="guardarVendedor()">Guardar vendedor</button>
+  </div>
 </div></div>
+
+<style>
+.mv-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--border);border-radius:99px;cursor:pointer;font-size:12px;background:var(--bg-card);transition:.15s;}
+.mv-chip input{margin:0;}
+.mv-chip:has(input:checked){background:var(--accent);color:#fff;border-color:var(--accent);}
+.mv-chip:has(input:checked) span{color:#fff;}
+</style>
 
 <!-- Modal: Cerrado Perdido (motivo requerido) -->
 <div class="modal-overlay" id="modal-perdido" onclick="if(event.target===this)closePerdidoModal()"><div class="modal">
@@ -4401,8 +4463,17 @@ async function loadVendedores(){
       const metaCell=IS_ADMIN
         ?`<td><input type="number" value="${m.meta_mxn||''}" placeholder="0" style="width:90px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;font-family:var(--mono);text-align:right;" onchange="saveMeta('${v.id}',this.value)"/></td>`
         :`<td style="font-family:var(--mono);font-size:13px;">${m.tiene_meta?fmt$(m.meta_mxn):'-'}</td>`;
+      // Indicador de cuenta de login
+      const loginBadge = v.login
+        ? `<div style="font-size:10px;color:var(--text3);">📧 ${_esc(v.login.correo)}${v.login.activo?'':' <span style="color:var(--red)">(inactivo)</span>'}</div>`
+        : `<div style="font-size:10px;color:var(--orange);">⚠ sin cuenta de login</div>`;
+      // Acciones: editar + reset password si tiene login
+      const accionesCell = v.login
+        ? `<button class="btn" onclick="editVendedor('${v.id}')" style="font-size:11px;padding:3px 8px;">Editar</button>
+           <button class="btn" onclick="resetPasswordVendedor('${v.id}','${_esc(v.nombre)}')" style="font-size:11px;padding:3px 8px;color:var(--orange);">Reset pwd</button>`
+        : `<button class="btn" onclick="editVendedor('${v.id}')" style="font-size:11px;padding:3px 8px;">Editar</button>`;
       tb.innerHTML+=`<tr>
-        <td class="td-name">${v.nombre}</td>
+        <td class="td-name"><strong>${_esc(v.nombre)}</strong>${loginBadge}</td>
         <td style="font-size:12px;">${marcas}</td>
         <td>${turno}</td>
         ${metaCell}
@@ -4413,7 +4484,7 @@ async function loadVendedores(){
           </div>
         </td>
         <td style="font-size:13px;font-weight:600;color:${barColor};">${pct}%</td>
-        <td><button class="btn" onclick="editVendedor('${v.id}')">Editar</button></td>
+        <td>${accionesCell}</td>
       </tr>`;
     });
     // Populate vendedor select in lead modal
@@ -4464,13 +4535,19 @@ function toggleVendedorSelect(){
   group.style.display=(origen==='Meta Ads')?'none':'block';
 }
 
-function openVendedorModal(id){
+function openVendedorModal(){
   document.getElementById('mv-id').value='';
   document.getElementById('mv-nombre').value='';
   document.getElementById('mv-tel').value='';
-  document.getElementById('mv-marcas').value='';
+  document.getElementById('mv-correo').value='';
+  document.getElementById('mv-password').value='';
+  document.getElementById('mv-rol-login').value='Vendedor';
+  document.getElementById('mv-rol-com').value='Asesor Comercial';
+  document.getElementById('mv-zonas').value='';
+  document.getElementById('mv-gmail').value='';
   document.getElementById('mv-turno').checked=true;
-  document.getElementById('mv-title').textContent='Agregar vendedor';
+  document.querySelectorAll('#mv-marcas-pills input').forEach(c=>c.checked=false);
+  document.getElementById('mv-title').textContent='Nuevo vendedor';
   document.getElementById('modal-vendedor').classList.add('open');
 }
 function closeVendedorModal(){document.getElementById('modal-vendedor').classList.remove('open');}
@@ -4478,31 +4555,67 @@ function closeVendedorModal(){document.getElementById('modal-vendedor').classLis
 function editVendedor(id){
   const v=_vendedores.find(x=>x.id===id);if(!v)return;
   document.getElementById('mv-id').value=v.id;
-  document.getElementById('mv-nombre').value=v.nombre;
+  document.getElementById('mv-nombre').value=v.nombre||'';
   document.getElementById('mv-tel').value=v.telefono_whatsapp||'';
-  document.getElementById('mv-rol').value=v.rol_comercial;
-  document.getElementById('mv-marcas').value=(v.especialidad_marca||[]).join(', ');
-  document.getElementById('mv-turno').checked=v.en_turno;
-  document.getElementById('mv-title').textContent='Editar vendedor';
+  document.getElementById('mv-correo').value=(v.login&&v.login.correo)||'';
+  document.getElementById('mv-password').value=''; // vacío = no cambiar
+  document.getElementById('mv-rol-login').value=(v.login&&v.login.rol)||'Vendedor';
+  document.getElementById('mv-rol-com').value=v.rol_comercial||'Asesor Comercial';
+  document.getElementById('mv-zonas').value=(v.zona_cobertura||[]).join(', ');
+  document.getElementById('mv-gmail').value=v.gmail_address||'';
+  document.getElementById('mv-turno').checked=!!v.en_turno;
+  document.querySelectorAll('#mv-marcas-pills input').forEach(c=>{
+    c.checked=(v.especialidad_marca||[]).includes(c.value);
+  });
+  document.getElementById('mv-title').textContent='Editar vendedor: '+v.nombre;
   document.getElementById('modal-vendedor').classList.add('open');
 }
 
 async function guardarVendedor(){
   const id=document.getElementById('mv-id').value;
+  const marcas=Array.from(document.querySelectorAll('#mv-marcas-pills input:checked')).map(c=>c.value);
+  const zonas=document.getElementById('mv-zonas').value.split(',').map(s=>s.trim()).filter(Boolean);
   const body={
-    nombre:document.getElementById('mv-nombre').value.trim(),
-    telefono_whatsapp:document.getElementById('mv-tel').value.trim(),
-    rol_comercial:document.getElementById('mv-rol').value,
-    especialidad_marca:document.getElementById('mv-marcas').value.split(',').map(s=>s.trim()).filter(Boolean),
-    en_turno:document.getElementById('mv-turno').checked,
+    nombre:           document.getElementById('mv-nombre').value.trim(),
+    telefono_whatsapp:document.getElementById('mv-tel').value.trim()||null,
+    correo:           document.getElementById('mv-correo').value.trim().toLowerCase(),
+    password:         document.getElementById('mv-password').value.trim()||null,
+    rol_login:        document.getElementById('mv-rol-login').value,
+    rol_comercial:    document.getElementById('mv-rol-com').value,
+    especialidad_marca: marcas,
+    zona_cobertura:   zonas,
+    gmail_address:    document.getElementById('mv-gmail').value.trim().toLowerCase()||null,
+    en_turno:         document.getElementById('mv-turno').checked,
   };
-  if(!body.nombre){document.getElementById('mv-nombre').focus();return;}
+  if(!body.nombre){document.getElementById('mv-nombre').focus();showToast('Falta','Nombre requerido');return;}
+  if(!body.correo){document.getElementById('mv-correo').focus();showToast('Falta','Correo requerido');return;}
   try{
-    const url=id?'/api/vendedores/'+id:'/api/vendedores/';
-    await fetch(url,{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const url=id?'/api/vendedores/'+id+'/full':'/api/vendedores/full';
+    const method=id?'PUT':'POST';
+    const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(!r.ok){showToast('Error',d.error||'No se pudo guardar');return;}
     closeVendedorModal();loadVendedores();
-    showToast(id?'Vendedor actualizado':'Vendedor creado',body.nombre);
-  }catch{showToast('Error','No se pudo guardar');}
+    if(d.password_temporal){
+      // Mostrar el password generado para que el admin lo copie
+      const pw=d.password_temporal;
+      const correo=d.login?.correo||body.correo;
+      const msg=`Cuenta creada para ${body.nombre}\n\nCorreo: ${correo}\nPassword temporal: ${pw}\n\nCopia y compártelo. El vendedor lo cambia al entrar.`;
+      alert(msg);
+    }else{
+      showToast(id?'Vendedor actualizado':'Vendedor creado', body.nombre);
+    }
+  }catch(e){showToast('Error',e.message||'No se pudo guardar');}
+}
+
+async function resetPasswordVendedor(id, nombre){
+  if(!confirm('¿Generar nuevo password temporal para '+nombre+'?'))return;
+  try{
+    const r=await fetch('/api/vendedores/'+id+'/reset-password',{method:'POST'});
+    const d=await r.json();
+    if(!r.ok){showToast('Error',d.error||'Falló');return;}
+    alert(`Nuevo password temporal para ${nombre}\n\nCorreo: ${d.correo}\nPassword: ${d.password_temporal}\n\nCopia y compártelo.`);
+  }catch(e){showToast('Error',e.message);}
 }
 
 // Gastos modal
