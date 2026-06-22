@@ -137,13 +137,16 @@ def crear_completo():
 @require_role(["super_admin"])
 def actualizar_completo(vendedor_id):
     """Actualiza perfil + login vinculado en una sola llamada.
-    Acepta cualquier subset de campos del POST /full + password (opcional, reset)."""
+    Si el vendedor NO tiene login y el payload trae correo, CREA el login
+    desde cero (genera password temporal si no se proporciona) y lo vincula.
+    """
     perfil = db.session.get(Usuario, vendedor_id)
     if not perfil:
         return jsonify({"error": "Vendedor no encontrado"}), 404
     login = UserCRM.query.filter_by(usuario_id=perfil.id).first()
     data = request.get_json() or {}
 
+    # ── Perfil comercial ─────────────────────────────────────────────
     if "nombre" in data and data["nombre"]:
         perfil.nombre = data["nombre"].strip()
         if login: login.nombre = data["nombre"].strip()
@@ -161,23 +164,52 @@ def actualizar_completo(vendedor_id):
         try: perfil.rol_comercial = RolComercial(data["rol_comercial"])
         except ValueError: pass
 
-    if login:
-        if "correo" in data and data["correo"]:
-            nuevo = data["correo"].strip().lower()
-            if nuevo != login.correo:
-                dup = UserCRM.query.filter(
-                    db.func.lower(UserCRM.correo) == nuevo,
-                    UserCRM.id != login.id,
-                ).first()
-                if dup:
-                    return jsonify({"error": f"Correo {nuevo} ya está usado"}), 409
-                login.correo = nuevo
+    password_generado = None  # solo set si se crea login nuevo y se genera password
+
+    # ── Login (crear si no existe O actualizar) ──────────────────────
+    correo_in = (data.get("correo") or "").strip().lower()
+
+    if not login:
+        # No tiene cuenta de login. Si trae correo, la creamos.
+        if correo_in:
+            # Validar correo único en users_crm
+            dup = UserCRM.query.filter(db.func.lower(UserCRM.correo) == correo_in).first()
+            if dup:
+                return jsonify({"error": f"Ya existe un usuario con correo {correo_in}"}), 409
+            try:
+                rol_lg = RolCRM(data.get("rol_login", "Vendedor"))
+            except ValueError:
+                rol_lg = RolCRM.VENDEDOR
+            password = (data.get("password") or "").strip()
+            if not password:
+                password = _gen_password()
+                password_generado = password
+            if len(password) < 8:
+                return jsonify({"error": "Password debe tener al menos 8 caracteres"}), 400
+            login = UserCRM(
+                nombre=perfil.nombre,
+                correo=correo_in,
+                rol=rol_lg,
+                activo=bool(data.get("activo", True)),
+                usuario_id=perfil.id,
+            )
+            login.set_password(password)
+            db.session.add(login)
+    else:
+        # Ya tiene login: actualizar
+        if correo_in and correo_in != login.correo:
+            dup = UserCRM.query.filter(
+                db.func.lower(UserCRM.correo) == correo_in,
+                UserCRM.id != login.id,
+            ).first()
+            if dup:
+                return jsonify({"error": f"Correo {correo_in} ya está usado"}), 409
+            login.correo = correo_in
         if "rol_login" in data:
             try: login.rol = RolCRM(data["rol_login"])
             except ValueError: pass
         if "activo" in data:
             login.activo = bool(data["activo"])
-        # Reset password si se proporciona
         new_pw = (data.get("password") or "").strip()
         if new_pw:
             if len(new_pw) < 8:
@@ -194,6 +226,7 @@ def actualizar_completo(vendedor_id):
         "ok": True,
         "perfil": perfil.to_dict(),
         "login":  {"id": str(login.id), "correo": login.correo, "rol": login.rol.value, "activo": login.activo} if login else None,
+        "password_temporal": password_generado,  # solo populado si se creó login y se generó password
     })
 
 
