@@ -92,6 +92,18 @@ def embudo():
     ganados = leads_q.filter(Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO).count()
     perdidos = leads_q.filter(Lead.etapa_pipeline == EtapaPipeline.CIERRE_PERDIDO).count()
 
+    # Breakdown por origen del lead (Meta Ads, Web, WhatsApp Orgánico, etc.)
+    origen_rows = (
+        leads_q.with_entities(Lead.origen, func.count(Lead.id))
+        .group_by(Lead.origen).all()
+    )
+    leads_por_origen = []
+    for origen_enum, n in origen_rows:
+        label = origen_enum.value if origen_enum else "Sin origen"
+        leads_por_origen.append({"origen": label, "count": int(n)})
+    # Ordenar de mayor a menor count para el UI
+    leads_por_origen.sort(key=lambda x: -x["count"])
+
     # Revenue
     rev_q = db.session.query(func.coalesce(func.sum(func.coalesce(
         Lead.cantidad_productos * Lead.precio_unitario, Lead.valor_estimado, 0,
@@ -133,6 +145,7 @@ def embudo():
     return jsonify({
         "mes": inicio_mes.strftime("%Y-%m"),
         "leads_totales": total,
+        "leads_por_origen": leads_por_origen,
         "calificados": calificados,
         "cotizados": cotizados,
         "ganados": ganados,

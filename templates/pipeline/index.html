@@ -407,7 +407,7 @@ fbq('track','PageView');
     </div>
   </div>
   <div class="metrics-row">
-    <div class="metric-card"><div class="metric-label">Leads totales</div><div class="metric-value" id="m-total">0</div><div class="metric-sub" id="m-total-sub"></div></div>
+    <div class="metric-card"><div class="metric-label">Leads totales</div><div class="metric-value" id="m-total">0</div><div class="metric-sub" id="m-total-sub" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;"></div></div>
     <div class="metric-card"><div class="metric-label">Pipe activo</div><div class="metric-value" style="color:var(--orange)" id="m-pipe">$0</div><div class="metric-sub" id="m-pipe-sub"></div></div>
     <div class="metric-card"><div class="metric-label">Cierres ganados</div><div class="metric-value" style="color:var(--green)" id="m-ganados">0</div><div class="metric-sub" id="m-revenue"></div></div>
     <div class="metric-card admin-only"><div class="metric-label">Gasto ads</div><div class="metric-value" style="color:var(--red)" id="m-gasto">$0</div><div class="metric-sub" id="m-cpl"></div></div>
@@ -3258,7 +3258,23 @@ async function loadDashboard(){
     ]);
     // Metrics
     document.getElementById('m-total').textContent=embudo.leads_totales;
-    document.getElementById('m-total-sub').textContent='';
+    // Breakdown por origen como mini-chips (Meta Ads, Web, WhatsApp, Prospección, Upselling, Cross-selling, Sin origen)
+    const ORIGEN_COLOR={
+      'Meta Ads':         {bg:'#dbeafe', fg:'#1d4ed8'},
+      'WhatsApp Organico':{bg:'#dcfce7', fg:'#15803d'},
+      'Web':              {bg:'#fef3c7', fg:'#b45309'},
+      'Prospeccion':      {bg:'#ede9fe', fg:'#6d28d9'},
+      'Upselling':        {bg:'#fce7f3', fg:'#be185d'},
+      'Cross-selling':    {bg:'#cffafe', fg:'#0e7490'},
+      'Sin origen':       {bg:'#f3f4f6', fg:'#6b7280'},
+    };
+    const subEl=document.getElementById('m-total-sub');
+    subEl.innerHTML='';
+    for(const r of (embudo.leads_por_origen||[])){
+      const c = ORIGEN_COLOR[r.origen] || ORIGEN_COLOR['Sin origen'];
+      const label = r.origen==='WhatsApp Organico' ? 'WhatsApp' : r.origen;
+      subEl.innerHTML+=`<span title="${r.origen}: ${r.count} leads" style="background:${c.bg};color:${c.fg};font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;">${label} ${r.count}</span>`;
+    }
     document.getElementById('m-pipe').textContent=fmt$(embudo.pipe_total);
     document.getElementById('m-pipe-sub').textContent='';
     document.getElementById('m-ganados').textContent=embudo.ganados;
