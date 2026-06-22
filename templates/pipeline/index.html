@@ -997,7 +997,7 @@ fbq('track','PageView');
 <!-- ===== VENDEDORES ===== -->
 <div class="view" id="view-vendedores">
   <div class="toolbar">
-    <span style="font-size:16px;font-weight:600;">Equipo Comercial</span>
+    <span style="font-size:16px;font-weight:600;">Equipo</span>
     <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
       <select class="filter-select" id="metas-mes" onchange="loadVendedores()" style="font-size:12px;">
         <option value="">Mes actual</option>
@@ -1006,12 +1006,21 @@ fbq('track','PageView');
         <option value="2026-03">Mar 2026</option>
         <option value="2026-04">Abr 2026</option>
       </select>
-      <button class="btn btn-filled" onclick="openVendedorModal()">+ Agregar vendedor</button>
+      <button class="btn btn-filled" onclick="openVendedorModal()">+ Agregar</button>
     </div>
+  </div>
+  <div style="padding:12px 18px 0;display:flex;gap:0;border-radius:8px;align-items:center;">
+    <div style="display:flex;gap:0;border-radius:8px;overflow:hidden;border:1px solid var(--border);">
+      <button id="vend-tab-vendedores" class="btn btn-filled" onclick="switchVendedoresTab('Vendedor')" style="font-size:12px;border-radius:0;padding:6px 14px;">Vendedores <span id="vend-cnt-vendedor" style="font-size:10px;opacity:.7;margin-left:4px;"></span></button>
+      <button id="vend-tab-kam"        class="btn"           onclick="switchVendedoresTab('KAM')"      style="font-size:12px;border-radius:0;padding:6px 14px;">KAMs <span id="vend-cnt-kam" style="font-size:10px;opacity:.7;margin-left:4px;"></span></button>
+      <button id="vend-tab-admin"      class="btn"           onclick="switchVendedoresTab('Super Admin')" style="font-size:12px;border-radius:0;padding:6px 14px;">Super Admins <span id="vend-cnt-admin" style="font-size:10px;opacity:.7;margin-left:4px;"></span></button>
+      <button id="vend-tab-todos"      class="btn"           onclick="switchVendedoresTab('todos')"    style="font-size:12px;border-radius:0;padding:6px 14px;">Todos <span id="vend-cnt-todos" style="font-size:10px;opacity:.7;margin-left:4px;"></span></button>
+    </div>
+    <span style="margin-left:auto;font-size:11px;color:var(--text2);" id="vend-tab-hint"></span>
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Nombre</th><th>Especialidad</th><th>En turno</th><th>Meta del mes</th><th>Ventas</th><th>Avance</th><th>%</th><th></th></tr></thead>
+      <thead><tr><th>Nombre</th><th>Rol</th><th>Especialidad</th><th>En turno</th><th>Meta del mes</th><th>Ventas</th><th>Avance</th><th>%</th><th></th></tr></thead>
       <tbody id="vendedores-tbody"></tbody>
     </table>
   </div>
@@ -4436,9 +4445,47 @@ function showToast(title,msg){const c=document.getElementById('toasts'),t=docume
 
 // Vendedores
 let _vendedores=[];
+let _vendedoresTab='Vendedor'; // default: solo vendedores
+
+const ROL_CHIPS = {
+  'Super Admin': {bg:'#fce7f3', fg:'#be185d', label:'Super Admin'},
+  'KAM':         {bg:'#dbeafe', fg:'#1d4ed8', label:'KAM'},
+  'Vendedor':    {bg:'#dcfce7', fg:'#15803d', label:'Vendedor'},
+  '_sinlogin':   {bg:'#fef3c7', fg:'#92400e', label:'Sin login'},
+};
+
+function switchVendedoresTab(tab){
+  _vendedoresTab=tab;
+  ['Vendedor','KAM','Super Admin','todos'].forEach(t=>{
+    const id = t==='Vendedor'?'vend-tab-vendedores'
+             : t==='KAM'?'vend-tab-kam'
+             : t==='Super Admin'?'vend-tab-admin'
+             : 'vend-tab-todos';
+    document.getElementById(id).className = (t===tab)?'btn btn-filled':'btn';
+  });
+  renderVendedoresTabla();
+}
+
+function _vendedorRol(v){
+  return (v.login && v.login.rol) ? v.login.rol : '_sinlogin';
+}
+
+let _metasMap = {};
+
 async function loadVendedores(){
   try{
     const r=await fetch('/api/vendedores/');_vendedores=await r.json();
+
+    // Counts por rol para los tabs
+    const counts={'Vendedor':0,'KAM':0,'Super Admin':0};
+    _vendedores.forEach(v=>{
+      const rol = _vendedorRol(v);
+      if(rol in counts) counts[rol]++;
+    });
+    document.getElementById('vend-cnt-vendedor').textContent = counts['Vendedor'];
+    document.getElementById('vend-cnt-kam').textContent      = counts['KAM'];
+    document.getElementById('vend-cnt-admin').textContent    = counts['Super Admin'];
+    document.getElementById('vend-cnt-todos').textContent    = _vendedores.length;
 
     // Load metas if admin
     let metas=[];
@@ -4449,51 +4496,86 @@ async function loadVendedores(){
         metas=await mr.json();
       }catch{}
     }
-    const metasMap={};
-    metas.forEach(m=>{metasMap[m.usuario_id]=m;});
+    _metasMap={};
+    metas.forEach(m=>{_metasMap[m.usuario_id]=m;});
 
-    // Table
-    const tb=document.getElementById('vendedores-tbody');tb.innerHTML='';
-    _vendedores.forEach(v=>{
-      const marcas=(v.especialidad_marca||[]).join(', ')||'-';
-      const turno=v.en_turno?'<span style="color:var(--green);">&#9679; Si</span>':'<span style="color:var(--red);">&#9675; No</span>';
-      const m=metasMap[v.id]||{meta_mxn:0,ventas_actual:0,porcentaje:0,tiene_meta:false};
-      const pct=m.porcentaje||0;
-      const barColor=pct>=80?'#16a34a':pct>=50?'#d97706':'#dc2626';
-      const metaCell=IS_ADMIN
-        ?`<td><input type="number" value="${m.meta_mxn||''}" placeholder="0" style="width:90px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;font-family:var(--mono);text-align:right;" onchange="saveMeta('${v.id}',this.value)"/></td>`
-        :`<td style="font-family:var(--mono);font-size:13px;">${m.tiene_meta?fmt$(m.meta_mxn):'-'}</td>`;
-      // Indicador de cuenta de login
-      const loginBadge = v.login
-        ? `<div style="font-size:10px;color:var(--text3);">📧 ${_esc(v.login.correo)}${v.login.activo?'':' <span style="color:var(--red)">(inactivo)</span>'}</div>`
-        : `<div style="font-size:10px;color:var(--orange);">⚠ sin cuenta de login</div>`;
-      // Acciones: editar + reset password si tiene login
-      const accionesCell = v.login
-        ? `<button class="btn" onclick="editVendedor('${v.id}')" style="font-size:11px;padding:3px 8px;">Editar</button>
-           <button class="btn" onclick="resetPasswordVendedor('${v.id}','${_esc(v.nombre)}')" style="font-size:11px;padding:3px 8px;color:var(--orange);">Reset pwd</button>`
-        : `<button class="btn" onclick="editVendedor('${v.id}')" style="font-size:11px;padding:3px 8px;">Editar</button>`;
-      tb.innerHTML+=`<tr>
-        <td class="td-name"><strong>${_esc(v.nombre)}</strong>${loginBadge}</td>
-        <td style="font-size:12px;">${marcas}</td>
-        <td>${turno}</td>
-        ${metaCell}
-        <td style="font-family:var(--mono);font-size:13px;color:var(--green);">${fmt$(m.ventas_actual)}</td>
-        <td style="width:120px;">
-          <div style="background:var(--border-light);border-radius:99px;height:8px;overflow:hidden;">
-            <div style="height:100%;width:${Math.min(pct,100)}%;background:${barColor};border-radius:99px;transition:width 300ms;"></div>
-          </div>
-        </td>
-        <td style="font-size:13px;font-weight:600;color:${barColor};">${pct}%</td>
-        <td>${accionesCell}</td>
-      </tr>`;
-    });
-    // Populate vendedor select in lead modal
+    renderVendedoresTabla();
+
+    // Populate vendedor select in lead modal (solo Vendedores en turno)
     const sel=document.getElementById('f-vendedor');
     sel.innerHTML='<option value="">Sin asignar</option>';
-    _vendedores.filter(v=>v.en_turno).forEach(v=>{
+    _vendedores.filter(v=>v.en_turno && _vendedorRol(v)==='Vendedor').forEach(v=>{
       sel.innerHTML+=`<option value="${v.id}">${v.nombre}</option>`;
     });
   }catch(e){console.error('Vendedores error:',e);}
+}
+
+function renderVendedoresTabla(){
+  const tb=document.getElementById('vendedores-tbody');tb.innerHTML='';
+  const filtered = _vendedoresTab==='todos'
+    ? _vendedores
+    : _vendedores.filter(v => _vendedorRol(v) === _vendedoresTab);
+
+  // Hint contextual
+  const hint = {
+    'Vendedor':    'Equipo de ventas activo. Reciben leads vía round-robin.',
+    'KAM':         'Cuentan clientes existentes en Customer Success.',
+    'Super Admin': 'Admins del sistema. Pueden tener perfil comercial para asignarse leads manualmente.',
+    'todos':       'Todos los perfiles con vínculo a Usuario (comercial).',
+  }[_vendedoresTab];
+  document.getElementById('vend-tab-hint').textContent = hint;
+
+  if(!filtered.length){
+    tb.innerHTML='<tr><td colspan="9" style="color:var(--text2);text-align:center;padding:18px;">Sin usuarios en esta categoría</td></tr>';
+    return;
+  }
+
+  filtered.forEach(v=>{
+    const rol = _vendedorRol(v);
+    const chip = ROL_CHIPS[rol] || ROL_CHIPS['_sinlogin'];
+    const marcas=(v.especialidad_marca||[]).join(', ')||'-';
+    const turno=v.en_turno?'<span style="color:var(--green);">&#9679; Si</span>':'<span style="color:var(--red);">&#9675; No</span>';
+    const m=_metasMap[v.id]||{meta_mxn:0,ventas_actual:0,porcentaje:0,tiene_meta:false};
+    const pct=m.porcentaje||0;
+    const barColor=pct>=80?'#16a34a':pct>=50?'#d97706':'#dc2626';
+
+    // Metas/ventas solo aplican a Vendedores reales
+    const showMetrics = rol === 'Vendedor';
+    const metaCell = !showMetrics
+      ? `<td style="color:var(--text3);font-size:12px;">—</td>`
+      : (IS_ADMIN
+          ?`<td><input type="number" value="${m.meta_mxn||''}" placeholder="0" style="width:90px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;font-family:var(--mono);text-align:right;" onchange="saveMeta('${v.id}',this.value)"/></td>`
+          :`<td style="font-family:var(--mono);font-size:13px;">${m.tiene_meta?fmt$(m.meta_mxn):'-'}</td>`);
+    const ventasCell = !showMetrics
+      ? `<td style="color:var(--text3);">—</td>`
+      : `<td style="font-family:var(--mono);font-size:13px;color:var(--green);">${fmt$(m.ventas_actual)}</td>`;
+    const avanceCell = !showMetrics
+      ? `<td style="color:var(--text3);">—</td>`
+      : `<td style="width:120px;"><div style="background:var(--border-light);border-radius:99px;height:8px;overflow:hidden;"><div style="height:100%;width:${Math.min(pct,100)}%;background:${barColor};border-radius:99px;transition:width 300ms;"></div></div></td>`;
+    const pctCell = !showMetrics
+      ? `<td style="color:var(--text3);">—</td>`
+      : `<td style="font-size:13px;font-weight:600;color:${barColor};">${pct}%</td>`;
+
+    const loginBadge = v.login
+      ? `<div style="font-size:10px;color:var(--text3);">📧 ${_esc(v.login.correo)}${v.login.activo?'':' <span style="color:var(--red)">(inactivo)</span>'}</div>`
+      : `<div style="font-size:10px;color:var(--orange);">⚠ sin cuenta de login</div>`;
+    const accionesCell = v.login
+      ? `<button class="btn" onclick="editVendedor('${v.id}')" style="font-size:11px;padding:3px 8px;">Editar</button>
+         <button class="btn" onclick="resetPasswordVendedor('${v.id}','${_esc(v.nombre)}')" style="font-size:11px;padding:3px 8px;color:var(--orange);">Reset pwd</button>`
+      : `<button class="btn" onclick="editVendedor('${v.id}')" style="font-size:11px;padding:3px 8px;">Editar</button>`;
+
+    tb.innerHTML+=`<tr>
+      <td class="td-name"><strong>${_esc(v.nombre)}</strong>${loginBadge}</td>
+      <td><span style="background:${chip.bg};color:${chip.fg};font-size:10px;font-weight:700;padding:3px 8px;border-radius:99px;text-transform:uppercase;letter-spacing:.3px;">${chip.label}</span></td>
+      <td style="font-size:12px;">${marcas}</td>
+      <td>${turno}</td>
+      ${metaCell}
+      ${ventasCell}
+      ${avanceCell}
+      ${pctCell}
+      <td>${accionesCell}</td>
+    </tr>`;
+  });
 }
 
 async function saveMeta(usuarioId,val){
