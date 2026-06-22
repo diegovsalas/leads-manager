@@ -1620,8 +1620,9 @@ fbq('track','PageView');
   </div>
   <div style="padding:20px 48px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
     <div style="display:flex;gap:0;border-radius:8px;overflow:hidden;border:1px solid var(--border);">
-      <button id="rev-tab-vendedores" class="btn btn-filled" onclick="switchRevisionTab('vendedores')" style="font-size:13px;border-radius:0;">Por Vendedor</button>
-      <button id="rev-tab-origen" class="btn" onclick="switchRevisionTab('origen')" style="font-size:13px;border-radius:0;">Por Origen</button>
+      <button id="rev-tab-vendedores" class="btn btn-filled" onclick="switchRevisionTab('vendedores')" style="font-size:13px;border-radius:0;">1-on-1</button>
+      <button id="rev-tab-tabla"      class="btn"           onclick="switchRevisionTab('tabla')"      style="font-size:13px;border-radius:0;">Tabla Vendedores</button>
+      <button id="rev-tab-origen"     class="btn"           onclick="switchRevisionTab('origen')"     style="font-size:13px;border-radius:0;">Por Origen</button>
     </div>
     <input type="month" id="rev-mes" onchange="loadRevision()" style="font-size:13px;padding:5px 10px;border:1px solid var(--border);border-radius:6px;"/>
     <span id="rev-status" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
@@ -1641,6 +1642,29 @@ fbq('track','PageView');
       <div class="dash-card" style="padding:40px;text-align:center;color:var(--text3);">
         ← Selecciona un vendedor para ver su pipe completo
       </div>
+    </div>
+  </div>
+
+  <!-- ── Tab: Tabla Vendedores ── -->
+  <div id="rev-pane-tabla" style="padding:20px 48px;display:none;">
+    <div class="dash-card">
+      <div class="dash-card-title">Embudo de conversión por vendedor</div>
+      <div style="padding:10px;display:flex;gap:14px;flex-wrap:wrap;" id="rev-tabla-kpis"></div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Vendedor</th>
+          <th style="text-align:right;">Leads mes</th>
+          <th style="text-align:right;">Calificados</th>
+          <th style="text-align:right;">Cotizados</th>
+          <th style="text-align:right;">En proceso</th>
+          <th style="text-align:right;color:var(--green);">Ganados</th>
+          <th style="text-align:right;color:var(--red);">Perdidos</th>
+          <th style="text-align:right;">% Cierre</th>
+          <th style="text-align:right;">Revenue mes</th>
+          <th style="text-align:right;">Pipe activo<br><span style="font-size:9px;font-weight:400;color:var(--text3);">snapshot ahora</span></th>
+        </tr></thead>
+        <tbody id="rev-tabla-tbody"></tbody>
+      </table></div>
     </div>
   </div>
 
@@ -2680,8 +2704,10 @@ const ETAPA_COLORS_REV={
 function switchRevisionTab(name){
   _revTab=name;
   document.getElementById('rev-tab-vendedores').className = name==='vendedores'?'btn btn-filled':'btn';
+  document.getElementById('rev-tab-tabla').className      = name==='tabla'?'btn btn-filled':'btn';
   document.getElementById('rev-tab-origen').className     = name==='origen'?'btn btn-filled':'btn';
   document.getElementById('rev-pane-vendedores').style.display = name==='vendedores'?'flex':'none';
+  document.getElementById('rev-pane-tabla').style.display      = name==='tabla'?'block':'none';
   document.getElementById('rev-pane-origen').style.display     = name==='origen'?'block':'none';
   loadRevision();
 }
@@ -2698,7 +2724,48 @@ async function loadRevision(){
     mesInput.value = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   }
   if(_revTab==='vendedores'){await loadRevisionVendedores();}
+  else if(_revTab==='tabla'){await loadRevisionTabla();}
   else if(_revTab==='origen'){await loadRevisionOrigen();}
+}
+
+async function loadRevisionTabla(){
+  const status=document.getElementById('rev-status');
+  status.textContent='Cargando...';
+  try{
+    const r=await fetch('/api/dashboard/vendedores-tabla'+_revMesParam());
+    if(r.status===403){status.textContent='Solo Super Admin';return;}
+    const d=await r.json();
+    // KPIs arriba
+    document.getElementById('rev-tabla-kpis').innerHTML=`
+      <div class="kpi" style="flex:1;"><div class="metric-label">Leads totales</div><div class="metric-value">${d.total}</div></div>
+      <div class="kpi" style="flex:1;"><div class="metric-label">Ganados</div><div class="metric-value" style="color:var(--green);">${d.total_ganados}</div></div>
+      <div class="kpi" style="flex:1;"><div class="metric-label">Tasa global</div><div class="metric-value">${d.tasa_global}%</div></div>
+      <div class="kpi" style="flex:1;"><div class="metric-label">Revenue</div><div class="metric-value" style="color:var(--green);">${_fmtMxn(d.total_revenue)}</div></div>
+      <div class="kpi" style="flex:1;"><div class="metric-label">Pipe activo</div><div class="metric-value" style="color:var(--orange);">${_fmtMxn(d.total_pipe_activo)}</div></div>`;
+
+    const tb=document.getElementById('rev-tabla-tbody');tb.innerHTML='';
+    for(const f of (d.filas||[])){
+      const tasaColor = f.tasa_cierre>=20?'var(--green)':f.tasa_cierre>=10?'var(--orange)':f.total>0?'var(--red)':'var(--text3)';
+      // Click → cambia a tab 1-on-1 con vendedor seleccionado
+      tb.innerHTML+=`<tr onclick="_revVendedorSel='${f.vendedor_id}';switchRevisionTab('vendedores');" style="cursor:pointer;" onmouseover="this.style.background='var(--bg-tag)'" onmouseout="this.style.background=''">
+        <td>
+          <strong>${_esc(f.vendedor)}</strong>
+          <div style="font-size:10px;color:var(--text3);">${(f.marcas||[]).join(' · ')||'sin marca'}</div>
+        </td>
+        <td style="text-align:right;font-weight:700;">${f.total}</td>
+        <td style="text-align:right;">${f.calificados}<span style="font-size:10px;color:var(--text3);"> · ${f.total>0?(f.calificados/f.total*100|0):0}%</span></td>
+        <td style="text-align:right;">${f.cotizados}<span style="font-size:10px;color:var(--text3);"> · ${f.total>0?(f.cotizados/f.total*100|0):0}%</span></td>
+        <td style="text-align:right;">${f.en_proceso}</td>
+        <td style="text-align:right;color:var(--green);font-weight:600;">${f.ganados}</td>
+        <td style="text-align:right;color:var(--red);">${f.perdidos}</td>
+        <td style="text-align:right;font-weight:700;color:${tasaColor};">${f.tasa_cierre}%</td>
+        <td style="text-align:right;color:var(--green);">${_fmtMxn(f.revenue)}</td>
+        <td style="text-align:right;color:var(--orange);font-weight:600;">${_fmtMxn(f.pipe_activo)}<div style="font-size:10px;color:var(--text3);font-weight:400;">${f.pipe_count} leads</div></td>
+      </tr>`;
+    }
+    if(!tb.innerHTML)tb.innerHTML='<tr><td colspan="10" style="color:var(--text2);text-align:center;padding:14px;">Sin vendedores con actividad este mes</td></tr>';
+    status.textContent=`${(d.filas||[]).length} vendedores · mes ${d.mes}`;
+  }catch(e){status.textContent='Error: '+e.message;}
 }
 
 async function loadRevisionVendedores(){

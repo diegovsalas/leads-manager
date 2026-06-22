@@ -510,6 +510,131 @@ def _kpis_vendedor(vendedor_usuario_id: str, inicio: date, fin: date) -> dict:
     }
 
 
+@dashboard_bp.route("/vendedores-tabla", methods=["GET"])
+@require_role(["super_admin"])
+def vendedores_tabla():
+    """Tabla embudo de conversión por VENDEDOR (mismo shape que leads-por-origen
+    pero agrupado por usuario_asignado_id). Para comparar vendedores en la junta.
+    """
+    from models import Usuario
+    mes_param = request.args.get("mes")
+    inicio_mes, fin_mes = _get_date_range(mes_param)
+    marca = request.args.get("marca")
+
+    etapas_calif = [
+        EtapaPipeline.CONTACTO_1, EtapaPipeline.CONTACTO_2,
+        EtapaPipeline.CONTACTO_3, EtapaPipeline.CONTACTO_4,
+        EtapaPipeline.COTIZACION, EtapaPipeline.DEMO,
+        EtapaPipeline.NEGOCIACION, EtapaPipeline.CIERRE_GANADO,
+    ]
+    etapas_cotiz = [
+        EtapaPipeline.COTIZACION, EtapaPipeline.DEMO,
+        EtapaPipeline.NEGOCIACION, EtapaPipeline.CIERRE_GANADO,
+    ]
+
+    leads_q = Lead.query.filter(
+        Lead.fecha_creacion >= inicio_mes,
+        Lead.fecha_creacion < fin_mes,
+        Lead.usuario_asignado_id.isnot(None),
+    )
+    if marca:
+        leads_q = leads_q.filter(Lead.marca_interes == marca)
+
+    def counts_por_vendedor(query_filter=None):
+        q = leads_q
+        if query_filter is not None:
+            q = q.filter(query_filter)
+        rows = q.with_entities(Lead.usuario_asignado_id, func.count(Lead.id)).group_by(Lead.usuario_asignado_id).all()
+        return {str(r[0]): int(r[1]) for r in rows if r[0]}
+
+    total_map = counts_por_vendedor()
+    calif_map = counts_por_vendedor(Lead.etapa_pipeline.in_(etapas_calif))
+    cotiz_map = counts_por_vendedor(Lead.etapa_pipeline.in_(etapas_cotiz))
+    ganados_map = counts_por_vendedor(Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO)
+    perdidos_map = counts_por_vendedor(Lead.etapa_pipeline == EtapaPipeline.CIERRE_PERDIDO)
+
+    # Revenue ganado por vendedor
+    rev_rows = (
+        leads_q.filter(Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO)
+        .with_entities(
+            Lead.usuario_asignado_id,
+            func.coalesce(func.sum(func.coalesce(
+                Lead.cantidad_productos * Lead.precio_unitario,
+                Lead.valor_estimado, 0,
+            )), 0),
+        ).group_by(Lead.usuario_asignado_id).all()
+    )
+    revenue_map = {str(r[0]): float(r[1] or 0) for r in rev_rows if r[0]}
+
+    # Pipe activo (snapshot ACTUAL, NO filtrado por mes) — esto es lo que
+    # tienen abierto hoy independientemente de cuándo entró.
+    pipe_rows = (
+        Lead.query
+        .filter(
+            Lead.usuario_asignado_id.isnot(None),
+            Lead.etapa_pipeline.notin_([
+                EtapaPipeline.CIERRE_GANADO, EtapaPipeline.CIERRE_PERDIDO,
+            ]),
+        )
+    )
+    if marca:
+        pipe_rows = pipe_rows.filter(Lead.marca_interes == marca)
+    pipe_rows = pipe_rows.with_entities(
+        Lead.usuario_asignado_id,
+        func.coalesce(func.sum(func.coalesce(
+            Lead.cantidad_productos * Lead.precio_unitario,
+            Lead.valor_estimado, 0,
+        )), 0),
+        func.count(Lead.id),
+    ).group_by(Lead.usuario_asignado_id).all()
+    pipe_valor_map = {str(r[0]): float(r[1] or 0) for r in pipe_rows if r[0]}
+    pipe_count_map = {str(r[0]): int(r[2]) for r in pipe_rows if r[0]}
+
+    # Nombres de vendedores
+    vendedor_ids = set(total_map) | set(pipe_valor_map)
+    vendedores = {
+        str(v.id): v for v in Usuario.query.filter(Usuario.id.in_(vendedor_ids)).all()
+    } if vendedor_ids else {}
+
+    filas = []
+    for vid, v in vendedores.items():
+        total = total_map.get(vid, 0)
+        ganados = ganados_map.get(vid, 0)
+        perdidos = perdidos_map.get(vid, 0)
+        if total == 0 and pipe_count_map.get(vid, 0) == 0:
+            continue
+        filas.append({
+            "vendedor_id":   vid,
+            "vendedor":      v.nombre,
+            "marcas":        list(v.especialidad_marca or []),
+            "total":         total,
+            "calificados":   calif_map.get(vid, 0),
+            "cotizados":     cotiz_map.get(vid, 0),
+            "ganados":       ganados,
+            "perdidos":      perdidos,
+            "en_proceso":    total - ganados - perdidos,
+            "revenue":       revenue_map.get(vid, 0.0),
+            "pipe_activo":   pipe_valor_map.get(vid, 0.0),
+            "pipe_count":    pipe_count_map.get(vid, 0),
+            "tasa_cierre":   round(ganados / total * 100, 1) if total > 0 else 0,
+            "tasa_calificacion": round(calif_map.get(vid, 0) / total * 100, 1) if total > 0 else 0,
+        })
+    filas.sort(key=lambda f: -f["pipe_activo"])
+
+    total_all = sum(f["total"] for f in filas)
+    ganados_all = sum(f["ganados"] for f in filas)
+    return jsonify({
+        "mes":               inicio_mes.strftime("%Y-%m"),
+        "marca_filter":      marca,
+        "filas":             filas,
+        "total":             total_all,
+        "total_ganados":     ganados_all,
+        "total_revenue":     sum(f["revenue"] for f in filas),
+        "total_pipe_activo": sum(f["pipe_activo"] for f in filas),
+        "tasa_global":       round(ganados_all / total_all * 100, 1) if total_all > 0 else 0,
+    })
+
+
 @dashboard_bp.route("/vendedores-review", methods=["GET"])
 @require_role(["super_admin"])
 def vendedores_review():
