@@ -188,9 +188,10 @@ def _extract_bodies(payload: dict, acc: dict = None) -> dict:
     # Adjunto: tiene filename y attachmentId (data está en body.attachmentId, no inline)
     if filename:
         acc["attachments"].append({
-            "filename": filename,
-            "mime_type": mime,
-            "size":      body.get("size", 0),
+            "filename":      filename,
+            "mime_type":     mime,
+            "size":          body.get("size", 0),
+            "attachment_id": body.get("attachmentId"),  # para descargar después
         })
     else:
         data = body.get("data")
@@ -216,13 +217,24 @@ def _query_for_lookback(minutes: int) -> str:
     return f"in:sent after:{after_ts} -to:@{INTERNAL_DOMAIN}"
 
 
+def _has_attachment_ids(email: "SalesEmail") -> bool:
+    """True si todos los attachments del correo tienen attachment_id (campo
+    necesario para poder descargar). Si no, hay que re-fetch."""
+    atts = email.attachments or []
+    for a in atts:
+        if a.get("filename") and not a.get("attachment_id"):
+            return False
+    return True
+
+
 def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN,
-                backfill_bodies: bool = True) -> dict:
+                backfill_bodies: bool = True, force_refresh: bool = False) -> dict:
     """Pull correos salientes de un vendedor.
 
     backfill_bodies=True (default): si encuentra un correo ya guardado pero
     sin body_text/body_html, lo re-fetcha con format=full y actualiza la fila.
-    Útil para upgradar correos importados antes con format=metadata.
+    force_refresh=True: re-fetch incluso si ya tiene body (útil para refrescar
+    attachment_id u otros campos nuevos del schema).
     """
     stats = {"vendedor": vendedor.nombre, "fetched": 0, "saved": 0,
              "skipped_internal": 0, "backfilled": 0, "errors": 0}
@@ -253,12 +265,14 @@ def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN,
             continue
 
         existing = SalesEmail.query.filter_by(gmail_message_id=mid).first()
-        # Si existe y ya tiene body, skip
-        if existing and (existing.body_text or existing.body_html):
-            continue
-        # Si existe pero NO tiene body y backfill desactivado, skip
-        if existing and not backfill_bodies:
-            continue
+        if existing:
+            # Decide si re-fetch necesario
+            has_body = existing.body_text or existing.body_html
+            needs_att_ids = bool(existing.attachments) and not _has_attachment_ids(existing)
+            if has_body and not force_refresh and not needs_att_ids:
+                continue
+            if not has_body and not backfill_bodies:
+                continue
 
         try:
             # format=full: trae body + adjuntos + headers
@@ -301,7 +315,8 @@ def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN,
     return stats
 
 
-def poll_all(lookback_min: int = LOOKBACK_MIN, backfill_bodies: bool = True) -> dict:
+def poll_all(lookback_min: int = LOOKBACK_MIN, backfill_bodies: bool = True,
+             force_refresh: bool = False) -> dict:
     """Itera todos los vendedores con gmail_address y los polea."""
     if not is_configured():
         return {"error": "GMAIL_SERVICE_ACCOUNT_JSON no configurado"}
@@ -314,7 +329,8 @@ def poll_all(lookback_min: int = LOOKBACK_MIN, backfill_bodies: bool = True) -> 
     results = []
     for v in vendedores:
         results.append(poll_vendor(v, lookback_min=lookback_min,
-                                    backfill_bodies=backfill_bodies))
+                                    backfill_bodies=backfill_bodies,
+                                    force_refresh=force_refresh))
     return {
         "vendedores":         len(vendedores),
         "total_saved":        sum(r["saved"] for r in results),

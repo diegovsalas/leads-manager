@@ -3,8 +3,9 @@ API admin para monitoreo de correos salientes de vendedores.
 
 Rutas bajo /api/sales-emails. Solo lectura. Requiere rol Super Admin.
 """
+import base64
 from datetime import datetime, timedelta, timezone
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, Response
 from sqlalchemy import func, desc
 
 from extensions import db
@@ -131,15 +132,69 @@ def get_email(email_id):
 @sales_emails_bp.route("/poll", methods=["POST", "GET"])
 def trigger_poll():
     """Dispara poll manual. Acepta GET para ser pegable desde el navegador
-    (sesión activa). Query param ?lookback_min=N override de ventana.
-    Recomendados: 1440 = 24h, 10080 = 7d, 43200 = 30d."""
+    (sesión activa).
+      ?lookback_min=N  override de ventana. Recomendados: 1440=24h, 10080=7d, 43200=30d
+      ?force=1         re-fetch incluso si el correo ya tiene body (refresca
+                       attachment_id u otros campos nuevos del schema)
+    """
     err = _require_admin()
     if err: return err
     lookback = int(request.args.get("lookback_min") or gmail_monitor.LOOKBACK_MIN)
+    force = (request.args.get("force") or "").strip() in ("1", "true", "yes")
     try:
-        return jsonify(gmail_monitor.poll_all(lookback_min=lookback))
+        return jsonify(gmail_monitor.poll_all(lookback_min=lookback, force_refresh=force))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@sales_emails_bp.route("/<uuid:email_id>/attachment/<int:idx>", methods=["GET"])
+def download_attachment(email_id, idx):
+    """Descarga un adjunto on-demand desde Gmail. NO se guarda en BD.
+    URL: /api/sales-emails/<id>/attachment/<n> donde n es el índice del
+    adjunto en email.attachments[].
+    """
+    err = _require_admin()
+    if err: return err
+
+    email = SalesEmail.query.get(str(email_id))
+    if not email:
+        return jsonify({"error": "Correo no encontrado"}), 404
+    atts = email.attachments or []
+    if idx < 0 or idx >= len(atts):
+        return jsonify({"error": "Adjunto no encontrado"}), 404
+    att = atts[idx]
+    att_id = att.get("attachment_id")
+    if not att_id:
+        return jsonify({
+            "error": "attachment_id no almacenado para este correo. Ejecuta /api/sales-emails/poll?force=1 para refrescar."
+        }), 400
+
+    vendedor = email.vendedor
+    if not vendedor or not vendedor.gmail_address:
+        return jsonify({"error": "Vendedora sin gmail_address"}), 400
+
+    try:
+        svc = gmail_monitor._build_service(vendedor.gmail_address)
+        result = svc.users().messages().attachments().get(
+            userId="me", messageId=email.gmail_message_id, id=att_id,
+        ).execute()
+        data_b64 = result.get("data") or ""
+        raw = base64.urlsafe_b64decode(data_b64)
+    except Exception as e:
+        return jsonify({"error": f"Error descargando de Gmail: {e}"}), 500
+
+    filename = att.get("filename") or "adjunto"
+    mime = att.get("mime_type") or "application/octet-stream"
+    # Sanea filename para Content-Disposition (sin comillas, sin newlines)
+    safe_name = filename.replace('"', "").replace("\n", "").replace("\r", "")
+    return Response(
+        raw,
+        mimetype=mime,
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_name}"',
+            "Content-Length": str(len(raw)),
+        },
+    )
 
 
 @sales_emails_bp.route("/test", methods=["GET"])
