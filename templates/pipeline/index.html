@@ -361,6 +361,7 @@ fbq('track','PageView');
     <div class="slink admin-only" onclick="showView('scip',this)">&#127919; <span class="sl-text">SCIP Director</span></div>
     <div class="slink admin-only" onclick="showView('campanas',this)">&#128226; <span class="sl-text">Campañas Meta</span></div>
     <div class="slink admin-only" onclick="showView('correos',this)">&#128231; <span class="sl-text">Correos vendedores</span></div>
+    <div class="slink admin-only" onclick="showView('revision',this)">&#128202; <span class="sl-text">Revisión Comercial</span></div>
 
     <div class="sidebar-divider admin-only"></div>
     <div class="sidebar-section admin-only">Administracion</div>
@@ -1610,6 +1611,63 @@ fbq('track','PageView');
   </div>
 </div>
 
+<!-- ===== REVISIÓN COMERCIAL ===== -->
+<div class="view" id="view-revision" style="overflow-y:auto;">
+  <div class="page-header">
+    <div class="page-emoji">&#128202;</div>
+    <div class="page-title">Revisión Comercial</div>
+    <div class="page-desc">Vista de gerente para junta 1-on-1 con vendedores. Click un vendedor → ves su pipe, sus leads agrupados por etapa, días estancado y valor por deal.</div>
+  </div>
+  <div style="padding:20px 48px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <div style="display:flex;gap:0;border-radius:8px;overflow:hidden;border:1px solid var(--border);">
+      <button id="rev-tab-vendedores" class="btn btn-filled" onclick="switchRevisionTab('vendedores')" style="font-size:13px;border-radius:0;">Por Vendedor</button>
+      <button id="rev-tab-origen" class="btn" onclick="switchRevisionTab('origen')" style="font-size:13px;border-radius:0;">Por Origen</button>
+    </div>
+    <input type="month" id="rev-mes" onchange="loadRevision()" style="font-size:13px;padding:5px 10px;border:1px solid var(--border);border-radius:6px;"/>
+    <span id="rev-status" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
+  </div>
+
+  <!-- ── Tab: Por Vendedor ── -->
+  <div id="rev-pane-vendedores" style="padding:20px 48px;display:flex;gap:18px;align-items:flex-start;">
+    <!-- Lista master de vendedores (izquierda) -->
+    <div style="flex:0 0 320px;">
+      <div class="dash-card">
+        <div class="dash-card-title">Vendedores activos</div>
+        <div id="rev-vendedores-list" style="padding:4px;"></div>
+      </div>
+    </div>
+    <!-- Drill-down del seleccionado (derecha) -->
+    <div style="flex:1;min-width:0;" id="rev-detail">
+      <div class="dash-card" style="padding:40px;text-align:center;color:var(--text3);">
+        ← Selecciona un vendedor para ver su pipe completo
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Tab: Por Origen ── -->
+  <div id="rev-pane-origen" style="padding:20px 48px;display:none;">
+    <div class="dash-card">
+      <div class="dash-card-title">Embudo de conversión por canal</div>
+      <div style="padding:10px;display:flex;gap:14px;flex-wrap:wrap;" id="rev-origen-kpis"></div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Origen</th>
+          <th style="text-align:right;">Total</th>
+          <th style="text-align:right;">Calificados</th>
+          <th style="text-align:right;">Cotizados</th>
+          <th style="text-align:right;">En proceso</th>
+          <th style="text-align:right;color:var(--green);">Ganados</th>
+          <th style="text-align:right;color:var(--red);">Perdidos</th>
+          <th style="text-align:right;">% Cierre</th>
+          <th style="text-align:right;">Revenue</th>
+          <th style="text-align:right;">Pipe activo</th>
+        </tr></thead>
+        <tbody id="rev-origen-tbody"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
 <!-- ===== CAMPAÑAS META (registry editable) ===== -->
 <div class="view" id="view-campanas" style="overflow-y:auto;">
   <div class="page-header">
@@ -2201,6 +2259,7 @@ function showView(name,el){
   if(name==='scip')loadScip();
   if(name==='campanas')loadCampanas();
   if(name==='correos')loadCorreos();
+  if(name==='revision')loadRevision();
   if(name==='opps')loadOpps();
   if(name==='accounts')loadAccounts();
   if(name==='contacts')loadContacts();
@@ -2597,6 +2656,212 @@ async function deleteCampana(cid, nombre){
 }
 
 function _esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+// ── Revisión Comercial (gerente con sus vendedores) ──
+let _revTab = 'vendedores';
+let _revVendedorSel = null;
+
+const ORIGEN_COLORS_REV={
+  'Meta Ads':         {bg:'#dbeafe', fg:'#1d4ed8'},
+  'WhatsApp Organico':{bg:'#dcfce7', fg:'#15803d'},
+  'Web':              {bg:'#fef3c7', fg:'#b45309'},
+  'Prospeccion':      {bg:'#ede9fe', fg:'#6d28d9'},
+  'Upselling':        {bg:'#fce7f3', fg:'#be185d'},
+  'Cross-selling':    {bg:'#cffafe', fg:'#0e7490'},
+  'Sin origen':       {bg:'#f3f4f6', fg:'#6b7280'},
+};
+const ETAPA_COLORS_REV={
+  'Nuevo Lead':'#6366f1','1er Contacto':'#9333ea','2do Contacto':'#9333ea',
+  '3er Contacto':'#9333ea','4to Contacto':'#9333ea','Presentación':'#ea580c',
+  'Cotización':'#2563eb','Demo':'#0891b2','Negociación':'#d97706',
+  'Cerrado Ganado':'#16a34a','Cerrado Perdido':'#dc2626',
+};
+
+function switchRevisionTab(name){
+  _revTab=name;
+  document.getElementById('rev-tab-vendedores').className = name==='vendedores'?'btn btn-filled':'btn';
+  document.getElementById('rev-tab-origen').className     = name==='origen'?'btn btn-filled':'btn';
+  document.getElementById('rev-pane-vendedores').style.display = name==='vendedores'?'flex':'none';
+  document.getElementById('rev-pane-origen').style.display     = name==='origen'?'block':'none';
+  loadRevision();
+}
+
+function _revMesParam(){
+  const mes=document.getElementById('rev-mes').value;
+  return mes ? '?mes='+mes : '';
+}
+
+async function loadRevision(){
+  const mesInput=document.getElementById('rev-mes');
+  if(!mesInput.value){
+    const now=new Date();
+    mesInput.value = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  }
+  if(_revTab==='vendedores'){await loadRevisionVendedores();}
+  else if(_revTab==='origen'){await loadRevisionOrigen();}
+}
+
+async function loadRevisionVendedores(){
+  const status=document.getElementById('rev-status');
+  status.textContent='Cargando...';
+  try{
+    const r=await fetch('/api/dashboard/vendedores-review'+_revMesParam());
+    if(r.status===403){status.textContent='Solo Super Admin';return;}
+    const d=await r.json();
+    const list=document.getElementById('rev-vendedores-list');list.innerHTML='';
+    if(!(d.vendedores||[]).length){
+      list.innerHTML='<div style="color:var(--text3);padding:14px;text-align:center;font-size:13px;">Sin vendedores con actividad</div>';
+      status.textContent='';return;
+    }
+    for(const v of d.vendedores){
+      const isSel = v.vendedor_id===_revVendedorSel;
+      list.innerHTML+=`<div onclick="selectVendedorRevision('${v.vendedor_id}')"
+        style="padding:12px;border-radius:8px;cursor:pointer;margin-bottom:6px;
+          ${isSel?'background:var(--bg-tag);border-left:3px solid var(--accent);':'border-left:3px solid transparent;'}
+          transition:all .15s;">
+        <div style="font-weight:600;font-size:14px;color:var(--ink-1);">${_esc(v.nombre)}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px;">${(v.marcas||[]).join(' · ')||'sin marca'}</div>
+        <div style="display:flex;gap:10px;margin-top:8px;font-size:11px;">
+          <div><div style="color:var(--text3);font-size:9px;">PIPE</div><div style="font-weight:700;color:var(--orange);">${_fmtMxn(v.pipe_activo)}</div></div>
+          <div><div style="color:var(--text3);font-size:9px;">ACTIVOS</div><div style="font-weight:700;">${v.leads_activos}</div></div>
+          <div><div style="color:var(--text3);font-size:9px;">GANADOS</div><div style="font-weight:700;color:var(--green);">${v.ganados_mes}</div></div>
+        </div>
+      </div>`;
+    }
+    status.textContent=`${d.vendedores.length} vendedores · mes ${d.mes}`;
+    if(_revVendedorSel) loadVendedorDetail(_revVendedorSel);
+  }catch(e){status.textContent='Error: '+e.message;}
+}
+
+async function selectVendedorRevision(vendedorId){
+  _revVendedorSel = vendedorId;
+  loadRevisionVendedores();
+  loadVendedorDetail(vendedorId);
+}
+
+async function loadVendedorDetail(vendedorId){
+  const detail=document.getElementById('rev-detail');
+  detail.innerHTML='<div class="dash-card" style="padding:40px;text-align:center;color:var(--text3);">Cargando vendedor...</div>';
+  try{
+    const r=await fetch('/api/dashboard/vendedor-review/'+vendedorId+_revMesParam());
+    if(!r.ok){detail.innerHTML='<div class="dash-card" style="padding:40px;color:var(--red);">Error cargando</div>';return;}
+    const d=await r.json();
+    const k=d.kpis||{};
+    // KPI strip
+    let html=`
+      <div class="dash-card" style="margin-bottom:14px;">
+        <div style="padding:14px 18px;border-bottom:1px solid var(--border-light);display:flex;align-items:baseline;gap:12px;">
+          <h3 style="margin:0;font-size:18px;">${_esc(d.vendedor_nombre)}</h3>
+          <span style="font-size:11px;color:var(--text3);">${(d.marcas||[]).join(' · ')}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;padding:16px 18px;">
+          <div><div style="font-size:10px;color:var(--text3);">PIPE ACTIVO</div><div style="font-size:22px;font-weight:700;color:var(--orange);">${_fmtMxn(k.pipe_activo)}</div></div>
+          <div><div style="font-size:10px;color:var(--text3);">LEADS ACTIVOS</div><div style="font-size:22px;font-weight:700;">${k.leads_activos}</div></div>
+          <div><div style="font-size:10px;color:var(--text3);">GANADOS MES</div><div style="font-size:22px;font-weight:700;color:var(--green);">${k.ganados_mes}</div></div>
+          <div><div style="font-size:10px;color:var(--text3);">REVENUE MES</div><div style="font-size:22px;font-weight:700;color:var(--green);">${_fmtMxn(k.revenue_mes)}</div></div>
+          <div><div style="font-size:10px;color:var(--text3);">% CIERRE</div><div style="font-size:22px;font-weight:700;color:${k.tasa_cierre>=20?'var(--green)':k.tasa_cierre>=10?'var(--orange)':'var(--red)'};">${k.tasa_cierre}%</div></div>
+        </div>
+      </div>`;
+
+    // Funnel
+    const maxFunnel = Math.max(...(d.funnel||[]).map(f=>f.count), 1);
+    html+=`<div class="dash-card" style="margin-bottom:14px;">
+      <div class="dash-card-title">Distribución por etapa</div>
+      <div style="padding:14px;">`;
+    for(const f of (d.funnel||[])){
+      if(f.count===0)continue;
+      const w=(f.count/maxFunnel)*100;
+      const c=ETAPA_COLORS_REV[f.etapa]||'#9ca3af';
+      html+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;">
+        <div style="width:130px;color:var(--ink-1);">${_esc(f.etapa)}</div>
+        <div style="flex:1;background:var(--bg-soft);border-radius:4px;height:18px;position:relative;">
+          <div style="position:absolute;left:0;top:0;height:18px;width:${w}%;background:${c};border-radius:4px;"></div>
+        </div>
+        <div style="width:60px;text-align:right;font-weight:600;">${f.count}</div>
+        <div style="width:100px;text-align:right;font-size:11px;color:var(--text2);">${f.valor>0?_fmtMxn(f.valor):'—'}</div>
+      </div>`;
+    }
+    html+=`</div></div>`;
+
+    // Leads agrupados por etapa
+    html+=`<div class="dash-card"><div class="dash-card-title">Leads activos por etapa</div>`;
+    const etapasOrden=['Nuevo Lead','1er Contacto','2do Contacto','3er Contacto','4to Contacto','Presentación','Cotización','Demo','Negociación'];
+    let hasAny=false;
+    for(const etapa of etapasOrden){
+      const ll=(d.leads_por_etapa||{})[etapa];
+      if(!ll||!ll.length)continue;
+      hasAny=true;
+      const c=ETAPA_COLORS_REV[etapa]||'#9ca3af';
+      html+=`<div style="padding:14px 18px;border-bottom:1px solid var(--border-light);">
+        <div style="font-size:12px;font-weight:700;color:${c};text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">${_esc(etapa)} · ${ll.length} leads</div>
+        <table style="width:100%;font-size:12px;">
+          <thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase;">
+            <th style="text-align:left;padding:4px 6px;">Lead / Empresa</th>
+            <th style="text-align:right;padding:4px 6px;">Valor</th>
+            <th style="text-align:left;padding:4px 6px;">Origen</th>
+            <th style="text-align:right;padding:4px 6px;">Días estancado</th>
+            <th style="text-align:left;padding:4px 6px;">Último contacto</th>
+          </tr></thead><tbody>`;
+      for(const l of ll){
+        const orig=l.origen||'Sin origen';
+        const oc=ORIGEN_COLORS_REV[orig]||ORIGEN_COLORS_REV['Sin origen'];
+        const stuckColor = l.dias_en_etapa>=14?'var(--red)':l.dias_en_etapa>=7?'var(--orange)':'var(--text2)';
+        const ultContacto = l.fecha_ultimo_contacto ? new Date(l.fecha_ultimo_contacto).toLocaleDateString('es-MX',{day:'2-digit',month:'short'}) : 'nunca';
+        html+=`<tr onclick="abrirLeadPanel('${l.id}')" style="cursor:pointer;" onmouseover="this.style.background='var(--bg-tag)'" onmouseout="this.style.background=''">
+          <td style="padding:6px;"><strong>${_esc(l.empresa||l.nombre||'-')}</strong>${l.empresa?`<div style="font-size:10px;color:var(--text3);">${_esc(l.nombre||'')}</div>`:''}${l.meta_campaign_nombre?`<div style="font-size:10px;color:var(--accent);">📣 ${_esc(l.meta_campaign_nombre.substring(0,40))}…</div>`:''}</td>
+          <td style="padding:6px;text-align:right;font-weight:600;">${l.valor>0?_fmtMxn(l.valor):'—'}</td>
+          <td style="padding:6px;"><span style="background:${oc.bg};color:${oc.fg};font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;">${_esc(orig==='WhatsApp Organico'?'WhatsApp':orig)}</span></td>
+          <td style="padding:6px;text-align:right;color:${stuckColor};font-weight:${l.dias_en_etapa>=7?700:400};">${l.dias_en_etapa}d ${l.dias_en_etapa>=14?'🔴':l.dias_en_etapa>=7?'⚠':''}</td>
+          <td style="padding:6px;color:var(--text2);font-size:11px;">${ultContacto}</td>
+        </tr>`;
+      }
+      html+='</tbody></table></div>';
+    }
+    if(!hasAny){
+      html+=`<div style="padding:30px;text-align:center;color:var(--text3);font-size:13px;">Sin leads activos</div>`;
+    }
+    html+=`</div>`;
+    detail.innerHTML=html;
+  }catch(e){
+    detail.innerHTML='<div class="dash-card" style="padding:40px;color:var(--red);">Error: '+_esc(e.message)+'</div>';
+  }
+}
+
+async function loadRevisionOrigen(){
+  const status=document.getElementById('rev-status');
+  status.textContent='Cargando...';
+  try{
+    const r=await fetch('/api/dashboard/leads-por-origen'+_revMesParam());
+    const d=await r.json();
+    // KPIs arriba
+    document.getElementById('rev-origen-kpis').innerHTML=`
+      <div class="kpi" style="flex:1;"><div class="metric-label">Leads totales</div><div class="metric-value">${d.total}</div></div>
+      <div class="kpi" style="flex:1;"><div class="metric-label">Ganados</div><div class="metric-value" style="color:var(--green);">${d.total_ganados}</div></div>
+      <div class="kpi" style="flex:1;"><div class="metric-label">Tasa global</div><div class="metric-value">${d.tasa_global}%</div></div>
+      <div class="kpi" style="flex:1;"><div class="metric-label">Revenue</div><div class="metric-value" style="color:var(--green);">${_fmtMxn(d.total_revenue)}</div></div>
+      <div class="kpi" style="flex:1;"><div class="metric-label">Pipe activo</div><div class="metric-value" style="color:var(--orange);">${_fmtMxn(d.total_pipe_activo)}</div></div>`;
+
+    const tb=document.getElementById('rev-origen-tbody');tb.innerHTML='';
+    for(const f of (d.filas||[])){
+      const c=ORIGEN_COLORS_REV[f.origen]||ORIGEN_COLORS_REV['Sin origen'];
+      const tasaColor = f.tasa_cierre>=20?'var(--green)':f.tasa_cierre>=10?'var(--orange)':'var(--text2)';
+      tb.innerHTML+=`<tr>
+        <td><span style="background:${c.bg};color:${c.fg};font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;">${_esc(f.origen)}</span></td>
+        <td style="text-align:right;font-weight:700;">${f.total}</td>
+        <td style="text-align:right;">${f.calificados}<span style="font-size:10px;color:var(--text3);"> · ${f.total>0?(f.calificados/f.total*100|0):0}%</span></td>
+        <td style="text-align:right;">${f.cotizados}<span style="font-size:10px;color:var(--text3);"> · ${f.total>0?(f.cotizados/f.total*100|0):0}%</span></td>
+        <td style="text-align:right;">${f.en_proceso}</td>
+        <td style="text-align:right;color:var(--green);font-weight:600;">${f.ganados}</td>
+        <td style="text-align:right;color:var(--red);">${f.perdidos}</td>
+        <td style="text-align:right;font-weight:700;color:${tasaColor};">${f.tasa_cierre}%</td>
+        <td style="text-align:right;color:var(--green);">${_fmtMxn(f.revenue)}</td>
+        <td style="text-align:right;color:var(--orange);">${_fmtMxn(f.pipe_activo)}</td>
+      </tr>`;
+    }
+    if(!tb.innerHTML)tb.innerHTML='<tr><td colspan="10" style="color:var(--text2);text-align:center;padding:14px;">Sin datos en este periodo</td></tr>';
+    status.textContent=`Mes ${d.mes}`;
+  }catch(e){status.textContent='Error: '+e.message;}
+}
 
 // ── Correos vendedores: visualizar cuerpo completo ──
 async function viewEmailBody(emailId){

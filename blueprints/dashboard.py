@@ -349,3 +349,288 @@ def actividad_reciente():
     limit = min(int(request.args.get("limit", 50)), 200)
     logs = ActividadLog.query.order_by(ActividadLog.fecha.desc()).limit(limit).all()
     return jsonify([l.to_dict() for l in logs])
+
+
+# ═══════════════════════════════════════════════════════════════════
+# REVISIÓN COMERCIAL — vistas para junta de gerente con sus vendedores
+# ═══════════════════════════════════════════════════════════════════
+
+
+@dashboard_bp.route("/leads-por-origen", methods=["GET"])
+def leads_por_origen():
+    """Tabla embudo de conversión por canal de origen.
+    Filtros: ?mes=YYYY-MM (default mes actual), ?marca=Aromatex (opcional)."""
+    mes_param = request.args.get("mes")
+    inicio_mes, fin_mes = _get_date_range(mes_param)
+    marca = request.args.get("marca")
+
+    etapas_calif = [
+        EtapaPipeline.CONTACTO_1, EtapaPipeline.CONTACTO_2,
+        EtapaPipeline.CONTACTO_3, EtapaPipeline.CONTACTO_4,
+        EtapaPipeline.COTIZACION, EtapaPipeline.DEMO,
+        EtapaPipeline.NEGOCIACION, EtapaPipeline.CIERRE_GANADO,
+    ]
+    etapas_cotiz = [
+        EtapaPipeline.COTIZACION, EtapaPipeline.DEMO,
+        EtapaPipeline.NEGOCIACION, EtapaPipeline.CIERRE_GANADO,
+    ]
+
+    leads_q = Lead.query.filter(
+        Lead.fecha_creacion >= inicio_mes,
+        Lead.fecha_creacion < fin_mes,
+    )
+    leads_q = _apply_vendedor_filter(leads_q)
+    if marca:
+        leads_q = leads_q.filter(Lead.marca_interes == marca)
+
+    # Counts por origen + etapas
+    def counts_por_origen(query_filter=None):
+        q = leads_q
+        if query_filter is not None:
+            q = q.filter(query_filter)
+        rows = q.with_entities(Lead.origen, func.count(Lead.id)).group_by(Lead.origen).all()
+        return {(r[0].value if r[0] else "Sin origen"): int(r[1]) for r in rows}
+
+    total_map = counts_por_origen()
+    calif_map = counts_por_origen(Lead.etapa_pipeline.in_(etapas_calif))
+    cotiz_map = counts_por_origen(Lead.etapa_pipeline.in_(etapas_cotiz))
+    ganados_map = counts_por_origen(Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO)
+    perdidos_map = counts_por_origen(Lead.etapa_pipeline == EtapaPipeline.CIERRE_PERDIDO)
+
+    # Revenue ganado por origen
+    rev_rows = (
+        leads_q.filter(Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO)
+        .with_entities(
+            Lead.origen,
+            func.coalesce(func.sum(func.coalesce(
+                Lead.cantidad_productos * Lead.precio_unitario,
+                Lead.valor_estimado, 0,
+            )), 0),
+        ).group_by(Lead.origen).all()
+    )
+    revenue_map = {(r[0].value if r[0] else "Sin origen"): float(r[1] or 0) for r in rev_rows}
+
+    # Valor del pipeline activo por origen (no ganados ni perdidos)
+    pipe_rows = (
+        leads_q.filter(Lead.etapa_pipeline.notin_([
+            EtapaPipeline.CIERRE_GANADO, EtapaPipeline.CIERRE_PERDIDO,
+        ]))
+        .with_entities(
+            Lead.origen,
+            func.coalesce(func.sum(func.coalesce(
+                Lead.cantidad_productos * Lead.precio_unitario,
+                Lead.valor_estimado, 0,
+            )), 0),
+        ).group_by(Lead.origen).all()
+    )
+    pipe_map = {(r[0].value if r[0] else "Sin origen"): float(r[1] or 0) for r in pipe_rows}
+
+    # Construir filas
+    all_origenes = set(total_map) | set(calif_map) | set(cotiz_map) | set(ganados_map) | set(perdidos_map)
+    filas = []
+    for origen in all_origenes:
+        total = total_map.get(origen, 0)
+        if total == 0:
+            continue
+        ganados = ganados_map.get(origen, 0)
+        perdidos = perdidos_map.get(origen, 0)
+        filas.append({
+            "origen": origen,
+            "total": total,
+            "calificados": calif_map.get(origen, 0),
+            "cotizados":  cotiz_map.get(origen, 0),
+            "ganados":    ganados,
+            "perdidos":   perdidos,
+            "en_proceso": total - ganados - perdidos,
+            "revenue":    revenue_map.get(origen, 0.0),
+            "pipe_activo": pipe_map.get(origen, 0.0),
+            "tasa_cierre": round(ganados / total * 100, 1) if total > 0 else 0,
+            "tasa_calificacion": round(calif_map.get(origen, 0) / total * 100, 1) if total > 0 else 0,
+        })
+    filas.sort(key=lambda f: -f["total"])
+
+    # Totales
+    total_all = sum(f["total"] for f in filas)
+    ganados_all = sum(f["ganados"] for f in filas)
+    return jsonify({
+        "mes":           inicio_mes.strftime("%Y-%m"),
+        "marca_filter":  marca,
+        "filas":         filas,
+        "total":         total_all,
+        "total_ganados": ganados_all,
+        "total_revenue": sum(f["revenue"] for f in filas),
+        "total_pipe_activo": sum(f["pipe_activo"] for f in filas),
+        "tasa_global":   round(ganados_all / total_all * 100, 1) if total_all > 0 else 0,
+    })
+
+
+def _kpis_vendedor(vendedor_usuario_id: str, inicio: date, fin: date) -> dict:
+    """KPIs resumen del vendedor para la lista master de revisión."""
+    base = Lead.query.filter(Lead.usuario_asignado_id == vendedor_usuario_id)
+
+    leads_mes = base.filter(
+        Lead.fecha_creacion >= inicio, Lead.fecha_creacion < fin,
+    ).count()
+    ganados_mes = base.filter(
+        Lead.fecha_creacion >= inicio, Lead.fecha_creacion < fin,
+        Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO,
+    ).count()
+    perdidos_mes = base.filter(
+        Lead.fecha_creacion >= inicio, Lead.fecha_creacion < fin,
+        Lead.etapa_pipeline == EtapaPipeline.CIERRE_PERDIDO,
+    ).count()
+
+    # Pipe activo (snapshot ahora, NO filtrado por mes)
+    activos_q = base.filter(Lead.etapa_pipeline.notin_([
+        EtapaPipeline.CIERRE_GANADO, EtapaPipeline.CIERRE_PERDIDO,
+    ]))
+    leads_activos = activos_q.count()
+    pipe_activo = float(activos_q.with_entities(func.coalesce(func.sum(func.coalesce(
+        Lead.cantidad_productos * Lead.precio_unitario,
+        Lead.valor_estimado, 0,
+    )), 0)).scalar() or 0)
+
+    # Revenue ganado del mes
+    revenue_mes = float(base.filter(
+        Lead.fecha_creacion >= inicio, Lead.fecha_creacion < fin,
+        Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO,
+    ).with_entities(func.coalesce(func.sum(func.coalesce(
+        Lead.cantidad_productos * Lead.precio_unitario,
+        Lead.valor_estimado, 0,
+    )), 0)).scalar() or 0)
+
+    return {
+        "leads_mes":       leads_mes,
+        "ganados_mes":     ganados_mes,
+        "perdidos_mes":    perdidos_mes,
+        "leads_activos":   leads_activos,
+        "pipe_activo":     pipe_activo,
+        "revenue_mes":     revenue_mes,
+        "tasa_cierre":     round(ganados_mes / leads_mes * 100, 1) if leads_mes > 0 else 0,
+    }
+
+
+@dashboard_bp.route("/vendedores-review", methods=["GET"])
+@require_role(["super_admin"])
+def vendedores_review():
+    """Lista de vendedores con KPIs resumen para la vista master de revisión."""
+    from models import Usuario
+    mes_param = request.args.get("mes")
+    inicio, fin = _get_date_range(mes_param)
+
+    vendedores = (
+        Usuario.query
+        .filter(Usuario.en_turno.is_(True))
+        .order_by(Usuario.nombre.asc()).all()
+    )
+    out = []
+    for v in vendedores:
+        kpis = _kpis_vendedor(v.id, inicio, fin)
+        # Solo incluir si tiene actividad (leads activos o leads del mes)
+        if kpis["leads_activos"] == 0 and kpis["leads_mes"] == 0:
+            continue
+        out.append({
+            "vendedor_id": str(v.id),
+            "nombre":      v.nombre,
+            "marcas":      list(v.especialidad_marca or []),
+            **kpis,
+        })
+    out.sort(key=lambda x: -x["pipe_activo"])
+    return jsonify({"mes": inicio.strftime("%Y-%m"), "vendedores": out})
+
+
+@dashboard_bp.route("/vendedor-review/<uuid:vendedor_id>", methods=["GET"])
+@require_role(["super_admin"])
+def vendedor_review(vendedor_id):
+    """Drill-down completo de UN vendedor para la junta de revisión.
+    - KPIs del mes
+    - Funnel (counts + valor por etapa)
+    - Lista de leads agrupada por etapa con días en etapa, último contacto, valor
+    """
+    from models import Usuario
+    from datetime import datetime as _dt, timezone as _tz
+    mes_param = request.args.get("mes")
+    inicio, fin = _get_date_range(mes_param)
+
+    v = Usuario.query.get(str(vendedor_id))
+    if not v:
+        return jsonify({"error": "Vendedor no encontrado"}), 404
+    kpis = _kpis_vendedor(v.id, inicio, fin)
+
+    # Funnel: counts + valor en cada etapa (snapshot leads activos + cierres del mes)
+    etapas_orden = [
+        EtapaPipeline.NUEVO_LEAD, EtapaPipeline.CONTACTO_1, EtapaPipeline.CONTACTO_2,
+        EtapaPipeline.CONTACTO_3, EtapaPipeline.CONTACTO_4, EtapaPipeline.PRESENTACION,
+        EtapaPipeline.COTIZACION, EtapaPipeline.DEMO, EtapaPipeline.NEGOCIACION,
+        EtapaPipeline.CIERRE_GANADO, EtapaPipeline.CIERRE_PERDIDO,
+    ]
+    funnel = []
+    for etapa in etapas_orden:
+        n = Lead.query.filter(
+            Lead.usuario_asignado_id == v.id,
+            Lead.etapa_pipeline == etapa,
+        ).count()
+        valor = float(Lead.query.filter(
+            Lead.usuario_asignado_id == v.id,
+            Lead.etapa_pipeline == etapa,
+        ).with_entities(func.coalesce(func.sum(func.coalesce(
+            Lead.cantidad_productos * Lead.precio_unitario,
+            Lead.valor_estimado, 0,
+        )), 0)).scalar() or 0)
+        funnel.append({"etapa": etapa.value, "count": n, "valor": valor})
+
+    # Lista de leads agrupada por etapa (solo activos: sin cerrados)
+    leads = (
+        Lead.query
+        .filter(
+            Lead.usuario_asignado_id == v.id,
+            Lead.etapa_pipeline.notin_([EtapaPipeline.CIERRE_GANADO, EtapaPipeline.CIERRE_PERDIDO]),
+        )
+        .order_by(Lead.fecha_ultimo_contacto.asc().nullsfirst(), Lead.fecha_creacion.asc())
+        .all()
+    )
+    now = _dt.now(_tz.utc)
+    leads_por_etapa = {}
+    for l in leads:
+        # Días desde fecha_ultimo_contacto (o creación si nunca contactó)
+        ref = l.fecha_ultimo_contacto or l.fecha_creacion
+        if ref and ref.tzinfo is None:
+            ref = ref.replace(tzinfo=_tz.utc)
+        dias = (now - ref).days if ref else 0
+        # Días en la etapa actual (usar fecha_actualizacion como proxy)
+        ref2 = l.fecha_actualizacion or l.fecha_creacion
+        if ref2 and ref2.tzinfo is None:
+            ref2 = ref2.replace(tzinfo=_tz.utc)
+        dias_etapa = (now - ref2).days if ref2 else 0
+
+        valor = float(l.valor_calculado or 0)
+        etapa = l.etapa_pipeline.value
+        leads_por_etapa.setdefault(etapa, []).append({
+            "id":               str(l.id),
+            "nombre":           l.nombre,
+            "telefono":         l.telefono,
+            "empresa":          l.empresa_nombre,
+            "marca_interes":    l.marca_interes,
+            "origen":           l.origen.value if l.origen else None,
+            "valor":            valor,
+            "estado":           l.estado_cliente,
+            "tipo_cliente":     l.tipo_cliente,
+            "icp_nivel":        l.icp_nivel,
+            "dias_sin_contacto": dias,
+            "dias_en_etapa":    dias_etapa,
+            "fecha_ultimo_contacto": l.fecha_ultimo_contacto.isoformat() if l.fecha_ultimo_contacto else None,
+            "proximo_contacto": l.proximo_contacto.isoformat() if l.proximo_contacto else None,
+            "respondio":        l.respondio_ultimo_contacto,
+            "meta_campaign_nombre": (l.meta_campaign_info or {}).get("nombre") if l.meta_campaign else None,
+            "stuck":            dias_etapa >= 7,
+        })
+
+    return jsonify({
+        "mes":               inicio.strftime("%Y-%m"),
+        "vendedor_id":       str(v.id),
+        "vendedor_nombre":   v.nombre,
+        "marcas":            list(v.especialidad_marca or []),
+        "kpis":              kpis,
+        "funnel":            funnel,
+        "leads_por_etapa":   leads_por_etapa,
+    })
