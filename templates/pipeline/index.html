@@ -2508,7 +2508,21 @@ function fmt$(n){return '$'+Number(n).toLocaleString('es-MX',{minimumFractionDig
 // SocketIO
 socket.on('connect',()=>{document.getElementById('ws-dot').classList.add('live');document.getElementById('ws-label').textContent='En vivo';});
 socket.on('disconnect',()=>{document.getElementById('ws-dot').classList.remove('live');document.getElementById('ws-label').textContent='Desconectado';});
-socket.on('nuevo_lead',l=>{showToast('Nuevo lead',l.nombre||'');setTimeout(()=>location.reload(),1000);});
+socket.on('nuevo_lead',l=>{
+  showToast('Nuevo lead', l.nombre||'');
+  // BUGFIX 23-jun-2026: NO recargar la página — si hay un modal abierto
+  // (alguien llenando lead/oportunidad/empresa), el reload cerraba el modal
+  // y se perdía todo el trabajo. Ahora refrescamos el Kanban solo si no hay
+  // modales abiertos. Si el usuario quiere ver el lead nuevo, refresca manual.
+  const modalAbierto = document.querySelector('.modal-overlay.open, .nl-overlay.open, #modal-vendedor.open');
+  if(modalAbierto){
+    console.log('[socket] nuevo_lead recibido pero hay modal abierto — no recargo para no perder cambios');
+    return;
+  }
+  if(typeof loadKanban==='function'){
+    loadKanban();
+  }
+});
 socket.on('lead_movido',({lead_id,etapa_pipeline})=>{const c=document.getElementById('kcard-'+lead_id),col=document.getElementById('kcards-'+etapa_pipeline);if(c&&col){col.appendChild(c);updateCounts();}});
 socket.on('lead_etapa_cambiada',({lead_id,etapa_nueva,nombre,motivo})=>{
   if(motivo==='cadencia_automatica'){showToast('Cadencia',nombre+' → '+etapa_nueva);}
