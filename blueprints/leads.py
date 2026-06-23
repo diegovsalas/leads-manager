@@ -67,6 +67,16 @@ def crear_lead():
     Crea un lead. Auto-asignacion Round-Robin SOLO para Meta Ads.
     Para manual/web/prospeccion se asigna al vendedor que el usuario elija.
     """
+    # FIX-2026-06-23: validar sesión activa ANTES de cualquier procesamiento.
+    # Si el vendedor dejó el modal abierto mucho tiempo y se le venció la
+    # sesión, retornamos 401 claro para que recargue y vuelva a entrar,
+    # en vez de crear un lead "huérfano" sin asignar.
+    if not session.get("user_id"):
+        return jsonify({
+            "error": "Tu sesión expiró. Recarga la página y vuelve a iniciar sesión. Tu información no se guardó.",
+            "session_expired": True,
+        }), 401
+
     data = request.get_json() or {}
 
     origen_valor = data.get("origen", "")
@@ -214,8 +224,29 @@ def crear_lead():
                     owner_id=asignado,
                 )
                 db.session.add(new_acc)
-                db.session.flush()
-                account_id = new_acc.id
+                try:
+                    db.session.flush()
+                    account_id = new_acc.id
+                except Exception as race_e:
+                    # FIX-2026-06-23: race condition — otro vendedor creó la
+                    # misma empresa mientras buscábamos. Rollback el flush
+                    # del Account y reusar el existente.
+                    err_str = str(race_e).lower()
+                    if "unique" in err_str or "duplicate" in err_str:
+                        db.session.rollback()
+                        existing = Account.query.filter(
+                            db.func.lower(Account.nombre) == empresa_str.lower()
+                        ).first()
+                        if existing:
+                            account_id = existing.id
+                            current_app.logger.info(
+                                f"[crear_lead] race detectada en empresa '{empresa_str}', "
+                                f"reusando account_id={existing.id}"
+                            )
+                        else:
+                            raise  # no era race, re-lanzar
+                    else:
+                        raise
 
         # Auto-vincular Contact si viene nombre+telefono y no existe
         contact_id = data.get("contact_id")

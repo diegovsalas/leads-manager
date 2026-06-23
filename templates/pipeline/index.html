@@ -5990,10 +5990,21 @@ async function openLeadModal(leadToEdit){
   // Industria + tamaño desde la API ya cargada
   const indSel=document.getElementById('nl-industria'),tamSel=document.getElementById('nl-tamano');
   if(indSel.children.length<=1){
-    fetch('/api/leads/icp-opciones').then(r=>r.json()).then(d=>{
+    fetch('/api/leads/icp-opciones').then(r=>{
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return r.json();
+    }).then(d=>{
       (d.industrias||[]).forEach(i=>{indSel.innerHTML+=`<option value="${i}">${i}</option>`;});
       (d.tamanos||[]).forEach(t=>{tamSel.innerHTML+=`<option value="${t}">${t}</option>`;});
-    }).catch(()=>{});
+    }).catch(e=>{
+      // FIX-2026-06-23: aviso visible si la API de catálogos falla.
+      // Antes el catch era silencioso y los selects se quedaban vacíos
+      // sin que el vendedor entendiera por qué no podía seleccionar Industria.
+      indSel.innerHTML='<option value="">⚠ No se cargaron opciones</option>';
+      tamSel.innerHTML='<option value="">⚠ No se cargaron opciones</option>';
+      console.warn('[modal nuevo lead] icp-opciones falló:',e);
+      _nlToast('Aviso: lista de Industria/Tamaño no se cargó. Si necesitas elegir, recarga la página.', true);
+    });
   }
   // Asignación preview
   document.getElementById('nl-assign-preview').innerHTML=`Se asignará a <strong>${me.nombre||'vos'}</strong>`;
@@ -6270,26 +6281,67 @@ async function nlSubmit(mode){
   };
 
   const btn=document.getElementById('nl-save-btn');btn.disabled=true;
+
+  // FIX-2026-06-23: helper que extrae el mensaje de error de forma robusta —
+  // antes si el server retornaba 500 sin JSON body, el catch generaba
+  // mensajes crípticos tipo "[object Error]" o "Unexpected end of JSON input".
+  async function _safeReadError(r){
+    try{
+      const err=await r.json();
+      return err.error || err.message || ('HTTP '+r.status);
+    }catch{
+      return 'Error '+r.status+' del servidor (sin detalle). Intenta de nuevo o avisa a tu admin.';
+    }
+  }
+
+  // FIX-2026-06-23: timeout de 30s. Si pierdes WiFi mid-submit, abortamos
+  // y te ofrecemos reintentar — antes el browser esperaba indefinido y al
+  // recuperar conexión llegaba un duplicado.
+  const _ctrl=new AbortController();
+  const _timeoutId=setTimeout(()=>_ctrl.abort(), 30000);
+
   try{
     let r, lead;
     if(_nlEditingLead){
       // PUT — modo edición. No mandamos etapa (se cambia por drag) ni teléfono (read-only).
       delete body.telefono;
       delete body.etapa_pipeline;
-      r=await fetch('/api/leads/'+_nlEditingLead.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-      if(!r.ok){const err=await r.json();throw new Error(err.error||'Error');}
+      r=await fetch('/api/leads/'+_nlEditingLead.id,{method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body),
+        signal:_ctrl.signal});
+      if(!r.ok){
+        // Detectar sesión expirada para dar mensaje específico
+        if(r.status===401){
+          const err=await _safeReadError(r);
+          _nlToast(err, true);
+          setTimeout(()=>{if(confirm('Tu sesión expiró. ¿Recargar la página? (la información que llenaste se perderá)'))location.reload();}, 1500);
+          return;
+        }
+        throw new Error(await _safeReadError(r));
+      }
       lead=await r.json();
       _nlToast('Lead actualizado: '+nombre);
       closeLeadModal();
-      // Refrescar el panel si está abierto y kanban
       if(document.getElementById('lead-panel').classList.contains('open')){
         abrirLeadPanel(lead.id);
       }
       setTimeout(()=>{if(typeof loadKanban==='function')loadKanban();else location.reload();},400);
     }else{
       // POST — modo alta
-      r=await fetch('/api/leads/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-      if(!r.ok){const err=await r.json();throw new Error(err.error||'Error');}
+      r=await fetch('/api/leads/',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body),
+        signal:_ctrl.signal});
+      if(!r.ok){
+        if(r.status===401){
+          const err=await _safeReadError(r);
+          _nlToast(err, true);
+          setTimeout(()=>{if(confirm('Tu sesión expiró. ¿Recargar la página? (la información que llenaste se perderá)'))location.reload();}, 1500);
+          return;
+        }
+        throw new Error(await _safeReadError(r));
+      }
       lead=await r.json();
       _nlToast('Lead creado: '+nombre);
       if(mode==='close'){closeLeadModal();setTimeout(()=>{if(typeof loadKanban==='function')loadKanban();else location.reload();},400);}
@@ -6304,7 +6356,19 @@ async function nlSubmit(mode){
         setTimeout(()=>document.getElementById('nl-phone').focus(),100);
       }
     }
-  }catch(e){_nlToast('Error: '+e.message,true);}
+  }catch(e){
+    clearTimeout(_timeoutId);
+    // FIX-2026-06-23: mensajes diferenciados por tipo de fallo
+    if(e.name==='AbortError'){
+      _nlToast('⏱️ Tardó más de 30s. Posible problema de conexión. ⚠ NO recargues: el lead quizá se guardó. Refresca el Kanban para confirmar.', true);
+    }else if(e.message && (e.message.includes('Failed to fetch') || e.message.includes('NetworkError'))){
+      _nlToast('📡 Sin conexión a internet. Reintenta cuando vuelva la red.', true);
+    }else{
+      _nlToast('Error: '+(e.message||'Falló el guardado'), true);
+    }
+  }finally{
+    clearTimeout(_timeoutId);
+  }
   finally{btn.disabled=false;}
 }
 </script>
