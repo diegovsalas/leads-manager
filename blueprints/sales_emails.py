@@ -265,6 +265,71 @@ def download_attachment(email_id, idx):
     )
 
 
+@sales_emails_bp.route("/diagnose", methods=["GET"])
+def diagnose_vendor():
+    """Diagnóstico de correos enviados de un vendedor. Cuenta mensajes con
+    diferentes filtros para identificar si el problema es:
+      - No manda correos en general
+      - Solo manda a internos (filtrados por el monitoreo)
+      - El filtro de exclusión @grupoavantex.com está mal
+    Uso: GET /api/sales-emails/diagnose?email=angelicauribe@grupoavantex.com
+    """
+    err = _require_admin()
+    if err: return err
+    email = (request.args.get("email") or "").strip()
+    if not email:
+        return jsonify({"error": "Falta ?email=..."}), 400
+    if not gmail_monitor.is_configured():
+        return jsonify({"error": "GMAIL_SERVICE_ACCOUNT_JSON no configurado"}), 500
+
+    try:
+        svc = gmail_monitor._build_service(email)
+    except Exception as e:
+        return jsonify({"error": f"Auth falló: {e}"}), 500
+
+    from datetime import datetime, timedelta, timezone
+    def _count(q):
+        try:
+            r = svc.users().messages().list(userId="me", q=q, maxResults=1).execute()
+            return int(r.get("resultSizeEstimate") or 0)
+        except Exception as e:
+            return f"error: {e}"
+
+    def _last_sent(q):
+        try:
+            r = svc.users().messages().list(userId="me", q=q, maxResults=1).execute()
+            msgs = r.get("messages") or []
+            if not msgs: return None
+            m = svc.users().messages().get(userId="me", id=msgs[0]["id"], format="metadata",
+                                            metadataHeaders=["Date","To","Subject"]).execute()
+            headers = (m.get("payload") or {}).get("headers") or []
+            def _h(name):
+                for h in headers:
+                    if (h.get("name") or "").lower() == name.lower():
+                        return h.get("value")
+                return None
+            internal_ms = m.get("internalDate")
+            sent_at = (datetime.fromtimestamp(int(internal_ms)/1000, tz=timezone.utc).isoformat()
+                       if internal_ms else None)
+            return {"to": _h("To"), "subject": _h("Subject"), "sent_at": sent_at}
+        except Exception as e:
+            return f"error: {e}"
+
+    after_30d = int((datetime.now(timezone.utc) - timedelta(days=30)).timestamp())
+    after_90d = int((datetime.now(timezone.utc) - timedelta(days=90)).timestamp())
+
+    return jsonify({
+        "email": email,
+        "enviados_30d_TODOS":           _count(f"in:sent after:{after_30d}"),
+        "enviados_30d_externos":        _count(f"in:sent after:{after_30d} -to:@grupoavantex.com"),
+        "enviados_30d_internos":        _count(f"in:sent after:{after_30d} to:@grupoavantex.com"),
+        "enviados_90d_TODOS":           _count(f"in:sent after:{after_90d}"),
+        "enviados_90d_externos":        _count(f"in:sent after:{after_90d} -to:@grupoavantex.com"),
+        "ultimo_enviado_30d":           _last_sent(f"in:sent after:{after_30d}"),
+        "ultimo_enviado_externo_90d":   _last_sent(f"in:sent after:{after_90d} -to:@grupoavantex.com"),
+    })
+
+
 @sales_emails_bp.route("/test", methods=["GET"])
 def test_auth():
     """Prueba autenticación con un email específico. Devuelve OK + perfil del
