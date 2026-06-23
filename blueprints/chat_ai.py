@@ -159,7 +159,7 @@ def _save_message(user_id: str, session_id: str, role: str, content):
     db.session.execute(
         db.text("""
             INSERT INTO chat_messages (user_id, session_id, role, content)
-            VALUES (:uid, :sid, :role, :content::jsonb)
+            VALUES (:uid, :sid, :role, CAST(:content AS jsonb))
         """),
         {
             "uid":     user_id,
