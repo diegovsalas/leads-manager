@@ -31,6 +31,9 @@ SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 INTERNAL_DOMAIN = os.getenv("GMAIL_INTERNAL_DOMAIN", "grupoavantex.com").lower()
 LOOKBACK_MIN = int(os.getenv("GMAIL_POLL_LOOKBACK_MIN", "15"))
 RETENTION_DAYS = int(os.getenv("GMAIL_RETENTION_DAYS", "365"))
+# Ventana de backfill inicial cuando un vendedor se agrega por primera vez.
+# Solo aplica UNA vez por vendedor (después se marca gmail_backfilled_at).
+BACKFILL_DAYS = int(os.getenv("GMAIL_BACKFILL_DAYS", "30"))
 
 
 def _load_credentials_json() -> Optional[dict]:
@@ -235,9 +238,14 @@ def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN,
     sin body_text/body_html, lo re-fetcha con format=full y actualiza la fila.
     force_refresh=True: re-fetch incluso si ya tiene body (útil para refrescar
     attachment_id u otros campos nuevos del schema).
+
+    Backfill automático para vendedores nuevos: si gmail_backfilled_at es None,
+    se usa una ventana extendida de BACKFILL_DAYS solo en este poll, y se
+    marca el timestamp para que el siguiente poll vuelva al lookback normal.
     """
     stats = {"vendedor": vendedor.nombre, "fetched": 0, "saved": 0,
-             "skipped_internal": 0, "backfilled": 0, "errors": 0}
+             "skipped_internal": 0, "backfilled": 0, "errors": 0,
+             "initial_backfill": False}
     if not vendedor.gmail_address:
         return stats
 
@@ -248,7 +256,15 @@ def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN,
         stats["errors"] = 1
         return stats
 
-    query = _query_for_lookback(lookback_min)
+    # ── Backfill inicial para vendedores nuevos ─────────────────────
+    is_initial = getattr(vendedor, "gmail_backfilled_at", None) is None
+    effective_lookback = lookback_min
+    if is_initial:
+        effective_lookback = BACKFILL_DAYS * 24 * 60  # días → minutos
+        stats["initial_backfill"] = True
+        log.info(f"[gmail] backfill inicial para {vendedor.nombre} ({vendedor.gmail_address}): {BACKFILL_DAYS} días")
+
+    query = _query_for_lookback(effective_lookback)
     try:
         resp = svc.users().messages().list(userId="me", q=query, maxResults=500).execute()
     except Exception as e:
@@ -304,6 +320,10 @@ def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN,
             db.session.rollback()
             log.warning(f"persist msg {mid} falló: {e}")
             stats["errors"] += 1
+
+    # Marcar backfill como completado (independiente de si hubo saved>0 o no)
+    if is_initial:
+        vendedor.gmail_backfilled_at = datetime.now(timezone.utc)
 
     try:
         db.session.commit()
