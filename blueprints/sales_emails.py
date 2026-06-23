@@ -224,6 +224,9 @@ def download_attachment(email_id, idx):
     err = _require_admin()
     if err: return err
 
+    from flask import current_app
+    import time as _time
+
     email = SalesEmail.query.get(str(email_id))
     if not email:
         return jsonify({"error": "Correo no encontrado"}), 404
@@ -241,17 +244,39 @@ def download_attachment(email_id, idx):
     if not vendedor or not vendedor.gmail_address:
         return jsonify({"error": "Vendedora sin gmail_address"}), 400
 
+    filename = att.get("filename") or "adjunto"
+    size_kb = (att.get("size") or 0) // 1024
+    current_app.logger.info(
+        f"[attachment] download iniciada: vendedor={vendedor.gmail_address} "
+        f"email_id={email_id} filename={filename} size_kb={size_kb}"
+    )
+
+    t0 = _time.time()
     try:
         svc = gmail_monitor._build_service(vendedor.gmail_address)
         result = svc.users().messages().attachments().get(
             userId="me", messageId=email.gmail_message_id, id=att_id,
         ).execute()
-        data_b64 = result.get("data") or ""
+    except Exception as e:
+        current_app.logger.exception(f"[attachment] Gmail API falló")
+        return jsonify({"error": f"Error consultando Gmail: {type(e).__name__}: {str(e)[:200]}"}), 502
+
+    data_b64 = result.get("data") or ""
+    if not data_b64:
+        # Gmail puede devolver attachmentId vacío si el archivo es muy grande
+        # y requiere descarga paginada (>= 25MB típicamente)
+        current_app.logger.warning(f"[attachment] sin data: file probablemente >25MB")
+        return jsonify({"error": "Archivo muy grande (>25MB). Gmail no lo devolvió inline. Abre el correo directo en Gmail con el link."}), 413
+
+    try:
         raw = base64.urlsafe_b64decode(data_b64)
     except Exception as e:
-        return jsonify({"error": f"Error descargando de Gmail: {e}"}), 500
+        current_app.logger.exception(f"[attachment] base64 decode falló")
+        return jsonify({"error": f"Archivo corrupto en Gmail: {e}"}), 500
 
-    filename = att.get("filename") or "adjunto"
+    elapsed_ms = int((_time.time() - t0) * 1000)
+    current_app.logger.info(f"[attachment] OK: {len(raw)} bytes en {elapsed_ms}ms ({filename})")
+
     mime = att.get("mime_type") or "application/octet-stream"
     # Sanea filename para Content-Disposition (sin comillas, sin newlines)
     safe_name = filename.replace('"', "").replace("\n", "").replace("\r", "")
@@ -261,6 +286,7 @@ def download_attachment(email_id, idx):
         headers={
             "Content-Disposition": f'attachment; filename="{safe_name}"',
             "Content-Length": str(len(raw)),
+            "Cache-Control": "private, max-age=300",  # cliente cachea 5min
         },
     )
 
