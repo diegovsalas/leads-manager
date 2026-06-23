@@ -259,7 +259,19 @@ def download_attachment(email_id, idx):
         ).execute()
     except Exception as e:
         current_app.logger.exception(f"[attachment] Gmail API falló")
-        return jsonify({"error": f"Error consultando Gmail: {type(e).__name__}: {str(e)[:200]}"}), 502
+        err_str = str(e)
+        # Detectar outage de Google IAM (Regional Access Boundary 500 INTERNAL)
+        if "Regional Access Boundary" in err_str or "INTERNAL" in err_str:
+            return jsonify({
+                "error": "Google Cloud IAM está fallando (no es nuestro CRM). Revisa https://status.cloud.google.com — intenta en 15-30 min.",
+                "tipo": "google_iam_outage",
+            }), 503
+        if "invalid_grant" in err_str or "Invalid email" in err_str:
+            return jsonify({
+                "error": f"Auth Gmail falló para {vendedor.gmail_address}. Verifica que el email sea correcto en admin.google.com.",
+                "tipo": "auth",
+            }), 502
+        return jsonify({"error": f"Error consultando Gmail: {type(e).__name__}: {err_str[:200]}"}), 502
 
     data_b64 = result.get("data") or ""
     if not data_b64:
