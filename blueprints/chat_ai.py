@@ -32,7 +32,8 @@ EXPORT_TTL_MIN = 60  # archivos viven 60 min
 
 MODEL = os.getenv("CHAT_AI_MODEL", "claude-sonnet-4-6")
 MAX_TOKENS = 1500
-MAX_HISTORY = 30  # últimos N mensajes que mandamos a Claude
+MAX_HISTORY = 30   # últimos N mensajes que mandamos a Claude
+MAX_TOOL_ITERS = 3  # cap loop tool-use para no acercarnos al gunicorn timeout 120s
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
@@ -211,10 +212,10 @@ def message():
         messages = _load_history_for_claude(user_id, sid)
         system = _system_prompt(ctx)
 
-        # Loop de tool use (max 5 iteraciones)
+        # Loop de tool use
         final_text = ""
         iters = 0
-        while iters < 5:
+        while iters < MAX_TOOL_ITERS:
             iters += 1
             try:
                 resp = client.messages.create(

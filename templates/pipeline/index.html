@@ -2406,6 +2406,21 @@ fbq('track','PageView');
     font-size:11px; padding:0; font-family:var(--font); font-weight:500;
   }
   .ai-quickbar button:hover{ text-decoration:underline; }
+  .ai-thinking{
+    align-self:flex-start; background:var(--bg-card); color:var(--text2);
+    border:1px solid var(--border); border-radius:12px; border-bottom-left-radius:4px;
+    padding:9px 13px; font-size:13px; box-shadow:var(--shadow);
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  .ai-thinking::after{
+    content:''; display:inline-block; width:6px; height:6px;
+    border-radius:50%; background:var(--text3);
+    animation:ai-dots 1.4s infinite;
+  }
+  @keyframes ai-dots {
+    0%,100% { opacity:.2; transform:scale(.85); }
+    50%     { opacity:.9; transform:scale(1.1); }
+  }
 </style>
 
 <button id="ai-fab" onclick="toggleAiChat()" title="Asistente IA">🤖</button>
@@ -5032,21 +5047,51 @@ async function sendAiMessage(){
   const btn=document.getElementById('ai-send-btn');
   const txt=inp.value.trim();
   if(!txt) return;
-  inp.value='';btn.disabled=true;btn.textContent='...';
+  inp.value='';btn.disabled=true;btn.textContent='…';
   _aiAppendBubble('user', txt);
-  _aiAppendBubble('assistant', '<span style="color:#9ca3af;">Pensando…</span>');
+
+  // Thinking indicator: bubble con clase CSS (dots animados), sin HTML en texto
   const cont=document.getElementById('ai-chat-messages');
-  const thinking = cont.lastChild;
+  const thinking=document.createElement('div');
+  thinking.className='ai-thinking';
+  thinking.textContent='Pensando';
+  cont.appendChild(thinking);
+  cont.scrollTop=cont.scrollHeight;
+
+  // Sube el label si tarda
+  const slowTimer=setTimeout(()=>{ if(thinking.parentNode) thinking.textContent='Consultando datos'; }, 4000);
+  const slowTimer2=setTimeout(()=>{ if(thinking.parentNode) thinking.textContent='Sigue trabajando'; }, 12000);
+
+  // Fetch con timeout 90s
+  const ctrl=new AbortController();
+  const timeoutId=setTimeout(()=>ctrl.abort(), 90_000);
+
   try{
-    const r=await fetch('/api/chat-ai/message',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({message:txt})});
-    const d=await r.json();
-    cont.removeChild(thinking);
-    if(!r.ok){ _aiAppendBubble('assistant', '❌ '+(d.error||'Error')); }
-    else{ _aiAppendBubble('assistant', d.reply||'(sin respuesta)'); }
+    const r=await fetch('/api/chat-ai/message',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:txt}),
+      signal:ctrl.signal,
+    });
+    clearTimeout(timeoutId);clearTimeout(slowTimer);clearTimeout(slowTimer2);
+
+    // Removemos thinking de forma segura
+    if(thinking.parentNode) thinking.parentNode.removeChild(thinking);
+
+    let d;
+    try{ d=await r.json(); }
+    catch{ d={error:'Respuesta no es JSON (HTTP '+r.status+')'}; }
+
+    if(!r.ok){ _aiAppendBubble('assistant', '❌ '+(d.error||('Error HTTP '+r.status))); }
+    else if(!d.reply){ _aiAppendBubble('assistant', '⚠️ Claude respondió vacío. Intenta reformular.'); }
+    else{ _aiAppendBubble('assistant', d.reply); }
   }catch(e){
-    cont.removeChild(thinking);
-    _aiAppendBubble('assistant', '❌ Error: '+e.message);
+    clearTimeout(timeoutId);clearTimeout(slowTimer);clearTimeout(slowTimer2);
+    if(thinking.parentNode) thinking.parentNode.removeChild(thinking);
+    if(e.name==='AbortError'){
+      _aiAppendBubble('assistant', '⏱️ Tardó más de 90s. Render quizá esté restarteando. Intenta de nuevo.');
+    }else{
+      _aiAppendBubble('assistant', '❌ Error: '+e.message);
+    }
   }
   btn.disabled=false;btn.textContent='Enviar';
   inp.focus();
