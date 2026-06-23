@@ -30,7 +30,7 @@ EXPORTS_DIR = Path(os.getenv("CHAT_EXPORTS_DIR", "/tmp/crm_exports"))
 EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
 EXPORT_TTL_MIN = 60  # archivos viven 60 min
 
-MODEL = os.getenv("CHAT_AI_MODEL", "claude-opus-4-5")
+MODEL = os.getenv("CHAT_AI_MODEL", "claude-sonnet-4-6")
 MAX_TOKENS = 1500
 MAX_HISTORY = 30  # últimos N mensajes que mandamos a Claude
 
@@ -176,95 +176,100 @@ def _save_message(user_id: str, session_id: str, role: str, content):
 
 @chat_ai_bp.route("/message", methods=["POST"])
 def message():
-    """Recibe { "message": "texto del user" }, devuelve { "reply": "...", ... }."""
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Sin sesión"}), 401
-
-    data = request.get_json() or {}
-    user_text = (data.get("message") or "").strip()
-    if not user_text:
-        return jsonify({"error": "Mensaje vacío"}), 400
-
-    ctx = _build_ctx()
-    sid = _get_session_id()
-
-    # Verificar Anthropic
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        return jsonify({"error": "ANTHROPIC_API_KEY no configurada en Render"}), 500
-
+    """Recibe { "message": "texto del user" }, devuelve { "reply": "...", ... }.
+    Wrapper top-level try/except para que CUALQUIER fallo retorne JSON
+    (no HTML), así el frontend nunca ve 'Unexpected token <'.
+    """
     try:
-        import anthropic
-    except ImportError:
-        return jsonify({"error": "anthropic SDK no instalado"}), 500
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"error": "Sin sesión"}), 401
 
-    client = anthropic.Anthropic(api_key=api_key)
+        data = request.get_json() or {}
+        user_text = (data.get("message") or "").strip()
+        if not user_text:
+            return jsonify({"error": "Mensaje vacío"}), 400
 
-    # Guarda mensaje del usuario
-    _save_message(user_id, sid, "user", [{"type": "text", "text": user_text}])
+        ctx = _build_ctx()
+        sid = _get_session_id()
 
-    # Construye conversación para Claude
-    messages = _load_history_for_claude(user_id, sid)
-    system = _system_prompt(ctx)
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            return jsonify({"error": "ANTHROPIC_API_KEY no configurada en Render"}), 500
 
-    # Loop de tool use (max 5 iteraciones de tools)
-    final_text = ""
-    iters = 0
-    while iters < 5:
-        iters += 1
         try:
-            resp = client.messages.create(
-                model=MODEL,
-                max_tokens=MAX_TOKENS,
-                system=system,
-                tools=tools.TOOLS_SCHEMA,
-                messages=messages,
-            )
-        except Exception as e:
-            log.exception("Anthropic call failed")
-            return jsonify({"error": f"Claude falló: {type(e).__name__}: {str(e)[:200]}"}), 502
+            import anthropic
+        except ImportError:
+            return jsonify({"error": "anthropic SDK no instalado"}), 500
 
-        # Acumula bloques de la respuesta
-        blocks = []
-        tool_calls_in_response = []
-        for block in resp.content:
-            if block.type == "text":
-                blocks.append({"type": "text", "text": block.text})
-                final_text += block.text
-            elif block.type == "tool_use":
-                blocks.append({
-                    "type":  "tool_use",
-                    "id":    block.id,
-                    "name":  block.name,
-                    "input": block.input,
+        client = anthropic.Anthropic(api_key=api_key)
+
+        # Guarda mensaje del usuario
+        _save_message(user_id, sid, "user", [{"type": "text", "text": user_text}])
+
+        # Construye conversación para Claude
+        messages = _load_history_for_claude(user_id, sid)
+        system = _system_prompt(ctx)
+
+        # Loop de tool use (max 5 iteraciones)
+        final_text = ""
+        iters = 0
+        while iters < 5:
+            iters += 1
+            try:
+                resp = client.messages.create(
+                    model=MODEL,
+                    max_tokens=MAX_TOKENS,
+                    system=system,
+                    tools=tools.TOOLS_SCHEMA,
+                    messages=messages,
+                )
+            except Exception as e:
+                log.exception("Anthropic call failed")
+                return jsonify({
+                    "error": f"Claude falló: {type(e).__name__}: {str(e)[:200]}",
+                    "model_used": MODEL,
+                }), 502
+
+            blocks = []
+            tool_calls_in_response = []
+            for block in resp.content:
+                if block.type == "text":
+                    blocks.append({"type": "text", "text": block.text})
+                    final_text += block.text
+                elif block.type == "tool_use":
+                    blocks.append({
+                        "type":  "tool_use",
+                        "id":    block.id,
+                        "name":  block.name,
+                        "input": block.input,
+                    })
+                    tool_calls_in_response.append(block)
+
+            _save_message(user_id, sid, "assistant", blocks)
+            messages.append({"role": "assistant", "content": blocks})
+
+            if resp.stop_reason == "end_turn" or not tool_calls_in_response:
+                break
+
+            tool_results = []
+            for tc in tool_calls_in_response:
+                result = tools.run_tool(tc.name, tc.input, ctx)
+                tool_results.append({
+                    "type":        "tool_result",
+                    "tool_use_id": tc.id,
+                    "content":     json.dumps(result, default=str, ensure_ascii=False),
                 })
-                tool_calls_in_response.append(block)
+            _save_message(user_id, sid, "user", tool_results)
+            messages.append({"role": "user", "content": tool_results})
 
-        # Persiste el turno del assistant
-        _save_message(user_id, sid, "assistant", blocks)
-        messages.append({"role": "assistant", "content": blocks})
+        return jsonify({"reply": final_text, "session_id": sid, "iters": iters})
 
-        if resp.stop_reason == "end_turn" or not tool_calls_in_response:
-            break
-
-        # Ejecuta las tools y manda los results al siguiente turno
-        tool_results = []
-        for tc in tool_calls_in_response:
-            result = tools.run_tool(tc.name, tc.input, ctx)
-            tool_results.append({
-                "type":        "tool_result",
-                "tool_use_id": tc.id,
-                "content":     json.dumps(result, default=str, ensure_ascii=False),
-            })
-        _save_message(user_id, sid, "user", tool_results)
-        messages.append({"role": "user", "content": tool_results})
-
-    return jsonify({
-        "reply":      final_text,
-        "session_id": sid,
-        "iters":      iters,
-    })
+    except Exception as e:
+        log.exception("chat_ai message endpoint top-level error")
+        return jsonify({
+            "error": f"Error interno: {type(e).__name__}: {str(e)[:200]}",
+        }), 500
 
 
 @chat_ai_bp.route("/history", methods=["GET"])
