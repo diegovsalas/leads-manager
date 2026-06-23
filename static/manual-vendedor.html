@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Manual del Vendedor — Avantex CRM</title>
+<style>
+  /* ─── Print-friendly base ─── */
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 11pt;
+    line-height: 1.55;
+    color: #1f2937;
+    background: #fff;
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 36px 28px;
+  }
+  .cover {
+    text-align: center;
+    padding: 80px 0 100px;
+    page-break-after: always;
+  }
+  .cover .brand {
+    font-size: 14pt;
+    letter-spacing: 6px;
+    color: #B97647;
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+  .cover h1 {
+    font-size: 36pt;
+    margin: 12px 0 8px;
+    color: #0f172a;
+    letter-spacing: -1px;
+  }
+  .cover .sub {
+    font-size: 14pt;
+    color: #64748b;
+    margin-bottom: 60px;
+  }
+  .cover .meta {
+    font-size: 10pt;
+    color: #94a3b8;
+    margin-top: 80px;
+  }
+  h1 {
+    font-size: 22pt;
+    color: #0f172a;
+    border-bottom: 2px solid #B97647;
+    padding-bottom: 8px;
+    margin-top: 36px;
+    margin-bottom: 18px;
+    page-break-after: avoid;
+  }
+  h2 {
+    font-size: 14pt;
+    color: #1e293b;
+    margin-top: 28px;
+    margin-bottom: 10px;
+    page-break-after: avoid;
+  }
+  h3 {
+    font-size: 12pt;
+    color: #475569;
+    margin-top: 18px;
+    margin-bottom: 6px;
+    page-break-after: avoid;
+  }
+  p { margin: 6px 0 12px; }
+  ul, ol { margin: 8px 0 14px; padding-left: 22px; }
+  li { margin-bottom: 5px; }
+  code, kbd {
+    background: #f1f5f9;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: 'SF Mono', Menlo, monospace;
+    font-size: 9.5pt;
+    color: #334155;
+  }
+  kbd {
+    border: 1px solid #cbd5e1;
+    box-shadow: 0 1px 0 #cbd5e1;
+    background: #fff;
+    font-weight: 600;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 20px;
+    font-size: 10pt;
+  }
+  th {
+    background: #f8fafc;
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 2px solid #e2e8f0;
+    font-weight: 600;
+    color: #475569;
+  }
+  td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: top;
+  }
+  .callout {
+    border-left: 4px solid #B97647;
+    background: #fef9f5;
+    padding: 12px 16px;
+    margin: 14px 0;
+    border-radius: 0 6px 6px 0;
+    font-size: 10.5pt;
+  }
+  .callout strong { color: #B97647; }
+  .warn {
+    border-left-color: #dc2626;
+    background: #fef2f2;
+  }
+  .warn strong { color: #dc2626; }
+  .ok {
+    border-left-color: #16a34a;
+    background: #f0fdf4;
+  }
+  .ok strong { color: #16a34a; }
+  .step-list {
+    counter-reset: step;
+    list-style: none;
+    padding: 0;
+  }
+  .step-list li {
+    counter-increment: step;
+    position: relative;
+    padding-left: 36px;
+    margin-bottom: 12px;
+  }
+  .step-list li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 24px;
+    height: 24px;
+    background: #B97647;
+    color: #fff;
+    border-radius: 50%;
+    text-align: center;
+    font-weight: 700;
+    font-size: 11pt;
+    line-height: 24px;
+  }
+  .pill {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 99px;
+    font-size: 9pt;
+    font-weight: 600;
+    margin-right: 4px;
+  }
+  .pill-nuevo    { background: #ede9fe; color: #6d28d9; }
+  .pill-contacto { background: #f3e8ff; color: #7e22ce; }
+  .pill-cotiz    { background: #dbeafe; color: #1d4ed8; }
+  .pill-demo     { background: #cffafe; color: #0e7490; }
+  .pill-nego     { background: #fef3c7; color: #b45309; }
+  .pill-ganado   { background: #dcfce7; color: #15803d; }
+  .pill-perdido  { background: #fecaca; color: #dc2626; }
+  .pill-meta     { background: #dbeafe; color: #1d4ed8; }
+  .pill-whats    { background: #dcfce7; color: #15803d; }
+  .pill-web      { background: #fef3c7; color: #b45309; }
+  .pill-prospec  { background: #ede9fe; color: #6d28d9; }
+  hr {
+    border: 0;
+    border-top: 1px solid #e2e8f0;
+    margin: 24px 0;
+  }
+  .toc {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin: 24px 0;
+  }
+  .toc h2 { margin-top: 0; }
+  .toc ol { margin: 0; }
+  .toc a { color: #334155; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .footer-note {
+    margin-top: 40px;
+    padding-top: 18px;
+    border-top: 1px solid #e2e8f0;
+    font-size: 9pt;
+    color: #94a3b8;
+    text-align: center;
+  }
+  @media print {
+    body { padding: 0; }
+    .no-print { display: none; }
+    h1 { page-break-before: always; }
+    h1:first-of-type, .cover + h1 { page-break-before: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═════════════════════════════════════ -->
+<!-- PORTADA                              -->
+<!-- ═════════════════════════════════════ -->
+<div class="cover">
+  <div class="brand">GRUPO AVANTEX</div>
+  <h1>Manual del Vendedor</h1>
+  <div class="sub">CRM Pipeline · Guía operativa para el equipo comercial</div>
+  <div class="meta">Versión 1.0 · Junio 2026</div>
+</div>
+
+<!-- ═════════════════════════════════════ -->
+<!-- ÍNDICE                               -->
+<!-- ═════════════════════════════════════ -->
+<div class="toc">
+<h2>Índice</h2>
+<ol>
+  <li><a href="#bienvenida">Bienvenida</a></li>
+  <li><a href="#primer-dia">Tu primer día — login y recorrido</a></li>
+  <li><a href="#mi-dia">Mi día — qué atender primero</a></li>
+  <li><a href="#pipeline">El Pipeline — las 11 etapas</a></li>
+  <li><a href="#capturar">Capturar un lead nuevo</a></li>
+  <li><a href="#trabajar">Trabajar un lead día a día</a></li>
+  <li><a href="#cerrar">Cerrar un lead — ganado o perdido</a></li>
+  <li><a href="#meta">Leads que llegan automáticos (Meta Ads)</a></li>
+  <li><a href="#cotizar">Generar una cotización</a></li>
+  <li><a href="#whatsapp">Comunicarte con clientes (WhatsApp)</a></li>
+  <li><a href="#buenas">Buenas prácticas y disciplina</a></li>
+  <li><a href="#atajos">Atajos de teclado</a></li>
+  <li><a href="#faq">Preguntas frecuentes</a></li>
+</ol>
+</div>
+
+<!-- ═════════════════════════════════════ -->
+<!-- 1. BIENVENIDA                        -->
+<!-- ═════════════════════════════════════ -->
+<h1 id="bienvenida">1. Bienvenida</h1>
+
+<p>Bienvenido al <strong>CRM de Avantex</strong>, tu nuevo aliado para gestionar leads, oportunidades y cierres. Este sistema reemplaza las hojas de Excel, los chats sueltos y las libretas: aquí vive todo lo que necesitas saber de cada prospecto desde el primer contacto hasta el cierre.</p>
+
+<h2>¿Qué resuelve el CRM?</h2>
+
+<ul>
+  <li><strong>No se te pierde ningún lead.</strong> Cada prospecto que llega — por Meta Ads, WhatsApp, web, prospección o cualquier canal — queda registrado y asignado automáticamente.</li>
+  <li><strong>Sabes exactamente qué hacer hoy.</strong> "Mi día" te dice qué leads están sin contactar, cuáles requieren seguimiento y qué oportunidades están por cerrarse.</li>
+  <li><strong>Tu gerente ve tu trabajo.</strong> Tu actividad, valor en pipeline y conversión están visibles — eso te protege en tu evaluación de desempeño y bonos.</li>
+  <li><strong>El cliente recibe seguimiento profesional.</strong> Cotizaciones con PDF, historial completo de conversaciones, y citas agendadas — todo desde un mismo lugar.</li>
+</ul>
+
+<div class="callout">
+  <strong>El CRM es tu herramienta de trabajo, no la del jefe.</strong> Mientras más completo lo mantengas, menos tiempo pierdes recordando con quién hablaste, qué les ofreciste y cuándo les toca seguimiento. Trátalo como tu memoria externa.
+</div>
+
+<!-- ═════════════════════════════════════ -->
+<!-- 2. PRIMER DÍA                        -->
+<!-- ═════════════════════════════════════ -->
+<h1 id="primer-dia">2. Tu primer día — login y recorrido</h1>
+
+<h2>Acceso al CRM</h2>
+
+<ol class="step-list">
+  <li>Abre <code>https://leads-manager-avantex.onrender.com</code> en tu navegador (Chrome de preferencia).</li>
+  <li>Ingresa con el <strong>correo</strong> y <strong>contraseña temporal</strong> que te compartió tu Super Admin.</li>
+  <li>Una vez dentro, cambia tu contraseña si tu admin no lo hizo por ti.</li>
+</ol>
+
+<div class="callout warn">
+  <strong>Seguridad:</strong> nunca compartas tu contraseña ni dejes la sesión abierta en computadoras que no son tuyas. Si crees que alguien tiene acceso, pide reset de contraseña a tu Super Admin.
+</div>
+
+<h2>Recorrido del sidebar (lado izquierdo)</h2>
+
+<table>
+<tr><th>Sección</th><th>Para qué sirve</th></tr>
+<tr><td><strong>Dashboard</strong></td><td>Tus KPIs del mes: leads, pipe activo, ganados, % cierre</td></tr>
+<tr><td><strong>Mi día</strong></td><td>Tareas y leads que requieren tu atención <em>hoy</em></td></tr>
+<tr><td><strong>Pipeline</strong></td><td>Vista Kanban con todos tus leads agrupados por etapa</td></tr>
+<tr><td><strong>+ Nuevo Lead</strong></td><td>Crear un lead manualmente (atajo <kbd>⌘N</kbd>)</td></tr>
+<tr><td><strong>Empresas</strong></td><td>Directorio de cuentas/empresas</td></tr>
+<tr><td><strong>Contactos</strong></td><td>Personas asociadas a esas empresas</td></tr>
+<tr><td><strong>Leads</strong></td><td>Vista de lista (alternativa al Kanban)</td></tr>
+<tr><td><strong>Unidades de negocio</strong></td><td>Filtra todo por Aromatex / Pestex / Weldex</td></tr>
+</table>
+
+<!-- ═════════════════════════════════════ -->
+<!-- 3. MI DÍA                             -->
+<!-- ═════════════════════════════════════ -->
+<h1 id="mi-dia">3. Mi día — qué atender primero</h1>
+
+<p>Esta es la vista que <strong>debes abrir cada mañana antes de hacer cualquier otra cosa</strong>. Te ordena el trabajo del día en categorías:</p>
+
+<h3>📍 Sin contactar</h3>
+<p>Leads recién asignados que aún no has trabajado. Son la <strong>primera prioridad del día</strong> — un lead frío en 24 horas pierde 50% de probabilidad de cerrar.</p>
+
+<h3>⏳ Por vencer cadencia</h3>
+<p>Leads en seguimiento que están a punto de "vencer" su ventana de respuesta. Si no los tocas pronto, se mueven solos a la siguiente etapa o se cierran como perdidos.</p>
+
+<h3>💬 Respondieron</h3>
+<p>Leads que te contestaron y aún no has respondido. <strong>Acción inmediata</strong>.</p>
+
+<h3>🤝 En negociación</h3>
+<p>Tus oportunidades calientes — cotización enviada, demo agendada o negociación en curso. Cierra estos antes de prospectar nuevos.</p>
+
+<div class="callout ok">
+  <strong>Regla de oro:</strong> empieza el día con "Mi día" y <em>no</em> con el Pipeline completo. El Kanban es para visión panorámica; "Mi día" es para acción inmediata.
+</div>
+
+<!-- ═════════════════════════════════════ -->
+<!-- 4. PIPELINE                          -->
+<!-- ═════════════════════════════════════ -->
+<h1 id="pipeline">4. El Pipeline — las 11 etapas</h1>
+
+<p>Cada lead vive en una etapa del Kanban. Tu trabajo es ir avanzándolos hasta cerrarlos. Las etapas son:</p>
+
+<table>
+<tr><th>Etapa</th><th>Cuándo entra el lead aquí</th></tr>
+<tr><td><span class="pill pill-nuevo">Nuevo Lead</span></td><td>Recién creado, aún no lo trabajas</td></tr>
+<tr><td><span class="pill pill-contacto">1er Contacto</span></td><td>Primera vez que llamas/escribes</td></tr>
+<tr><td><span class="pill pill-contacto">2do Contacto</span></td><td>Segundo intento (si no respondió)</td></tr>
+<tr><td><span class="pill pill-contacto">3er Contacto</span></td><td>Tercer intento</td></tr>
+<tr><td><span class="pill pill-contacto">4to Contacto</span></td><td>Último intento antes de cerrar perdido</td></tr>
+<tr><td><span class="pill pill-cotiz">Presentación</span></td><td>Tuviste primera reunión presentando el servicio</td></tr>
+<tr><td><span class="pill pill-cotiz">Cotización</span></td><td>Mandaste cotización formal con PDF</td></tr>
+<tr><td><span class="pill pill-demo">Demo</span></td><td>Hiciste demo del servicio en sitio</td></tr>
+<tr><td><span class="pill pill-nego">Negociación</span></td><td>Cliente respondió la cotización, están negociando</td></tr>
+<tr><td><span class="pill pill-ganado">Cerrado Ganado</span></td><td>Firmaron / pagaron 🎉</td></tr>
+<tr><td><span class="pill pill-perdido">Cerrado Perdido</span></td><td>Dijeron no o desaparecieron</td></tr>
+</table>
+
+<h2>Cómo mover un lead</h2>
+
+<p>Tienes 3 maneras de cambiar de etapa:</p>
+<ol>
+  <li><strong>Drag & drop</strong> — arrastra la card del Kanban a otra columna</li>
+  <li><strong>Click en la card</strong> — se abre el panel lateral, ahí cambias la etapa desde el selector</li>
+  <li><strong>Atajo</strong> dentro del panel: <kbd>1</kbd> a <kbd>9</kbd> para etapas, <kbd>W</kbd> ganado, <kbd>L</kbd> perdido</li>
+</ol>
+
+<!-- ═════════════════════════════════════ -->
+<!-- 5. CAPTURAR LEAD                     -->
+<!-- ═════════════════════════════════════ -->
+<h1 id="capturar">5. Capturar un lead nuevo</h1>
+
+<p>La mayoría de los leads <strong>llegan automáticos</strong> desde Meta Ads u otros canales. Pero también puedes crear leads manualmente cuando un cliente te contacta por WhatsApp, te llaman al teléfono, o estás prospectando.</p>
+
+<h2>Crear lead manual paso a paso</h2>
+
+<ol class="step-list">
+  <li>Sidebar → <strong>+ Nuevo Lead</strong> (o presiona <kbd>⌘</kbd>+<kbd>N</kbd>)</li>
+  <li>Llena <strong>teléfono</strong> y <strong>nombre del contacto</strong> (obligatorios)</li>
+  <li>Si es para una empresa: tipea las primeras 3 letras del nombre — si ya existe, autocompleta. Si no, se crea nueva.</li>
+  <li>Marca el checkbox <strong>"Uso personal / sin empresa"</strong> solo si es un cliente B2C (ej. aromatizar su casa).</li>
+  <li><strong>Estado</strong>: obligatorio. Esto sirve para que se asigne al vendedor correcto si el lead viniera de un canal sin asignación.</li>
+  <li><strong>Unidad de negocio</strong>: Aromatex, Pestex o Weldex. Define a quién le toca y qué cotización aplica.</li>
+  <li><strong>Industria</strong>: obligatorio si no es B2C. Determina el ICP score (qué tan calificado está el lead).</li>
+  <li><strong>Origen</strong>: cómo llegó el lead. Opciones:
+    <ul>
+      <li><span class="pill pill-prospec">Prospección</span> — tú lo cazaste</li>
+      <li><span class="pill pill-web">Web</span> — llenó formulario en el sitio</li>
+      <li><span class="pill pill-whats">WhatsApp Orgánico</span> — te escribió por WhatsApp sin campaña</li>
+      <li><span class="pill pill-meta">Meta Ads</span> — vino de Facebook/Instagram (normalmente entra solo)</li>
+      <li><strong>Upselling</strong> — cliente actual al que le ofreces más del mismo servicio</li>
+      <li><strong>Cross-selling</strong> — cliente actual al que le ofreces un servicio nuevo</li>
+    </ul>
+  </li>
+  <li>(Opcional) Expande "Calificar más" para llenar tamaño de empresa, tipo de cliente, valor estimado.</li>
+  <li>Click <strong>Guardar</strong> → el lead aparece en el Kanban en columna "Nuevo Lead", asignado a ti.</li>
+</ol>
+
+<div class="callout">
+  <strong>Llena Estado e Industria siempre.</strong> El sistema te obliga, pero también es por tu bien: sin esos datos, el ICP no funciona y no sabes si el lead vale la pena calificarse.
+</div>
+
+<!-- ═════════════════════════════════════ -->
+<!-- 6. TRABAJAR LEAD                     -->
+<!-- ═════════════════════════════════════ -->
+<h1 id="trabajar">6. Trabajar un lead día a día</h1>
+
+<p>El verdadero trabajo no es crear leads — es trabajarlos. Click en cualquier card del Kanban para abrir el <strong>panel lateral del lead</strong>:</p>
+
+<h2>Qué hacer en cada interacción</h2>
+
+<ol class="step-list">
+  <li><strong>Antes de llamar/escribir</strong>: lee el panel completo. Empresa, sucursales, industria, origen, campaña Meta (si aplica), ICP, notas previas.</li>
+  <li><strong>Después del contacto</strong>: registra en "Notas" qué pasó (3 líneas máximo: <em>"Habló con Juan, encargado de compras, requiere cotización para 5 sucursales, le interesa Pestex Premium"</em>).</li>
+  <li><strong>Marca el botón "Respondió"</strong> si el cliente te contestó algo. Esto detiene la cadencia automática y le dice al sistema que el lead está activo.</li>
+  <li><strong>Programa próximo contacto</strong>: pon fecha y hora en el campo "Próximo contacto". Aparecerá en tu "Mi día" cuando llegue.</li>
+  <li><strong>Mueve la etapa</strong> si cambia el status (de 1er a 2do, de 2do a Cotización, etc.)</li>
+</ol>
+
+<h2>Atribución Meta Ads</h2>
+
+<p>Si el lead vino de una campaña de Meta, el panel muestra:</p>
+<ul>
+  <li><strong>Campaña</strong>: el nombre legible (ej. "AX-B2B Contactos Norte · Junio 2026")</li>
+  <li><strong>Unidad</strong>: aromatex_b2b, weldex, etc.</li>
+  <li><strong>Campaign ID</strong>: identificador técnico de Meta</li>
+</ul>
+
+<p>Esta info te ayuda a personalizar el mensaje: <em>"Hola, vi que mostraste interés en nuestros servicios B2B de Aromatex…"</em> en vez de un genérico.</p>
+
+<!-- ═════════════════════════════════════ -->
+<!-- 7. CERRAR LEAD                       -->
+<!-- ═════════════════════════════════════ -->
+<h1 id="cerrar">7. Cerrar un lead — ganado o perdido</h1>
+
+<h2>Cerrar como Ganado 🎉</h2>
+
+<p>Cuando el cliente firma o paga, mueve la card a <span class="pill pill-ganado">Cerrado Ganado</span>. El sistema te pedirá:</p>
+<ul>
+  <li><strong>Valor real del cierre</strong> (puede ser diferente al estimado original)</li>
+  <li>Convertir a <strong>oportunidad/cuenta</strong> en Customer Success — esto activa al KAM</li>
+</ul>
+
+<h2>Cerrar como Perdido</h2>
+
+<p>Si el lead dijo no o desapareció, mueve a <span class="pill pill-perdido">Cerrado Perdido</span>. El sistema <strong>te obliga a poner motivo</strong>:</p>
+<ul>
+  <li>Precio</li>
+  <li>Competencia</li>
+  <li>No respondió (después de 4 intentos)</li>
+  <li>No es el momento</li>
+  <li>No era cliente ideal</li>
+  <li>Otro (texto libre)</li>
+</ul>
+
+<div class="callout warn">
+  <strong>Sé honesto en el motivo de pérdida.</strong> Tu gerente usa esta data para ajustar campañas, scripts y pricing. Si todos ponen "no respondió", nadie aprende. Si pones "competencia (BrandX 20% más barato)" estamos identificando una amenaza real.
+</div>
+
+<!-- ═════════════════════════════════════ -->
+<!-- 8. LEADS AUTOMÁTICOS                 -->
+<!-- ═════════════════════════════════════ -->
+<h1 id="meta">8. Leads que llegan automáticos (Meta Ads)</h1>
+
+<p>Las campañas de Facebook e Instagram generan leads que entran <strong>solos al CRM cada 5 minutos</strong>. Tú no haces nada — el sistema:</p>
+
+<ol>
+  <li>Recibe el lead del formulario de Meta</li>
+  <li>Identifica la campaña (Weldu MTY, AX-B2B Norte, etc.)</li>
+  <li>Define la marca y zona</li>
+  <li>Te lo asigna si tu marca y zona coinciden</li>
+  <li>Te notifica con un toast verde en pantalla + sonido</li>
+</ol>
+
+<h2>Qué hacer cuando entra un lead Meta</h2>
+
+<ol class="step-list">
+  <li>Verás un toast: <em>"Nuevo lead: Juan Pérez (Pestex)"</em></li>
+  <li>La card aparece automáticamente en tu columna "Nuevo Lead"</li>
+  <li><strong>Idealmente, contáctalo en los próximos 5 minutos</strong>. Las estadísticas dicen que tu probabilidad de cerrar baja 80% después de la primera hora.</li>
+  <li>Cuando lo contactes, mueve a "1er Contacto" y registra la interacción.</li>
+</ol>
+
+<div class="callout">
+  <strong>Velocidad mata calidad en leads digitales.</strong> Un lead Meta vale 10x más si lo contactas en 5 minutos que si lo contactas en 2 horas. Si estás trabajando otra cosa, deja todo y atiéndelo.
+</div>
+
+<!-- ═════════════════════════════════════ -->
+<!-- 9. COTIZACIÓN                        -->
+<!-- ═════════════════════════════════════ -->
+<h1 id="cotizar">9. Generar una cotización</h1>
+
+<p>Desde el panel del lead, click <strong>"Convertir a oportunidad"</strong>. Esto te abre el flujo de cotización:</p>
+
+<ol class="step-list">
+  <li>Confirma datos del cliente (nombre, RFC, dirección fiscal)</li>
+  <li>Selecciona productos/servicios del catálogo</li>
+  <li>Aplica descuentos si fueron autorizados</li>
+  <li>Genera PDF — se descarga al instante</li>
+  <li>Click <strong>"Enviar por correo"</strong> para mandarlo al cliente vía Resend</li>
+  <li>El lead avanza automáticamente a etapa "Cotización"</li>
+</ol>
+
+<div class="callout warn">
+  <strong>Descuentos: necesitan autorización.</strong> Aromatex → autoriza Alejandro Gil. Pestex → Alan Aziz. Sin autorización, el sistema bloquea descuentos arriba de cierto umbral.
+</div>
+
+<!-- ═════════════════════════════════════ -->
+<!-- 10. WHATSAPP                         -->
+<!-- ═════════════════════════════════════ -->
+<h1 id="whatsapp">10. Comunicarte con clientes (WhatsApp)</h1>
+
+<p>El CRM integra WhatsApp para que toda la conversación con cada lead quede archivada. Si tu vendedora tiene sesión Baileys configurada, puedes enviar y recibir desde el chat del lead.</p>
+
+<h3>Mejores prácticas en WhatsApp</h3>
+<ul>
+  <li><strong>Saluda primero por nombre</strong>: el CRM te muestra el nombre del lead</li>
+  <li><strong>Menciona el contexto</strong>: "Vi que mostraste interés en nuestros servicios de [marca]"</li>
+  <li><strong>Una pregunta a la vez</strong>: no satures con muchas preguntas en un mensaje</li>
+  <li><strong>Audios cortos</strong> son más personales que texto largo</li>
+  <li><strong>Cierra el mensaje con próximo paso</strong>: "¿Te llamo mañana 11am para confirmar?"</li>
+</ul>
+
+<!-- ═════════════════════════════════════ -->
+<!-- 11. BUENAS PRÁCTICAS                  -->
+<!-- ═════════════════════════════════════ -->
+<h1 id="buenas">11. Buenas prácticas y disciplina</h1>
+
+<h2>Las 6 reglas de oro del vendedor en CRM</h2>
+
+<ol class="step-list">
+  <li><strong>Cero leads sin contactar más de 24h.</strong> Si lo dejas frío, lo pierdes.</li>
+  <li><strong>Notas en cada interacción.</strong> Aunque sea una línea: <em>"Llamé, buzón. Reintento mañana 10am"</em>.</li>
+  <li><strong>Próximo contacto agendado siempre.</strong> Nunca dejes un lead sin "qué sigue" claro.</li>
+  <li><strong>Mueve etapas en tiempo real.</strong> No esperes al final del día — si mandaste cotización, mueve a "Cotización" ya.</li>
+  <li><strong>Cierra perdidos con motivo honesto.</strong> "No respondió" debe ser el último recurso, no el default.</li>
+  <li><strong>Pipe limpio = comisión clara.</strong> Tu pipe activo es lo que cobras. Mantenlo actualizado.</li>
+</ol>
+
+<h2>Qué NO hacer</h2>
+
+<ul>
+  <li>Dejar leads en "Nuevo Lead" más de 2 días</li>
+  <li>Tener oportunidades en "Cotización" sin enviar PDF formal</li>
+  <li>Crear leads duplicados (el sistema te avisa, pero no inventes teléfonos)</li>
+  <li>Cambiar el valor estimado sin razón solo para inflar tu pipe</li>
+  <li>Mover a "Ganado" sin haber firmado/cobrado</li>
+</ul>
+
+<!-- ═════════════════════════════════════ -->
+<!-- 12. ATAJOS                            -->
+<!-- ═════════════════════════════════════ -->
+<h1 id="atajos">12. Atajos de teclado</h1>
+
+<table>
+<tr><th>Atajo</th><th>Acción</th></tr>
+<tr><td><kbd>⌘</kbd>+<kbd>N</kbd></td><td>Nuevo lead</td></tr>
+<tr><td><kbd>⌘</kbd>+<kbd>K</kbd></td><td>Búsqueda global</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>Cerrar modal o panel</td></tr>
+<tr><td><kbd>1</kbd>-<kbd>9</kbd></td><td>Mover lead a etapa N (en panel)</td></tr>
+<tr><td><kbd>W</kbd></td><td>Cerrar ganado (en panel)</td></tr>
+<tr><td><kbd>L</kbd></td><td>Cerrar perdido (en panel)</td></tr>
+<tr><td><kbd>R</kbd></td><td>Marcar como respondió (en panel)</td></tr>
+</table>
+
+<!-- ═════════════════════════════════════ -->
+<!-- 13. FAQ                              -->
+<!-- ═════════════════════════════════════ -->
+<h1 id="faq">13. Preguntas frecuentes</h1>
+
+<h3>¿Por qué un lead se movió solo a otra etapa?</h3>
+<p>El sistema tiene una <strong>cadencia automática</strong> (actualmente pausada). Cuando esté activa, leads sin respuesta avanzan solos: 1er → 2do (24h), 2do → 3er (48h), etc. Marca "Respondió" para detener la cadencia.</p>
+
+<h3>¿Por qué un lead me llegó si no es de mi marca?</h3>
+<p>Si recibes un lead que no debería ser tuyo, contacta a tu Super Admin. Probablemente alguna configuración de marca/zona en tu perfil necesita ajuste.</p>
+
+<h3>¿Puedo reasignar un lead a otro vendedor?</h3>
+<p>Si eres Super Admin, sí (desde el panel del lead). Si eres Vendedor regular, pídele a tu admin.</p>
+
+<h3>¿Qué pasa si me equivoco al cerrar un lead?</h3>
+<p>Puedes moverlo de regreso desde el panel. Pero si era "Ganado" y revertiste, registra el motivo en notas para auditoría.</p>
+
+<h3>¿Cómo sé qué leads me asignaron hoy?</h3>
+<p>Sidebar → "Mi día" → sección "Sin contactar" en la parte de arriba.</p>
+
+<h3>¿Cómo veo el historial de WhatsApp de un lead?</h3>
+<p>Panel del lead → pestaña "Mensajes" o "Conversación".</p>
+
+<h3>Mi card no se mueve cuando la arrastro</h3>
+<p>Refresca con <kbd>Cmd</kbd>+<kbd>R</kbd>. Si persiste, probablemente perdiste conexión — verifica el indicador "En vivo" abajo a la izquierda.</p>
+
+<h3>¿Qué hago si veo un dato incorrecto en un lead?</h3>
+<p>Click en la card → edita los campos directamente en el panel → guarda. Si es del Account/Empresa, hazlo desde el módulo de Empresas.</p>
+
+<hr>
+
+<div class="footer-note">
+  <p>Manual del Vendedor v1.0 · Grupo Avantex · CRM Pipeline<br>
+  Última actualización: Junio 2026<br>
+  Dudas técnicas: contacta a tu Super Admin</p>
+</div>
+
+</body>
+</html>
