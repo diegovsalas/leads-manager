@@ -2325,6 +2325,51 @@ fbq('track','PageView');
 
 <div class="toast-container" id="toasts"></div>
 
+<!-- ═══ ASISTENTE IA: botón flotante + panel chat ═══ -->
+<button id="ai-fab" onclick="toggleAiChat()" title="Asistente IA"
+        style="position:fixed;bottom:22px;right:22px;width:56px;height:56px;border-radius:50%;
+               background:linear-gradient(135deg,#B97647,#8e5634);color:#fff;border:0;cursor:pointer;
+               box-shadow:0 6px 22px rgba(185,118,71,.5);font-size:24px;z-index:9998;
+               display:flex;align-items:center;justify-content:center;transition:transform .15s;">
+  🤖
+</button>
+
+<div id="ai-chat-panel" style="display:none;position:fixed;bottom:90px;right:22px;width:420px;
+                                height:560px;background:#fff;border-radius:16px;
+                                box-shadow:0 10px 40px rgba(0,0,0,.18);z-index:9999;
+                                display:none;flex-direction:column;overflow:hidden;
+                                border:1px solid #e5e7eb;">
+  <div style="background:linear-gradient(135deg,#B97647,#8e5634);color:#fff;padding:14px 18px;
+              display:flex;justify-content:space-between;align-items:center;">
+    <div>
+      <div style="font-weight:700;font-size:14px;">🤖 Asistente IA</div>
+      <div style="font-size:10px;opacity:.85;" id="ai-sub">Pregunta lo que necesites</div>
+    </div>
+    <div style="display:flex;gap:6px;">
+      <button onclick="clearAiChat()" title="Nueva conversación"
+              style="background:rgba(255,255,255,.2);border:0;color:#fff;cursor:pointer;
+                     width:28px;height:28px;border-radius:6px;font-size:14px;">🗑</button>
+      <button onclick="toggleAiChat()" style="background:rgba(255,255,255,.2);border:0;color:#fff;
+              cursor:pointer;width:28px;height:28px;border-radius:6px;font-size:14px;">✕</button>
+    </div>
+  </div>
+  <div id="ai-chat-messages" style="flex:1;overflow-y:auto;padding:14px;background:#f9fafb;
+                                     display:flex;flex-direction:column;gap:10px;"></div>
+  <div style="border-top:1px solid #e5e7eb;padding:10px;display:flex;gap:8px;background:#fff;">
+    <input type="text" id="ai-chat-input" placeholder="Ej: ¿Qué tengo pendiente hoy?"
+           onkeypress="if(event.key==='Enter')sendAiMessage()"
+           style="flex:1;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;outline:none;">
+    <button onclick="sendAiMessage()" id="ai-send-btn"
+            style="background:#B97647;color:#fff;border:0;padding:9px 16px;border-radius:8px;
+                   cursor:pointer;font-weight:600;font-size:13px;">Enviar</button>
+  </div>
+  <div style="padding:6px 14px;background:#f9fafb;border-top:1px solid #f3f4f6;font-size:10px;color:#9ca3af;display:flex;gap:10px;flex-wrap:wrap;">
+    <button onclick="askAi('¿Qué tengo pendiente hoy?')" style="background:none;border:0;color:#B97647;cursor:pointer;font-size:10px;padding:0;">Pendientes</button>
+    <button onclick="askAi('Dame mis KPIs del mes')" style="background:none;border:0;color:#B97647;cursor:pointer;font-size:10px;padding:0;">KPIs</button>
+    <button onclick="askAi('Exporta mis leads activos a Excel')" style="background:none;border:0;color:#B97647;cursor:pointer;font-size:10px;padding:0;">Exportar</button>
+  </div>
+</div>
+
 <script>
 function toggleSidebar(){
   const shell=document.querySelector('.shell');
@@ -4862,6 +4907,107 @@ fetch('/api/leads/icp-opciones').then(r=>r.json()).then(d=>{
   if(sel&&d.industrias){d.industrias.forEach(i=>{sel.innerHTML+=`<option value="${i}">${i}</option>`;});}
 }).catch(()=>{});
 applyRoleVisibility();
+
+// ═══ Asistente IA ═══
+function toggleAiChat(){
+  const p=document.getElementById('ai-chat-panel');
+  const open = p.style.display !== 'flex';
+  p.style.display = open ? 'flex' : 'none';
+  if(open){
+    loadAiHistory();
+    setTimeout(()=>document.getElementById('ai-chat-input').focus(), 100);
+  }
+}
+
+async function loadAiHistory(){
+  const cont=document.getElementById('ai-chat-messages');
+  if(cont.dataset.loaded) return;
+  try{
+    const r=await fetch('/api/chat-ai/history');
+    const d=await r.json();
+    cont.innerHTML='';
+    if(!(d.messages||[]).length){
+      _aiAppendBubble('assistant',
+        `Hola${window.USER_NOMBRE_AI?' '+window.USER_NOMBRE_AI:''}, soy tu asistente del CRM. Puedes preguntarme:
+- "¿Qué tengo pendiente hoy?"
+- "Dame mis KPIs del mes"
+- "Lista mis leads en Cotización"
+- "Exporta mis leads activos a Excel"
+${window.IS_ADMIN_AI?'- "¿Cómo va el equipo?"\n- "¿Qué tiene pendiente Damariz?"':''}`);
+    }else{
+      for(const m of d.messages){ _aiAppendBubble(m.role, m.text); }
+    }
+    cont.dataset.loaded='1';
+  }catch(e){ _aiAppendBubble('assistant', 'Error cargando historial: '+e.message); }
+}
+
+function _aiAppendBubble(role, text){
+  const cont=document.getElementById('ai-chat-messages');
+  const isUser = role==='user';
+  const bubble=document.createElement('div');
+  bubble.style.cssText=`max-width:85%;padding:9px 13px;border-radius:14px;font-size:13px;line-height:1.45;${
+    isUser
+      ? 'align-self:flex-end;background:#B97647;color:#fff;border-bottom-right-radius:4px;'
+      : 'align-self:flex-start;background:#fff;color:#1f2937;border:1px solid #e5e7eb;border-bottom-left-radius:4px;'
+  }`;
+  bubble.innerHTML=_renderMarkdown(text);
+  cont.appendChild(bubble);
+  cont.scrollTop = cont.scrollHeight;
+}
+
+function _renderMarkdown(t){
+  if(!t) return '';
+  let h = String(t)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/`(.+?)`/g,'<code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-family:monospace;font-size:11px;">$1</code>')
+    .replace(/\[(.+?)\]\((.+?)\)/g,'<a href="$2" target="_blank" style="color:#B97647;font-weight:600;">$1</a>')
+    .replace(/\n/g,'<br>');
+  return h;
+}
+
+async function sendAiMessage(){
+  const inp=document.getElementById('ai-chat-input');
+  const btn=document.getElementById('ai-send-btn');
+  const txt=inp.value.trim();
+  if(!txt) return;
+  inp.value='';btn.disabled=true;btn.textContent='...';
+  _aiAppendBubble('user', txt);
+  _aiAppendBubble('assistant', '<span style="color:#9ca3af;">Pensando…</span>');
+  const cont=document.getElementById('ai-chat-messages');
+  const thinking = cont.lastChild;
+  try{
+    const r=await fetch('/api/chat-ai/message',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:txt})});
+    const d=await r.json();
+    cont.removeChild(thinking);
+    if(!r.ok){ _aiAppendBubble('assistant', '❌ '+(d.error||'Error')); }
+    else{ _aiAppendBubble('assistant', d.reply||'(sin respuesta)'); }
+  }catch(e){
+    cont.removeChild(thinking);
+    _aiAppendBubble('assistant', '❌ Error: '+e.message);
+  }
+  btn.disabled=false;btn.textContent='Enviar';
+  inp.focus();
+}
+
+function askAi(prompt){
+  document.getElementById('ai-chat-input').value=prompt;
+  sendAiMessage();
+}
+
+async function clearAiChat(){
+  if(!confirm('¿Empezar conversación nueva? Se borrará el contexto actual.'))return;
+  await fetch('/api/chat-ai/clear',{method:'POST'});
+  const cont=document.getElementById('ai-chat-messages');
+  cont.innerHTML='';cont.dataset.loaded='';
+  loadAiHistory();
+}
+
+// Inject globals para el chat
+window.USER_NOMBRE_AI = USER_NOMBRE || '';
+window.IS_ADMIN_AI = IS_ADMIN || false;
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════

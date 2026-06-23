@@ -147,6 +147,7 @@ def create_app():
     from blueprints.accounts      import accounts_bp, contacts_bp
     from blueprints.meta_campaigns import meta_campaigns_bp
     from blueprints.sales_emails    import sales_emails_bp
+    from blueprints.chat_ai         import chat_ai_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp,      url_prefix="/webhook")
@@ -181,6 +182,7 @@ def create_app():
     app.register_blueprint(contacts_bp,      url_prefix="/api/contacts")
     app.register_blueprint(meta_campaigns_bp, url_prefix="/api/meta-campaigns")
     app.register_blueprint(sales_emails_bp,   url_prefix="/api/sales-emails")
+    app.register_blueprint(chat_ai_bp,        url_prefix="/api/chat-ai")
 
     # Serve React app at /app/
     @app.route("/app/")
