@@ -6067,7 +6067,35 @@ async function openLeadModal(leadToEdit){
   setTimeout(()=>document.getElementById(_nlEditingLead?'nl-nombre':'nl-phone').focus(),50);
 }
 
-function closeLeadModal(){document.getElementById('nl-overlay').classList.remove('open');}
+// FIX-2026-06-23: detecta si el form tiene contenido para evitar pérdida accidental
+function _nlIsFormDirty(){
+  // Si estamos editando un lead existente, los campos pre-llenos no cuentan como dirty
+  if(_nlEditingLead) return false;
+  const checkIds = ['nl-phone','nl-nombre','nl-empresa','nl-sucursales',
+                    'nl-cantidad','nl-precio','nl-valor-estimado','nl-notas'];
+  for(const id of checkIds){
+    const el = document.getElementById(id);
+    if(el && el.value && el.value.trim()) return true;
+  }
+  // Estado / industria / tamano / tipo-cliente
+  const sels = ['nl-estado','nl-industria','nl-tamano','nl-tipo-cliente'];
+  for(const id of sels){
+    const el = document.getElementById(id);
+    if(el && el.value) return true;
+  }
+  return false;
+}
+
+function closeLeadModal(force){
+  // Si hay datos sin guardar, pedir confirmación (a menos que sea force=true tras éxito)
+  if(!force && _nlIsFormDirty()){
+    if(!confirm('Tienes información sin guardar en este lead. ¿Cerrar y descartar los cambios?')){
+      return false;
+    }
+  }
+  document.getElementById('nl-overlay').classList.remove('open');
+  return true;
+}
 
 // Phone format + duplicate check on blur
 document.addEventListener('DOMContentLoaded',()=>{
@@ -6129,8 +6157,15 @@ function nlEmpresaSearch(){
   _nlEmpresaTimer=setTimeout(async()=>{
     const q=document.getElementById('nl-empresa').value.trim();
     const list=document.getElementById('nl-empresa-list');
-    // Limpiar account_id linkeado mientras se está tipeando
-    document.getElementById('nl-account-id').value='';
+    // FIX-2026-06-23: NO limpiar account_id si el texto coincide con la
+    // empresa actualmente vinculada (insensitive a mayúsculas y trim).
+    // Antes: cada keystroke borraba el vínculo, perdiendo el account ya
+    // seleccionado si el usuario tocaba la caja para corregir un typo.
+    const lastPickedName = window._nlLastPickedEmpresaName || '';
+    const matchesPicked = q.toLowerCase() === lastPickedName.toLowerCase();
+    if(!matchesPicked){
+      document.getElementById('nl-account-id').value='';
+    }
     if(q.length<3){list.style.display='none';return;}
     try{
       const items=await _api('/api/accounts/search?q='+encodeURIComponent(q))||[];
@@ -6150,6 +6185,9 @@ function nlPickEmpresa(id,name){
   document.getElementById('nl-empresa').value=name;
   document.getElementById('nl-account-id').value=id;
   document.getElementById('nl-empresa-list').style.display='none';
+  // Recordar para que el typeahead no nos quite el vínculo si el usuario
+  // edita la caja con el mismo nombre.
+  window._nlLastPickedEmpresaName = name;
 }
 function nlCreateNewEmpresa(){
   const typed=document.getElementById('nl-empresa').value.trim();
@@ -6322,7 +6360,7 @@ async function nlSubmit(mode){
       }
       lead=await r.json();
       _nlToast('Lead actualizado: '+nombre);
-      closeLeadModal();
+      closeLeadModal(true);  // force=true: ya guardamos, no preguntar
       if(document.getElementById('lead-panel').classList.contains('open')){
         abrirLeadPanel(lead.id);
       }
@@ -6344,7 +6382,7 @@ async function nlSubmit(mode){
       }
       lead=await r.json();
       _nlToast('Lead creado: '+nombre);
-      if(mode==='close'){closeLeadModal();setTimeout(()=>{if(typeof loadKanban==='function')loadKanban();else location.reload();},400);}
+      if(mode==='close'){closeLeadModal(true);setTimeout(()=>{if(typeof loadKanban==='function')loadKanban();else location.reload();},400);}
       else if(mode==='add-another'){
         // Reset y reabrir
         ['nl-phone','nl-nombre','nl-empresa','nl-account-id','nl-sucursales','nl-cantidad','nl-precio','nl-notas'].forEach(id=>document.getElementById(id).value='');

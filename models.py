@@ -176,7 +176,20 @@ class Lead(db.Model):
     motivo_perdida = db.Column(db.Text, nullable=True)
 
     # Seguimiento y clasificacion
-    tipo_cliente = db.Column(db.Text, nullable=True)
+    tipo_cliente = db.Column(
+        db.Text, nullable=True,
+        # FIX-2026-06-23: CHECK constraint que matchea la regla ya existente
+        # en BD (leads_tipo_cliente_check). Declararla en el modelo evita
+        # que un INSERT desde código no-Flask (script, otra app) pase un
+        # valor inválido. Si en algún momento se borra de BD, se recrea
+        # automáticamente desde el modelo.
+    )
+    __table_args__ = (
+        db.CheckConstraint(
+            "tipo_cliente IS NULL OR tipo_cliente IN ('Recurrente', 'Eventual')",
+            name="leads_tipo_cliente_check",
+        ),
+    )
     tipo_venta = db.Column(db.String(40), nullable=True)  # Eventual / Recurrente
     fecha_ultimo_contacto = db.Column(db.DateTime(timezone=True), default=_utcnow)
     proximo_contacto = db.Column(db.DateTime(timezone=True), nullable=True)

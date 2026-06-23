@@ -290,8 +290,13 @@ def crear_lead():
         )
 
         step = "icp"
+        # FIX-2026-06-23: savepoint para _apply_icp. Si la función modifica
+        # state pero falla a mitad (ej. consulta a Account.industria explota),
+        # el SAVEPOINT permite hacer rollback solo de esa porción sin perder
+        # el Account/Contact ya creados arriba.
         try:
-            _apply_icp(lead)
+            with db.session.begin_nested():
+                _apply_icp(lead)
         except Exception as icp_err:
             current_app.logger.warning("[crear_lead] _apply_icp falló (continúo): %s", icp_err)
 
@@ -304,8 +309,14 @@ def crear_lead():
             log_actividad("crear", "lead", lead.id, f"Lead creado: {lead.nombre} ({lead.telefono})")
         except Exception as e:
             current_app.logger.warning("[crear_lead] log_actividad falló: %s", e)
+        # FIX-2026-06-23: socketio.emit en background con gevent.spawn para
+        # que el response no se bloquee si el broker está lento o caído.
+        # Antes si el socket tardaba, el vendedor veía "Pensando..." más
+        # tiempo del necesario aunque su lead ya estaba en BD.
         try:
-            socketio.emit("nuevo_lead", lead.to_dict())
+            import gevent
+            lead_dict = lead.to_dict()
+            gevent.spawn(lambda: socketio.emit("nuevo_lead", lead_dict))
         except Exception as e:
             current_app.logger.warning("[crear_lead] socketio.emit falló: %s", e)
 
