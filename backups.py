@@ -1,69 +1,207 @@
 # backups.py
 """
-Backup automático de la base de datos.
-Ejecuta pg_dump y guarda un JSON snapshot de tablas críticas.
-Se ejecuta diariamente via APScheduler.
+Backup diario REAL del CRM (SECURITY-2026-06-24).
 
-Los backups se almacenan en la tabla backup_log para auditoría.
-El snapshot JSON se guarda en la propia BD (backup_log.contenido).
+Antes este módulo solo contaba filas y escribía a stderr (no respaldaba nada).
+Ahora:
+  1) Descubre tablas del schema public.
+  2) Hace COPY ... TO STDOUT WITH CSV HEADER por cada tabla (excluye logs masivos
+     y tablas re-sincronizables desde Savio para mantener el archivo manejable).
+  3) Empaqueta en tar.gz en /tmp.
+  4) Sube a Supabase Storage (bucket configurable) vía REST.
+  5) Rota: borra backups > BACKUP_RETENTION_DAYS días.
+
+Esta es la SEGUNDA línea de defensa. La PRIMERA es el snapshot diario automático
+de Supabase Free (7 días de retención, fuera de nuestro código).
+
+Configuración (Render env vars):
+  SUPABASE_URL              — https://<proj>.supabase.co
+  SUPABASE_SERVICE_KEY      — service_role key (NUNCA exponer al cliente)
+  SUPABASE_BACKUP_BUCKET    — default 'crm-backups' (créalo en Supabase Studio)
+  BACKUP_RETENTION_DAYS     — default 14
 """
+import io
+import logging
+import os
 import sys
-from datetime import datetime, timezone
+import tarfile
+import tempfile
+from datetime import datetime, timedelta, timezone
+
+import requests
+from sqlalchemy import text as _sa_text
 
 from extensions import db
-from models import Lead, Usuario, UserCRM, Cotizacion, MetaVendedor, GastoPublicidad
+
+log = logging.getLogger("backups")
+
+# Tablas que NO respaldamos (logs masivos o re-sincronizables desde origen).
+TABLAS_EXCLUIDAS = {
+    # Logs masivos: si se pierden, no es crítico
+    "mensajes_whatsapp",
+    "sales_emails",
+    "chatbot_messages",
+    "chatbot_conversations",
+    "sdr_dir_history",
+    "chat_messages",
+    "actividad_log",        # útil pero crece rápido — queda en el snapshot Supabase
+    # Re-sincronizables desde Savio (no perdemos data por no respaldar aquí):
+    "savio_customers",
+    "savio_subscriptions",
+    "savio_invoices",
+    "savio_payments",
+    # Tablas operacionales que se hidratan rapidísimo de origen:
+    "zoho_tokens",
+    "api_costs",
+}
 
 
-def crear_snapshot():
-    """
-    Crea un snapshot JSON de las tablas críticas.
-    Retorna dict con conteos y timestamp.
-    """
+def _list_tables():
+    """Lista tablas del schema public, excluye blacklist y sistema."""
+    rows = db.session.execute(_sa_text("""
+        SELECT tablename FROM pg_tables
+        WHERE schemaname = 'public'
+          AND tablename NOT LIKE 'pg_%'
+          AND tablename NOT LIKE 'sql_%'
+        ORDER BY tablename
+    """)).fetchall()
+    return [r[0] for r in rows if r[0] not in TABLAS_EXCLUIDAS]
+
+
+def _dump_table_to_csv(table: str) -> bytes:
+    """Dump una tabla a CSV usando COPY TO STDOUT. Retorna bytes UTF-8."""
+    raw = db.session.connection().connection
+    # psycopg2 connection — cursor.copy_expert es la forma estándar.
+    cur = raw.cursor()
+    buf = io.BytesIO()
+    cur.copy_expert(f'COPY "{table}" TO STDOUT WITH CSV HEADER', buf)
+    cur.close()
+    return buf.getvalue()
+
+
+def _build_archive() -> tuple:
+    """Genera tar.gz con CSVs de todas las tablas + manifest. Retorna (path, filename, size)."""
     ahora = datetime.now(timezone.utc)
+    ts = ahora.strftime("%Y%m%d_%H%M%S")
+    filename = f"crm_backup_{ts}.tar.gz"
+    path = os.path.join(tempfile.gettempdir(), filename)
 
-    snapshot = {
-        "timestamp": ahora.isoformat(),
-        "tablas": {
-            "leads": {
-                "total": Lead.query.count(),
-                "por_etapa": {},
-            },
-            "usuarios": Usuario.query.count(),
-            "users_crm": UserCRM.query.count(),
-            "cotizaciones": Cotizacion.query.count(),
-            "metas_vendedor": MetaVendedor.query.count(),
-            "gastos_publicidad": GastoPublicidad.query.count(),
-        },
+    tablas = _list_tables()
+    manifest = [f"# CRM backup — {ahora.isoformat()}", f"# tablas: {len(tablas)}", ""]
+
+    with tarfile.open(path, "w:gz") as tar:
+        for t in tablas:
+            try:
+                data = _dump_table_to_csv(t)
+                info = tarfile.TarInfo(name=f"{t}.csv")
+                info.size = len(data)
+                info.mtime = int(ahora.timestamp())
+                tar.addfile(info, io.BytesIO(data))
+                manifest.append(f"{t}: {len(data)} bytes")
+            except Exception as e:
+                log.warning(f"dump {t}: {e}")
+                manifest.append(f"{t}: ERROR ({e})")
+
+        manifest_bytes = "\n".join(manifest).encode("utf-8")
+        minfo = tarfile.TarInfo(name="MANIFEST.txt")
+        minfo.size = len(manifest_bytes)
+        minfo.mtime = int(ahora.timestamp())
+        tar.addfile(minfo, io.BytesIO(manifest_bytes))
+
+    return path, filename, os.path.getsize(path)
+
+
+def _supabase_upload(local_path: str, filename: str) -> bool:
+    """Sube el archivo a Supabase Storage. True si OK."""
+    url_base = os.getenv("SUPABASE_URL", "").rstrip("/")
+    key      = os.getenv("SUPABASE_SERVICE_KEY", "")
+    bucket   = os.getenv("SUPABASE_BACKUP_BUCKET", "crm-backups")
+
+    if not url_base or not key:
+        log.warning("backup: SUPABASE_URL o SUPABASE_SERVICE_KEY no configurados — "
+                    "el archivo quedó SOLO en /tmp y se borra al redeploy. "
+                    "Configurar para activar upload.")
+        return False
+
+    upload_url = f"{url_base}/storage/v1/object/{bucket}/{filename}"
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type":  "application/gzip",
+        "x-upsert":      "true",
     }
+    with open(local_path, "rb") as f:
+        r = requests.post(upload_url, headers=headers, data=f, timeout=120)
+    if r.status_code in (200, 201):
+        log.info(f"backup subido: {bucket}/{filename} ({os.path.getsize(local_path)} bytes)")
+        return True
+    log.warning(f"backup upload falló {r.status_code}: {r.text[:200]}")
+    return False
 
-    # Conteo por etapa
-    from models import EtapaPipeline
-    for etapa in EtapaPipeline:
-        snapshot["tablas"]["leads"]["por_etapa"][etapa.value] = (
-            Lead.query.filter_by(etapa_pipeline=etapa).count()
-        )
 
-    return snapshot
+def _supabase_rotate(retention_days: int):
+    """Borra backups > retention_days días del bucket."""
+    url_base = os.getenv("SUPABASE_URL", "").rstrip("/")
+    key      = os.getenv("SUPABASE_SERVICE_KEY", "")
+    bucket   = os.getenv("SUPABASE_BACKUP_BUCKET", "crm-backups")
+    if not url_base or not key:
+        return
+
+    list_url = f"{url_base}/storage/v1/object/list/{bucket}"
+    headers  = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    r = requests.post(list_url, headers=headers,
+                      json={"limit": 1000, "offset": 0, "prefix": "crm_backup_"},
+                      timeout=30)
+    if r.status_code != 200:
+        log.warning(f"backup rotate list falló: {r.status_code}")
+        return
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    to_delete = []
+    for item in r.json():
+        created = item.get("created_at") or item.get("updated_at")
+        if not created:
+            continue
+        try:
+            cdt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if cdt < cutoff:
+            to_delete.append(item["name"])
+
+    if not to_delete:
+        return
+
+    del_url = f"{url_base}/storage/v1/object/{bucket}"
+    dr = requests.delete(del_url, headers=headers,
+                         json={"prefixes": to_delete}, timeout=30)
+    if dr.status_code == 200:
+        log.info(f"backup rotate: borrados {len(to_delete)} archivos > {retention_days}d")
+    else:
+        log.warning(f"backup rotate delete falló: {dr.status_code}")
 
 
 def ejecutar_backup():
-    """
-    Ejecuta backup diario: snapshot de conteos.
-    Registra en logs para auditoría.
-    """
+    """Punto de entrada del cron diario (3am CST)."""
     try:
-        snapshot = crear_snapshot()
-        total_leads = snapshot["tablas"]["leads"]["total"]
-        total_usuarios = snapshot["tablas"]["usuarios"]
-
+        path, filename, size = _build_archive()
+        uploaded = _supabase_upload(path, filename)
+        if uploaded:
+            retention = int(os.getenv("BACKUP_RETENTION_DAYS", "14"))
+            try:
+                _supabase_rotate(retention)
+            except Exception as e:
+                log.warning(f"backup rotate error (no fatal): {e}")
+        # Limpia el local SIEMPRE para no llenar /tmp
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
         print(
-            f"[Backup] Snapshot completado: "
-            f"{total_leads} leads, {total_usuarios} vendedores, "
-            f"{snapshot['tablas']['cotizaciones']} cotizaciones",
+            f"[Backup] OK: {filename} ({size} bytes) — uploaded={uploaded}",
             file=sys.stderr,
         )
-
-        return snapshot
+        return {"ok": True, "filename": filename, "size": size, "uploaded": uploaded}
     except Exception as e:
-        print(f"[Backup] Error: {e}", file=sys.stderr)
-        return None
+        log.exception("backup falló")
+        print(f"[Backup] FAIL: {e}", file=sys.stderr)
+        return {"ok": False, "error": str(e)}

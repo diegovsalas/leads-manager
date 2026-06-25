@@ -224,3 +224,14 @@ def google_callback():
     if user.rol.value.upper() == "KAM":
         return redirect("/cs/")
     return redirect(url_for("index"))
+
+
+# ─── Backup manual (admin) ──────────────────────────────────────────
+@auth_bp.route("/api/admin/backup-now", methods=["POST"])
+@require_role(["super_admin"])
+def trigger_backup_now():
+    """Dispara el backup diario inmediatamente. Útil para verificar config
+    sin esperar al cron de las 3am. SECURITY-2026-06-24."""
+    from backups import ejecutar_backup
+    result = ejecutar_backup()
+    return jsonify(result)
