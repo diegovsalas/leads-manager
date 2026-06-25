@@ -3706,7 +3706,13 @@ function onDrop(e,etapa){
     const leadId=draggingId;
     draggingId=null;
     document.getElementById('mp-lead-id').value=leadId;
-    document.getElementById('mp-motivo').value='';
+    // BUGFIX 24-jun-2026: antes intentaba resetear #mp-motivo que NO EXISTE
+    // (los IDs reales son mp-motivo-select y mp-motivo-text). Lanzaba
+    // TypeError null.value=, el handler abortaba y el modal nunca abría.
+    // Por eso ningún vendedor podía cerrar perdido.
+    document.getElementById('mp-motivo-select').value='';
+    document.getElementById('mp-motivo-text').value='';
+    document.getElementById('mp-otro').style.display='none';
     document.getElementById('modal-perdido').classList.add('open');
     return;
   }
