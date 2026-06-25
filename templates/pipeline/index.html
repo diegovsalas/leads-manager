@@ -4942,6 +4942,10 @@ async function saveMeta(usuarioId, field, val){
     if(!r.ok){const e=await r.json().catch(()=>({error:'Error'}));throw new Error(e.error||'Falló');}
     const label = field==='meta_recurrente_mxn'?'🔁 Recurrente':'📅 Eventual';
     showToast('Meta guardada', label+' = '+(monto>0?fmt$(monto):'(sin meta)'));
+    // FIX-2026-06-25: refrescar la tabla para que el % se recalcule contra
+    // la nueva meta. Antes la tabla quedaba en su snapshot de page-load y
+    // el % seguía mostrando 0% aunque hubiera ventas + meta.
+    loadVendedores();
   }catch(e){showToast('Error', e.message||'No se pudo guardar');}
 }
 
