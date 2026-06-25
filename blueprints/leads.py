@@ -455,13 +455,39 @@ def actualizar_lead(lead_id):
                    "precio_unitario", "valor_estimado", "motivo_perdida",
                    "usuario_asignado_id", "tipo_industria", "tamano_empresa",
                    "num_sucursales", "tipo_cliente", "tipo_venta", "notas",
-                   "account_id", "contact_id"]:
+                   "account_id", "contact_id",
+                   # FEAT 24-jun-2026: campos de factura para cierre ganado
+                   "factura_numero", "factura_monto", "factura_notas"]:
         if campo in data:
             # Normalizar empty string a None para UUIDs
             value = data[campo]
             if campo in ("account_id", "contact_id") and value == "":
                 value = None
             setattr(lead, campo, value)
+
+    # factura_fecha como Date (viene "YYYY-MM-DD" del frontend)
+    if "factura_fecha" in data:
+        from datetime import date as _date
+        v = data["factura_fecha"]
+        if v in (None, ""):
+            lead.factura_fecha = None
+        else:
+            try:
+                lead.factura_fecha = _date.fromisoformat(v[:10])
+            except (ValueError, TypeError):
+                return jsonify({"error": "factura_fecha inválida (formato YYYY-MM-DD)"}), 400
+
+    # factura_registrada_at: timestamp ISO con TZ
+    if "factura_registrada_at" in data:
+        from datetime import datetime as _dt
+        v = data["factura_registrada_at"]
+        if v in (None, ""):
+            lead.factura_registrada_at = None
+        else:
+            try:
+                lead.factura_registrada_at = _dt.fromisoformat(v.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass  # ignorar si formato malo
 
     if "etapa_pipeline" in data:
         try:

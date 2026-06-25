@@ -2104,6 +2104,42 @@ fbq('track','PageView');
   </div>
 </div></div>
 
+<!-- Modal: Cerrado Ganado (factura) -->
+<div class="modal-overlay" id="modal-ganado" onclick="if(event.target===this)closeGanadoModal()">
+  <div class="modal">
+    <div class="modal-title" style="color:var(--green);">🎉 Cerrar como Ganado</div>
+    <input type="hidden" id="mg-lead-id" value=""/>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">
+      Registra los datos del cierre. Si aún no tienes la factura, puedes cerrar igual y completar después
+      desde el panel del lead.
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Monto del cierre (MXN)</label>
+        <input class="form-input" id="mg-monto" type="number" min="0" step="0.01" placeholder="0.00"/>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px;">Editable si difiere del valor estimado</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fecha de la factura</label>
+        <input class="form-input" id="mg-fecha" type="date"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Número de factura</label>
+      <input class="form-input" id="mg-numero" type="text" placeholder="Ej: A-12345"/>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px;">Folio o serie/folio del CFDI. Si no la tienes aún, déjalo vacío.</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notas (opcional)</label>
+      <textarea class="form-input" id="mg-notas" rows="2" style="resize:vertical;" placeholder="Forma de pago, condiciones de crédito, contacto de pago..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeGanadoModal()">Cancelar</button>
+      <button class="btn" style="background:#16a34a;color:#fff;font-weight:500;padding:6px 12px;" onclick="confirmarGanado()">Confirmar cierre ganado</button>
+    </div>
+  </div>
+</div>
+
 <!-- Lead detail panel -->
 <div class="lead-panel-overlay" id="lp-overlay" onclick="closeLeadPanel()"></div>
 <div class="lead-panel" id="lead-panel">
@@ -2162,6 +2198,22 @@ fbq('track','PageView');
       <div class="lp-field"><span class="lp-field-label">Cantidad</span><span class="lp-field-value" id="lp-cantidad"></span></div>
       <div class="lp-field"><span class="lp-field-label">Precio unitario</span><span class="lp-field-value" id="lp-precio"></span></div>
       <div class="lp-field"><span class="lp-field-label">Valor estimado</span><span class="lp-field-value" style="font-size:16px;color:var(--green);" id="lp-valor"></span></div>
+    </div>
+
+    <div class="lp-section" id="lp-factura-section" style="display:none;border-left:3px solid var(--green);">
+      <div class="lp-section-title">🎉 Cierre / Facturación</div>
+      <div class="lp-field"><span class="lp-field-label">Monto</span><span class="lp-field-value" id="lp-factura-monto" style="font-size:18px;color:var(--green);font-weight:600;"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Número de factura</span><span class="lp-field-value" id="lp-factura-numero" style="font-family:var(--mono);"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Fecha</span><span class="lp-field-value" id="lp-factura-fecha"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Notas</span><span class="lp-field-value" id="lp-factura-notas" style="font-size:12px;color:var(--text2);"></span></div>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border-light);">
+        <button class="btn" onclick="abrirEditarFactura()" style="font-size:11px;padding:4px 10px;">✏️ Editar factura</button>
+      </div>
+    </div>
+    <div class="lp-section" id="lp-pendiente-factura" style="display:none;border-left:3px solid var(--orange);">
+      <div class="lp-section-title" style="color:var(--orange);">⚠ Cierre sin facturar</div>
+      <div style="font-size:12px;color:var(--text2);padding:6px 0;">Este lead está cerrado ganado pero falta capturar la factura.</div>
+      <button class="btn" onclick="abrirEditarFactura()" style="font-size:12px;padding:6px 12px;background:var(--green);color:#fff;">+ Registrar factura</button>
     </div>
 
     <div class="lp-section" id="lp-meta-section" style="display:none;">
@@ -3716,6 +3768,13 @@ function onDrop(e,etapa){
     document.getElementById('modal-perdido').classList.add('open');
     return;
   }
+  // FEAT 24-jun-2026: si se mueve a Cerrado Ganado, pedir factura
+  if(etapa==='Cerrado Ganado'){
+    const leadId=draggingId;
+    draggingId=null;
+    openGanadoModal(leadId);
+    return;
+  }
   const col=document.getElementById('kcards-'+etapa),card=document.getElementById('kcard-'+draggingId);
   if(col&&card){col.appendChild(card);updateCounts();}
   fetch('/api/leads/'+draggingId+'/mover',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({etapa_pipeline:etapa})}).catch(console.error);
@@ -4367,6 +4426,18 @@ async function abrirLeadPanel(id){
     document.getElementById('lp-precio').textContent=l.precio_unitario?fmt$(l.precio_unitario):'—';
     document.getElementById('lp-valor').textContent=l.valor_estimado?fmt$(l.valor_estimado):'—';
 
+    // FEAT 24-jun-2026: sección de factura — visible solo si etapa = Cerrado Ganado
+    const esGanado = l.etapa_pipeline === 'Cerrado Ganado';
+    const tieneFactura = l.factura_numero || l.factura_monto;
+    document.getElementById('lp-factura-section').style.display = (esGanado && tieneFactura) ? '' : 'none';
+    document.getElementById('lp-pendiente-factura').style.display = (esGanado && !tieneFactura) ? '' : 'none';
+    if(esGanado && tieneFactura){
+      document.getElementById('lp-factura-monto').textContent = l.factura_monto ? fmt$(l.factura_monto) : '—';
+      document.getElementById('lp-factura-numero').textContent = l.factura_numero || '(sin folio)';
+      document.getElementById('lp-factura-fecha').textContent = l.factura_fecha ? new Date(l.factura_fecha).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+      document.getElementById('lp-factura-notas').textContent = l.factura_notas || '—';
+    }
+
     // Meta Ads attribution (solo si vino de la API real)
     const hasMetaData=l.meta_lead_id||l.meta_form_id||l.meta_campaign||l.meta_ad_id;
     document.getElementById('lp-meta-section').style.display=hasMetaData?'':'none';
@@ -4909,6 +4980,103 @@ async function confirmarPerdido(){
     closePerdidoModal();
     location.reload();
   }catch{showToast('Error','No se pudo actualizar');}
+}
+
+// ─── Cerrado Ganado: modal de factura ───
+function closeGanadoModal(){document.getElementById('modal-ganado').classList.remove('open');}
+
+// Abrir el modal para editar factura de un lead ya cerrado ganado
+// (desde el panel del lead)
+async function abrirEditarFactura(){
+  const leadId = document.getElementById('lp-id')?.value;
+  if(!leadId){showToast('Error','No hay lead activo');return;}
+  document.getElementById('mg-lead-id').value = leadId;
+  // Cargar valores actuales
+  try{
+    const r = await fetch('/api/leads/'+leadId);
+    if(r.ok){
+      const lead = await r.json();
+      document.getElementById('mg-monto').value = lead.factura_monto || lead.valor_estimado || '';
+      document.getElementById('mg-numero').value = lead.factura_numero || '';
+      document.getElementById('mg-fecha').value = lead.factura_fecha ? lead.factura_fecha.slice(0,10) : new Date().toISOString().split('T')[0];
+      document.getElementById('mg-notas').value = lead.factura_notas || '';
+    }
+  }catch{}
+  document.getElementById('modal-ganado').classList.add('open');
+  setTimeout(()=>document.getElementById('mg-numero').focus(),100);
+}
+
+async function openGanadoModal(leadId){
+  document.getElementById('mg-lead-id').value=leadId;
+  // Limpiar campos del modal
+  document.getElementById('mg-numero').value='';
+  document.getElementById('mg-notas').value='';
+  // Default: fecha hoy
+  document.getElementById('mg-fecha').value=new Date().toISOString().split('T')[0];
+  // Prellenar monto con valor_estimado del lead
+  try{
+    const r=await fetch('/api/leads/'+leadId);
+    if(r.ok){
+      const lead=await r.json();
+      document.getElementById('mg-monto').value=lead.valor_estimado||'';
+    }else{
+      document.getElementById('mg-monto').value='';
+    }
+  }catch{ document.getElementById('mg-monto').value=''; }
+  document.getElementById('modal-ganado').classList.add('open');
+  setTimeout(()=>document.getElementById('mg-monto').focus(),100);
+}
+
+async function confirmarGanado(){
+  const leadId=document.getElementById('mg-lead-id').value;
+  const monto=document.getElementById('mg-monto').value.trim();
+  const numero=document.getElementById('mg-numero').value.trim();
+  const fecha=document.getElementById('mg-fecha').value;
+  const notas=document.getElementById('mg-notas').value.trim();
+
+  // Validación mínima: si pone número de factura, monto y fecha son requeridos
+  if(numero && !monto){
+    showToast('Falta','Si pones número de factura, indica el monto');
+    document.getElementById('mg-monto').focus();return;
+  }
+  if(numero && !fecha){
+    showToast('Falta','Si pones número de factura, indica la fecha');
+    document.getElementById('mg-fecha').focus();return;
+  }
+
+  const body={};
+  if(monto)  body.factura_monto = parseFloat(monto);
+  if(numero) body.factura_numero = numero;
+  if(fecha)  body.factura_fecha = fecha;
+  if(notas)  body.factura_notas = notas;
+  // Si se llenó cualquier dato de factura, marcamos el timestamp
+  if(Object.keys(body).length > 0){
+    body.factura_registrada_at = new Date().toISOString();
+  }
+  // También actualizar valor_estimado si lo cambiaron en el cierre
+  if(monto) body.valor_estimado = parseFloat(monto);
+
+  try{
+    // 1. Mover a Cerrado Ganado
+    const r1=await fetch('/api/leads/'+leadId+'/mover',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({etapa_pipeline:'Cerrado Ganado'})});
+    if(!r1.ok){const e=await r1.json().catch(()=>({error:'Error'}));throw new Error(e.error||'No se pudo mover');}
+
+    // 2. Si llenaron datos de factura, guardarlos
+    if(Object.keys(body).length > 0){
+      const r2=await fetch('/api/leads/'+leadId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(!r2.ok){const e=await r2.json().catch(()=>({error:'Error'}));throw new Error(e.error||'Datos de factura no guardaron');}
+    }
+
+    closeGanadoModal();
+    if(numero){
+      showToast('🎉 Ganado','Cerrado con factura '+numero);
+    }else{
+      showToast('🎉 Ganado','Lead cerrado. Recuerda capturar la factura después.');
+    }
+    setTimeout(()=>{if(typeof loadKanban==='function')loadKanban();else location.reload();},500);
+  }catch(e){
+    showToast('Error', e.message || 'No se pudo cerrar');
+  }
 }
 
 function openGastoModal(){

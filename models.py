@@ -216,6 +216,13 @@ class Lead(db.Model):
     )
     usuario_asignado = db.relationship("Usuario", back_populates="leads")
 
+    # Cierre / Facturación (se llena cuando el vendedor mueve a Cerrado Ganado)
+    factura_numero = db.Column(db.String(60), nullable=True)   # ej. "A-12345"
+    factura_fecha  = db.Column(db.Date, nullable=True)
+    factura_monto  = db.Column(db.Numeric(14, 2), nullable=True)  # monto real del cierre (puede diferir de valor_estimado)
+    factura_notas  = db.Column(db.Text, nullable=True)         # forma de pago, condiciones, etc.
+    factura_registrada_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
     # Metadatos Meta Ads
     meta_lead_id = db.Column(db.String(100), unique=True, nullable=True)
     meta_form_id = db.Column(db.String(100), nullable=True)
@@ -302,6 +309,11 @@ class Lead(db.Model):
             "empresa_nombre": self.empresa_nombre,
             "account_id": str(self.account_id) if self.account_id else None,
             "contact_id": str(self.contact_id) if self.contact_id else None,
+            "factura_numero":        self.factura_numero,
+            "factura_fecha":         self.factura_fecha.isoformat() if self.factura_fecha else None,
+            "factura_monto":         float(self.factura_monto) if self.factura_monto is not None else None,
+            "factura_notas":         self.factura_notas,
+            "factura_registrada_at": self.factura_registrada_at.isoformat() if self.factura_registrada_at else None,
             "meta_lead_id": self.meta_lead_id,
             "meta_form_id": self.meta_form_id,
             "meta_ad_id": self.meta_ad_id,
