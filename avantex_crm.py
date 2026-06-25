@@ -91,6 +91,22 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] etapa_pipeline 'Presentación' failed (retry on next boot): %s", e)
 
+        # ─── metas_vendedor: meta_recurrente_mxn + meta_eventual_mxn (FEAT-2026-06-25) ───
+        try:
+            with db.engine.begin() as conn:
+                for col in ("meta_recurrente_mxn", "meta_eventual_mxn"):
+                    exists = conn.execute(text("""
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'metas_vendedor' AND column_name = :c
+                    """), {"c": col}).first()
+                    if not exists:
+                        app.logger.info(f"[auto-migrate] adding metas_vendedor.{col}...")
+                        conn.execute(text(
+                            f"ALTER TABLE metas_vendedor ADD COLUMN {col} NUMERIC(12,2)"
+                        ))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] metas_vendedor split rec/ev failed: %s", e)
+
         # ─── cs_invoices.savio_invoice_id UNIQUE (SECURITY-2026-06-24) ───
         # Sin esto, una corrida con bug del sync podía duplicar filas de la
         # misma factura de Savio y romper el cálculo de facturación / MRR.

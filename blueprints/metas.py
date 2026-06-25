@@ -1,6 +1,7 @@
 # blueprints/metas.py
 """
 Metas mensuales por vendedor.
+FEAT-2026-06-25: dos metas separadas por tipo_venta del lead (Recurrente / Eventual).
 - Super Admin: CRUD + resumen del equipo
 - Vendedor: solo lectura de su propio progreso
 """
@@ -18,8 +19,10 @@ def _mes_actual():
     return date.today().strftime("%Y-%m")
 
 
-def _calcular_ventas(usuario_id, mes):
-    """Revenue cerrado ganado de un vendedor en un mes."""
+def _calcular_ventas(usuario_id, mes, tipo_venta=None):
+    """Revenue cerrado ganado de un vendedor en un mes, opcionalmente
+    filtrado por tipo_venta del lead ('Recurrente' / 'Eventual' / None=todos).
+    Prioriza factura_monto (monto real cobrado) sobre el cálculo estimado."""
     year, month = mes.split("-")
     inicio = date(int(year), int(month), 1)
     if inicio.month == 12:
@@ -27,8 +30,9 @@ def _calcular_ventas(usuario_id, mes):
     else:
         fin = inicio.replace(month=inicio.month + 1)
 
-    row = db.session.query(
+    q = db.session.query(
         func.coalesce(func.sum(func.coalesce(
+            Lead.factura_monto,
             Lead.cantidad_productos * Lead.precio_unitario,
             Lead.valor_estimado, 0,
         )), 0)
@@ -37,9 +41,15 @@ def _calcular_ventas(usuario_id, mes):
         Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO,
         Lead.fecha_creacion >= inicio,
         Lead.fecha_creacion < fin,
-    ).scalar()
+    )
+    if tipo_venta:
+        q = q.filter(Lead.tipo_venta == tipo_venta)
 
-    return float(row or 0)
+    return float(q.scalar() or 0)
+
+
+def _calc_pct(ventas, meta):
+    return round((ventas / meta) * 100, 1) if meta and meta > 0 else 0
 
 
 @metas_bp.route("/", methods=["GET"])
@@ -55,29 +65,45 @@ def listar_metas():
 @require_role(["super_admin"])
 def crear_o_actualizar_meta():
     """
-    Super Admin: crear o actualizar meta.
-    Body: { "usuario_id": "uuid", "mes": "2026-04", "meta_mxn": 50000 }
+    Super Admin: crear o actualizar meta. Acepta cualquier subset de:
+      { usuario_id, mes, meta_mxn, meta_recurrente_mxn, meta_eventual_mxn }
+    Solo aplica los campos enviados (deja los demás como estaban).
     """
     data = request.get_json() or {}
     usuario_id = data.get("usuario_id")
     mes = data.get("mes", _mes_actual())
-    meta_mxn = data.get("meta_mxn")
 
-    if not usuario_id or meta_mxn is None:
-        return jsonify({"error": "usuario_id y meta_mxn requeridos"}), 400
+    if not usuario_id:
+        return jsonify({"error": "usuario_id requerido"}), 400
 
-    # Upsert
+    # Por backward-compat: si solo viene meta_mxn legacy, lo aceptamos.
+    # Pero al menos UNO de los tres montos debe venir.
+    montos_enviados = {
+        k: data.get(k) for k in
+        ("meta_mxn", "meta_recurrente_mxn", "meta_eventual_mxn")
+        if k in data
+    }
+    if not montos_enviados:
+        return jsonify({"error": "Envía al menos un monto (meta_mxn, meta_recurrente_mxn o meta_eventual_mxn)"}), 400
+
     meta = MetaVendedor.query.filter_by(usuario_id=usuario_id, mes=mes).first()
-    if meta:
-        meta.meta_mxn = meta_mxn
-    else:
+    if not meta:
         meta = MetaVendedor(
             usuario_id=usuario_id,
             mes=mes,
-            meta_mxn=meta_mxn,
             created_by=session.get("user_id"),
         )
         db.session.add(meta)
+
+    for k, v in montos_enviados.items():
+        # Permitir limpiar la meta enviando 0/null
+        if v in (None, "", 0, "0"):
+            setattr(meta, k, None)
+        else:
+            try:
+                setattr(meta, k, float(v))
+            except (ValueError, TypeError):
+                return jsonify({"error": f"{k} debe ser numérico"}), 400
 
     db.session.commit()
     return jsonify(meta.to_dict()), 201
@@ -85,32 +111,46 @@ def crear_o_actualizar_meta():
 
 @metas_bp.route("/mi-progreso", methods=["GET"])
 def mi_progreso():
-    """Vendedor: su meta + ventas del mes actual."""
+    """Vendedor: sus DOS metas (Recurrente / Eventual) + ventas + % del mes actual."""
     usuario_id = session.get("usuario_id")
     if not usuario_id:
         return jsonify({"error": "Sin vendedor vinculado"}), 400
 
     mes = request.args.get("mes", _mes_actual())
     meta = MetaVendedor.query.filter_by(usuario_id=usuario_id, mes=mes).first()
-    ventas = _calcular_ventas(usuario_id, mes)
 
-    meta_mxn = float(meta.meta_mxn) if meta else 0
-    pct = round((ventas / meta_mxn) * 100, 1) if meta_mxn > 0 else 0
+    meta_rec = float(meta.meta_recurrente_mxn) if meta and meta.meta_recurrente_mxn else 0
+    meta_ev  = float(meta.meta_eventual_mxn)   if meta and meta.meta_eventual_mxn   else 0
+    meta_legacy = float(meta.meta_mxn) if meta and meta.meta_mxn else 0
+
+    ventas_rec = _calcular_ventas(usuario_id, mes, tipo_venta="Recurrente")
+    ventas_ev  = _calcular_ventas(usuario_id, mes, tipo_venta="Eventual")
+    ventas_total = _calcular_ventas(usuario_id, mes, tipo_venta=None)
 
     return jsonify({
         "usuario_id": usuario_id,
         "mes": mes,
-        "meta_mxn": meta_mxn,
-        "ventas_actual": ventas,
-        "porcentaje": pct,
-        "tiene_meta": meta is not None,
+        # Nuevo formato (FEAT-2026-06-25)
+        "meta_recurrente_mxn": meta_rec,
+        "ventas_recurrente":   ventas_rec,
+        "pct_recurrente":      _calc_pct(ventas_rec, meta_rec),
+        "meta_eventual_mxn":   meta_ev,
+        "ventas_eventual":     ventas_ev,
+        "pct_eventual":        _calc_pct(ventas_ev, meta_ev),
+        # Legacy (backward-compat con UI viejo)
+        "meta_mxn":            meta_legacy or (meta_rec + meta_ev),
+        "ventas_actual":       ventas_total,
+        "porcentaje":          _calc_pct(ventas_total, meta_legacy or (meta_rec + meta_ev)),
+        "tiene_meta":          bool(meta and (meta_rec or meta_ev or meta_legacy)),
+        "tiene_meta_recurrente": bool(meta_rec),
+        "tiene_meta_eventual":   bool(meta_ev),
     })
 
 
 @metas_bp.route("/resumen-equipo", methods=["GET"])
 @require_role(["super_admin"])
 def resumen_equipo():
-    """Super Admin: tabla comparativa de todos los vendedores vs meta."""
+    """Super Admin: tabla comparativa de todos los vendedores con DOS metas y DOS avances."""
     mes = request.args.get("mes", _mes_actual())
 
     vendedores = Usuario.query.filter(Usuario.en_turno.is_(True)).order_by(Usuario.nombre).all()
@@ -118,11 +158,15 @@ def resumen_equipo():
 
     for v in vendedores:
         meta = MetaVendedor.query.filter_by(usuario_id=v.id, mes=mes).first()
-        ventas = _calcular_ventas(v.id, mes)
-        meta_mxn = float(meta.meta_mxn) if meta else 0
-        pct = round((ventas / meta_mxn) * 100, 1) if meta_mxn > 0 else 0
 
-        # Leads activos (no cerrados)
+        meta_rec    = float(meta.meta_recurrente_mxn) if meta and meta.meta_recurrente_mxn else 0
+        meta_ev     = float(meta.meta_eventual_mxn)   if meta and meta.meta_eventual_mxn   else 0
+        meta_legacy = float(meta.meta_mxn) if meta and meta.meta_mxn else 0
+
+        ventas_rec = _calcular_ventas(v.id, mes, tipo_venta="Recurrente")
+        ventas_ev  = _calcular_ventas(v.id, mes, tipo_venta="Eventual")
+        ventas_total = _calcular_ventas(v.id, mes, tipo_venta=None)
+
         leads_activos = Lead.query.filter(
             Lead.usuario_asignado_id == v.id,
             Lead.etapa_pipeline.notin_([EtapaPipeline.CIERRE_GANADO, EtapaPipeline.CIERRE_PERDIDO]),
@@ -131,11 +175,18 @@ def resumen_equipo():
         resultado.append({
             "usuario_id": str(v.id),
             "nombre": v.nombre,
-            "meta_mxn": meta_mxn,
-            "ventas_actual": ventas,
-            "porcentaje": pct,
+            "meta_recurrente_mxn": meta_rec,
+            "ventas_recurrente":   ventas_rec,
+            "pct_recurrente":      _calc_pct(ventas_rec, meta_rec),
+            "meta_eventual_mxn":   meta_ev,
+            "ventas_eventual":     ventas_ev,
+            "pct_eventual":        _calc_pct(ventas_ev, meta_ev),
+            # Legacy
+            "meta_mxn":      meta_legacy or (meta_rec + meta_ev),
+            "ventas_actual": ventas_total,
+            "porcentaje":    _calc_pct(ventas_total, meta_legacy or (meta_rec + meta_ev)),
             "leads_activos": leads_activos,
-            "tiene_meta": meta is not None,
+            "tiene_meta":    bool(meta and (meta_rec or meta_ev or meta_legacy)),
         })
 
     return jsonify(resultado)

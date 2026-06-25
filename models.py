@@ -633,7 +633,10 @@ class MetaVendedor(db.Model):
     usuario_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=False)
     usuario = db.relationship("Usuario", back_populates="metas")
     mes = db.Column(db.Text, nullable=False)  # '2026-04'
-    meta_mxn = db.Column(db.Numeric(12, 2), nullable=True)
+    meta_mxn = db.Column(db.Numeric(12, 2), nullable=True)  # legacy: total combinado
+    # FEAT-2026-06-25: dos metas separadas por tipo_venta del lead.
+    meta_recurrente_mxn = db.Column(db.Numeric(12, 2), nullable=True)
+    meta_eventual_mxn   = db.Column(db.Numeric(12, 2), nullable=True)
     created_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users_crm.id"), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
 
@@ -645,6 +648,8 @@ class MetaVendedor(db.Model):
             "usuario_id": str(self.usuario_id),
             "mes": self.mes,
             "meta_mxn": float(self.meta_mxn) if self.meta_mxn else None,
+            "meta_recurrente_mxn": float(self.meta_recurrente_mxn) if self.meta_recurrente_mxn else None,
+            "meta_eventual_mxn":   float(self.meta_eventual_mxn)   if self.meta_eventual_mxn   else None,
             "created_by": str(self.created_by) if self.created_by else None,
             "created_at": self.created_at.isoformat(),
         }

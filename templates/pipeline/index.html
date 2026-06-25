@@ -427,24 +427,41 @@ fbq('track','PageView');
   <!-- Meta vendedor card (solo para vendedores) -->
   <div id="meta-vendedor-card" style="display:none;padding:16px 48px 0;">
     <div class="dash-card" style="border-left:4px solid #16a34a;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-        <div>
-          <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">Tu meta del mes</div>
-          <div style="font-size:28px;font-weight:700;" id="meta-v-target">$0</div>
+      <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:10px;">Tus metas del mes</div>
+
+      <!-- META RECURRENTE -->
+      <div id="meta-v-rec-row" style="margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;">
+          <div style="font-size:12px;font-weight:600;color:#b45309;">🔁 Recurrente</div>
+          <div style="font-family:var(--mono);font-size:13px;">
+            <span style="color:var(--green);font-weight:600;" id="meta-v-rec-actual">$0</span>
+            <span style="color:var(--text3);"> / </span>
+            <span id="meta-v-rec-target">$0</span>
+            <span style="font-weight:700;margin-left:8px;" id="meta-v-rec-pct">0%</span>
+          </div>
         </div>
-        <div style="text-align:right;">
-          <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">Llevas</div>
-          <div style="font-size:28px;font-weight:700;color:var(--green);" id="meta-v-actual">$0</div>
+        <div style="margin-top:6px;background:var(--border-light);border-radius:99px;height:10px;overflow:hidden;">
+          <div id="meta-v-rec-bar" style="height:100%;border-radius:99px;transition:width 300ms;width:0%;background:#b45309;"></div>
         </div>
-        <div style="text-align:right;">
-          <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">Avance</div>
-          <div style="font-size:28px;font-weight:700;" id="meta-v-pct">0%</div>
-        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:3px;text-align:right;" id="meta-v-rec-falta"></div>
       </div>
-      <div style="margin-top:12px;background:var(--border-light);border-radius:99px;height:12px;overflow:hidden;">
-        <div id="meta-v-bar" style="height:100%;border-radius:99px;transition:width 300ms;width:0%;"></div>
+
+      <!-- META EVENTUAL -->
+      <div id="meta-v-ev-row">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;">
+          <div style="font-size:12px;font-weight:600;color:#6d28d9;">📅 Eventual</div>
+          <div style="font-family:var(--mono);font-size:13px;">
+            <span style="color:var(--green);font-weight:600;" id="meta-v-ev-actual">$0</span>
+            <span style="color:var(--text3);"> / </span>
+            <span id="meta-v-ev-target">$0</span>
+            <span style="font-weight:700;margin-left:8px;" id="meta-v-ev-pct">0%</span>
+          </div>
+        </div>
+        <div style="margin-top:6px;background:var(--border-light);border-radius:99px;height:10px;overflow:hidden;">
+          <div id="meta-v-ev-bar" style="height:100%;border-radius:99px;transition:width 300ms;width:0%;background:#6d28d9;"></div>
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:3px;text-align:right;" id="meta-v-ev-falta"></div>
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:6px;text-align:right;" id="meta-v-falta"></div>
     </div>
   </div>
 
@@ -1030,7 +1047,7 @@ fbq('track','PageView');
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Nombre</th><th>Rol</th><th>Especialidad</th><th>En turno</th><th>Meta del mes</th><th>Ventas</th><th>Avance</th><th>%</th><th></th></tr></thead>
+      <thead><tr><th>Nombre</th><th>Rol</th><th>Especialidad</th><th>En turno</th><th title="Meta de ventas Recurrentes">🔁 Meta Rec.</th><th>Vta Rec.</th><th>%</th><th title="Meta de ventas Eventuales">📅 Meta Ev.</th><th>Vta Ev.</th><th>%</th><th></th></tr></thead>
       <tbody id="vendedores-tbody"></tbody>
     </table>
   </div>
@@ -2112,6 +2129,18 @@ fbq('track','PageView');
     <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">
       Registra los datos del cierre. Si aún no tienes la factura, puedes cerrar igual y completar después
       desde el panel del lead.
+    </div>
+    <!-- FEAT-2026-06-25: tipo_venta obligatorio para que cuente en la meta correcta -->
+    <div class="form-group" id="mg-tipo-venta-group">
+      <label class="form-label">Tipo de venta <span style="color:var(--red);">*</span></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="nl-pill mg-tv-pill" data-val="Eventual" onclick="_mgSelectTipo('Eventual')">📅 Eventual<small style="display:block;font-size:9px;opacity:.6;font-weight:400;margin-top:1px">Compra única / ocasional</small></button>
+        <button type="button" class="nl-pill mg-tv-pill" data-val="Recurrente" onclick="_mgSelectTipo('Recurrente')">🔁 Recurrente<small style="display:block;font-size:9px;opacity:.6;font-weight:400;margin-top:1px">Servicio mensual / suscripción</small></button>
+      </div>
+      <input type="hidden" id="mg-tipo-venta" value=""/>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px;">
+        Define en qué meta del mes contará este cierre. Obligatorio.
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -4844,7 +4873,7 @@ function renderVendedoresTabla(){
   document.getElementById('vend-tab-hint').textContent = hint;
 
   if(!filtered.length){
-    tb.innerHTML='<tr><td colspan="9" style="color:var(--text2);text-align:center;padding:18px;">Sin usuarios en esta categoría</td></tr>';
+    tb.innerHTML='<tr><td colspan="11" style="color:var(--text2);text-align:center;padding:18px;">Sin usuarios en esta categoría</td></tr>';
     return;
   }
 
@@ -4853,26 +4882,30 @@ function renderVendedoresTabla(){
     const chip = ROL_CHIPS[rol] || ROL_CHIPS['_sinlogin'];
     const marcas=(v.especialidad_marca||[]).join(', ')||'-';
     const turno=v.en_turno?'<span style="color:var(--green);">&#9679; Si</span>':'<span style="color:var(--red);">&#9675; No</span>';
-    const m=_metasMap[v.id]||{meta_mxn:0,ventas_actual:0,porcentaje:0,tiene_meta:false};
-    const pct=m.porcentaje||0;
-    const barColor=pct>=80?'#16a34a':pct>=50?'#d97706':'#dc2626';
+    // FEAT-2026-06-25: 2 metas (recurrente + eventual) por vendedor
+    const m=_metasMap[v.id]||{};
+    const mRec=m.meta_recurrente_mxn||0, vRec=m.ventas_recurrente||0, pRec=m.pct_recurrente||0;
+    const mEv =m.meta_eventual_mxn  ||0, vEv =m.ventas_eventual  ||0, pEv =m.pct_eventual  ||0;
+    const colorRec = pRec>=80?'#16a34a':pRec>=50?'#d97706':'#dc2626';
+    const colorEv  = pEv >=80?'#16a34a':pEv >=50?'#d97706':'#dc2626';
 
     // Metas/ventas solo aplican a Vendedores reales
     const showMetrics = rol === 'Vendedor';
-    const metaCell = !showMetrics
-      ? `<td style="color:var(--text3);font-size:12px;">—</td>`
-      : (IS_ADMIN
-          ?`<td><input type="number" value="${m.meta_mxn||''}" placeholder="0" style="width:90px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;font-family:var(--mono);text-align:right;" onchange="saveMeta('${v.id}',this.value)"/></td>`
-          :`<td style="font-family:var(--mono);font-size:13px;">${m.tiene_meta?fmt$(m.meta_mxn):'-'}</td>`);
-    const ventasCell = !showMetrics
-      ? `<td style="color:var(--text3);">—</td>`
-      : `<td style="font-family:var(--mono);font-size:13px;color:var(--green);">${fmt$(m.ventas_actual)}</td>`;
-    const avanceCell = !showMetrics
-      ? `<td style="color:var(--text3);">—</td>`
-      : `<td style="width:120px;"><div style="background:var(--border-light);border-radius:99px;height:8px;overflow:hidden;"><div style="height:100%;width:${Math.min(pct,100)}%;background:${barColor};border-radius:99px;transition:width 300ms;"></div></div></td>`;
-    const pctCell = !showMetrics
-      ? `<td style="color:var(--text3);">—</td>`
-      : `<td style="font-size:13px;font-weight:600;color:${barColor};">${pct}%</td>`;
+    function metaCell(field, valor){
+      if(!showMetrics) return `<td style="color:var(--text3);font-size:12px;">—</td>`;
+      if(IS_ADMIN){
+        return `<td><input type="number" value="${valor||''}" placeholder="0" style="width:90px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;font-family:var(--mono);text-align:right;" onchange="saveMeta('${v.id}','${field}',this.value)"/></td>`;
+      }
+      return `<td style="font-family:var(--mono);font-size:13px;">${valor>0?fmt$(valor):'-'}</td>`;
+    }
+    function ventaCell(valor){
+      if(!showMetrics) return `<td style="color:var(--text3);">—</td>`;
+      return `<td style="font-family:var(--mono);font-size:13px;color:var(--green);">${fmt$(valor)}</td>`;
+    }
+    function pctCell(pct, color){
+      if(!showMetrics) return `<td style="color:var(--text3);">—</td>`;
+      return `<td style="font-size:12px;font-weight:600;color:${color};white-space:nowrap;">${pct}%</td>`;
+    }
 
     const loginBadge = v.login
       ? `<div style="font-size:10px;color:var(--text3);">📧 ${_esc(v.login.correo)}${v.login.activo?'':' <span style="color:var(--red)">(inactivo)</span>'}</div>`
@@ -4887,25 +4920,29 @@ function renderVendedoresTabla(){
       <td><span style="background:${chip.bg};color:${chip.fg};font-size:10px;font-weight:700;padding:3px 8px;border-radius:99px;text-transform:uppercase;letter-spacing:.3px;">${chip.label}</span></td>
       <td style="font-size:12px;">${marcas}</td>
       <td>${turno}</td>
-      ${metaCell}
-      ${ventasCell}
-      ${avanceCell}
-      ${pctCell}
+      ${metaCell('meta_recurrente_mxn', mRec)}
+      ${ventaCell(vRec)}
+      ${pctCell(pRec, colorRec)}
+      ${metaCell('meta_eventual_mxn', mEv)}
+      ${ventaCell(vEv)}
+      ${pctCell(pEv, colorEv)}
       <td>${accionesCell}</td>
     </tr>`;
   });
 }
 
-async function saveMeta(usuarioId,val){
+async function saveMeta(usuarioId, field, val){
   const monto=parseFloat(val);
-  if(!monto||monto<=0)return;
+  // val vacío o 0 = limpiar la meta (el backend lo trata como null)
   const mes=document.getElementById('metas-mes')?.value||'';
+  const payload={usuario_id:usuarioId, mes:mes||undefined};
+  payload[field] = (!val || isNaN(monto)) ? 0 : monto;
   try{
-    await fetch('/api/metas/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-      usuario_id:usuarioId,mes:mes||undefined,meta_mxn:monto
-    })});
-    showToast('Meta guardada',fmt$(monto));
-  }catch{showToast('Error','No se pudo guardar');}
+    const r = await fetch('/api/metas/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(!r.ok){const e=await r.json().catch(()=>({error:'Error'}));throw new Error(e.error||'Falló');}
+    const label = field==='meta_recurrente_mxn'?'🔁 Recurrente':'📅 Eventual';
+    showToast('Meta guardada', label+' = '+(monto>0?fmt$(monto):'(sin meta)'));
+  }catch(e){showToast('Error', e.message||'No se pudo guardar');}
 }
 
 async function loadMetaVendedor(){
@@ -4915,16 +4952,33 @@ async function loadMetaVendedor(){
     const d=await r.json();
     if(!d.tiene_meta){document.getElementById('meta-vendedor-card').style.display='none';return;}
     document.getElementById('meta-vendedor-card').style.display='block';
-    document.getElementById('meta-v-target').textContent=fmt$(d.meta_mxn);
-    document.getElementById('meta-v-actual').textContent=fmt$(d.ventas_actual);
-    const pct=d.porcentaje;
-    document.getElementById('meta-v-pct').textContent=pct+'%';
-    document.getElementById('meta-v-pct').style.color=pct>=80?'#16a34a':pct>=50?'#d97706':'#dc2626';
-    const bar=document.getElementById('meta-v-bar');
-    bar.style.width=Math.min(pct,100)+'%';
-    bar.style.background=pct>=80?'#16a34a':pct>=50?'#d97706':'#dc2626';
-    const falta=d.meta_mxn-d.ventas_actual;
-    document.getElementById('meta-v-falta').textContent=falta>0?'Faltan '+fmt$(falta)+' para tu meta':'Meta alcanzada!';
+
+    // FEAT-2026-06-25: dos barras (Recurrente / Eventual)
+    function pintar(tipo, metaVal, ventas, pct){
+      const row    = document.getElementById('meta-v-'+tipo+'-row');
+      const target = document.getElementById('meta-v-'+tipo+'-target');
+      const actual = document.getElementById('meta-v-'+tipo+'-actual');
+      const pctEl  = document.getElementById('meta-v-'+tipo+'-pct');
+      const bar    = document.getElementById('meta-v-'+tipo+'-bar');
+      const falta  = document.getElementById('meta-v-'+tipo+'-falta');
+      if(!metaVal || metaVal<=0){
+        // Sin meta de este tipo: oculto la fila
+        row.style.display='none';
+        return;
+      }
+      row.style.display='block';
+      target.textContent = fmt$(metaVal);
+      actual.textContent = fmt$(ventas);
+      pctEl.textContent  = pct+'%';
+      pctEl.style.color  = pct>=80?'#16a34a':pct>=50?'#d97706':'#dc2626';
+      bar.style.width    = Math.min(pct,100)+'%';
+      // Mantengo el color base por tipo, solo intensifico verde si pasa de 100%
+      if(pct>=100){ bar.style.background='#16a34a'; }
+      const f = metaVal - ventas;
+      falta.textContent = f>0 ? 'Faltan '+fmt$(f) : 'Meta alcanzada!';
+    }
+    pintar('rec', d.meta_recurrente_mxn, d.ventas_recurrente, d.pct_recurrente);
+    pintar('ev',  d.meta_eventual_mxn,   d.ventas_eventual,   d.pct_eventual);
   }catch{}
 }
 
@@ -5039,12 +5093,21 @@ async function confirmarPerdido(){
 // ─── Cerrado Ganado: modal de factura ───
 function closeGanadoModal(){document.getElementById('modal-ganado').classList.remove('open');}
 
+// FEAT-2026-06-25: helper para seleccionar tipo_venta en el modal de Ganado.
+function _mgSelectTipo(val){
+  document.getElementById('mg-tipo-venta').value = val||'';
+  document.querySelectorAll('#mg-tipo-venta-group .mg-tv-pill').forEach(p=>{
+    p.classList.toggle('active', p.dataset.val===val);
+  });
+}
+
 // Abrir el modal para editar factura de un lead ya cerrado ganado
 // (desde el panel del lead)
 async function abrirEditarFactura(){
   const leadId = document.getElementById('lp-id')?.value;
   if(!leadId){showToast('Error','No hay lead activo');return;}
   document.getElementById('mg-lead-id').value = leadId;
+  _mgSelectTipo('');
   // Cargar valores actuales
   try{
     const r = await fetch('/api/leads/'+leadId);
@@ -5054,6 +5117,8 @@ async function abrirEditarFactura(){
       document.getElementById('mg-numero').value = lead.factura_numero || '';
       document.getElementById('mg-fecha').value = lead.factura_fecha ? lead.factura_fecha.slice(0,10) : new Date().toISOString().split('T')[0];
       document.getElementById('mg-notas').value = lead.factura_notas || '';
+      // Prellenar tipo_venta si ya estaba seteado en el lead
+      if(lead.tipo_venta) _mgSelectTipo(lead.tipo_venta);
     }
   }catch{}
   document.getElementById('modal-ganado').classList.add('open');
@@ -5065,14 +5130,16 @@ async function openGanadoModal(leadId){
   // Limpiar campos del modal
   document.getElementById('mg-numero').value='';
   document.getElementById('mg-notas').value='';
+  _mgSelectTipo('');
   // Default: fecha hoy
   document.getElementById('mg-fecha').value=new Date().toISOString().split('T')[0];
-  // Prellenar monto con valor_estimado del lead
+  // Prellenar monto con valor_estimado + tipo_venta si ya venía en el lead
   try{
     const r=await fetch('/api/leads/'+leadId);
     if(r.ok){
       const lead=await r.json();
       document.getElementById('mg-monto').value=lead.valor_estimado||'';
+      if(lead.tipo_venta) _mgSelectTipo(lead.tipo_venta);
     }else{
       document.getElementById('mg-monto').value='';
     }
@@ -5087,6 +5154,14 @@ async function confirmarGanado(){
   const numero=document.getElementById('mg-numero').value.trim();
   const fecha=document.getElementById('mg-fecha').value;
   const notas=document.getElementById('mg-notas').value.trim();
+  const tipoVenta=document.getElementById('mg-tipo-venta').value;
+
+  // FEAT-2026-06-25: tipo_venta OBLIGATORIO para que el cierre cuente
+  // en la meta correcta (Recurrente o Eventual) del vendedor.
+  if(!tipoVenta){
+    showToast('Falta','Elige tipo de venta: Recurrente o Eventual');
+    return;
+  }
 
   // Validación mínima: si pone número de factura, monto y fecha son requeridos
   if(numero && !monto){
@@ -5098,35 +5173,37 @@ async function confirmarGanado(){
     document.getElementById('mg-fecha').focus();return;
   }
 
-  const body={};
+  const body={tipo_venta: tipoVenta};
   if(monto)  body.factura_monto = parseFloat(monto);
   if(numero) body.factura_numero = numero;
   if(fecha)  body.factura_fecha = fecha;
   if(notas)  body.factura_notas = notas;
   // Si se llenó cualquier dato de factura, marcamos el timestamp
-  if(Object.keys(body).length > 0){
+  if(monto || numero || fecha || notas){
     body.factura_registrada_at = new Date().toISOString();
   }
   // También actualizar valor_estimado si lo cambiaron en el cierre
   if(monto) body.valor_estimado = parseFloat(monto);
 
   try{
-    // 1. Mover a Cerrado Ganado
+    // 1. Guardar tipo_venta y factura ANTES de mover la etapa, así si el
+    //    mover dispara recalcular metas, ya tenemos el tipo_venta correcto.
+    const r2=await fetch('/api/leads/'+leadId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r2.ok){const e=await r2.json().catch(()=>({error:'Error'}));throw new Error(e.error||'Datos de factura no guardaron');}
+
+    // 2. Mover a Cerrado Ganado
     const r1=await fetch('/api/leads/'+leadId+'/mover',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({etapa_pipeline:'Cerrado Ganado'})});
     if(!r1.ok){const e=await r1.json().catch(()=>({error:'Error'}));throw new Error(e.error||'No se pudo mover');}
 
-    // 2. Si llenaron datos de factura, guardarlos
-    if(Object.keys(body).length > 0){
-      const r2=await fetch('/api/leads/'+leadId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-      if(!r2.ok){const e=await r2.json().catch(()=>({error:'Error'}));throw new Error(e.error||'Datos de factura no guardaron');}
-    }
-
     closeGanadoModal();
+    const tipoLabel = tipoVenta==='Recurrente' ? '🔁 Recurrente' : '📅 Eventual';
     if(numero){
-      showToast('🎉 Ganado','Cerrado con factura '+numero);
+      showToast('🎉 Ganado', tipoLabel+' · Factura '+numero);
     }else{
-      showToast('🎉 Ganado','Lead cerrado. Recuerda capturar la factura después.');
+      showToast('🎉 Ganado', tipoLabel+' · Recuerda capturar la factura después');
     }
+    // Refrescar la meta del vendedor (si la vista es propia)
+    if(typeof loadMetaVendedor==='function') loadMetaVendedor();
     setTimeout(()=>{if(typeof loadKanban==='function')loadKanban();else location.reload();},500);
   }catch(e){
     showToast('Error', e.message || 'No se pudo cerrar');
