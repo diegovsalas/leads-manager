@@ -2541,6 +2541,17 @@ function switchPortal(portal){
 
 // Restaurar portal preferido al cargar (solo admin)
 window.addEventListener('DOMContentLoaded', ()=>{
+  // BUGFIX 24-jun-2026: restaurar la última vista activa para que tras un
+  // location.reload() (crear/borrar lead, etc.) el usuario no caiga en Dashboard.
+  try{
+    const savedView = sessionStorage.getItem('avantex_view');
+    if(savedView && savedView !== 'dashboard'){
+      const link = document.querySelector(`.slink[onclick*="showView('${savedView}'"]`);
+      if(link && document.getElementById('view-'+savedView)){
+        showView(savedView, link);
+      }
+    }
+  }catch{}
   if(!IS_ADMIN) return;
   try{
     const saved = localStorage.getItem('avantex_portal');
@@ -2582,6 +2593,10 @@ function showView(name,el){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name)?.classList.add('active');
   if(el){document.querySelectorAll('.sidebar .slink:not([data-marca])').forEach(s=>s.classList.remove('active'));el.classList.add('active');}
+  // BUGFIX 24-jun-2026: persistir vista activa en sessionStorage para que
+  // tras un location.reload() (ej. después de crear/borrar lead) el usuario
+  // se quede en la misma vista, no lo aviente al Dashboard default.
+  try{ sessionStorage.setItem('avantex_view', name); }catch{}
   if(name==='integraciones')loadIntegraciones();
   if(name==='savio')loadSavio();
   if(name==='sdrprospect')document.getElementById('sdrp-tbody').innerHTML='<tr><td colspan="7" style="color:var(--text2);text-align:center;padding:20px;">Llena los filtros y dale a Buscar</td></tr>';
@@ -3106,13 +3121,27 @@ async function loadRevisionVendedores(){
       </div>`;
     }
     status.textContent=`${d.vendedores.length} vendedores · mes ${d.mes}`;
-    if(_revVendedorSel) loadVendedorDetail(_revVendedorSel);
+    // BUGFIX 24-jun-2026: NO recargar loadVendedorDetail aquí. Antes lo hacíamos
+    // y como selectVendedorRevision también lo llama, había DOS llamadas async.
+    // La segunda llegaba tarde y sobreescribía la info ya renderizada con
+    // 'Cargando...', dando la impresión de que la info 'se borraba'.
   }catch(e){status.textContent='Error: '+e.message;}
 }
 
 async function selectVendedorRevision(vendedorId){
   _revVendedorSel = vendedorId;
-  loadRevisionVendedores();
+  // Solo actualizar el highlight visual sin re-fetch de la lista (más rápido,
+  // evita doble llamada a loadVendedorDetail).
+  document.querySelectorAll('#rev-vendedores-list > div').forEach(d => {
+    const isSel = d.getAttribute('onclick')?.includes(vendedorId);
+    if(isSel){
+      d.style.background='var(--bg-tag)';
+      d.style.borderLeft='3px solid var(--accent)';
+    }else{
+      d.style.background='';
+      d.style.borderLeft='3px solid transparent';
+    }
+  });
   loadVendedorDetail(vendedorId);
 }
 

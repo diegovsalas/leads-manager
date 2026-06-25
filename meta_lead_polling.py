@@ -89,12 +89,26 @@ def poll_and_create_leads():
             stats["forms"] += 1
             leads = _get_leads(form["id"], page_token)
 
+            from sqlalchemy import text as _sa_text
+
             for lead_data in leads:
                 stats["leads_found"] += 1
                 meta_lead_id = lead_data.get("id")
 
                 if Lead.query.filter_by(meta_lead_id=meta_lead_id).first():
                     stats["duplicates"] += 1
+                    continue
+
+                # BUGFIX 24-jun-2026: si el lead fue borrado manualmente antes,
+                # NO lo recreamos. Antes el polling cada 5 min resurrecía los
+                # leads que el vendedor acababa de borrar.
+                dismissed = db.session.execute(
+                    _sa_text("SELECT 1 FROM meta_leads_dismissed WHERE meta_lead_id = :mid"),
+                    {"mid": meta_lead_id},
+                ).fetchone()
+                if dismissed:
+                    stats.setdefault("dismissed", 0)
+                    stats["dismissed"] += 1
                     continue
 
                 try:

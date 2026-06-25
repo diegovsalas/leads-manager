@@ -519,6 +519,28 @@ def eliminar_lead(lead_id):
 
     lead_nombre = lead.nombre or "(sin nombre)"
     lid_str = str(lead_id)
+    meta_lid = lead.meta_lead_id  # Capturar antes del delete
+
+    # BUGFIX 24-jun-2026: si el lead vino de Meta, registrar el meta_lead_id
+    # en meta_leads_dismissed para que el polling no lo recree en el siguiente
+    # tick (cada 5 min). Antes: borrabas lead Meta → 5 min después reaparecía.
+    if meta_lid:
+        try:
+            with db.engine.begin() as conn:
+                conn.execute(text("""
+                    INSERT INTO meta_leads_dismissed
+                      (meta_lead_id, lead_id, lead_nombre, dismissed_by)
+                    VALUES (:mid, :lid, :nom, :uid)
+                    ON CONFLICT (meta_lead_id) DO NOTHING
+                """), {
+                    "mid": meta_lid, "lid": lid_str, "nom": lead_nombre[:200],
+                    "uid": session.get("user_id"),
+                })
+            current_app.logger.info(
+                "[delete-lead] meta_lead_id %s registrado en dismissed", meta_lid,
+            )
+        except Exception as e:
+            current_app.logger.warning("[delete-lead] dismiss meta falló: %s", e)
 
     # Descubrir todos los FKs que apuntan a leads.id
     fk_discovery = text("""
