@@ -130,10 +130,11 @@ def create_app():
     # - HttpOnly: cookie no accesible via document.cookie (mitiga XSS exfil)
     # - Secure: cookie solo en HTTPS (Render siempre es HTTPS)
     # - SameSite=Lax: CSRF protection
-    # - 8h: si nos roban una cookie, el daño termina pronto. Refresh-on-request
-    #   via session.permanent=True abajo asegura que vendedor activo nunca caduque
-    #   en medio del día.
-    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
+    # - 24h: si nos roban una cookie y nadie la usa, el daño termina en 1 día
+    #   (antes 7d). Refresh-each-request asegura que un vendedor activo nunca
+    #   pierda la sesión en mitad del día laboral. PATCH-2026-06-25: subido de
+    #   8h a 24h porque vendedores en sesiones cortas perdían el login.
+    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=24)
     app.config["SESSION_COOKIE_HTTPONLY"]    = True
     app.config["SESSION_COOKIE_SECURE"]      = os.getenv("FLASK_ENV") != "development"
     app.config["SESSION_COOKIE_SAMESITE"]    = "Lax"
@@ -234,6 +235,13 @@ def create_app():
         if any(request.path.startswith(p) for p in allowed):
             return
         if not session.get("user_id"):
+            # PATCH-2026-06-25: rutas /api/* devuelven JSON 401, no HTML redirect.
+            # Antes el fetch del frontend recibía el HTML de /login, intentaba
+            # parsearlo como JSON, fallaba, y mostraba mensajes confusos como
+            # "lista de Industria/Tamaño no se cargó".
+            if request.path.startswith("/api/"):
+                from flask import jsonify
+                return jsonify({"error": "Sesión expirada", "session_expired": True}), 401
             return redirect(url_for("auth.login_page"))
         # KAMs solo pueden acceder a /cs/ y /logout
         if session.get("user_rol", "").upper() == "KAM":

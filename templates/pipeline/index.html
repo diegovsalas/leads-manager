@@ -2504,6 +2504,31 @@ function toggleSidebar(){
 if(localStorage.getItem('sidebar-collapsed')==='true') document.querySelector('.shell').classList.add('collapsed');
 
 const socket=io();
+
+// PATCH-2026-06-25: interceptor global de fetch para sesiones expiradas.
+// Si el backend regresa 401 con session_expired:true, mandamos al login una
+// sola vez (debounce con flag). Antes, los fetch fallaban silenciosamente y
+// el vendedor veía mensajes confusos como "lista de Industria/Tamaño no se cargó".
+(function(){
+  const _origFetch = window.fetch.bind(window);
+  let _redirected = false;
+  window.fetch = async function(...args){
+    const res = await _origFetch(...args);
+    if(res.status === 401 && !_redirected){
+      try{
+        const cloned = res.clone();
+        const j = await cloned.json();
+        if(j && j.session_expired){
+          _redirected = true;
+          alert('Tu sesión expiró. Vamos a recargar.');
+          window.location.href = '/login';
+        }
+      }catch(_){ /* no era JSON, ignoramos */ }
+    }
+    return res;
+  };
+})();
+
 // Role-based access
 window.ROL_USUARIO='{{ user_rol }}'.toLowerCase().replace(' ','_');
 window.VENDEDOR_ID='{{ usuario_id }}';
