@@ -374,9 +374,30 @@ TOOL_FUNCTIONS = {
     "exportar_leads":        tool_exportar_leads,
 }
 
+# Tools que SOLO un Super Admin puede invocar. Si un Vendedor las llamara,
+# las tools internas igualmente filtran, pero por defensa-en-profundidad ni
+# siquiera se las exponemos a Claude.
+ADMIN_ONLY_TOOLS = {"equipo_resumen", "vendedor_pendientes"}
+
+
+def schema_for_role(rol: str) -> list:
+    """Retorna el TOOLS_SCHEMA filtrado segun el rol del usuario.
+    SECURITY-2026-06-24: Vendedor NO ve tools de admin."""
+    es_admin = (rol or "").lower() in ("super admin", "super_admin", "admin")
+    if es_admin:
+        return TOOLS_SCHEMA
+    return [t for t in TOOLS_SCHEMA if t["name"] not in ADMIN_ONLY_TOOLS]
+
 
 def run_tool(name: str, args: dict, ctx: dict) -> dict:
     """Despacha una tool por nombre. Retorna dict serializable."""
+    # SECURITY-2026-06-24: bloqueo defensivo si el modelo intenta invocar
+    # una tool admin sin ser admin (no deberia pasar porque ni siquiera la
+    # ve, pero por si acaso).
+    if name in ADMIN_ONLY_TOOLS:
+        rol = (ctx.get("rol") or "").lower()
+        if rol not in ("super admin", "super_admin", "admin"):
+            return {"error": f"No tienes permisos para invocar {name}."}
     fn = TOOL_FUNCTIONS.get(name)
     if not fn:
         return {"error": f"Tool '{name}' no existe."}

@@ -49,7 +49,26 @@ def _apply_icp(lead):
 
 @leads_bp.route("/", methods=["GET"])
 def listar_leads():
-    leads = Lead.query.order_by(Lead.fecha_actualizacion.desc()).all()
+    """Lista leads. SECURITY-2026-06-24: vendedor solo ve los suyos.
+    Super Admin ve todo (puede pasar ?vendedor=<uuid> para filtrar a uno)."""
+    from blueprints.auth import get_vendedor_filter
+    vendedor_id = get_vendedor_filter()  # None si admin, uuid si vendedor
+    q = Lead.query
+    if vendedor_id:
+        # Vendedor solo ve sus propios leads
+        q = q.filter(Lead.usuario_asignado_id == vendedor_id)
+    else:
+        # Admin puede filtrar opcionalmente
+        filtro = (request.args.get("vendedor") or "").strip()
+        if filtro == "sin_asignar":
+            q = q.filter(Lead.usuario_asignado_id.is_(None))
+        elif filtro:
+            try:
+                uuid.UUID(filtro)
+                q = q.filter(Lead.usuario_asignado_id == filtro)
+            except (ValueError, TypeError):
+                pass
+    leads = q.order_by(Lead.fecha_actualizacion.desc()).all()
     return jsonify([l.to_dict() for l in leads])
 
 
@@ -409,15 +428,52 @@ def me():
 
 @leads_bp.route("/<uuid:lead_id>/mover", methods=["PATCH"])
 def mover_lead(lead_id):
+    from blueprints.auth import get_vendedor_filter
     lead = db.session.get(Lead, lead_id)
     if not lead:
         return jsonify({"error": "Lead no encontrado"}), 404
+
+    # SECURITY-2026-06-24: vendedor solo puede mover SUS leads
+    vendedor_id = get_vendedor_filter()
+    if vendedor_id and str(lead.usuario_asignado_id) != str(vendedor_id):
+        return jsonify({"error": "No tienes permisos sobre este lead"}), 403
 
     data = request.get_json() or {}
     try:
         nueva_etapa = EtapaPipeline(data.get("etapa_pipeline"))
     except (ValueError, KeyError):
         return jsonify({"error": "Etapa invalida"}), 400
+
+    # SECURITY-2026-06-24: validar transiciones de etapa (state machine)
+    # Reglas:
+    #   - Admin puede mover libre
+    #   - Vendedor: solo orden lineal o regresar; Cerrado Ganado SOLO desde
+    #     Cotización/Demo/Negociación/Presentación; Cerrado Perdido siempre OK
+    #     (descalificar en cualquier momento); de un Cerrado NO se puede salir.
+    if vendedor_id:  # solo vendedor (admin pasa libre)
+        orden = [
+            EtapaPipeline.NUEVO_LEAD, EtapaPipeline.CONTACTO_1, EtapaPipeline.CONTACTO_2,
+            EtapaPipeline.CONTACTO_3, EtapaPipeline.CONTACTO_4, EtapaPipeline.PRESENTACION,
+            EtapaPipeline.COTIZACION, EtapaPipeline.DEMO, EtapaPipeline.NEGOCIACION,
+        ]
+        etapas_cerradas = (EtapaPipeline.CIERRE_GANADO, EtapaPipeline.CIERRE_PERDIDO)
+        etapas_pre_ganado = (EtapaPipeline.PRESENTACION, EtapaPipeline.COTIZACION,
+                             EtapaPipeline.DEMO, EtapaPipeline.NEGOCIACION)
+        actual = lead.etapa_pipeline
+
+        if actual in etapas_cerradas:
+            return jsonify({"error": f"Lead ya está '{actual.value}' — no puede salir de ahí"}), 400
+
+        if nueva_etapa == EtapaPipeline.CIERRE_PERDIDO:
+            pass  # descalificar siempre permitido
+        elif nueva_etapa == EtapaPipeline.CIERRE_GANADO:
+            if actual not in etapas_pre_ganado:
+                return jsonify({"error": f"Solo se puede Cerrar Ganado desde Presentación/Cotización/Demo/Negociación (estás en '{actual.value}')"}), 400
+        else:
+            # Mover entre etapas del pipeline normal — permitir adelantar o regresar
+            # mientras ambas estén en el orden lineal. Bloquea brincos a etapas inexistentes.
+            if nueva_etapa not in orden or actual not in orden:
+                return jsonify({"error": "Transición no permitida"}), 400
 
     etapa_anterior = lead.etapa_pipeline.value
     lead.etapa_pipeline = nueva_etapa
@@ -491,9 +547,21 @@ def actualizar_lead(lead_id):
 
     if "etapa_pipeline" in data:
         try:
-            lead.etapa_pipeline = EtapaPipeline(data["etapa_pipeline"])
+            nueva_etapa = EtapaPipeline(data["etapa_pipeline"])
         except ValueError:
             return jsonify({"error": "Etapa invalida"}), 400
+        # SECURITY-2026-06-24: si es vendedor, validar transición igual que /mover
+        from blueprints.auth import get_vendedor_filter as _gvf
+        _vid = _gvf()
+        if _vid and lead.etapa_pipeline != nueva_etapa:
+            etapas_pre_ganado = (EtapaPipeline.PRESENTACION, EtapaPipeline.COTIZACION,
+                                 EtapaPipeline.DEMO, EtapaPipeline.NEGOCIACION)
+            etapas_cerradas = (EtapaPipeline.CIERRE_GANADO, EtapaPipeline.CIERRE_PERDIDO)
+            if lead.etapa_pipeline in etapas_cerradas:
+                return jsonify({"error": f"Lead ya está '{lead.etapa_pipeline.value}' — no puede salir de ahí"}), 400
+            if nueva_etapa == EtapaPipeline.CIERRE_GANADO and lead.etapa_pipeline not in etapas_pre_ganado:
+                return jsonify({"error": "Solo se puede Cerrar Ganado desde Presentación/Cotización/Demo/Negociación"}), 400
+        lead.etapa_pipeline = nueva_etapa
 
     # Recalcular ICP si se modificaron campos relevantes
     icp_fields = {"tipo_industria", "tamano_empresa", "num_sucursales", "tipo_cliente"}

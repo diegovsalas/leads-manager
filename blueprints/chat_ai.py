@@ -222,7 +222,7 @@ def message():
                     model=MODEL,
                     max_tokens=MAX_TOKENS,
                     system=system,
-                    tools=tools.TOOLS_SCHEMA,
+                    tools=tools.schema_for_role(ctx.get("rol")),
                     messages=messages,
                 )
             except Exception as e:

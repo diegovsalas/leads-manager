@@ -91,6 +91,27 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] etapa_pipeline 'Presentación' failed (retry on next boot): %s", e)
 
+        # ─── cs_invoices.savio_invoice_id UNIQUE (SECURITY-2026-06-24) ───
+        # Sin esto, una corrida con bug del sync podía duplicar filas de la
+        # misma factura de Savio y romper el cálculo de facturación / MRR.
+        try:
+            with db.engine.begin() as conn:
+                # Dedup defensivo: borra duplicados antes de crear el unique.
+                # Conserva la fila con id más bajo por savio_invoice_id.
+                conn.execute(text("""
+                    DELETE FROM cs_invoices a
+                    USING cs_invoices b
+                    WHERE a.savio_invoice_id IS NOT NULL
+                      AND a.savio_invoice_id = b.savio_invoice_id
+                      AND a.id > b.id
+                """))
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ux_cs_invoices_savio_invoice_id "
+                    "ON cs_invoices (savio_invoice_id) WHERE savio_invoice_id IS NOT NULL"
+                ))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] cs_invoices unique savio_invoice_id failed: %s", e)
+
 
 def create_app():
     app = Flask(__name__)
@@ -104,7 +125,19 @@ def create_app():
         db_url = db_url.replace("postgres://", "postgresql://", 1)
     app.config["SQLALCHEMY_DATABASE_URI"] = db_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+
+    # SECURITY-2026-06-24: cookies endurecidas
+    # - HttpOnly: cookie no accesible via document.cookie (mitiga XSS exfil)
+    # - Secure: cookie solo en HTTPS (Render siempre es HTTPS)
+    # - SameSite=Lax: CSRF protection
+    # - 8h: si nos roban una cookie, el daño termina pronto. Refresh-on-request
+    #   via session.permanent=True abajo asegura que vendedor activo nunca caduque
+    #   en medio del día.
+    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
+    app.config["SESSION_COOKIE_HTTPONLY"]    = True
+    app.config["SESSION_COOKIE_SECURE"]      = os.getenv("FLASK_ENV") != "development"
+    app.config["SESSION_COOKIE_SAMESITE"]    = "Lax"
+    app.config["SESSION_REFRESH_EACH_REQUEST"] = True  # extiende cookie en cada hit
 
     # Variables de Meta/WhatsApp accesibles en toda la app
     app.config["WHATSAPP_TOKEN"]    = os.getenv("WHATSAPP_TOKEN", "")
@@ -370,13 +403,19 @@ def _start_scheduler(app):
 
         def _run_notificaciones():
             with app.app_context():
-                from notificaciones import enviar_notificaciones_diarias
-                enviar_notificaciones_diarias()
+                try:
+                    from notificaciones import enviar_notificaciones_diarias
+                    enviar_notificaciones_diarias()
+                except Exception as e:
+                    app.logger.warning(f"notificaciones diarias: {e}")
 
         def _run_backup():
             with app.app_context():
-                from backups import ejecutar_backup
-                ejecutar_backup()
+                try:
+                    from backups import ejecutar_backup
+                    ejecutar_backup()
+                except Exception as e:
+                    app.logger.warning(f"backup diario: {e}")
 
         def _run_savio_invoices_payments():
             with app.app_context():
@@ -499,10 +538,13 @@ def _start_scheduler(app):
         if os.getenv("META_PAGE_TOKEN"):
             def _run_meta_polling():
                 with app.app_context():
-                    from meta_lead_polling import poll_and_create_leads
-                    result = poll_and_create_leads()
-                    if result.get("leads_created", 0) > 0:
-                        app.logger.info(f"Meta polling: {result}")
+                    try:
+                        from meta_lead_polling import poll_and_create_leads
+                        result = poll_and_create_leads()
+                        if result.get("leads_created", 0) > 0:
+                            app.logger.info(f"Meta polling: {result}")
+                    except Exception as e:
+                        app.logger.warning(f"meta polling: {e}")
 
             scheduler.add_job(_run_meta_polling, "interval", minutes=5, id="meta_lead_polling")
             app.logger.info("Meta Lead Ads polling activo (cada 5 min)")
@@ -511,10 +553,13 @@ def _start_scheduler(app):
         if os.getenv("LINKEDIN_ACCESS_TOKEN"):
             def _run_linkedin_polling():
                 with app.app_context():
-                    from linkedin_lead_polling import poll_and_create_leads
-                    result = poll_and_create_leads()
-                    if result.get("leads_created", 0) > 0:
-                        app.logger.info(f"LinkedIn polling: {result}")
+                    try:
+                        from linkedin_lead_polling import poll_and_create_leads
+                        result = poll_and_create_leads()
+                        if result.get("leads_created", 0) > 0:
+                            app.logger.info(f"LinkedIn polling: {result}")
+                    except Exception as e:
+                        app.logger.warning(f"linkedin polling: {e}")
 
             scheduler.add_job(_run_linkedin_polling, "interval", minutes=5, id="linkedin_lead_polling")
             app.logger.info("LinkedIn Lead Gen polling activo (cada 5 min)")
