@@ -115,10 +115,15 @@ def crear_o_actualizar_meta():
                     log.warning(f"metas POST: session.user_id {sess_uid} no existe en users_crm; created_by=NULL")
 
             step = "insert_meta_row"
+            # HOTFIX-2026-06-25: meta_mxn (legacy) nació NOT NULL en la DB de
+            # prod aunque el modelo lo marca nullable. Si no viene en el body,
+            # seteamos 0 explícitamente como fallback para que el INSERT no
+            # explote con NotNullViolation antes de que el auto-migrate corra.
             meta = MetaVendedor(
                 usuario_id=usuario_id,
                 mes=mes,
                 created_by=created_by_valid,
+                meta_mxn=montos_enviados.get("meta_mxn", 0),
             )
             db.session.add(meta)
 

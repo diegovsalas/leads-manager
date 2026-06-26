@@ -104,6 +104,20 @@ def _run_pending_migrations(app):
                         conn.execute(text(
                             f"ALTER TABLE metas_vendedor ADD COLUMN {col} NUMERIC(12,2)"
                         ))
+                # HOTFIX-2026-06-25: drop NOT NULL del meta_mxn legacy. El modelo
+                # dice nullable=True pero la columna en prod nació NOT NULL desde
+                # el create_all() original. Al hacer INSERT solo con
+                # meta_recurrente_mxn/meta_eventual_mxn, meta_mxn queda NULL y la
+                # constraint vieja explota con NotNullViolation.
+                col_info = conn.execute(text("""
+                    SELECT is_nullable FROM information_schema.columns
+                    WHERE table_name = 'metas_vendedor' AND column_name = 'meta_mxn'
+                """)).first()
+                if col_info and col_info[0] == "NO":
+                    app.logger.info("[auto-migrate] dropping NOT NULL on metas_vendedor.meta_mxn...")
+                    conn.execute(text(
+                        "ALTER TABLE metas_vendedor ALTER COLUMN meta_mxn DROP NOT NULL"
+                    ))
         except Exception as e:
             app.logger.warning("[auto-migrate] metas_vendedor split rec/ev failed: %s", e)
 
