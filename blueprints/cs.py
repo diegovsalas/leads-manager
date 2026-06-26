@@ -173,6 +173,74 @@ def _periodos_disponibles():
     ]
 
 
+def _calc_sucursales_efectivas(account_ids):
+    """FIX-2026-06-26: cuenta sucursales reales de cada cuenta.
+
+    El campo cs_accounts.sucursales es manual y se queda en 0 si el KAM
+    nunca lo edita. Esto deformaba los KPIs del dashboard (ej. Batia
+    aparecía en 0 sucursales pese a tener 86 sucursales operando en citas).
+
+    Estrategia (Opción 1 aprobada por Diego):
+      sucursales_efectivas = MAX(manual, props_cargadas, citas_distintas)
+      si los 3 son 0 → usa COUNT(DISTINCT concepto) de facturas como fallback.
+
+    Nunca BAJA un número ya conocido. No persiste cambios — solo cómputo.
+
+    Retorna dict {account_id (UUID): int}.
+    """
+    if not account_ids:
+        return {}
+
+    manual_rows = db.session.query(CSAccount.id, CSAccount.sucursales).filter(
+        CSAccount.id.in_(account_ids)
+    ).all()
+    manual = {r[0]: (r[1] or 0) for r in manual_rows}
+
+    props_rows = (
+        db.session.query(CSPropiedad.account_id, func.count(CSPropiedad.id))
+        .filter(CSPropiedad.account_id.in_(account_ids))
+        .group_by(CSPropiedad.account_id).all()
+    )
+    props = {r[0]: r[1] for r in props_rows}
+
+    citas_rows = (
+        db.session.query(
+            CSAppointment.account_id,
+            func.count(func.distinct(CSAppointment.propiedad)),
+        )
+        .filter(
+            CSAppointment.account_id.in_(account_ids),
+            CSAppointment.propiedad.isnot(None),
+            CSAppointment.propiedad != "",
+        )
+        .group_by(CSAppointment.account_id).all()
+    )
+    citas = {r[0]: r[1] for r in citas_rows}
+
+    conc_rows = (
+        db.session.query(
+            CSInvoice.account_id,
+            func.count(func.distinct(CSInvoice.concepto)),
+        )
+        .filter(
+            CSInvoice.account_id.in_(account_ids),
+            CSInvoice.concepto.isnot(None),
+            func.trim(CSInvoice.concepto) != "",
+        )
+        .group_by(CSInvoice.account_id).all()
+    )
+    conceptos = {r[0]: r[1] for r in conc_rows}
+
+    out = {}
+    for aid in account_ids:
+        m = manual.get(aid, 0)
+        p = props.get(aid, 0)
+        c = citas.get(aid, 0)
+        max3 = max(m, p, c)
+        out[aid] = max3 if max3 > 0 else conceptos.get(aid, 0)
+    return out
+
+
 def _calc_facturacion_periodo(account_ids, inicio, fin):
     """Calcula facturación del periodo. Separa pendiente vencido vs por cobrar (en plazo de crédito)."""
     from sqlalchemy import case
@@ -238,7 +306,10 @@ def dashboard():
     mrr_observado_total = sum(float(getattr(a, "mrr_observado", 0) or 0) for a in accounts)
     arr_total = sum(float(a.arr_proyectado or 0) for a in accounts)
     arr_observado_total = mrr_observado_total * 12
-    total_sucursales = sum(a.sucursales for a in accounts)
+    # FIX-2026-06-26: usar sucursales efectivas (max de fuentes), no el
+    # campo manual que se queda en 0 cuando el KAM no lo edita.
+    suc_efectivas = _calc_sucursales_efectivas(account_ids)
+    total_sucursales = sum(suc_efectivas.values())
     # Gap % (qué tan desactualizado está Savio respecto al recurrente real)
     gap_pct = ((mrr_observado_total - mrr_total) / mrr_total * 100) if mrr_total > 0 else 0
 
@@ -318,7 +389,8 @@ def dashboard():
             "num_cuentas": len(accs_kam),
             "mrr": sum(float(a.mrr or 0) for a in accs_kam),
             "mrr_observado": sum(float(getattr(a, "mrr_observado", 0) or 0) for a in accs_kam),
-            "sucursales": sum(a.sucursales for a in accs_kam),
+            # FIX-2026-06-26: usar sucursales efectivas (max de fuentes)
+            "sucursales": sum(suc_efectivas.get(a.id, 0) for a in accs_kam),
         })
 
     cuentas_onboarding = [a for a in accounts if a.es_cuenta_nueva]
