@@ -4937,16 +4937,27 @@ async function saveMeta(usuarioId, field, val){
   const mes=document.getElementById('metas-mes')?.value||'';
   const payload={usuario_id:usuarioId, mes:mes||undefined};
   payload[field] = (!val || isNaN(monto)) ? 0 : monto;
+  console.log('[saveMeta] payload:', payload);
   try{
     const r = await fetch('/api/metas/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    if(!r.ok){const e=await r.json().catch(()=>({error:'Error'}));throw new Error(e.error||'Falló');}
+    const respText = await r.text();
+    let respJson = null;
+    try{ respJson = JSON.parse(respText); }catch{}
+    console.log('[saveMeta] response', r.status, respJson || respText);
+    if(!r.ok){
+      const msg = (respJson && respJson.error) ? respJson.error : respText.slice(0,120);
+      throw new Error('HTTP '+r.status+': '+msg);
+    }
     const label = field==='meta_recurrente_mxn'?'🔁 Recurrente':'📅 Eventual';
     showToast('Meta guardada', label+' = '+(monto>0?fmt$(monto):'(sin meta)'));
     // FIX-2026-06-25: refrescar la tabla para que el % se recalcule contra
     // la nueva meta. Antes la tabla quedaba en su snapshot de page-load y
     // el % seguía mostrando 0% aunque hubiera ventas + meta.
     loadVendedores();
-  }catch(e){showToast('Error', e.message||'No se pudo guardar');}
+  }catch(e){
+    console.error('[saveMeta] error:', e);
+    showToast('Error', (e.message||'No se pudo guardar').slice(0,140));
+  }
 }
 
 async function loadMetaVendedor(){

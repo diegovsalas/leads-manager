@@ -68,45 +68,82 @@ def crear_o_actualizar_meta():
     Super Admin: crear o actualizar meta. Acepta cualquier subset de:
       { usuario_id, mes, meta_mxn, meta_recurrente_mxn, meta_eventual_mxn }
     Solo aplica los campos enviados (deja los demás como estaban).
+    HOTFIX-2026-06-25: tracking detallado del paso que falla y validación
+    de FKs antes del commit para evitar errores opacos en el toast.
     """
-    data = request.get_json() or {}
-    usuario_id = data.get("usuario_id")
-    mes = data.get("mes", _mes_actual())
+    import logging
+    log = logging.getLogger("metas")
 
-    if not usuario_id:
-        return jsonify({"error": "usuario_id requerido"}), 400
+    step = "parse_body"
+    try:
+        data = request.get_json() or {}
+        usuario_id = data.get("usuario_id")
+        mes = data.get("mes", _mes_actual())
 
-    # Por backward-compat: si solo viene meta_mxn legacy, lo aceptamos.
-    # Pero al menos UNO de los tres montos debe venir.
-    montos_enviados = {
-        k: data.get(k) for k in
-        ("meta_mxn", "meta_recurrente_mxn", "meta_eventual_mxn")
-        if k in data
-    }
-    if not montos_enviados:
-        return jsonify({"error": "Envía al menos un monto (meta_mxn, meta_recurrente_mxn o meta_eventual_mxn)"}), 400
+        if not usuario_id:
+            return jsonify({"error": "usuario_id requerido"}), 400
 
-    meta = MetaVendedor.query.filter_by(usuario_id=usuario_id, mes=mes).first()
-    if not meta:
-        meta = MetaVendedor(
-            usuario_id=usuario_id,
-            mes=mes,
-            created_by=session.get("user_id"),
-        )
-        db.session.add(meta)
+        # Validar que el usuario_id sea un UUID existente en `usuarios`
+        step = "validate_usuario_fk"
+        from models import Usuario, UserCRM
+        usuario = db.session.get(Usuario, usuario_id)
+        if not usuario:
+            return jsonify({"error": f"Vendedor {usuario_id[:8]}... no existe en usuarios. ¿Está su perfil comercial creado?"}), 400
 
-    for k, v in montos_enviados.items():
-        # Permitir limpiar la meta enviando 0/null
-        if v in (None, "", 0, "0"):
-            setattr(meta, k, None)
-        else:
-            try:
-                setattr(meta, k, float(v))
-            except (ValueError, TypeError):
-                return jsonify({"error": f"{k} debe ser numérico"}), 400
+        montos_enviados = {
+            k: data.get(k) for k in
+            ("meta_mxn", "meta_recurrente_mxn", "meta_eventual_mxn")
+            if k in data
+        }
+        if not montos_enviados:
+            return jsonify({"error": "Envía al menos un monto (meta_mxn, meta_recurrente_mxn o meta_eventual_mxn)"}), 400
 
-    db.session.commit()
-    return jsonify(meta.to_dict()), 201
+        step = "upsert_lookup"
+        meta = MetaVendedor.query.filter_by(usuario_id=usuario_id, mes=mes).first()
+        if not meta:
+            # Validar created_by FK antes de incluirlo en el INSERT.
+            # Si el user_id de la sesión no existe en users_crm (corner case),
+            # dejamos created_by como NULL para no romper el INSERT.
+            step = "validate_created_by_fk"
+            sess_uid = session.get("user_id")
+            created_by_valid = None
+            if sess_uid:
+                creator = db.session.get(UserCRM, sess_uid)
+                if creator:
+                    created_by_valid = sess_uid
+                else:
+                    log.warning(f"metas POST: session.user_id {sess_uid} no existe en users_crm; created_by=NULL")
+
+            step = "insert_meta_row"
+            meta = MetaVendedor(
+                usuario_id=usuario_id,
+                mes=mes,
+                created_by=created_by_valid,
+            )
+            db.session.add(meta)
+
+        step = "apply_montos"
+        for k, v in montos_enviados.items():
+            # Permitir limpiar la meta enviando 0/null
+            if v in (None, "", 0, "0"):
+                setattr(meta, k, None)
+            else:
+                try:
+                    setattr(meta, k, float(v))
+                except (ValueError, TypeError):
+                    return jsonify({"error": f"{k} debe ser numérico"}), 400
+
+        step = "commit"
+        db.session.commit()
+        return jsonify(meta.to_dict()), 201
+
+    except Exception as e:
+        db.session.rollback()
+        log.exception(f"metas POST falló en paso '{step}' (usuario_id={data.get('usuario_id') if 'data' in locals() else '?'})")
+        return jsonify({
+            "error": f"Error en paso '{step}': {type(e).__name__}: {str(e)[:200]}",
+            "step": step,
+        }), 500
 
 
 @metas_bp.route("/mi-progreso", methods=["GET"])
