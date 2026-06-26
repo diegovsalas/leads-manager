@@ -2318,15 +2318,25 @@ def eliminar_entregable(account_id, ent_id):
 # ══════════════════════════════════════════════
 @cs_bp.route("/account/<uuid:account_id>/qbr")
 def download_qbr(account_id):
+    """Descarga el QBR del trimestre actual por defecto.
+    Override con ?q=Q1+2026 (o Q2/Q3/Q4) para trimestres pasados.
+    FIX-2026-06-26: antes el trimestre estaba hardcoded en 'Q1 2026'."""
     account = db.session.get(CSAccount, account_id)
     if not account:
         return "Cuenta no encontrada", 404
-    from cs_qbr_generator import generar_qbr
-    excel_buffer = generar_qbr(account, trimestre="Q1 2026")
+    from cs_qbr_generator import generar_qbr, _parse_trim
+
+    # Si no viene en query string, _parse_trim hace fallback al trimestre actual
+    trimestre_param = request.args.get("q") or request.args.get("trimestre")
+    _, _, q_label, trim_full = _parse_trim(trimestre_param)
+    safe_q = q_label  # ej. "Q2"
+    safe_year = trim_full.split()[-1]
+
+    excel_buffer = generar_qbr(account, trimestre=trim_full)
     nombre_limpio = account.nombre.replace(" ", "_").replace("/", "-")
     return send_file(
         excel_buffer, as_attachment=True,
-        download_name=f"QBR_Q1_2026_{nombre_limpio}.xlsx",
+        download_name=f"QBR_{safe_q}_{safe_year}_{nombre_limpio}.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 

@@ -81,8 +81,46 @@ ALIGN_LEFT = Alignment(horizontal='left', vertical='center')
 ALIGN_RIGHT = Alignment(horizontal='right', vertical='center')
 ALIGN_WRAP = Alignment(horizontal='left', vertical='center', wrap_text=True)
 
-# Meses del Q1
-MESES_Q1 = {1: 'Enero', 2: 'Febrero', 3: 'Marzo'}
+# Meses (mapeo completo para QBR de cualquier trimestre)
+# FIX-2026-06-26: antes solo había Q1. Ahora soporta Q1-Q4 dinámicamente.
+MESES = {
+    1: 'Enero', 2: 'Febrero', 3: 'Marzo',
+    4: 'Abril', 5: 'Mayo', 6: 'Junio',
+    7: 'Julio', 8: 'Agosto', 9: 'Septiembre',
+    10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre',
+}
+MESES_Q1 = MESES  # alias legacy (por si algo externo lo importa)
+
+_TRIM_A_MESES = {
+    'Q1': (1, 2, 3),
+    'Q2': (4, 5, 6),
+    'Q3': (7, 8, 9),
+    'Q4': (10, 11, 12),
+}
+
+
+def _parse_trim(trimestre: str):
+    """Parsea 'Q2 2026' → (year=2026, meses=(4,5,6), q_label='Q2', full='Q2 2026').
+
+    Acepta 'Q1 2026', 'Q1_2026', 'q1-2026'. Si el formato es inválido,
+    cae al trimestre actual del sistema.
+    """
+    s = (trimestre or '').strip().upper().replace('_', ' ').replace('-', ' ')
+    parts = s.split()
+    q_label = parts[0] if parts and parts[0] in _TRIM_A_MESES else None
+    year = None
+    if len(parts) >= 2 and parts[1].isdigit():
+        year = int(parts[1])
+
+    if not q_label or not year:
+        # Fallback: trimestre actual del sistema
+        from datetime import date as _date
+        hoy = _date.today()
+        q_num = (hoy.month - 1) // 3 + 1
+        q_label = f'Q{q_num}'
+        year = hoy.year
+
+    return year, _TRIM_A_MESES[q_label], q_label, f'{q_label} {year}'
 
 
 def _apply_header_row(ws, row, max_col, fill=AZUL_OSCURO):
@@ -127,8 +165,8 @@ def _pct_font(value):
 # Lógica de datos
 # ---------------------------------------------------------------------------
 
-def _get_appointments_data(account: Account):
-    """Obtiene y estructura todas las citas de la cuenta."""
+def _get_appointments_data(account: Account, year: int, meses: tuple):
+    """Obtiene y estructura todas las citas de la cuenta en el trimestre dado."""
     apts = (Appointment.query
             .filter_by(account_id=account.id)
             .order_by(Appointment.fecha_inicio.desc())
@@ -138,8 +176,8 @@ def _get_appointments_data(account: Account):
     for a in apts:
         mes = a.fecha_inicio.month if a.fecha_inicio else None
         anio = a.fecha_inicio.year if a.fecha_inicio else None
-        # Solo Q1 2026
-        if mes is None or anio != 2026 or mes not in (1, 2, 3):
+        # Solo el trimestre solicitado
+        if mes is None or anio != year or mes not in meses:
             continue
 
         es_recurrente = a.titulo_servicio in SERVICIOS_RECURRENTES
@@ -222,14 +260,19 @@ def _clasificar_cobertura(records_sucursal):
 # Generación del Excel
 # ---------------------------------------------------------------------------
 
-def generar_qbr(account: Account, trimestre: str = 'Q1 2026') -> BytesIO:
+def generar_qbr(account: Account, trimestre: str = None) -> BytesIO:
     """
     Genera el reporte QBR en Excel y lo devuelve como BytesIO.
+    Si no se pasa trimestre, usa el trimestre actual del sistema.
     """
+    # FIX-2026-06-26: trimestre dinámico (antes hardcode "Q1 2026")
+    year, meses_trim, q_label, trimestre_full = _parse_trim(trimestre)
+    trimestre = trimestre_full  # para que se imprima bien en el banner
+
     wb = Workbook()
 
     # Obtener datos
-    all_records = _get_appointments_data(account)
+    all_records = _get_appointments_data(account, year, meses_trim)
     limpios, descartados = _deduplicar(all_records)
 
     # Separar recurrentes y eventos
@@ -336,7 +379,7 @@ def generar_qbr(account: Account, trimestre: str = 'Q1 2026') -> BytesIO:
         total_term = 0
         total_agendadas = 0
 
-        for mes_num in (1, 2, 3):
+        for mes_num in meses_trim:
             row += 1
             recs_mes = [r for r in recs_tipo if r['mes'] == mes_num]
             base = len(portafolio)
@@ -351,7 +394,7 @@ def generar_qbr(account: Account, trimestre: str = 'Q1 2026') -> BytesIO:
             total_term += terminadas
             total_agendadas += agendadas
 
-            vals = [MESES_Q1[mes_num], base, agendadas, sin_agendar,
+            vals = [MESES[mes_num], base, agendadas, sin_agendar,
                     terminadas, canceladas, no_realizadas, pct, None]
             for c, v in enumerate(vals, 1):
                 cell = ws1.cell(row=row, column=c, value=v)
@@ -366,15 +409,15 @@ def generar_qbr(account: Account, trimestre: str = 'Q1 2026') -> BytesIO:
 
             _apply_data_row(ws1, row, len(headers), mes_num % 2 == 0)
 
-        # Subtotal Q1
+        # Subtotal del trimestre
         row += 1
-        base_q1 = len(portafolio) * 3
-        pct_q1 = total_term / base_q1 if base_q1 > 0 else 0
-        vals_total = ['TOTAL Q1', base_q1, total_agendadas,
-                      max(0, base_q1 - total_agendadas), total_term,
+        base_q = len(portafolio) * len(meses_trim)
+        pct_q = total_term / base_q if base_q > 0 else 0
+        vals_total = [f'TOTAL {q_label}', base_q, total_agendadas,
+                      max(0, base_q - total_agendadas), total_term,
                       sum(1 for r in recs_tipo if r['estatus'] == 'Cancelada'),
                       sum(1 for r in recs_tipo if r['estatus'] == 'No Realizada'),
-                      pct_q1, None]
+                      pct_q, None]
         for c, v in enumerate(vals_total, 1):
             cell = ws1.cell(row=row, column=c, value=v)
             cell.font = FONT_BOLD
@@ -404,7 +447,7 @@ def generar_qbr(account: Account, trimestre: str = 'Q1 2026') -> BytesIO:
 
         for tipo_srv in tipos_eventos:
             recs_ev = [r for r in eventos if r['servicio'] == tipo_srv]
-            for mes_num in (1, 2, 3):
+            for mes_num in meses_trim:
                 recs_mes = [r for r in recs_ev if r['mes'] == mes_num]
                 if not recs_mes:
                     continue
@@ -418,7 +461,7 @@ def generar_qbr(account: Account, trimestre: str = 'Q1 2026') -> BytesIO:
                               if r['estatus'] == 'No Realizada')
                 pct = terminadas / agendadas if agendadas > 0 else 0
 
-                vals = [tipo_srv, MESES_Q1[mes_num], agendadas, terminadas,
+                vals = [tipo_srv, MESES[mes_num], agendadas, terminadas,
                         canceladas, no_real, pct, None]
                 for c, v in enumerate(vals, 1):
                     cell = ws1.cell(row=row, column=c, value=v)
@@ -510,16 +553,17 @@ def generar_qbr(account: Account, trimestre: str = 'Q1 2026') -> BytesIO:
     ws3 = wb.create_sheet('Cobertura Sucursales')
     ws3.sheet_properties.tabColor = '16A34A'
 
-    s_headers = ['Sucursal', 'Zona', 'Enero', 'Febrero', 'Marzo',
+    # FIX-2026-06-26: nombres de meses dinámicos según el trimestre
+    s_headers = ['Sucursal', 'Zona'] + [MESES[m] for m in meses_trim] + [
                  'Terminadas', 'Total Citas', 'Clasificación']
     for c, h in enumerate(s_headers, 1):
         ws3.cell(row=1, column=c, value=h)
     _apply_header_row(ws3, 1, len(s_headers))
 
-    # Agrupar recurrentes por sucursal
+    # Agrupar recurrentes por sucursal — meses dinámicos según trimestre
     sucs_data = defaultdict(lambda: {
         'zona': 'Sin zona',
-        'meses': {1: [], 2: [], 3: []}
+        'meses': {m: [] for m in meses_trim}
     })
     for r in recurrentes:
         sd = sucs_data[r['propiedad']]
@@ -529,13 +573,13 @@ def generar_qbr(account: Account, trimestre: str = 'Q1 2026') -> BytesIO:
     # También incluir sucursales del portafolio sin citas
     for prop in portafolio:
         if prop not in sucs_data:
-            sucs_data[prop] = {'zona': 'Sin zona', 'meses': {1: [], 2: [], 3: []}}
+            sucs_data[prop] = {'zona': 'Sin zona', 'meses': {m: [] for m in meses_trim}}
 
     row = 2
     for prop in sorted(sucs_data.keys()):
         sd = sucs_data[prop]
         all_recs = []
-        for m in (1, 2, 3):
+        for m in meses_trim:
             all_recs.extend(sd['meses'][m])
 
         terminadas = sum(1 for e in all_recs if e == 'Terminada')
@@ -546,9 +590,11 @@ def generar_qbr(account: Account, trimestre: str = 'Q1 2026') -> BytesIO:
         ws3.cell(row=row, column=1, value=prop).font = FONT_NORMAL
         ws3.cell(row=row, column=2, value=sd['zona']).font = FONT_NORMAL
 
-        # Estatus por mes con semáforo (columnas 3, 4, 5 → meses 1, 2, 3)
-        for mes_num in (1, 2, 3):
-            col = mes_num + 2  # col 3=Enero, 4=Feb, 5=Mar
+        # Estatus por mes con semáforo. FIX-2026-06-26: columnas dinámicas
+        # según el trimestre (antes solo Q1 → cols 3,4,5).
+        # Layout: Sucursal[1], Zona[2], <meses>, Terminadas, Total, Clasif.
+        for idx, mes_num in enumerate(meses_trim):
+            col = 3 + idx
             cell = ws3.cell(row=row, column=col)
             estatuses = sd['meses'][mes_num]
 
@@ -568,10 +614,13 @@ def generar_qbr(account: Account, trimestre: str = 'Q1 2026') -> BytesIO:
             cell.alignment = ALIGN_CENTER
             cell.border = BORDER_THIN
 
-        ws3.cell(row=row, column=6, value=terminadas).font = FONT_NORMAL
-        ws3.cell(row=row, column=7, value=total).font = FONT_NORMAL
+        _col_term  = 3 + len(meses_trim)
+        _col_total = _col_term + 1
+        _col_clasif = _col_total + 1
+        ws3.cell(row=row, column=_col_term, value=terminadas).font = FONT_NORMAL
+        ws3.cell(row=row, column=_col_total, value=total).font = FONT_NORMAL
 
-        cell_clasif = ws3.cell(row=row, column=8, value=clasificacion)
+        cell_clasif = ws3.cell(row=row, column=_col_clasif, value=clasificacion)
         cell_clasif.font = FONT_BOLD
         if clasificacion == 'COMPLETO':
             cell_clasif.fill = VERDE_LIGHT
@@ -605,7 +654,7 @@ def generar_qbr(account: Account, trimestre: str = 'Q1 2026') -> BytesIO:
     for r in sorted(limpios, key=lambda x: (x['mes'], x['propiedad'])):
         vals = [
             r['id'], r['propiedad'], r['zona'], r['servicio'],
-            r['tipo_servicio'].capitalize(), MESES_Q1.get(r['mes'], ''),
+            r['tipo_servicio'].capitalize(), MESES.get(r['mes'], ''),
             r['estatus'], r['tecnico'],
             r['fecha_inicio'].strftime('%d/%m/%Y %H:%M') if r['fecha_inicio'] else '',
             r['fecha_terminacion'].strftime('%d/%m/%Y %H:%M') if r['fecha_terminacion'] else '',
@@ -647,7 +696,7 @@ def generar_qbr(account: Account, trimestre: str = 'Q1 2026') -> BytesIO:
     for r in descartados:
         vals = [
             r['id'], r['propiedad'], r['servicio'],
-            MESES_Q1.get(r['mes'], ''), r['estatus'],
+            MESES.get(r['mes'], ''), r['estatus'],
             r['fecha_inicio'].strftime('%d/%m/%Y %H:%M') if r['fecha_inicio'] else '',
             'Duplicado — se conservó registro más reciente/Terminada',
         ]
