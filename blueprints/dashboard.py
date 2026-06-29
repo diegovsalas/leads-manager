@@ -21,6 +21,13 @@ def _apply_vendedor_filter(query):
     return query
 
 
+def _apply_un_filter(query):
+    """FEAT-2026-06-29: filtra query de Lead por la UN del request.
+    No-op si no viene ?un= o si la UN es 'todas' / inválida."""
+    from un_filter import filtrar_leads_por_un
+    return filtrar_leads_por_un(query, Lead, request.args.get("un"))
+
+
 def _get_date_range(mes_param):
     """Retorna (inicio_mes, fin_mes) a partir de param ?mes=2026-04."""
     if mes_param:
@@ -49,6 +56,8 @@ def pipeline_valores():
     vid = get_vendedor_filter()
     if vid:
         q = q.filter(Lead.usuario_asignado_id == vid)
+    # FEAT-2026-06-29: filtro global por UN
+    q = _apply_un_filter(q)
 
     resultados = q.group_by(Lead.etapa_pipeline).all()
 
@@ -73,6 +82,7 @@ def embudo():
         Lead.fecha_creacion < fin_mes,
     )
     leads_q = _apply_vendedor_filter(leads_q)
+    leads_q = _apply_un_filter(leads_q)
 
     total = leads_q.count()
 
@@ -114,6 +124,7 @@ def embudo():
     vid = get_vendedor_filter()
     if vid:
         rev_q = rev_q.filter(Lead.usuario_asignado_id == vid)
+    rev_q = _apply_un_filter(rev_q)
     revenue = float(rev_q.scalar() or 0)
 
     # Pipe Activo: SIN filtro de fecha (es snapshot actual, no del mes) y
@@ -128,6 +139,7 @@ def embudo():
     )
     if vid:
         pipe_q = pipe_q.filter(Lead.usuario_asignado_id == vid)
+    pipe_q = _apply_un_filter(pipe_q)
     pipe_total = float(pipe_q.scalar() or 0)
 
     # Gastos (solo super_admin ve gastos reales, vendedor ve 0)
@@ -253,6 +265,7 @@ def marketing_roi():
         Lead.fecha_creacion < fin_mes,
     )
     leads_q = _apply_vendedor_filter(leads_q)
+    leads_q = _apply_un_filter(leads_q)
     if marca_filter:
         leads_q = leads_q.filter(Lead.marca_interes == marca_filter)
 
@@ -380,6 +393,7 @@ def leads_por_origen():
         Lead.fecha_creacion < fin_mes,
     )
     leads_q = _apply_vendedor_filter(leads_q)
+    leads_q = _apply_un_filter(leads_q)
     if marca:
         leads_q = leads_q.filter(Lead.marca_interes == marca)
 

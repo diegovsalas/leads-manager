@@ -10,14 +10,59 @@
         <h1>Dashboard</h1>
         <p class="sub">Grupo Avantex · Customer Success · {{ periodo_label }}</p>
     </div>
-    <div class="actions">
-        <select onchange="window.location='/cs/?periodo='+this.value" class="btn" style="appearance:auto;padding-right:24px">
+    <div class="actions" style="display:flex;gap:8px;align-items:center;">
+        <!-- FEAT-2026-06-29: filtro global por Unidad de Negocio -->
+        <select id="cs-un-select" onchange="_csChangeUN(this.value)" class="btn" style="appearance:auto;padding-right:24px;" title="Unidad de Negocio">
+            <option value="">Todas las UN</option>
+            <option value="Aromatex">🟧 Aromatex</option>
+            <option value="Pestex">🟨 Pestex</option>
+            <option value="Weldex">🟦 Weldex</option>
+            <option value="Nexo">🟪 Nexo</option>
+        </select>
+        <select onchange="_csChangePeriodo(this.value)" class="btn" style="appearance:auto;padding-right:24px">
             {% for p in periodos %}
             <option value="{{ p.value }}" {% if p.value == periodo_param %}selected{% endif %}>{{ p.label }}</option>
             {% endfor %}
         </select>
     </div>
 </div>
+
+<script>
+// FEAT-2026-06-29: filtro UN persistente para CS Dashboard
+(function(){
+  const sel = document.getElementById('cs-un-select');
+  if(!sel) return;
+  const saved = localStorage.getItem('avantex_un');
+  if(saved && saved !== 'Todas') sel.value = saved;
+})();
+function _csQS(params){
+  // params: dict { un: 'Aromatex', periodo: '2026-06' } — usa los actuales si no se override
+  const cur = new URLSearchParams(window.location.search);
+  Object.entries(params).forEach(([k,v])=>{
+    if(v === '' || v == null) cur.delete(k);
+    else cur.set(k, v);
+  });
+  const q = cur.toString();
+  return '/cs/' + (q ? '?' + q : '');
+}
+function _csChangeUN(un){
+  if(!un) localStorage.removeItem('avantex_un');
+  else localStorage.setItem('avantex_un', un);
+  window.location = _csQS({un: un || null});
+}
+function _csChangePeriodo(p){
+  window.location = _csQS({periodo: p});
+}
+// Si llega sin ?un= pero hay uno en localStorage, redirige con el param
+(function(){
+  const cur = new URLSearchParams(window.location.search);
+  const saved = localStorage.getItem('avantex_un');
+  if(saved && saved !== 'Todas' && !cur.has('un')){
+    cur.set('un', saved);
+    window.location.replace('/cs/?' + cur.toString());
+  }
+})();
+</script>
 
 <!-- Alert strip -->
 {% if alertas %}

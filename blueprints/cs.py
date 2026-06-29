@@ -294,6 +294,9 @@ def dashboard():
     q = CSAccount.query
     if kam_filter:
         q = q.filter_by(kam_id=kam_filter)
+    # FEAT-2026-06-29: filtro global por UN
+    from un_filter import filtrar_cs_accounts_por_un
+    q = filtrar_cs_accounts_por_un(q, CSAccount, request.args.get("un"))
     accounts = q.all()
     account_ids = [a.id for a in accounts]
 
@@ -943,7 +946,11 @@ def kam_view(kam_id=None):
     if not kam:
         return "KAM no encontrado", 404
 
-    accounts = CSAccount.query.filter_by(kam_id=kam.id).order_by(CSAccount.mrr.desc()).all()
+    # FEAT-2026-06-29: filtro global por UN también dentro de kam_view
+    from un_filter import filtrar_cs_accounts_por_un
+    q = CSAccount.query.filter_by(kam_id=kam.id)
+    q = filtrar_cs_accounts_por_un(q, CSAccount, request.args.get("un"))
+    accounts = q.order_by(CSAccount.mrr.desc()).all()
     scores_map = calcular_health_scores_batch(accounts)
 
     account_scores = []

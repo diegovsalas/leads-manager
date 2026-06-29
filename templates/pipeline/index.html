@@ -335,6 +335,18 @@ fbq('track','PageView');
     <button class="portal-btn"        data-portal="admin"     onclick="switchPortal('admin')"     style="flex:1;font-size:11px;padding:6px 4px;border:0;border-radius:6px;color:rgba(255,255,255,.65);background:transparent;font-weight:600;cursor:pointer;">⚙️ Admin</button>
   </div>
 
+  <!-- FEAT-2026-06-29: Filtro global por Unidad de Negocio. Persistente. -->
+  <div style="margin:4px 12px 8px;padding:6px 8px;background:rgba(255,255,255,.08);border-radius:8px;border:1px solid rgba(255,255,255,.12);">
+    <div style="font-size:9px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;font-weight:600;">Unidad de Negocio</div>
+    <select id="un-global-select" onchange="setUN(this.value || 'Todas')" style="width:100%;font-size:12px;padding:4px 6px;border-radius:5px;border:1px solid rgba(255,255,255,.2);background:rgba(0,0,0,.25);color:#fff;font-weight:600;cursor:pointer;">
+      <option value="">Todas las UN</option>
+      <option value="Aromatex">🟧 Aromatex</option>
+      <option value="Pestex">🟨 Pestex</option>
+      <option value="Weldex">🟦 Weldex</option>
+      <option value="Nexo">🟪 Nexo</option>
+    </select>
+  </div>
+
   <nav style="flex:1;overflow-y:auto;padding:4px 0;">
     <!-- ═══ PORTAL OPERACIÓN (vendedor y admin lo ven) ═══ -->
     <div class="portal-section" data-portal="operacion">
@@ -630,7 +642,7 @@ fbq('track','PageView');
             <div class="k-card-detail">{{ lead.cantidad_productos }} x ${{ "{:,.0f}".format(lead.precio_unitario) }}</div>
             {% endif %}
             <div class="k-card-tags">
-              {% if lead.marca_interes %}<span class="tag tag-marca">{{ lead.marca_interes }}</span>{% endif %}
+              {% if lead.marca_interes %}<span class="tag tag-marca">{{ lead.marca_interes }}</span>{% else %}<span class="tag" style="background:#fee2e2;color:#991b1b;font-weight:600;" title="Este lead no tiene UN asignada. Edítalo para clasificarlo.">⚠ Sin UN</span>{% endif %}
               {% if lead.meta_campaign_info %}<span class="tag" style="background:#e0e7ff;color:#3730a3;font-weight:600;" title="{{ lead.meta_campaign_info.nombre }}">📣 {{ lead.meta_campaign_info.nombre }}</span>{% elif lead.meta_campaign %}<span class="tag" style="background:#f3f4f6;color:#6b7280;font-family:var(--mono);font-size:10px;" title="Campaign ID Meta (no registrada)">📣 {{ lead.meta_campaign[-10:] }}</span>{% endif %}
               {% if lead.valor_calculado %}<span class="tag tag-valor">${{ "{:,.0f}".format(lead.valor_calculado) }}</span>{% endif %}
               {% if lead.tipo_cliente == 'Recurrente' %}<span class="tag" style="background:#dcfce7;color:#16a34a;">Cliente recurrente</span>{% endif %}
@@ -2540,14 +2552,36 @@ if(localStorage.getItem('sidebar-collapsed')==='true') document.querySelector('.
 const socket=io();
 
 // PATCH-2026-06-25: interceptor global de fetch para sesiones expiradas.
-// Si el backend regresa 401 con session_expired:true, mandamos al login una
-// sola vez (debounce con flag). Antes, los fetch fallaban silenciosamente y
-// el vendedor veía mensajes confusos como "lista de Industria/Tamaño no se cargó".
+// FEAT-2026-06-29: también inyecta el filtro de UN actual a todos los
+// fetches que vayan a /api/* o /cs/* (excluye POSTs con body para no
+// romperlos). El filtro de UN se persiste en localStorage.
 (function(){
   const _origFetch = window.fetch.bind(window);
   let _redirected = false;
-  window.fetch = async function(...args){
-    const res = await _origFetch(...args);
+
+  // Helper para agregar ?un= al URL si hay filtro activo y no viene ya
+  function _injectUN(url){
+    try{
+      const un = (localStorage.getItem('avantex_un') || '').trim();
+      if(!un || un === 'Todas') return url;
+      // Solo a endpoints internos
+      const path = typeof url === 'string' ? url : url.url;
+      if(!/^\/(api|cs)\//.test(path)) return url;
+      // No duplicar
+      if(/[?&]un=/.test(path)) return url;
+      const sep = path.includes('?') ? '&' : '?';
+      const newPath = path + sep + 'un=' + encodeURIComponent(un);
+      return typeof url === 'string' ? newPath : new Request(newPath, url);
+    }catch{ return url; }
+  }
+
+  window.fetch = async function(input, init){
+    // Solo inyectamos en GET (los POST/PUT pueden tener el filtro en body)
+    const method = (init && init.method) ? init.method.toUpperCase() : 'GET';
+    if(method === 'GET'){
+      input = _injectUN(input);
+    }
+    const res = await _origFetch(input, init);
     if(res.status === 401 && !_redirected){
       try{
         const cloned = res.clone();
@@ -2563,9 +2597,37 @@ const socket=io();
   };
 })();
 
+// FEAT-2026-06-29: helpers globales de filtro UN
+window.UN_CANONICAS = ['Aromatex', 'Pestex', 'Weldex', 'Nexo'];
+window.getUN = function(){
+  return (localStorage.getItem('avantex_un') || 'Todas');
+};
+window.setUN = function(un){
+  if(!un || un === 'Todas'){
+    localStorage.removeItem('avantex_un');
+  }else{
+    localStorage.setItem('avantex_un', un);
+  }
+  // Re-render de TODO lo visible
+  try{
+    if(typeof loadKanban === 'function') loadKanban();
+    if(typeof loadDashboard === 'function') loadDashboard();
+    if(typeof loadVendedores === 'function') loadVendedores();
+    if(typeof loadMetaVendedor === 'function') loadMetaVendedor();
+    // Sync el dropdown del UI
+    const sel = document.getElementById('un-global-select');
+    if(sel) sel.value = (un === 'Todas' ? '' : un);
+    const lbl = document.getElementById('un-global-label');
+    if(lbl) lbl.textContent = (un === 'Todas' ? 'Todas las UN' : un);
+  }catch(e){ console.warn('setUN re-render:', e); }
+};
+
+// Default según rol (lo seteamos en DOMContentLoaded, ver más abajo)
+
 // Role-based access
 window.ROL_USUARIO='{{ user_rol }}'.toLowerCase().replace(' ','_');
 window.VENDEDOR_ID='{{ usuario_id }}';
+window.MI_ESPECIALIDAD = {{ mi_especialidad|tojson|safe }};
 const IS_ADMIN=ROL_USUARIO==='super_admin';
 let leadActivo=null,draggingId=null,filtroMarca='';
 
@@ -2611,6 +2673,31 @@ window.addEventListener('DOMContentLoaded', ()=>{
       }
     }
   }catch{}
+
+  // FEAT-2026-06-29: inicializa el filtro UN según rol + especialidad,
+  // o lo restaura si el usuario ya había seteado uno antes.
+  try{
+    const sel = document.getElementById('un-global-select');
+    if(sel){
+      let unInicial = localStorage.getItem('avantex_un');
+      if(!unInicial){
+        // Default por rol: vendedor con 1 sola UN canónica → esa UN; resto → Todas
+        const esp = (window.MI_ESPECIALIDAD || []);
+        const norm = {
+          'aromatex':'Aromatex', 'aromatex home':'Aromatex',
+          'pestex':'Pestex', 'weldex':'Weldex', 'nexo':'Nexo'
+        };
+        const canon = new Set();
+        esp.forEach(m=>{ const c = norm[(m||'').toLowerCase()]; if(c) canon.add(c); });
+        if(!IS_ADMIN && ROL_USUARIO !== 'kam' && canon.size === 1){
+          unInicial = [...canon][0];
+          localStorage.setItem('avantex_un', unInicial);
+        }
+      }
+      sel.value = (unInicial && unInicial !== 'Todas') ? unInicial : '';
+    }
+  }catch(e){ console.warn('UN init:', e); }
+
   if(!IS_ADMIN) return;
   try{
     const saved = localStorage.getItem('avantex_portal');

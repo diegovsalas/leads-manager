@@ -192,10 +192,18 @@ def mi_progreso():
 @metas_bp.route("/resumen-equipo", methods=["GET"])
 @require_role(["super_admin"])
 def resumen_equipo():
-    """Super Admin: tabla comparativa de todos los vendedores con DOS metas y DOS avances."""
+    """Super Admin: tabla comparativa de todos los vendedores con DOS metas y DOS avances.
+    FEAT-2026-06-29: filtro global ?un= por especialidad_marca."""
+    from un_filter import usuario_pertenece_a_un
     mes = request.args.get("mes", _mes_actual())
+    un = request.args.get("un")
 
-    vendedores = Usuario.query.filter(Usuario.en_turno.is_(True)).order_by(Usuario.nombre).all()
+    vendedores_all = Usuario.query.filter(Usuario.en_turno.is_(True)).order_by(Usuario.nombre).all()
+    if un:
+        vendedores = [v for v in vendedores_all
+                      if usuario_pertenece_a_un(v.especialidad_marca, un)]
+    else:
+        vendedores = vendedores_all
     resultado = []
 
     for v in vendedores:

@@ -11,8 +11,17 @@ vendedores_bp = Blueprint("vendedores", __name__)
 
 @vendedores_bp.route("/", methods=["GET"])
 def listar():
-    """Lista vendedores (perfil comercial) enriquecidos con info de login."""
-    vendedores = Usuario.query.order_by(Usuario.nombre).all()
+    """Lista vendedores (perfil comercial) enriquecidos con info de login.
+    FEAT-2026-06-29: filtro global ?un= por especialidad_marca."""
+    from un_filter import usuario_pertenece_a_un
+    from flask import request as _req
+    vendedores_all = Usuario.query.order_by(Usuario.nombre).all()
+    un = _req.args.get("un")
+    if un:
+        vendedores = [v for v in vendedores_all
+                      if usuario_pertenece_a_un(v.especialidad_marca, un)]
+    else:
+        vendedores = vendedores_all
     # Lookup de logins vinculados (1 query)
     logins = {
         str(u.usuario_id): u for u in UserCRM.query

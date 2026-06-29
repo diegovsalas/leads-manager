@@ -50,15 +50,17 @@ def _apply_icp(lead):
 @leads_bp.route("/", methods=["GET"])
 def listar_leads():
     """Lista leads. SECURITY-2026-06-24: vendedor solo ve los suyos.
-    Super Admin ve todo (puede pasar ?vendedor=<uuid> para filtrar a uno)."""
+    Super Admin ve todo (puede pasar ?vendedor=<uuid> para filtrar a uno).
+    FEAT-2026-06-29: filtro global ?un=Aromatex/Pestex/Weldex/Nexo.
+    Leads sin marca_interes siguen visibles aunque haya filtro
+    (forzar al equipo a clasificarlos)."""
     from blueprints.auth import get_vendedor_filter
-    vendedor_id = get_vendedor_filter()  # None si admin, uuid si vendedor
+    from un_filter import filtrar_leads_por_un
+    vendedor_id = get_vendedor_filter()
     q = Lead.query
     if vendedor_id:
-        # Vendedor solo ve sus propios leads
         q = q.filter(Lead.usuario_asignado_id == vendedor_id)
     else:
-        # Admin puede filtrar opcionalmente
         filtro = (request.args.get("vendedor") or "").strip()
         if filtro == "sin_asignar":
             q = q.filter(Lead.usuario_asignado_id.is_(None))
@@ -68,6 +70,8 @@ def listar_leads():
                 q = q.filter(Lead.usuario_asignado_id == filtro)
             except (ValueError, TypeError):
                 pass
+    # Filtro global por UN
+    q = filtrar_leads_por_un(q, Lead, request.args.get("un"))
     leads = q.order_by(Lead.fecha_actualizacion.desc()).all()
     return jsonify([l.to_dict() for l in leads])
 

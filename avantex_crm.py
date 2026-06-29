@@ -412,6 +412,17 @@ def create_app():
                 "oppos":        oppos_by_pipe_etapa.get(etapa, []),  # oppos huérfanos mapeados
             }
         from meta_conversions import get_pixel_ids
+        # FEAT-2026-06-29: pasar especialidad del vendedor para el default
+        # del filtro UN
+        mi_especialidad = []
+        if session.get("usuario_id"):
+            from models import Usuario as _U
+            try:
+                _u = db.session.get(_U, session["usuario_id"])
+                if _u and _u.especialidad_marca:
+                    mi_especialidad = list(_u.especialidad_marca)
+            except Exception:
+                pass
         return render_template(
             "pipeline/index.html",
             pipeline=pipeline,
@@ -419,6 +430,7 @@ def create_app():
             user_nombre=session.get("user_nombre", ""),
             user_rol=session.get("user_rol", ""),
             usuario_id=session.get("usuario_id", ""),
+            mi_especialidad=mi_especialidad,
             meta_pixels=get_pixel_ids(),
             vendedores_list=vendedores_list,
             filtro_vendedor=filtro_vendedor,
