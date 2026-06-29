@@ -652,16 +652,24 @@ def vendedores_tabla():
 @dashboard_bp.route("/vendedores-review", methods=["GET"])
 @require_role(["super_admin"])
 def vendedores_review():
-    """Lista de vendedores con KPIs resumen para la vista master de revisión."""
+    """Lista de vendedores con KPIs resumen para la vista master de revisión.
+    FEAT-2026-06-29: filtro global ?un= por especialidad_marca."""
     from models import Usuario
+    from un_filter import usuario_pertenece_a_un
     mes_param = request.args.get("mes")
     inicio, fin = _get_date_range(mes_param)
+    un = request.args.get("un")
 
-    vendedores = (
+    vendedores_all = (
         Usuario.query
         .filter(Usuario.en_turno.is_(True))
         .order_by(Usuario.nombre.asc()).all()
     )
+    if un:
+        vendedores = [v for v in vendedores_all
+                      if usuario_pertenece_a_un(v.especialidad_marca, un)]
+    else:
+        vendedores = vendedores_all
     out = []
     for v in vendedores:
         kpis = _kpis_vendedor(v.id, inicio, fin)

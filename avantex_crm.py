@@ -354,6 +354,12 @@ def create_app():
             else:
                 q = q.filter(Lead.usuario_asignado_id == filtro_vendedor)
 
+        # FEAT-2026-06-29: aplicar filtro UN al SSR del kanban inicial.
+        # Sin esto, recargar la página mostraba TODOS los leads aunque el
+        # selector UN del sidebar dijera 'Pestex'.
+        from un_filter import filtrar_leads_por_un
+        q = filtrar_leads_por_un(q, Lead, request.args.get("un"))
+
         # Lista de vendedores para el dropdown (solo admins lo usan)
         vendedores_list = []
         if user_rol.upper() != "VENDEDOR":

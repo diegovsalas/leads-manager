@@ -2608,18 +2608,21 @@ window.setUN = function(un){
   }else{
     localStorage.setItem('avantex_un', un);
   }
-  // Re-render de TODO lo visible
+  // FEAT-2026-06-29 / FIX-2026-06-29: el kanban es SSR — la única forma
+  // de re-renderizar con el filtro es recargar la página con ?un= en la
+  // URL. Antes solo se llamaban loadKanban/loadDashboard que NO existen
+  // (kanban está hardcoded en el HTML del template), por eso aunque el
+  // selector cambiaba, seguían viendo todos los leads.
   try{
-    if(typeof loadKanban === 'function') loadKanban();
-    if(typeof loadDashboard === 'function') loadDashboard();
-    if(typeof loadVendedores === 'function') loadVendedores();
-    if(typeof loadMetaVendedor === 'function') loadMetaVendedor();
-    // Sync el dropdown del UI
-    const sel = document.getElementById('un-global-select');
-    if(sel) sel.value = (un === 'Todas' ? '' : un);
-    const lbl = document.getElementById('un-global-label');
-    if(lbl) lbl.textContent = (un === 'Todas' ? 'Todas las UN' : un);
-  }catch(e){ console.warn('setUN re-render:', e); }
+    // Persistir la vista actual para que no caigan en Dashboard tras reload
+    const cur = new URL(window.location.href);
+    if(!un || un === 'Todas') cur.searchParams.delete('un');
+    else cur.searchParams.set('un', un);
+    window.location.href = cur.toString();
+  }catch(e){
+    console.warn('setUN reload:', e);
+    window.location.reload();
+  }
 };
 
 // Default según rol (lo seteamos en DOMContentLoaded, ver más abajo)
@@ -2676,6 +2679,8 @@ window.addEventListener('DOMContentLoaded', ()=>{
 
   // FEAT-2026-06-29: inicializa el filtro UN según rol + especialidad,
   // o lo restaura si el usuario ya había seteado uno antes.
+  // FIX: si el URL del navegador NO tiene ?un= pero localStorage SÍ,
+  // hacemos redirect (el kanban es SSR y necesita el param en la URL).
   try{
     const sel = document.getElementById('un-global-select');
     if(sel){
@@ -2695,6 +2700,14 @@ window.addEventListener('DOMContentLoaded', ()=>{
         }
       }
       sel.value = (unInicial && unInicial !== 'Todas') ? unInicial : '';
+      // Reload con ?un= si el filtro existe pero la URL no lo refleja
+      const urlUN = new URL(window.location.href).searchParams.get('un');
+      if(unInicial && unInicial !== 'Todas' && !urlUN){
+        const cur = new URL(window.location.href);
+        cur.searchParams.set('un', unInicial);
+        window.location.replace(cur.toString());
+        return;  // abortar el resto del init, vamos a recargar
+      }
     }
   }catch(e){ console.warn('UN init:', e); }
 
