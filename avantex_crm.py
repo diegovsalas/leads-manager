@@ -91,6 +91,26 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] etapa_pipeline 'Presentación' failed (retry on next boot): %s", e)
 
+        # ─── leads.telefono: quitar UNIQUE (FEAT-2026-06-29) ───
+        # Un cliente puede tener N leads (recurrente + eventual + repetidas).
+        # El UNIQUE bloqueaba registrar 'otra venta al mismo cliente'.
+        # Reemplazamos por un índice NO único para mantener performance de búsqueda.
+        try:
+            with db.engine.begin() as conn:
+                exists = conn.execute(text("""
+                    SELECT 1 FROM pg_constraint
+                    WHERE conrelid = 'leads'::regclass
+                      AND conname = 'leads_telefono_key'
+                """)).first()
+                if exists:
+                    app.logger.info("[auto-migrate] dropping UNIQUE leads_telefono_key...")
+                    conn.execute(text("ALTER TABLE leads DROP CONSTRAINT leads_telefono_key"))
+                    conn.execute(text(
+                        "CREATE INDEX IF NOT EXISTS ix_leads_telefono ON leads (telefono)"
+                    ))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] drop unique leads.telefono failed: %s", e)
+
         # ─── metas_vendedor: meta_recurrente_mxn + meta_eventual_mxn (FEAT-2026-06-25) ───
         try:
             with db.engine.begin() as conn:

@@ -344,11 +344,16 @@ def crear_lead():
     except Exception as e:
         db.session.rollback()
         current_app.logger.error("[crear_lead] step=%s falló: %s\n%s", step, e, _tb.format_exc())
-        # Caso típico: dup por teléfono
-        if step == "commit":
+        # FEAT-2026-06-29: ya no hay UNIQUE(telefono), pero por si el
+        # auto-migrate todavía no corrió en una réplica, mantenemos el
+        # mensaje claro.
+        if step == "commit" and "leads_telefono_key" in str(getattr(e, "orig", e)):
             existing = Lead.query.filter_by(telefono=data.get("telefono")).first()
             if existing:
-                return jsonify({"error": f"Ya existe un lead con este teléfono: {existing.nombre}", "lead": existing.to_dict()}), 409
+                return jsonify({
+                    "error": "Aún no se aplicó la migración que permite múltiples leads por cliente — espera 1 min y reintenta.",
+                    "lead": existing.to_dict(),
+                }), 409
         msg = str(getattr(e, "orig", e))[:400]
         return jsonify({
             "error": f"Error en paso '{step}': {type(e).__name__}: {msg}",
@@ -358,31 +363,117 @@ def crear_lead():
 
 @leads_bp.route("/check-duplicate", methods=["GET"])
 def check_duplicate():
-    """GET /api/leads/check-duplicate?phone=52... — devuelve el Lead existente
-    si hay match por últimos 10 dígitos. Para validación inline del modal."""
+    """GET /api/leads/check-duplicate?phone=52... — devuelve TODOS los leads
+    con el mismo cliente (match por últimos 10 dígitos del teléfono).
+
+    FEAT-2026-06-29: ya no bloqueamos al duplicado. Mostramos lo que ya
+    existe para que el vendedor decida: 'es otra venta al mismo cliente'
+    (crea Lead nuevo) vs 'me confundí' (cancela).
+    """
     phone = request.args.get("phone", "").strip()
     digits = re.sub(r"\D", "", phone)[-10:]
     if len(digits) < 10:
-        return jsonify({"duplicate": False})
-    lead = (
+        return jsonify({"duplicate": False, "leads": []})
+    leads = (
         Lead.query
         .filter(Lead.telefono.like(f"%{digits}"))
         .order_by(Lead.fecha_creacion.desc())
-        .first()
+        .all()
     )
-    if not lead:
-        return jsonify({"duplicate": False})
-    asignado_nombre = lead.usuario_asignado.nombre if lead.usuario_asignado else None
-    return jsonify({
-        "duplicate": True,
-        "lead": {
-            "id": str(lead.id),
-            "nombre": lead.nombre,
-            "empresa_nombre": lead.empresa_nombre,
-            "telefono": lead.telefono,
-            "etapa": lead.etapa_pipeline.value if lead.etapa_pipeline else None,
+    if not leads:
+        return jsonify({"duplicate": False, "leads": []})
+    out = []
+    for l in leads:
+        asignado_nombre = l.usuario_asignado.nombre if l.usuario_asignado else None
+        out.append({
+            "id": str(l.id),
+            "nombre": l.nombre,
+            "empresa_nombre": l.empresa_nombre,
+            "telefono": l.telefono,
+            "etapa": l.etapa_pipeline.value if l.etapa_pipeline else None,
+            "tipo_venta": l.tipo_venta,
             "asignado_a": asignado_nombre,
-        },
+            "fecha_creacion": l.fecha_creacion.isoformat() if l.fecha_creacion else None,
+            "factura_monto": float(l.factura_monto) if l.factura_monto else None,
+        })
+    return jsonify({"duplicate": True, "leads": out})
+
+
+@leads_bp.route("/sospechosos-ventas-mezcladas", methods=["GET"])
+def leads_sospechosos():
+    """FEAT-2026-06-29: reporte para super_admin.
+
+    Antes de quitar el UNIQUE(telefono), si un vendedor quería registrar
+    OTRA venta al mismo cliente, no podía crear un Lead nuevo. La salida
+    de escape era editar el lead existente (cambiar monto, agregar nota
+    'también vendí...', etc.) → quedaron leads con datos de 2 ventas
+    mezcladas.
+
+    Este endpoint detecta leads con señales de mezcla para revisión humana.
+    Solo Super Admin.
+    """
+    from blueprints.auth import get_vendedor_filter
+    if get_vendedor_filter():
+        return jsonify({"error": "Solo Super Admin"}), 403
+
+    señales_clave = ("también", "tambien", " y vend", " y rent", "+ ",
+                     "más renta", "mas renta", "más equipo", "mas equipo",
+                     "y aroma", "y equipo")
+
+    leads_ganados = (
+        Lead.query.filter(Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO)
+        .all()
+    )
+
+    sospechosos = []
+    for l in leads_ganados:
+        razones = []
+        # Señal 1: factura_monto >> valor_estimado (más del doble)
+        try:
+            est = float(l.valor_estimado or 0)
+            fac = float(l.factura_monto or 0)
+            if est > 0 and fac > est * 2:
+                razones.append(f"Factura ${fac:,.0f} es {fac/est:.1f}× el estimado ${est:,.0f}")
+        except (ValueError, TypeError):
+            pass
+        # Señal 2: factura_notas tiene palabras de mezcla
+        notas = (l.factura_notas or "").lower()
+        for s in señales_clave:
+            if s in notas:
+                razones.append(f"Notas mencionan '{s.strip()}'")
+                break
+        # Señal 3: notas generales del lead con esas palabras
+        notas_gen = (l.notas or "").lower()
+        for s in señales_clave:
+            if s in notas_gen and not any("Notas mencionan" in r for r in razones):
+                razones.append(f"Notas del lead mencionan '{s.strip()}'")
+                break
+        # Señal 4: tipo_venta vacío en Cerrado Ganado (registrado pre-feat)
+        if not l.tipo_venta:
+            razones.append("Sin tipo_venta — pre feature de meta split")
+
+        if not razones:
+            continue
+        sospechosos.append({
+            "id": str(l.id),
+            "nombre": l.nombre,
+            "empresa_nombre": l.empresa_nombre,
+            "telefono": l.telefono,
+            "vendedor": l.usuario_asignado.nombre if l.usuario_asignado else None,
+            "fecha_creacion": l.fecha_creacion.isoformat() if l.fecha_creacion else None,
+            "valor_estimado": float(l.valor_estimado) if l.valor_estimado else None,
+            "factura_monto": float(l.factura_monto) if l.factura_monto else None,
+            "tipo_venta": l.tipo_venta,
+            "marca_interes": l.marca_interes,
+            "factura_notas": l.factura_notas,
+            "razones": razones,
+        })
+
+    # Ordenar por # de razones desc, luego por monto
+    sospechosos.sort(key=lambda x: (-len(x["razones"]), -(x["factura_monto"] or 0)))
+    return jsonify({
+        "total": len(sospechosos),
+        "leads": sospechosos,
     })
 
 

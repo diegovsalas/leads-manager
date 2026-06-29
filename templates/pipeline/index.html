@@ -2235,14 +2235,19 @@ fbq('track','PageView');
       <div class="lp-field"><span class="lp-field-label">Número de factura</span><span class="lp-field-value" id="lp-factura-numero" style="font-family:var(--mono);"></span></div>
       <div class="lp-field"><span class="lp-field-label">Fecha</span><span class="lp-field-value" id="lp-factura-fecha"></span></div>
       <div class="lp-field"><span class="lp-field-label">Notas</span><span class="lp-field-value" id="lp-factura-notas" style="font-size:12px;color:var(--text2);"></span></div>
-      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border-light);">
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border-light);display:flex;gap:6px;flex-wrap:wrap;">
         <button class="btn" onclick="abrirEditarFactura()" style="font-size:11px;padding:4px 10px;">✏️ Editar factura</button>
+        <!-- FEAT-2026-06-29: atajo para registrar otra venta al mismo cliente -->
+        <button class="btn" onclick="nuevaVentaMismoCliente()" style="font-size:11px;padding:4px 10px;background:#16a34a;color:#fff;font-weight:600;">➕ Nueva venta al mismo cliente</button>
       </div>
     </div>
     <div class="lp-section" id="lp-pendiente-factura" style="display:none;border-left:3px solid var(--orange);">
       <div class="lp-section-title" style="color:var(--orange);">⚠ Cierre sin facturar</div>
       <div style="font-size:12px;color:var(--text2);padding:6px 0;">Este lead está cerrado ganado pero falta capturar la factura.</div>
-      <button class="btn" onclick="abrirEditarFactura()" style="font-size:12px;padding:6px 12px;background:var(--green);color:#fff;">+ Registrar factura</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn" onclick="abrirEditarFactura()" style="font-size:12px;padding:6px 12px;background:var(--green);color:#fff;">+ Registrar factura</button>
+        <button class="btn" onclick="nuevaVentaMismoCliente()" style="font-size:12px;padding:6px 12px;">➕ Nueva venta al mismo cliente</button>
+      </div>
     </div>
 
     <div class="lp-section" id="lp-meta-section" style="display:none;">
@@ -5140,6 +5145,55 @@ async function abrirEditarFactura(){
   setTimeout(()=>document.getElementById('mg-numero').focus(),100);
 }
 
+// FEAT-2026-06-29: atajo para crear OTRA venta al mismo cliente sin
+// volver a tipear todos los datos. Útil cuando ya cerraste Ganado y
+// el cliente te compra algo más (típico: renta recurrente + venta de
+// equipo eventual).
+async function nuevaVentaMismoCliente(){
+  const leadId = document.getElementById('lp-id')?.value;
+  if(!leadId){ showToast('Error','No hay lead activo'); return; }
+  let lead = null;
+  try{
+    const r = await fetch('/api/leads/'+leadId);
+    if(r.ok) lead = await r.json();
+  }catch{}
+  if(!lead){ showToast('Error','No se pudo cargar el lead'); return; }
+
+  closeLeadPanel();
+  openLeadModal();  // modal de nuevo lead (no edit)
+
+  // Prefillear datos del cliente PERO dejar vacíos los de la venta nueva
+  setTimeout(()=>{
+    try{
+      document.getElementById('nl-phone').value = lead.telefono || '';
+      document.getElementById('nl-nombre').value = lead.nombre || '';
+      if(lead.empresa_nombre){
+        const eEl = document.getElementById('nl-empresa');
+        if(eEl) eEl.value = lead.empresa_nombre;
+      }
+      if(lead.marca_interes){
+        document.querySelectorAll('#nl-marca-pills .nl-pill').forEach(p=>{
+          p.classList.toggle('active', p.dataset.val===lead.marca_interes);
+        });
+      }
+      // NO copiamos tipo_venta ni valor — la nueva venta es distinta por definición
+      // Marcamos el flag de "repetir" para que el banner duplicado salga ya confirmado
+      window._nlRepeatConfirmed = true;
+      const banner = document.getElementById('nl-dup-banner');
+      if(banner){
+        banner.className = 'nl-banner ok';
+        banner.style.flexDirection = 'row';
+        banner.innerHTML = `<span style="color:#16a34a;font-weight:600;">✓ Nueva venta para <strong>${lead.nombre||lead.empresa_nombre||'el mismo cliente'}</strong> · NO modifica el lead anterior</span>`;
+        banner.style.display = 'flex';
+      }
+      // Focus en lo que el vendedor SÍ tiene que llenar nuevo
+      const tvPills = document.querySelectorAll('#nl-tipo-venta-pills .nl-pill');
+      tvPills.forEach(p=>p.classList.remove('active'));
+      showToast('Nueva venta', 'Elige tipo de venta y monto. El cliente ya viene prellenado.');
+    }catch(e){ console.warn('nuevaVentaMismoCliente prefill error:', e); }
+  }, 200);
+}
+
 async function openGanadoModal(leadId){
   document.getElementById('mg-lead-id').value=leadId;
   // Limpiar campos del modal
@@ -6421,16 +6475,46 @@ document.addEventListener('DOMContentLoaded',()=>{
       else if(v.startsWith('52')&&v.length===12)v=v;
       else if(v.length>=10)v=v.slice(-10),v='52'+v;
       e.target.value=v;
-      if(v.length<12){document.getElementById('nl-dup-banner').style.display='none';return;}
+      const banner=document.getElementById('nl-dup-banner');
+      if(v.length<12){banner.style.display='none';return;}
       try{
         const r=await fetch('/api/leads/check-duplicate?phone='+v);
         const d=await r.json();
-        const banner=document.getElementById('nl-dup-banner');
-        if(d.duplicate){
+        // FEAT-2026-06-29: ya no bloquea — muestra LISTA de leads del mismo
+        // cliente y permite confirmar 'es otra venta'.
+        if(d.duplicate && d.leads && d.leads.length){
+          window._nlRepeatConfirmed = false;
+          const filas = d.leads.map(l=>{
+            const etapa = l.etapa || '(s/etapa)';
+            const tv = l.tipo_venta ? ` · ${l.tipo_venta}` : '';
+            const monto = l.factura_monto ? ` · $${l.factura_monto.toLocaleString('es-MX')}` : '';
+            const fecha = l.fecha_creacion ? new Date(l.fecha_creacion).toLocaleDateString('es-MX') : '';
+            const empresa = l.empresa_nombre ? ` · ${l.empresa_nombre}` : '';
+            return `<div style="font-size:11px;padding:2px 0;"><strong>${l.nombre||'(sin nombre)'}</strong>${empresa} · ${etapa}${tv}${monto} · ${l.asignado_a||'sin asignar'} · ${fecha}</div>`;
+          }).join('');
           banner.className='nl-banner warn';
-          banner.innerHTML=`⚠ Ya existe: <strong>${d.lead.nombre||'(sin nombre)'}</strong> ${d.lead.empresa_nombre?'· '+d.lead.empresa_nombre:''} · etapa: ${d.lead.etapa} · asignado a ${d.lead.asignado_a||'nadie'}`;
+          banner.style.flexDirection='column';
+          banner.style.alignItems='flex-start';
+          banner.innerHTML = `
+            <div style="font-weight:600;margin-bottom:4px;">⚠ Este cliente ya tiene ${d.leads.length} lead(s) registrado(s):</div>
+            <div style="max-height:140px;overflow:auto;width:100%;background:rgba(255,255,255,.4);border-radius:4px;padding:4px 8px;">${filas}</div>
+            <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
+              <button type="button" id="nl-dup-confirm-repeat" style="font-size:11px;padding:4px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;">✓ Sí, es OTRA venta al mismo cliente</button>
+              <span style="font-size:10px;color:var(--text3);">Si te equivocaste, edita el teléfono.</span>
+            </div>
+          `;
           banner.style.display='flex';
-        }else{banner.style.display='none';}
+          // Botón confirma → cambia banner a verde y marca flag
+          document.getElementById('nl-dup-confirm-repeat').onclick = ()=>{
+            window._nlRepeatConfirmed = true;
+            banner.className='nl-banner ok';
+            banner.innerHTML = `<span style="color:#16a34a;font-weight:600;">✓ Registrando NUEVA venta para este cliente (${d.leads.length} lead(s) previo(s))</span>`;
+            banner.style.flexDirection='row';
+          };
+        }else{
+          banner.style.display='none';
+          window._nlRepeatConfirmed = false;
+        }
       }catch(e){}
     });
     phoneEl.addEventListener('input',e=>{

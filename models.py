@@ -155,7 +155,9 @@ class Lead(db.Model):
     __tablename__ = "leads"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
-    telefono = db.Column(db.String(30), unique=True, nullable=False)
+    # FEAT-2026-06-29: telefono ya NO es unique. Un cliente puede tener N
+    # leads (recurrente + eventual + repetidas). Index para performance.
+    telefono = db.Column(db.String(30), nullable=False, index=True)
     nombre = db.Column(db.String(200), nullable=True)
     origen = db.Column(
         db.Enum(OrigenLead, name="origen_lead_enum",
