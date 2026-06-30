@@ -48,6 +48,7 @@ def pipeline_valores():
         Lead.etapa_pipeline,
         func.count(Lead.id).label("cantidad"),
         func.coalesce(func.sum(func.coalesce(
+            Lead.factura_monto,
             Lead.cantidad_productos * Lead.precio_unitario,
             Lead.valor_estimado, 0,
         )), 0).label("valor_total"),
@@ -116,6 +117,7 @@ def embudo():
 
     # Revenue
     rev_q = db.session.query(func.coalesce(func.sum(func.coalesce(
+        Lead.factura_monto,
         Lead.cantidad_productos * Lead.precio_unitario, Lead.valor_estimado, 0,
     )), 0)).filter(
         Lead.fecha_creacion >= inicio_mes, Lead.fecha_creacion < fin_mes,
@@ -131,6 +133,7 @@ def embudo():
     # SIN cerrados (ni ganado ni perdido) para que cuadre con las barras de
     # etapas abiertas del dashboard.
     pipe_q = db.session.query(func.coalesce(func.sum(func.coalesce(
+        Lead.factura_monto,
         Lead.cantidad_productos * Lead.precio_unitario, Lead.valor_estimado, 0,
     )), 0)).filter(
         Lead.etapa_pipeline.notin_([
@@ -303,6 +306,7 @@ def marketing_roi():
         .with_entities(
             Lead.origen,
             func.coalesce(func.sum(func.coalesce(
+                Lead.factura_monto,
                 Lead.cantidad_productos * Lead.precio_unitario,
                 Lead.valor_estimado, 0,
             )), 0),
@@ -417,6 +421,7 @@ def leads_por_origen():
         .with_entities(
             Lead.origen,
             func.coalesce(func.sum(func.coalesce(
+                Lead.factura_monto,
                 Lead.cantidad_productos * Lead.precio_unitario,
                 Lead.valor_estimado, 0,
             )), 0),
@@ -432,6 +437,7 @@ def leads_por_origen():
         .with_entities(
             Lead.origen,
             func.coalesce(func.sum(func.coalesce(
+                Lead.factura_monto,
                 Lead.cantidad_productos * Lead.precio_unitario,
                 Lead.valor_estimado, 0,
             )), 0),
@@ -500,6 +506,7 @@ def _kpis_vendedor(vendedor_usuario_id: str, inicio: date, fin: date) -> dict:
     ]))
     leads_activos = activos_q.count()
     pipe_activo = float(activos_q.with_entities(func.coalesce(func.sum(func.coalesce(
+        Lead.factura_monto,
         Lead.cantidad_productos * Lead.precio_unitario,
         Lead.valor_estimado, 0,
     )), 0)).scalar() or 0)
@@ -509,6 +516,7 @@ def _kpis_vendedor(vendedor_usuario_id: str, inicio: date, fin: date) -> dict:
         Lead.fecha_creacion >= inicio, Lead.fecha_creacion < fin,
         Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO,
     ).with_entities(func.coalesce(func.sum(func.coalesce(
+        Lead.factura_monto,
         Lead.cantidad_productos * Lead.precio_unitario,
         Lead.valor_estimado, 0,
     )), 0)).scalar() or 0)
@@ -573,6 +581,7 @@ def vendedores_tabla():
         .with_entities(
             Lead.usuario_asignado_id,
             func.coalesce(func.sum(func.coalesce(
+                Lead.factura_monto,
                 Lead.cantidad_productos * Lead.precio_unitario,
                 Lead.valor_estimado, 0,
             )), 0),
@@ -596,6 +605,7 @@ def vendedores_tabla():
     pipe_rows = pipe_rows.with_entities(
         Lead.usuario_asignado_id,
         func.coalesce(func.sum(func.coalesce(
+            Lead.factura_monto,
             Lead.cantidad_productos * Lead.precio_unitario,
             Lead.valor_estimado, 0,
         )), 0),
@@ -721,6 +731,7 @@ def vendedor_review(vendedor_id):
             Lead.usuario_asignado_id == v.id,
             Lead.etapa_pipeline == etapa,
         ).with_entities(func.coalesce(func.sum(func.coalesce(
+            Lead.factura_monto,
             Lead.cantidad_productos * Lead.precio_unitario,
             Lead.valor_estimado, 0,
         )), 0)).scalar() or 0)

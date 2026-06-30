@@ -251,6 +251,12 @@ class Lead(db.Model):
 
     @property
     def valor_calculado(self):
+        # FIX-2026-06-30: priorizar factura_monto cuando exista. Antes el
+        # kanban en Cerrado Ganado mostraba el valor_estimado (lo
+        # proyectado) en vez de lo realmente facturado, causando que la
+        # suma del pipeline no cuadrara con las metas Rec+Ev.
+        if self.factura_monto:
+            return self.factura_monto
         if self.cantidad_productos and self.precio_unitario:
             return self.cantidad_productos * self.precio_unitario
         return self.valor_estimado
