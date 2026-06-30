@@ -425,7 +425,6 @@ fbq('track','PageView');
       <option value="2026-04">Abril 2026</option>
     </select>
     <div style="margin-left:auto;display:flex;gap:6px;">
-      <button class="btn admin-only" onclick="openGastoModal()">+ Registrar gasto</button>
       <button class="btn btn-filled" onclick="openLeadModal()">+ Nuevo lead</button>
     </div>
   </div>
@@ -498,10 +497,6 @@ fbq('track','PageView');
         <span class="kpi">CPA: <strong id="f-cpa" style="color:var(--orange);">$0</strong></span>
         <span class="kpi">ROI: <strong id="f-roi" style="color:var(--green);">0x</strong></span>
       </div>
-    </div>
-    <div class="dash-card admin-only">
-      <div class="dash-card-title">Gastos de publicidad</div>
-      <div id="gastos-list"></div>
     </div>
   </div>
 </div>
@@ -4094,10 +4089,9 @@ async function loadDashboard(){
   try{
     const mes=document.getElementById('dash-mes')?.value||'';
     const mesParam=mes?'?mes='+mes:'';
-    const [embudo,pipeVals,gastosData]=await Promise.all([
+    const [embudo,pipeVals]=await Promise.all([
       fetch('/api/dashboard/embudo'+mesParam).then(r=>r.json()),
       fetch('/api/dashboard/pipeline-valores').then(r=>r.json()),
-      fetch('/api/dashboard/gastos'+(mes?'?mes='+mes:'')).then(r=>r.json()),
     ]);
     // Metrics
     document.getElementById('m-total').textContent=embudo.leads_totales;
@@ -4187,15 +4181,6 @@ async function loadDashboard(){
       fv.innerHTML=`<svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${svgW}px;">${svg}</svg>`;
     }
 
-    // Gastos
-    const gl=document.getElementById('gastos-list');gl.innerHTML='';
-    gastosData.forEach(g=>{
-      gl.innerHTML+=`<div class="gasto-item">
-        <div style="width:28px;height:28px;border-radius:4px;background:var(--bg-hover);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">${g.plataforma[0]}</div>
-        <div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${g.campana||g.plataforma}</div><div style="font-size:12px;color:var(--text2);">${g.marca||'General'}</div></div>
-        <div style="font-size:14px;font-weight:600;color:var(--red);white-space:nowrap;">${fmt$(g.monto)}</div>
-      </div>`;
-    });
   }catch(e){console.error('Dashboard error:',e);}
 }
 
