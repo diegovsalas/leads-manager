@@ -24,10 +24,13 @@
             <option value="{{ p.value }}" {% if p.value == periodo_param %}selected{% endif %}>{{ p.label }}</option>
             {% endfor %}
         </select>
-        <!-- FEAT-2026-07-03: forzar sync Zoho manualmente (super_admin) -->
+        <!-- FEAT-2026-07-03: sync manual de fuentes externas (super_admin) -->
         {% if (user_rol or '').lower().replace(' ','_') == 'super_admin' %}
-        <button type="button" onclick="_csSyncZoho(this)" class="btn" title="Fuerza el sync de Zoho Analytics → cs_appointments">
-            🔄 Forzar sync Zoho
+        <button type="button" onclick="_csSyncZoho(this)" class="btn" title="Fuerza el sync de Zoho Analytics → cs_appointments (operación/citas)">
+            🔄 Zoho (Citas)
+        </button>
+        <button type="button" onclick="_csSyncSavio(this)" class="btn" title="Fuerza el sync de Savio → savio_invoices + savio_payments + cs_invoices (facturación y pagos)">
+            💰 Savio (Facturas+Pagos)
         </button>
         {% endif %}
     </div>
@@ -78,10 +81,39 @@ async function _csSyncZoho(btn){
     const r = await fetch('/cs/api/zoho/sync-appointments', {method:'POST'});
     const d = await r.json();
     if(r.ok && d.ok){
-      alert(`Sync OK — ${d.rows_upserted || 0} filas actualizadas en ${d.elapsed_s}s`);
+      alert(`Zoho OK — ${d.rows_upserted || 0} citas actualizadas en ${d.elapsed_s}s`);
       window.location.reload();
     }else if(d.faltantes){
       alert('Faltan env vars en Render:\n\n' + d.faltantes.join('\n'));
+    }else{
+      alert('Error: ' + (d.error || 'desconocido'));
+    }
+  }catch(e){
+    alert('Falló: ' + e.message);
+  }finally{
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+}
+
+// FEAT-2026-07-03: forzar sync Savio → facturas + pagos + bridge CS (super_admin)
+async function _csSyncSavio(btn){
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Sincronizando…';
+  try{
+    const r = await fetch('/api/savio/sync', {method:'POST'});
+    const d = await r.json();
+    if(r.ok && !d.error){
+      // sync_all() retorna un dict con conteos por tabla
+      const partes = [];
+      if(d.invoices) partes.push(`${d.invoices.upserted||0} facturas`);
+      if(d.payments) partes.push(`${d.payments.upserted||0} pagos`);
+      if(d.cs_invoices) partes.push(`${d.cs_invoices.upserted||0} cs_invoices`);
+      if(d.customers) partes.push(`${d.customers.upserted||0} clientes`);
+      if(d.subscriptions) partes.push(`${d.subscriptions.upserted||0} subs`);
+      alert('Savio OK — ' + (partes.length ? partes.join(' · ') : 'sync completado'));
+      window.location.reload();
     }else{
       alert('Error: ' + (d.error || 'desconocido'));
     }
