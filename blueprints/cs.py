@@ -1377,6 +1377,51 @@ def api_email_response_times():
     })
 
 
+@cs_bp.route("/api/cuentas-sin-sub-savio", methods=["GET"])
+def cuentas_sin_sub_savio():
+    """FEAT-2026-07-03: cuentas con MRR contratado=0 pero MRR observado>0.
+
+    Detecta cuentas cuyo cs_accounts.mrr (contratado, viene de subs Savio)
+    quedó en 0 mientras que mrr_observado (facturación recurrente real
+    últimos 5m) tiene valor. Indica un customer en Savio sin subscription
+    activa registrada, aunque el negocio sí factura recurrentemente.
+
+    Alcance del bug detectado por Diego (2026-07-03): 4 cuentas por
+    $458k/mes de MRR real no reflejado en Savio.
+    """
+    from sqlalchemy import or_
+    rows = (
+        CSAccount.query
+        .filter(or_(CSAccount.mrr.is_(None), CSAccount.mrr == 0))
+        .filter(CSAccount.mrr_observado > 0)
+        .order_by(CSAccount.mrr_observado.desc())
+        .all()
+    )
+    kams_by_id = {str(k.id): k.nombre for k in _get_kams()}
+    out = []
+    total_mrr = 0.0
+    for a in rows:
+        mrr_obs = float(a.mrr_observado or 0)
+        total_mrr += mrr_obs
+        out.append({
+            "id": str(a.id),
+            "nombre": a.nombre,
+            "client_id": a.client_id,
+            "kam": kams_by_id.get(str(a.kam_id), "—"),
+            "mrr_contratado": float(a.mrr or 0),
+            "mrr_observado": mrr_obs,
+            "facturacion_q1": float(a.facturacion_q1 or 0),
+            "pagado_q1": float(a.pagado_q1 or 0),
+            "unidades": a.unidades_contratadas or "",
+        })
+    return jsonify({
+        "cuentas": out,
+        "total": len(out),
+        "mrr_no_reflejado": round(total_mrr, 2),
+        "arr_no_reflejado": round(total_mrr * 12, 2),
+    })
+
+
 @cs_bp.route("/api/zoho/sync-appointments", methods=["POST"])
 def zoho_sync_appointments():
     """Trigger manual del ETL Zoho Analytics → cs_appointments (super_admin).

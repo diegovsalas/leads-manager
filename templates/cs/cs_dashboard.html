@@ -159,6 +159,12 @@ async function _csSyncSavio(btn){
             <span class="muted">vs real</span>
             {% endif %}
         </div>
+        <!-- FEAT-2026-07-03: badge de cuentas sin sub Savio (dinámico) -->
+        <div id="mrr-huerfanas-chip" style="display:none;margin-top:6px;">
+            <button type="button" onclick="_csAbrirHuerfanas()" style="all:unset;cursor:pointer;background:#FEF3C7;color:#92400E;font-size:11px;font-weight:600;padding:3px 8px;border-radius:4px;display:inline-flex;align-items:center;gap:4px;" title="Ver cuentas con MRR observado pero sin subscription registrada en Savio">
+                ⚠ <span id="mrr-huerfanas-count">—</span> sin sub Savio · <span id="mrr-huerfanas-monto">—</span>
+            </button>
+        </div>
     </div>
     <div class="kpi">
         <div class="label">Cuentas Activas</div>
@@ -435,10 +441,87 @@ async function _csSyncSavio(btn){
 </div>
 {% endif %}
 
+<!-- FEAT-2026-07-03: Modal "Cuentas sin sub Savio" -->
+<div id="huerfanas-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;" onclick="if(event.target===this)_csCerrarHuerfanas()">
+    <div style="background:#fff;border-radius:12px;padding:24px;max-width:900px;width:92%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.3);">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+            <div>
+                <h3 style="margin:0;font-size:18px;">⚠ Cuentas con MRR real pero sin subscription en Savio</h3>
+                <p class="muted" style="font-size:12px;margin:4px 0 0;">MRR contratado = $0 pero MRR observado (facturación recurrente real de últimos 5m) > 0. Indica que Savio no tiene la sub registrada aunque el negocio sí factura.</p>
+            </div>
+            <button onclick="_csCerrarHuerfanas()" style="all:unset;cursor:pointer;font-size:20px;color:#999;line-height:1;">×</button>
+        </div>
+        <div id="huerfanas-summary" style="background:#FEF3C7;padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:13px;">
+            Cargando…
+        </div>
+        <table class="tbl" style="width:100%;">
+            <thead>
+                <tr>
+                    <th>Cuenta</th>
+                    <th>Client ID</th>
+                    <th>KAM</th>
+                    <th class="r">MRR observado</th>
+                    <th class="r">Facturación Q1</th>
+                    <th>Unidades</th>
+                </tr>
+            </thead>
+            <tbody id="huerfanas-body">
+                <tr><td colspan="6" style="text-align:center;padding:24px;color:#999">Cargando…</td></tr>
+            </tbody>
+        </table>
+        <div style="margin-top:12px;font-size:11px;color:#666;background:#F3F4F6;padding:10px 12px;border-radius:6px;">
+            <strong>Cómo resolverlo:</strong> pasar esta lista al equipo que administra Savio para que
+            revise/recree las subscriptions de estas cuentas. Después clic en 💰 Savio (Fact+Pagos) y el MRR contratado se refleja.
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
+// FEAT-2026-07-03: Cargar contador de cuentas sin sub Savio
+(function(){
+  fetch('/cs/api/cuentas-sin-sub-savio').then(r=>r.json()).then(d=>{
+    if(!d || !d.total) return;
+    const chip = document.getElementById('mrr-huerfanas-chip');
+    document.getElementById('mrr-huerfanas-count').textContent = d.total;
+    document.getElementById('mrr-huerfanas-monto').textContent = '$' + Math.round(d.mrr_no_reflejado).toLocaleString('en-US') + '/mes';
+    chip.style.display = '';
+    // pre-cachear el detalle para abrir el modal instantáneo
+    window._huerfanasCache = d;
+  }).catch(()=>{});
+})();
+
+function _csAbrirHuerfanas(){
+  const modal = document.getElementById('huerfanas-modal');
+  const body  = document.getElementById('huerfanas-body');
+  const sum   = document.getElementById('huerfanas-summary');
+  modal.style.display = 'flex';
+  const render = d => {
+    sum.innerHTML = `<strong>${d.total} cuentas</strong> · MRR no reflejado: <strong>$${Math.round(d.mrr_no_reflejado).toLocaleString('en-US')}/mes</strong> · ARR: <strong>$${Math.round(d.arr_no_reflejado).toLocaleString('en-US')}/año</strong>`;
+    if(!d.cuentas.length){
+      body.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:#059669">✓ Sin cuentas huérfanas — todas las que facturan tienen sub en Savio</td></tr>';
+      return;
+    }
+    body.innerHTML = d.cuentas.map(c => `
+      <tr>
+        <td class="primary"><a href="/cs/account/${c.id}">${c.nombre}</a></td>
+        <td>${c.client_id || '—'}</td>
+        <td>${c.kam || '—'}</td>
+        <td class="r" style="font-weight:600;color:var(--warn-ink)">$${Math.round(c.mrr_observado).toLocaleString('en-US')}</td>
+        <td class="r">$${Math.round(c.facturacion_q1).toLocaleString('en-US')}</td>
+        <td style="font-size:11px">${c.unidades || '—'}</td>
+      </tr>
+    `).join('');
+  };
+  if(window._huerfanasCache){ render(window._huerfanasCache); return; }
+  fetch('/cs/api/cuentas-sin-sub-savio').then(r=>r.json()).then(render);
+}
+function _csCerrarHuerfanas(){
+  document.getElementById('huerfanas-modal').style.display = 'none';
+}
+
 // KAM email response times
 (function(){
   const body = document.getElementById('email-rt-body');

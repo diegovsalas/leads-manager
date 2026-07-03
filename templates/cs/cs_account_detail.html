@@ -55,6 +55,12 @@
                 <div>
                     <p class="text-xs text-gray-500 uppercase">MRR</p>
                     <p class="text-lg font-bold text-gray-800">${{ "{:,.0f}".format(account.mrr) }}</p>
+                    {# FEAT-2026-07-03: badge cuando mrr contratado=0 pero observado>0 #}
+                    {% if (not account.mrr or account.mrr == 0) and account.mrr_observado and account.mrr_observado > 0 %}
+                    <div class="mt-1 inline-block px-2 py-0.5 bg-yellow-100 border border-yellow-300 rounded text-xs text-yellow-800" title="MRR contratado = $0 pero MRR real observado (facturación recurrente 5m) = ${{ '{:,.0f}'.format(account.mrr_observado) }}. Falta crear/reactivar la subscription en Savio.">
+                        ⚠ Sin sub en Savio · MRR real ${{ "{:,.0f}".format(account.mrr_observado) }}/mes
+                    </div>
+                    {% endif %}
                 </div>
                 <div>
                     <p class="text-xs text-gray-500 uppercase">ARR</p>
