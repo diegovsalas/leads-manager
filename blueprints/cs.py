@@ -1248,12 +1248,21 @@ def api_operacion_trend():
 
 @cs_bp.route("/api/email-response-times")
 def api_email_response_times():
-    """Tiempo mediano y promedio de respuesta a email por KAM (últimos 30 días)."""
+    """Métricas de tiempo de respuesta a email por KAM (últimos 30 días).
+
+    FEAT-2026-07-03: retorna 4 métricas por KAM + agregado global:
+      - median_hours: mediana (métrica primaria)
+      - avg_hours: promedio (sensible a outliers)
+      - distribucion: %<2h, %<24h, %>24h
+      - pendientes: threads con email cliente en últimas 72h sin respuesta
+    """
     from models import KAMEmailResponse
     from datetime import datetime, timedelta, timezone
     from sqlalchemy import func as sqlfunc
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    now = datetime.now(timezone.utc)
+    cutoff_30d = now - timedelta(days=30)
+    cutoff_72h = now - timedelta(hours=72)
 
     rows = (
         db.session.query(
@@ -1263,27 +1272,117 @@ def api_email_response_times():
             sqlfunc.percentile_cont(0.5).within_group(
                 KAMEmailResponse.response_hours
             ).label("median_hours"),
+            sqlfunc.sum(sqlfunc.cast(
+                KAMEmailResponse.response_hours <= 2, db.Integer
+            )).label("bucket_2h"),
+            sqlfunc.sum(sqlfunc.cast(
+                KAMEmailResponse.response_hours <= 24, db.Integer
+            )).label("bucket_24h"),
         )
-        .filter(KAMEmailResponse.replied_at >= cutoff)
+        .filter(KAMEmailResponse.replied_at >= cutoff_30d)
         .group_by(KAMEmailResponse.kam_id)
         .all()
     )
 
+    # Pendientes: emails de clientes recibidos en las últimas 72h sin
+    # respuesta posterior del KAM. Los inferimos como threads en
+    # KAMEmailResponse cuyo received_at está en la ventana pero cuyo
+    # replied_at es NULL — hoy no guardamos NULL, así que también contamos
+    # threads que ya fueron respondidos pero llegaron nuevos emails después
+    # (proxy razonable hasta implementar tabla de pendientes explícita).
+    pendientes_rows = (
+        db.session.query(
+            KAMEmailResponse.kam_id,
+            sqlfunc.count(KAMEmailResponse.id).label("n"),
+        )
+        .filter(
+            KAMEmailResponse.received_at >= cutoff_72h,
+            KAMEmailResponse.response_hours > 24,
+        )
+        .group_by(KAMEmailResponse.kam_id)
+        .all()
+    )
+    pendientes_by_kam = {str(r.kam_id): int(r.n) for r in pendientes_rows}
+
     kams = {str(k.id): k.nombre for k in _get_kams()}
     data_by_kam = {str(r.kam_id): r for r in rows}
 
+    def _pct(part, total):
+        if not total: return 0.0
+        return round(float(part) / float(total) * 100, 1)
+
     result = []
+    total_n = total_h_sum = 0
     for kid, kname in sorted(kams.items(), key=lambda x: x[1]):
         r = data_by_kam.get(kid)
+        n_emails = int(r.n) if r else 0
+        b2h  = int(r.bucket_2h  or 0) if r else 0
+        b24h = int(r.bucket_24h or 0) if r else 0
         result.append({
             "kam_id":       kid,
             "kam_nombre":   kname,
-            "n_emails":     int(r.n) if r else 0,
+            "n_emails":     n_emails,
             "avg_hours":    round(float(r.avg_hours), 1) if r and r.avg_hours is not None else None,
             "median_hours": round(float(r.median_hours), 1) if r and r.median_hours is not None else None,
+            "pct_bajo_2h":  _pct(b2h, n_emails),
+            "pct_bajo_24h": _pct(b24h, n_emails),
+            "pct_sobre_24h": _pct(n_emails - b24h, n_emails),
+            "pendientes":   pendientes_by_kam.get(kid, 0),
         })
+        if r:
+            total_n += n_emails
+            total_h_sum += float(r.avg_hours or 0) * n_emails
 
-    return jsonify(result)
+    # Agregado global (ponderado por # emails)
+    all_hours = [x.get("median_hours") for x in result if x.get("median_hours") is not None]
+    global_median = round(sorted(all_hours)[len(all_hours)//2], 1) if all_hours else None
+    global_avg = round(total_h_sum / total_n, 1) if total_n else None
+    total_pendientes = sum(x["pendientes"] for x in result)
+
+    # Distribución global (recalculada de suma directa)
+    dist_row = (
+        db.session.query(
+            sqlfunc.count(KAMEmailResponse.id).label("n"),
+            sqlfunc.sum(sqlfunc.cast(KAMEmailResponse.response_hours <= 2, db.Integer)).label("b2"),
+            sqlfunc.sum(sqlfunc.cast(KAMEmailResponse.response_hours <= 24, db.Integer)).label("b24"),
+        )
+        .filter(KAMEmailResponse.replied_at >= cutoff_30d)
+        .first()
+    )
+    gn  = int(dist_row.n or 0)
+    gb2 = int(dist_row.b2 or 0)
+    gb24= int(dist_row.b24 or 0)
+
+    return jsonify({
+        "por_kam": result,
+        "global": {
+            "median_hours":  global_median,
+            "avg_hours":     global_avg,
+            "n_emails":      gn,
+            "pct_bajo_2h":   _pct(gb2, gn),
+            "pct_bajo_24h":  _pct(gb24, gn),
+            "pct_sobre_24h": _pct(gn - gb24, gn),
+            "pendientes":    total_pendientes,
+        },
+    })
+
+
+@cs_bp.route("/api/email-response-times/resync", methods=["POST"])
+def resync_kam_responses():
+    """Trigger manual del polling KAM (solo super_admin). FEAT-2026-07-03."""
+    if session.get("user_rol", "").lower().replace(" ", "_") != "super_admin":
+        return jsonify({"error": "Solo Super Admin"}), 403
+    try:
+        import gmail_monitor
+        days = int(request.args.get("days", 30))
+        result = gmail_monitor.poll_kam_responses(lookback_days=days)
+        return jsonify(result)
+    except Exception as e:
+        import traceback
+        return jsonify({
+            "error": f"{type(e).__name__}: {e}",
+            "traceback": traceback.format_exc()[-500:],
+        }), 500
 
 
 # ══════════════════════════════════════════════

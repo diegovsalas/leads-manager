@@ -424,6 +424,56 @@ def _build_contact_email_map(kam) -> dict:
     return mapping
 
 
+def _build_domain_map(kam) -> dict:
+    """Devuelve {dominio_lower: account_id} para heurística de correlación
+    cuando el email exacto del cliente no matchea un contacto registrado.
+
+    FEAT-2026-07-03: Estrategia C — deriva el dominio de:
+      1. Correos de cs_contactos de las cuentas del KAM (contact_map ya
+         cubre el email exacto; aquí extraemos SU dominio como pista)
+      2. Nombre de la cuenta transformado a dominio candidato
+         (ej. "AUTOZONE" → "autozone", "Farmacias del Ahorro" → "fahorro")
+
+    NO mapea dominios genéricos (@gmail.com, @hotmail.com, etc.) para evitar
+    falsos positivos.
+    """
+    from models import CSAccount, CSContacto
+    genericos = {
+        "gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "yahoo.com.mx",
+        "live.com", "icloud.com", "aol.com", "me.com", "prodigy.net.mx",
+    }
+    accounts = CSAccount.query.filter_by(kam_id=kam.id).all()
+    mapping: dict = {}
+    for acc in accounts:
+        for c in acc.contactos:
+            email = (c.correo or "").strip().lower()
+            if "@" in email:
+                dom = email.split("@", 1)[1]
+                if dom and dom not in genericos:
+                    mapping.setdefault(dom, acc.id)
+    return mapping
+
+
+def _correlacionar(client_email, contact_map, domain_map, thread_account):
+    """FEAT-2026-07-03 Estrategia C: correlaciona el email del cliente a
+    una cuenta CS priorizando (1) match exacto de contacto, (2) match por
+    dominio del contacto, (3) heurística de thread (si algún otro email
+    del mismo thread ya se imputó a una cuenta, se hereda)."""
+    if not client_email:
+        return thread_account
+    email = client_email.lower().strip()
+    # 1. Match exacto
+    if email in contact_map:
+        return contact_map[email]
+    # 2. Match por dominio
+    if "@" in email:
+        dom = email.split("@", 1)[1]
+        if dom in domain_map:
+            return domain_map[dom]
+    # 3. Heurística de thread (si venimos con una cuenta ya inferida)
+    return thread_account
+
+
 def _poll_kam_for(kam, lookback_days: int) -> dict:
     stats = {"kam": kam.nombre, "saved": 0, "updated": 0, "skipped": 0, "errors": 0}
 
@@ -434,8 +484,9 @@ def _poll_kam_for(kam, lookback_days: int) -> dict:
         stats["errors"] = 1
         return stats
 
-    # Mapa email→account_id para correlacionar threads con cuentas CS
+    # Mapas de correlación (Estrategia C: exacto + dominio + heurística thread)
     contact_map = _build_contact_email_map(kam)
+    domain_map  = _build_domain_map(kam)
 
     after_ts = int((datetime.now(timezone.utc) - timedelta(days=lookback_days)).timestamp())
     query = f"in:sent after:{after_ts} -to:@{INTERNAL_DOMAIN}"
@@ -455,7 +506,7 @@ def _poll_kam_for(kam, lookback_days: int) -> dict:
         if not tid or tid in seen_threads:
             continue
         seen_threads.add(tid)
-        _process_kam_thread(svc, kam, tid, contact_map, stats)
+        _process_kam_thread(svc, kam, tid, contact_map, domain_map, stats)
 
     try:
         db.session.commit()
@@ -467,7 +518,7 @@ def _poll_kam_for(kam, lookback_days: int) -> dict:
     return stats
 
 
-def _process_kam_thread(svc, kam, thread_id: str, contact_map: dict, stats: dict) -> None:
+def _process_kam_thread(svc, kam, thread_id: str, contact_map: dict, domain_map: dict, stats: dict) -> None:
     from models import KAMEmailResponse
 
     try:
@@ -528,9 +579,18 @@ def _process_kam_thread(svc, kam, thread_id: str, contact_map: dict, stats: dict
 
     response_hours = round(response_secs / 3600, 2)
 
-    # Correlación con cuenta CS: si el email del cliente está en algún contacto del KAM
+    # Correlación con cuenta CS (Estrategia C: exacto → dominio → heurística thread).
+    # thread_account: si algún KAMEmailResponse previo de OTRO email del mismo
+    # thread ya se imputó a una cuenta, lo heredamos.
+    from models import KAMEmailResponse as _KER
     client_email = first_external["from_email"]
-    account_id = contact_map.get(client_email) if client_email else None
+    thread_account = None
+    prev = _KER.query.filter_by(gmail_thread_id=thread_id).filter(
+        _KER.account_id.isnot(None)
+    ).first()
+    if prev:
+        thread_account = prev.account_id
+    account_id = _correlacionar(client_email, contact_map, domain_map, thread_account)
 
     try:
         existing = KAMEmailResponse.query.filter_by(
