@@ -2168,6 +2168,37 @@ class Oportunidad(db.Model):
         }
 
 
+class KAMEmailResponse(db.Model):
+    """Tiempo de primera respuesta de un KAM a un email de cliente externo.
+
+    Un registro por hilo (gmail_thread_id) — solo la primera respuesta del KAM.
+    account_id se resuelve cuando client_email coincide con CSContacto.correo
+    de alguna cuenta que el KAM atiende (heurística de correlación).
+    Populado por gmail_monitor.poll_kam_responses() cada hora.
+    """
+    __tablename__ = "kam_email_responses"
+
+    id              = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    kam_id          = db.Column(UUID(as_uuid=True), db.ForeignKey("users_crm.id", ondelete="CASCADE"),
+                                nullable=False, index=True)
+    account_id      = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id", ondelete="SET NULL"),
+                                nullable=True, index=True)
+    gmail_thread_id = db.Column(db.Text, nullable=False)
+    subject         = db.Column(db.Text, nullable=True)
+    client_email    = db.Column(db.Text, nullable=True)
+    received_at     = db.Column(db.DateTime(timezone=True), nullable=False)
+    replied_at      = db.Column(db.DateTime(timezone=True), nullable=False)
+    response_hours  = db.Column(db.Float, nullable=False)
+    synced_at       = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    kam     = db.relationship("UserCRM", foreign_keys=[kam_id])
+    account = db.relationship("CSAccount", foreign_keys=[account_id])
+
+    __table_args__ = (
+        db.UniqueConstraint("kam_id", "gmail_thread_id", name="uq_kam_email_response"),
+    )
+
+
 @db.event.listens_for(Oportunidad, "before_insert")
 @db.event.listens_for(Oportunidad, "before_update")
 def _auto_probabilidad(mapper, connection, target):

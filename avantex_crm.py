@@ -162,6 +162,58 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] cs_invoices unique savio_invoice_id failed: %s", e)
 
+        # ─── kam_email_responses (2026-07-03) ───
+        try:
+            with db.engine.begin() as conn:
+                exists = conn.execute(text("""
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_name = 'kam_email_responses'
+                """)).first()
+                if not exists:
+                    app.logger.info("[auto-migrate] creating kam_email_responses...")
+                    conn.execute(text("""
+                        CREATE TABLE kam_email_responses (
+                            id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                            kam_id          UUID NOT NULL REFERENCES users_crm(id) ON DELETE CASCADE,
+                            account_id      UUID REFERENCES cs_accounts(id) ON DELETE SET NULL,
+                            gmail_thread_id TEXT NOT NULL,
+                            subject         TEXT,
+                            client_email    TEXT,
+                            received_at     TIMESTAMPTZ NOT NULL,
+                            replied_at      TIMESTAMPTZ NOT NULL,
+                            response_hours  DOUBLE PRECISION NOT NULL,
+                            synced_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                            CONSTRAINT uq_kam_email_response UNIQUE (kam_id, gmail_thread_id)
+                        )
+                    """))
+                    conn.execute(text(
+                        "CREATE INDEX IF NOT EXISTS ix_kam_email_responses_kam_id "
+                        "ON kam_email_responses (kam_id)"
+                    ))
+                    conn.execute(text(
+                        "CREATE INDEX IF NOT EXISTS ix_kam_email_responses_account_id "
+                        "ON kam_email_responses (account_id) WHERE account_id IS NOT NULL"
+                    ))
+                    app.logger.info("[auto-migrate] kam_email_responses created.")
+                else:
+                    # Agregar account_id si la tabla existe pero la columna no
+                    col_exists = conn.execute(text("""
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'kam_email_responses' AND column_name = 'account_id'
+                    """)).first()
+                    if not col_exists:
+                        conn.execute(text(
+                            "ALTER TABLE kam_email_responses "
+                            "ADD COLUMN account_id UUID REFERENCES cs_accounts(id) ON DELETE SET NULL"
+                        ))
+                        conn.execute(text(
+                            "CREATE INDEX IF NOT EXISTS ix_kam_email_responses_account_id "
+                            "ON kam_email_responses (account_id) WHERE account_id IS NOT NULL"
+                        ))
+                        app.logger.info("[auto-migrate] kam_email_responses.account_id added.")
+        except Exception as e:
+            app.logger.warning("[auto-migrate] kam_email_responses failed: %s", e)
+
 
 def create_app():
     app = Flask(__name__)
@@ -605,10 +657,23 @@ def _start_scheduler(app):
                     except Exception as e:
                         app.logger.warning(f"gmail purge: {e}")
 
-            scheduler.add_job(_run_gmail_poll,  "interval", minutes=5, id="gmail_poll")
+            def _run_kam_response_poll():
+                with app.app_context():
+                    try:
+                        import gmail_monitor
+                        result = gmail_monitor.poll_kam_responses()
+                        saved = result.get("total_saved", 0)
+                        updated = result.get("total_updated", 0)
+                        if saved + updated > 0:
+                            app.logger.info(f"KAM email responses: {saved} nuevos, {updated} actualizados")
+                    except Exception as e:
+                        app.logger.warning(f"kam response polling: {e}")
+
+            scheduler.add_job(_run_gmail_poll,       "interval", minutes=5,  id="gmail_poll")
+            scheduler.add_job(_run_kam_response_poll, "interval", minutes=60, id="kam_response_poll")
             # Purge diario a las 4am CST (10am UTC) — fuera de horario laboral
             scheduler.add_job(_run_gmail_purge, "cron", hour=10, minute=0, id="gmail_purge")
-            app.logger.info("Gmail monitoring activo (poll 5 min + purge diario)")
+            app.logger.info("Gmail monitoring activo (poll 5 min + purge diario + KAM responses cada hora)")
 
         # Meta Lead Ads polling (cada 5 min) — alternativa al webhook mientras la App no está publicada
         if os.getenv("META_PAGE_TOKEN"):

@@ -1,19 +1,21 @@
 # cs_health_score.py
 """
-Health Score v2 — 5 componentes, sin métricas manuales.
+Health Score v3 — 6 componentes, sin métricas manuales.
 Score: 0-100 → Sana(70+), Atención(40-69), Riesgo(0-39)
 
 Componentes:
-  1. Cobranza (25%) — % pagado vs facturado (solo AROMATEX + PESTEX)
-  2. Operación (25%) — ratio citas completadas / relevantes
-  3. NPS (20%) — automático desde encuestas. Sin respuesta = 0
-  4. CSAT (15%) — automático desde encuestas (promedio 6 dimensiones). Sin respuesta = 0
-  5. Vencido (15%) — % de facturación NO vencida (100 = nada vencido, 0 = todo vencido)
+  1. Cobranza (25%)       — % pagado vs facturado (solo AROMATEX + PESTEX)
+  2. Operación (25%)      — ratio citas completadas / relevantes
+  3. NPS (20%)            — automático desde encuestas. Sin respuesta = 0
+  4. CSAT (15%)           — automático desde encuestas (promedio 6 dimensiones). Sin respuesta = 0
+  5. Vencido (10%)        — % de facturación NO vencida (100 = nada vencido, 0 = todo vencido)
+  6. Email Response (5%)  — tiempo de respuesta del KAM a emails del cliente (mediana 30d)
+                            Sin datos = 50 (neutral). ≤2h=100, ≤8h=80, ≤24h=50, ≤48h=20, >48h=0
 """
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import func, case
 from extensions import db
-from models import CSAccount, CSInvoice, CSAppointment, CSEncuesta
+from models import CSAccount, CSInvoice, CSAppointment, CSEncuesta, KAMEmailResponse
 
 
 def _preload_cita_stats(account_ids):
@@ -102,26 +104,50 @@ def _preload_encuestas(account_ids):
     return result
 
 
+def _preload_email_response(account_ids):
+    """Mediana de response_hours por cuenta CS en los últimos 30 días."""
+    if not account_ids:
+        return {}
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    rows = (
+        db.session.query(
+            KAMEmailResponse.account_id,
+            func.percentile_cont(0.5).within_group(
+                KAMEmailResponse.response_hours
+            ).label("median_hours"),
+        )
+        .filter(
+            KAMEmailResponse.account_id.in_(account_ids),
+            KAMEmailResponse.replied_at >= cutoff,
+        )
+        .group_by(KAMEmailResponse.account_id)
+        .all()
+    )
+    return {str(r[0]): float(r[1]) for r in rows if r[1] is not None}
+
+
 def calcular_health_scores_batch(accounts: list[CSAccount]) -> dict:
     account_ids = [a.id for a in accounts]
-    cita_stats = _preload_cita_stats(account_ids)
-    cobranza_map = _preload_cobranza(account_ids)
-    encuesta_map = _preload_encuestas(account_ids)
+    cita_stats    = _preload_cita_stats(account_ids)
+    cobranza_map  = _preload_cobranza(account_ids)
+    encuesta_map  = _preload_encuestas(account_ids)
+    email_map     = _preload_email_response(account_ids)
 
     results = {}
     for acc in accounts:
-        results[str(acc.id)] = _calcular_score(acc, cita_stats, cobranza_map, encuesta_map)
+        results[str(acc.id)] = _calcular_score(acc, cita_stats, cobranza_map, encuesta_map, email_map)
     return results
 
 
 def calcular_health_score(account: CSAccount) -> dict:
-    cita_stats = _preload_cita_stats([account.id])
+    cita_stats   = _preload_cita_stats([account.id])
     cobranza_map = _preload_cobranza([account.id])
     encuesta_map = _preload_encuestas([account.id])
-    return _calcular_score(account, cita_stats, cobranza_map, encuesta_map)
+    email_map    = _preload_email_response([account.id])
+    return _calcular_score(account, cita_stats, cobranza_map, encuesta_map, email_map)
 
 
-def _calcular_score(account, cita_stats, cobranza_map, encuesta_map):
+def _calcular_score(account, cita_stats, cobranza_map, encuesta_map, email_map=None):
     desglose = {}
     key = str(account.id)
 
@@ -174,7 +200,7 @@ def _calcular_score(account, cita_stats, cobranza_map, encuesta_map):
         "detalle": csat_detalle,
     }
 
-    # ── 5. VENCIDO (15%) — % NO vencido (100 = nada vencido) ──
+    # ── 5. VENCIDO (10%) — % NO vencido (100 = nada vencido) ──
     vencido = cobr["vencido"]
     if facturado > 0:
         pct_no_vencido = 1 - (vencido / facturado)
@@ -184,8 +210,33 @@ def _calcular_score(account, cita_stats, cobranza_map, encuesta_map):
         score_vencido = 100
         vencido_detalle = "Sin facturación registrada"
     desglose["vencido"] = {
-        "peso": 15, "score": round(score_vencido, 1),
+        "peso": 10, "score": round(score_vencido, 1),
         "detalle": vencido_detalle,
+    }
+
+    # ── 6. EMAIL RESPONSE (5%) — mediana de respuesta del KAM últimos 30d ──
+    median_h = (email_map or {}).get(key)
+    if median_h is None:
+        score_email = 50  # neutral — sin datos correlacionados aún
+        email_detalle = "Sin emails correlacionados con esta cuenta"
+    elif median_h <= 2:
+        score_email = 100
+        email_detalle = f"Mediana {median_h:.1f}h — Excelente (≤2h)"
+    elif median_h <= 8:
+        score_email = 80
+        email_detalle = f"Mediana {median_h:.1f}h — Bueno (≤8h)"
+    elif median_h <= 24:
+        score_email = 50
+        email_detalle = f"Mediana {median_h:.1f}h — Aceptable (≤24h)"
+    elif median_h <= 48:
+        score_email = 20
+        email_detalle = f"Mediana {median_h:.1f}h — Lento (≤48h)"
+    else:
+        score_email = 0
+        email_detalle = f"Mediana {median_h:.1f}h — Muy lento (>48h)"
+    desglose["email_response"] = {
+        "peso": 5, "score": round(score_email, 1),
+        "detalle": email_detalle,
     }
 
     # ── TOTAL ──
@@ -194,7 +245,8 @@ def _calcular_score(account, cita_stats, cobranza_map, encuesta_map):
         score_operacion * 0.25 +
         min(score_nps, 100) * 0.20 +
         min(score_csat, 100) * 0.15 +
-        score_vencido * 0.15
+        score_vencido * 0.10 +
+        score_email * 0.05
     )
     cat = "Sana" if total >= 70 else "Atención" if total >= 40 else "Riesgo"
     color = "green" if total >= 70 else "yellow" if total >= 40 else "red"

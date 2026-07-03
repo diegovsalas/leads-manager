@@ -339,12 +339,69 @@ function _csChangePeriodo(p){
         </table>
     </div>
 </div>
+
+<!-- KAM email response time -->
+<div class="card mb-4" id="email-rt-card">
+    <div class="card-head">
+        <h3>Tiempo de respuesta de email — KAMs</h3>
+        <div class="meta" id="email-rt-meta">últimos 30 días · cargando…</div>
+    </div>
+    <table class="tbl" id="email-rt-table">
+        <thead>
+            <tr>
+                <th>KAM</th>
+                <th class="r">Correos respondidos</th>
+                <th class="r">Mediana</th>
+                <th class="r">Promedio</th>
+                <th class="c">Nivel</th>
+            </tr>
+        </thead>
+        <tbody id="email-rt-body">
+            <tr><td colspan="5" style="text-align:center;color:var(--ink-3);padding:24px">Cargando datos…</td></tr>
+        </tbody>
+    </table>
+</div>
 {% endif %}
 
 {% endblock %}
 
 {% block scripts %}
 <script>
+// KAM email response times
+(function(){
+  const body = document.getElementById('email-rt-body');
+  const meta = document.getElementById('email-rt-meta');
+  if(!body) return;
+
+  function fmtHours(h){
+    if(h === null || h === undefined) return '—';
+    if(h < 1) return Math.round(h * 60) + ' min';
+    const hh = Math.floor(h);
+    const mm = Math.round((h - hh) * 60);
+    return mm > 0 ? hh + 'h ' + mm + 'm' : hh + 'h';
+  }
+
+  function levelBadge(h){
+    if(h === null || h === undefined) return '<span style="color:var(--ink-3)">sin datos</span>';
+    if(h <= 4)  return '<span style="background:#D4EDDA;color:#1B5E20;padding:2px 8px;border-radius:4px;font-size:12px">Excelente</span>';
+    if(h <= 24) return '<span style="background:#FFF3CD;color:#856404;padding:2px 8px;border-radius:4px;font-size:12px">Aceptable</span>';
+    return '<span style="background:#F8D7DA;color:#721C24;padding:2px 8px;border-radius:4px;font-size:12px">Lento</span>';
+  }
+
+  fetch('/cs/api/email-response-times').then(r=>r.json()).then(data=>{
+    if(!data.length){ body.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--ink-3);padding:24px">Sin datos aún — el sistema recopila datos cada hora</td></tr>'; return; }
+    body.innerHTML = data.map(d=>`
+      <tr>
+        <td class="primary"><a href="/cs/kam/${d.kam_id}">${d.kam_nombre}</a></td>
+        <td class="r">${d.n_emails}</td>
+        <td class="r" style="font-weight:600">${fmtHours(d.median_hours)}</td>
+        <td class="r">${fmtHours(d.avg_hours)}</td>
+        <td class="c">${levelBadge(d.median_hours)}</td>
+      </tr>`).join('');
+    if(meta) meta.textContent = 'últimos 30 días · ' + data.filter(d=>d.n_emails>0).length + ' KAMs con datos';
+  }).catch(()=>{ if(body) body.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--ink-3)">Error al cargar</td></tr>'; });
+})();
+
 // MRR Trend
 fetch('/cs/api/mrr-trend').then(r=>r.json()).then(data=>{
     const ctx=document.getElementById('mrrTrendChart');

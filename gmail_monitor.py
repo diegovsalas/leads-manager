@@ -366,3 +366,201 @@ def purge_old(days: int = RETENTION_DAYS) -> dict:
     deleted = SalesEmail.query.filter(SalesEmail.sent_at < cutoff).delete(synchronize_session=False)
     db.session.commit()
     return {"deleted": deleted, "cutoff": cutoff.isoformat()}
+
+
+# ──────────────────────────────────────────────
+# KAM email response time tracking
+# ──────────────────────────────────────────────
+KAM_RESPONSE_LOOKBACK_DAYS = int(os.getenv("KAM_RESPONSE_LOOKBACK_DAYS", "30"))
+
+
+def poll_kam_responses(lookback_days: int = KAM_RESPONSE_LOOKBACK_DAYS) -> dict:
+    """Mide el tiempo de primera respuesta de cada KAM a emails de clientes externos.
+
+    Para cada KAM activo con correo @{INTERNAL_DOMAIN}:
+    1. Obtiene sus emails enviados en los últimos N días (excluyendo internos)
+    2. Por cada hilo con >=2 mensajes, busca el primer email del cliente (externo)
+       y la primera respuesta del KAM — calcula response_hours
+    3. Persiste/actualiza KAMEmailResponse (upsert por kam_id + gmail_thread_id)
+    """
+    if not is_configured():
+        return {"error": "GMAIL_SERVICE_ACCOUNT_JSON no configurado"}
+
+    from models import UserCRM, RolCRM
+
+    kams = UserCRM.query.filter(
+        UserCRM.rol == RolCRM.KAM,
+        UserCRM.activo.is_(True),
+        UserCRM.correo.isnot(None),
+        UserCRM.correo != "",
+    ).all()
+
+    results = []
+    for kam in kams:
+        if not kam.correo.lower().endswith("@" + INTERNAL_DOMAIN):
+            continue
+        stats = _poll_kam_for(kam, lookback_days)
+        results.append(stats)
+
+    return {
+        "kams":          len(results),
+        "total_saved":   sum(r.get("saved", 0) for r in results),
+        "total_updated": sum(r.get("updated", 0) for r in results),
+        "detalle":       results,
+    }
+
+
+def _build_contact_email_map(kam) -> dict:
+    """Devuelve {email_lower: account_id (UUID)} para todos los contactos de
+    las cuentas que el KAM atiende. Se usa para correlacionar threads a cuentas."""
+    from models import CSAccount, CSContacto
+    accounts = CSAccount.query.filter_by(kam_id=kam.id).all()
+    mapping: dict = {}
+    for acc in accounts:
+        for c in acc.contactos:
+            email = (c.correo or "").strip().lower()
+            if email:
+                mapping[email] = acc.id
+    return mapping
+
+
+def _poll_kam_for(kam, lookback_days: int) -> dict:
+    stats = {"kam": kam.nombre, "saved": 0, "updated": 0, "skipped": 0, "errors": 0}
+
+    try:
+        svc = _build_service(kam.correo)
+    except Exception as e:
+        log.exception(f"[kam_response] build_service failed for {kam.correo}: {e}")
+        stats["errors"] = 1
+        return stats
+
+    # Mapa email→account_id para correlacionar threads con cuentas CS
+    contact_map = _build_contact_email_map(kam)
+
+    after_ts = int((datetime.now(timezone.utc) - timedelta(days=lookback_days)).timestamp())
+    query = f"in:sent after:{after_ts} -to:@{INTERNAL_DOMAIN}"
+
+    try:
+        resp = svc.users().messages().list(userId="me", q=query, maxResults=200).execute()
+    except Exception as e:
+        log.exception(f"[kam_response] list failed for {kam.correo}: {e}")
+        stats["errors"] = 1
+        return stats
+
+    messages = resp.get("messages") or []
+    seen_threads: set = set()
+
+    for m in messages:
+        tid = m.get("threadId")
+        if not tid or tid in seen_threads:
+            continue
+        seen_threads.add(tid)
+        _process_kam_thread(svc, kam, tid, contact_map, stats)
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        log.exception(f"[kam_response] commit failed for {kam.nombre}: {e}")
+        stats["errors"] += 1
+
+    return stats
+
+
+def _process_kam_thread(svc, kam, thread_id: str, contact_map: dict, stats: dict) -> None:
+    from models import KAMEmailResponse
+
+    try:
+        thread = svc.users().threads().get(
+            userId="me", id=thread_id, format="metadata",
+            metadataHeaders=["From", "Subject"],
+        ).execute()
+    except Exception as e:
+        log.warning(f"[kam_response] get thread {thread_id} failed: {e}")
+        stats["errors"] += 1
+        return
+
+    msgs = thread.get("messages") or []
+    if len(msgs) < 2:
+        stats["skipped"] += 1
+        return
+
+    kam_email = kam.correo.lower()
+    first_external: Optional[dict] = None
+    first_kam_reply: Optional[datetime] = None
+
+    for msg in msgs:
+        headers = (msg.get("payload") or {}).get("headers") or []
+        from_val = next((h["value"] for h in headers if (h.get("name") or "").lower() == "from"), "")
+        from_emails = _extract_emails(from_val)
+        is_from_kam = kam_email in [e.lower() for e in from_emails]
+
+        internal_ms = msg.get("internalDate")
+        if not internal_ms:
+            continue
+        try:
+            msg_at = datetime.fromtimestamp(int(internal_ms) / 1000, tz=timezone.utc)
+        except (ValueError, OSError):
+            continue
+
+        if not is_from_kam and first_external is None:
+            # Solo mensajes de externos reales (no del dominio interno)
+            if from_emails and not any(e.lower().endswith("@" + INTERNAL_DOMAIN) for e in from_emails):
+                subject_val = next(
+                    (h["value"] for h in headers if (h.get("name") or "").lower() == "subject"), ""
+                )
+                first_external = {
+                    "at": msg_at,
+                    "from_email": from_emails[0].lower() if from_emails else None,
+                    "subject": subject_val,
+                }
+        elif is_from_kam and first_external is not None and first_kam_reply is None:
+            first_kam_reply = msg_at
+
+    if not first_external or not first_kam_reply:
+        stats["skipped"] += 1
+        return
+
+    response_secs = (first_kam_reply - first_external["at"]).total_seconds()
+    if response_secs <= 0:
+        stats["skipped"] += 1
+        return
+
+    response_hours = round(response_secs / 3600, 2)
+
+    # Correlación con cuenta CS: si el email del cliente está en algún contacto del KAM
+    client_email = first_external["from_email"]
+    account_id = contact_map.get(client_email) if client_email else None
+
+    try:
+        existing = KAMEmailResponse.query.filter_by(
+            kam_id=kam.id, gmail_thread_id=thread_id
+        ).first()
+
+        if existing:
+            existing.received_at    = first_external["at"]
+            existing.replied_at     = first_kam_reply
+            existing.response_hours = response_hours
+            existing.synced_at      = datetime.now(timezone.utc)
+            # Actualiza account_id si ahora hay match (puede haberse registrado el contacto después)
+            if account_id and existing.account_id is None:
+                existing.account_id = account_id
+            stats["updated"] += 1
+        else:
+            db.session.add(KAMEmailResponse(
+                kam_id          = kam.id,
+                account_id      = account_id,
+                gmail_thread_id = thread_id,
+                subject         = (first_external["subject"] or "")[:500] or None,
+                client_email    = client_email,
+                received_at     = first_external["at"],
+                replied_at      = first_kam_reply,
+                response_hours  = response_hours,
+            ))
+            stats["saved"] += 1
+
+        db.session.flush()
+    except Exception as e:
+        db.session.rollback()
+        log.warning(f"[kam_response] persist thread {thread_id} failed: {e}")
+        stats["errors"] += 1

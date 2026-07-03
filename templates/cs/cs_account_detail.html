@@ -196,6 +196,11 @@
                             {% elif key == 'uns' %}UNs contratadas ({{ comp.peso }}%)
                             {% elif key == 'operacion' %}Operación ({{ comp.peso }}%)
                             {% elif key == 'recencia' %}Recencia de pago ({{ comp.peso }}%)
+                            {% elif key == 'nps' %}NPS ({{ comp.peso }}%)
+                            {% elif key == 'csat' %}CSAT ({{ comp.peso }}%)
+                            {% elif key == 'vencido' %}Cartera Vencida ({{ comp.peso }}%)
+                            {% elif key == 'email_response' %}Resp. Email KAM ({{ comp.peso }}%)
+                            {% else %}{{ key|replace('_',' ')|title }} ({{ comp.peso }}%)
                             {% endif %}
                         </span>
                         <span class="font-semibold

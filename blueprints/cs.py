@@ -1246,6 +1246,46 @@ def api_operacion_trend():
     } for r in rows])
 
 
+@cs_bp.route("/api/email-response-times")
+def api_email_response_times():
+    """Tiempo mediano y promedio de respuesta a email por KAM (últimos 30 días)."""
+    from models import KAMEmailResponse
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import func as sqlfunc
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+
+    rows = (
+        db.session.query(
+            KAMEmailResponse.kam_id,
+            sqlfunc.count(KAMEmailResponse.id).label("n"),
+            sqlfunc.avg(KAMEmailResponse.response_hours).label("avg_hours"),
+            sqlfunc.percentile_cont(0.5).within_group(
+                KAMEmailResponse.response_hours
+            ).label("median_hours"),
+        )
+        .filter(KAMEmailResponse.replied_at >= cutoff)
+        .group_by(KAMEmailResponse.kam_id)
+        .all()
+    )
+
+    kams = {str(k.id): k.nombre for k in _get_kams()}
+    data_by_kam = {str(r.kam_id): r for r in rows}
+
+    result = []
+    for kid, kname in sorted(kams.items(), key=lambda x: x[1]):
+        r = data_by_kam.get(kid)
+        result.append({
+            "kam_id":       kid,
+            "kam_nombre":   kname,
+            "n_emails":     int(r.n) if r else 0,
+            "avg_hours":    round(float(r.avg_hours), 1) if r and r.avg_hours is not None else None,
+            "median_hours": round(float(r.median_hours), 1) if r and r.median_hours is not None else None,
+        })
+
+    return jsonify(result)
+
+
 # ══════════════════════════════════════════════
 # CARGA DE DATOS — CSV upload
 # ══════════════════════════════════════════════
