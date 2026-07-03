@@ -675,6 +675,28 @@ def _start_scheduler(app):
             scheduler.add_job(_run_gmail_purge, "cron", hour=10, minute=0, id="gmail_purge")
             app.logger.info("Gmail monitoring activo (poll 5 min + purge diario + KAM responses cada hora)")
 
+        # FEAT-2026-07-03: Zoho Analytics → cs_appointments ETL (diario 4:30am CST)
+        # Solo si están configuradas las 8 env vars necesarias.
+        _zoho_vars = ("ZOHO_CLIENT_ID","ZOHO_CLIENT_SECRET","ZOHO_REFRESH_TOKEN",
+                      "ZOHO_USER_EMAIL","ZOHO_WORKSPACE","ZOHO_TABLE",
+                      "SUPABASE_URL","SUPABASE_SERVICE_KEY")
+        if all(os.getenv(k) for k in _zoho_vars):
+            def _run_zoho_appointments_etl():
+                with app.app_context():
+                    try:
+                        import zoho_appointments_etl as etl
+                        result = etl.run()
+                        app.logger.info(f"Zoho ETL: {result}")
+                    except Exception as e:
+                        app.logger.warning(f"zoho appointments etl: {e}")
+
+            scheduler.add_job(_run_zoho_appointments_etl, "cron",
+                              hour=10, minute=30, id="zoho_appts_etl")  # 4:30am CST
+            app.logger.info("Zoho Analytics ETL activo (diario 4:30am CST)")
+        else:
+            _faltan = [k for k in _zoho_vars if not os.getenv(k)]
+            app.logger.info(f"Zoho ETL desactivado — faltan env vars: {_faltan}")
+
         # Meta Lead Ads polling (cada 5 min) — alternativa al webhook mientras la App no está publicada
         if os.getenv("META_PAGE_TOKEN"):
             def _run_meta_polling():

@@ -17,3 +17,4 @@ anthropic>=0.40
 google-ads>=24.0
 google-api-python-client>=2.100
 google-auth>=2.20
+supabase>=2.0

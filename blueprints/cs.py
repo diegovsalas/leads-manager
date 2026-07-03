@@ -1377,6 +1377,43 @@ def api_email_response_times():
     })
 
 
+@cs_bp.route("/api/zoho/sync-appointments", methods=["POST"])
+def zoho_sync_appointments():
+    """Trigger manual del ETL Zoho Analytics → cs_appointments (super_admin).
+
+    FEAT-2026-07-03: Diego pidió forzar la conexión. Este endpoint dispara
+    zoho_appointments_etl.run() en el mismo proceso Flask.
+
+    Requiere env vars en Render:
+      ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, ZOHO_REFRESH_TOKEN,
+      ZOHO_USER_EMAIL, ZOHO_WORKSPACE, ZOHO_TABLE,
+      SUPABASE_URL, SUPABASE_SERVICE_KEY
+    """
+    if session.get("user_rol", "").lower().replace(" ", "_") != "super_admin":
+        return jsonify({"error": "Solo Super Admin"}), 403
+    import os as _os
+    faltan = [k for k in ("ZOHO_CLIENT_ID","ZOHO_CLIENT_SECRET","ZOHO_REFRESH_TOKEN",
+                          "ZOHO_USER_EMAIL","ZOHO_WORKSPACE","ZOHO_TABLE",
+                          "SUPABASE_URL","SUPABASE_SERVICE_KEY") if not _os.getenv(k)]
+    if faltan:
+        return jsonify({
+            "error": "Faltan env vars en Render",
+            "faltantes": faltan,
+        }), 400
+    try:
+        import zoho_appointments_etl as etl
+        result = etl.run()
+        return jsonify({"ok": True, **result})
+    except KeyError as e:
+        return jsonify({"error": f"Falta env var: {e}"}), 400
+    except Exception as e:
+        import traceback
+        return jsonify({
+            "error": f"{type(e).__name__}: {e}",
+            "traceback": traceback.format_exc()[-800:],
+        }), 500
+
+
 @cs_bp.route("/api/email-response-times/resync", methods=["POST"])
 def resync_kam_responses():
     """Trigger manual del polling KAM (solo super_admin). FEAT-2026-07-03."""
