@@ -24,6 +24,12 @@
             <option value="{{ p.value }}" {% if p.value == periodo_param %}selected{% endif %}>{{ p.label }}</option>
             {% endfor %}
         </select>
+        <!-- FEAT-2026-07-03: forzar sync Zoho manualmente (super_admin) -->
+        {% if (user_rol or '').lower().replace(' ','_') == 'super_admin' %}
+        <button type="button" onclick="_csSyncZoho(this)" class="btn" title="Fuerza el sync de Zoho Analytics → cs_appointments">
+            🔄 Forzar sync Zoho
+        </button>
+        {% endif %}
     </div>
 </div>
 
@@ -62,6 +68,30 @@ function _csChangePeriodo(p){
     window.location.replace('/cs/?' + cur.toString());
   }
 })();
+
+// FEAT-2026-07-03: forzar sync Zoho → cs_appointments (super_admin)
+async function _csSyncZoho(btn){
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Sincronizando…';
+  try{
+    const r = await fetch('/cs/api/zoho/sync-appointments', {method:'POST'});
+    const d = await r.json();
+    if(r.ok && d.ok){
+      alert(`Sync OK — ${d.rows_upserted || 0} filas actualizadas en ${d.elapsed_s}s`);
+      window.location.reload();
+    }else if(d.faltantes){
+      alert('Faltan env vars en Render:\n\n' + d.faltantes.join('\n'));
+    }else{
+      alert('Error: ' + (d.error || 'desconocido'));
+    }
+  }catch(e){
+    alert('Falló: ' + e.message);
+  }finally{
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+}
 </script>
 
 <!-- Alert strip -->
