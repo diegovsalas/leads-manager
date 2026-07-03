@@ -38,8 +38,9 @@
                 <span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold
                     {% if health.color == 'green' %}bg-green-100 text-green-700
                     {% elif health.color == 'yellow' %}bg-yellow-100 text-yellow-700
-                    {% else %}bg-red-100 text-red-700{% endif %}">
-                    {{ health.categoria }} · {{ health.score }}
+                    {% elif health.color == 'red' %}bg-red-100 text-red-700
+                    {% else %}bg-gray-100 text-gray-600{% endif %}">
+                    {{ health.categoria }}{% if health.score is not none %} · {{ health.score }}{% endif %}
                 </span>
             </div>
             <p class="text-sm text-gray-500">
@@ -176,18 +177,21 @@
                     <div class="inline-flex items-center justify-center w-24 h-24 rounded-full border-4
                         {% if health.color == 'green' %}border-green-400
                         {% elif health.color == 'yellow' %}border-yellow-400
-                        {% else %}border-red-400{% endif %}">
+                        {% elif health.color == 'red' %}border-red-400
+                        {% else %}border-gray-300{% endif %}">
                         <span class="text-3xl font-bold
                             {% if health.color == 'green' %}text-green-600
                             {% elif health.color == 'yellow' %}text-yellow-500
-                            {% else %}text-red-600{% endif %}">
-                            {{ health.score }}
+                            {% elif health.color == 'red' %}text-red-600
+                            {% else %}text-gray-400{% endif %}">
+                            {% if health.score is none %}—{% else %}{{ health.score }}{% endif %}
                         </span>
                     </div>
-                    <p class="text-sm text-gray-500 mt-2">de 100 puntos</p>
+                    <p class="text-sm text-gray-500 mt-2">de 100 puntos{% if health.cobertura_peso is defined and health.cobertura_peso < 100 %} · cobertura {{ health.cobertura_peso }}%{% endif %}</p>
                 </div>
 
-                <!-- Barras de cada componente -->
+                <!-- Barras de cada componente. FIX-2026-07-03: comp.score puede
+                     ser None (componente sin datos, excluido del score total). -->
                 {% for key, comp in health.desglose.items() %}
                 <div class="mb-4">
                     <div class="flex justify-between text-sm mb-1">
@@ -196,6 +200,7 @@
                             {% elif key == 'uns' %}UNs contratadas ({{ comp.peso }}%)
                             {% elif key == 'operacion' %}Operación ({{ comp.peso }}%)
                             {% elif key == 'recencia' %}Recencia de pago ({{ comp.peso }}%)
+                            {% elif key == 'evaluaciones' %}Evaluaciones ({{ comp.peso }}%)
                             {% elif key == 'nps' %}NPS ({{ comp.peso }}%)
                             {% elif key == 'csat' %}CSAT ({{ comp.peso }}%)
                             {% elif key == 'vencido' %}Cartera Vencida ({{ comp.peso }}%)
@@ -203,20 +208,28 @@
                             {% else %}{{ key|replace('_',' ')|title }} ({{ comp.peso }}%)
                             {% endif %}
                         </span>
+                        {% if comp.score is none %}
+                        <span class="text-xs text-gray-400 italic">Sin datos</span>
+                        {% else %}
                         <span class="font-semibold
                             {% if comp.score >= 70 %}text-green-600
                             {% elif comp.score >= 40 %}text-yellow-500
                             {% else %}text-red-600{% endif %}">
                             {{ comp.score }}
                         </span>
+                        {% endif %}
                     </div>
                     <!-- Barra de progreso -->
                     <div class="w-full bg-gray-200 rounded-full h-2">
+                        {% if comp.score is none %}
+                        <div class="h-2 rounded-full bg-gray-300" style="width: 100%; opacity:.3;"></div>
+                        {% else %}
                         <div class="h-2 rounded-full
                             {% if comp.score >= 70 %}bg-green-500
                             {% elif comp.score >= 40 %}bg-yellow-400
                             {% else %}bg-red-500{% endif %}"
                             style="width: {{ comp.score }}%"></div>
+                        {% endif %}
                     </div>
                     <p class="text-xs text-gray-400 mt-0.5">{{ comp.detalle }}</p>
                 </div>

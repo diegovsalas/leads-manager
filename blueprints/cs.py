@@ -350,12 +350,16 @@ def dashboard():
         hs = scores_map[str(acc.id)]
         fp = fact_periodo.get(str(acc.id), {"facturado": 0, "pagado": 0, "pendiente": 0})
         account_scores.append({"account": acc, "health": hs, "fact": fp})
-    account_scores.sort(key=lambda x: x["health"]["score"])
-    top_riesgo = account_scores[:5]
+    # FIX-2026-07-03: score puede ser None (sin datos). Al ordenar por
+    # riesgo, tratamos None como score alto (final de la lista, no lo
+    # confundimos con riesgo real).
+    account_scores.sort(key=lambda x: x["health"]["score"] if x["health"]["score"] is not None else 999)
+    top_riesgo = [x for x in account_scores if x["health"]["score"] is not None][:5]
 
-    cat_counts = {"Sana": 0, "Atención": 0, "Riesgo": 0}
+    cat_counts = {"Sana": 0, "Atención": 0, "Riesgo": 0, "Sin datos": 0}
     for item in account_scores:
-        cat_counts[item["health"]["categoria"]] += 1
+        c = item["health"]["categoria"]
+        cat_counts[c] = cat_counts.get(c, 0) + 1
 
     # ── KPIs avanzados ────────────────────────────────────────────────
     num_acc = max(len(accounts), 1)
@@ -364,7 +368,9 @@ def dashboard():
     pct_cobranza = (pagado_periodo / facturado_periodo * 100) if facturado_periodo > 0 else 0
     pct_riesgo = (cat_counts["Riesgo"] / num_acc * 100) if num_acc else 0
     pct_atencion = (cat_counts["Atención"] / num_acc * 100) if num_acc else 0
-    hs_avg = round(sum(item["health"]["score"] for item in account_scores) / num_acc, 1) if num_acc else 0
+    # FIX-2026-07-03: promediar SOLO cuentas con score válido.
+    scores_validos = [item["health"]["score"] for item in account_scores if item["health"]["score"] is not None]
+    hs_avg = round(sum(scores_validos) / len(scores_validos), 1) if scores_validos else 0
 
     # NPS promedio del portafolio (de los CSAccount.nps si está populado)
     nps_vals = [float(a.nps) for a in accounts if a.nps is not None]
@@ -529,7 +535,11 @@ def mis_cuentas():
     mrr_total = sum(float(a.mrr or 0) for a in accounts)
     arr_total = sum(float(a.arr_proyectado or 0) for a in accounts)
     cuentas_nuevas = sum(1 for a in accounts if a.es_cuenta_nueva)
-    en_riesgo = sum(1 for a in accounts if scores_map.get(str(a.id), {}).get("score", 100) < 40)
+    # FIX-2026-07-03: score puede ser None (sin datos suficientes); no cuenta como riesgo
+    en_riesgo = sum(
+        1 for a in accounts
+        if (scores_map.get(str(a.id), {}).get("score") or 100) < 40
+    )
 
     return render_template(
         "cs_mis_cuentas.html",
