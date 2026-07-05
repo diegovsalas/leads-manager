@@ -63,3 +63,64 @@ ALTER TABLE cs_opportunities
 -- Antes vivía dentro del <details> oculto del modal y se guardaba en tipo_cliente
 -- (hack). Ahora tiene columna propia y campo visible en el formulario.
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS notas TEXT;
+
+-- Round CRM/PIPE integridad: una oportunidad ganada debe reflejarse como una
+-- venta única, y Account/Contact dejan de ser soft links huérfanos.
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS opportunity_id UUID;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_sales_opportunity_id
+    ON sales(opportunity_id)
+    WHERE opportunity_id IS NOT NULL;
+
+UPDATE sales s
+SET opportunity_id = NULL
+WHERE opportunity_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM oportunidades o WHERE o.id = s.opportunity_id);
+
+ALTER TABLE sales DROP CONSTRAINT IF EXISTS sales_opportunity_id_fkey;
+ALTER TABLE sales
+    ADD CONSTRAINT sales_opportunity_id_fkey
+    FOREIGN KEY (opportunity_id)
+    REFERENCES oportunidades(id)
+    ON DELETE SET NULL;
+
+UPDATE leads l
+SET account_id = NULL
+WHERE account_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id = l.account_id);
+UPDATE leads l
+SET contact_id = NULL
+WHERE contact_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM contacts c WHERE c.id = l.contact_id);
+UPDATE oportunidades o
+SET account_id = NULL
+WHERE account_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id = o.account_id);
+UPDATE oportunidades o
+SET contact_id = NULL
+WHERE contact_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM contacts c WHERE c.id = o.contact_id);
+
+ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_account_id_fkey;
+ALTER TABLE leads
+    ADD CONSTRAINT leads_account_id_fkey
+    FOREIGN KEY (account_id)
+    REFERENCES accounts(id)
+    ON DELETE SET NULL;
+ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_contact_id_fkey;
+ALTER TABLE leads
+    ADD CONSTRAINT leads_contact_id_fkey
+    FOREIGN KEY (contact_id)
+    REFERENCES contacts(id)
+    ON DELETE SET NULL;
+ALTER TABLE oportunidades DROP CONSTRAINT IF EXISTS oportunidades_account_id_fkey;
+ALTER TABLE oportunidades
+    ADD CONSTRAINT oportunidades_account_id_fkey
+    FOREIGN KEY (account_id)
+    REFERENCES accounts(id)
+    ON DELETE SET NULL;
+ALTER TABLE oportunidades DROP CONSTRAINT IF EXISTS oportunidades_contact_id_fkey;
+ALTER TABLE oportunidades
+    ADD CONSTRAINT oportunidades_contact_id_fkey
+    FOREIGN KEY (contact_id)
+    REFERENCES contacts(id)
+    ON DELETE SET NULL;

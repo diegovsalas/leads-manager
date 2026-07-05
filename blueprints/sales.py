@@ -105,6 +105,12 @@ def create_sale():
     rate, amount = _calc_commission(sale_type, commission_type, monthly, total)
 
     lead_id = data.get("lead_id")
+    opportunity_id = data.get("opportunity_id")
+    if opportunity_id:
+        existing = Sale.query.filter(Sale.opportunity_id == opportunity_id).first()
+        if existing:
+            return jsonify(existing.to_dict()), 200
+
     lead_source = None
     if lead_id:
         lead = db.session.get(Lead, lead_id)
@@ -112,7 +118,7 @@ def create_sale():
             lead_source = lead.origen.value if lead.origen else None
 
     sale = Sale(
-        lead_id=lead_id, user_id=_current_user_id(),
+        lead_id=lead_id, opportunity_id=opportunity_id, user_id=_current_user_id(),
         unit=unit, sale_type=sale_type,
         sale_category=data.get("sale_category") or "recurrente",
         uen=data.get("uen"),

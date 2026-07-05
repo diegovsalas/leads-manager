@@ -111,6 +111,75 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] drop unique leads.telefono failed: %s", e)
 
+        # ─── sales.opportunity_id: una Oportunidad ganada = una Venta ───
+        try:
+            with db.engine.begin() as conn:
+                exists = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'sales' AND column_name = 'opportunity_id'
+                """)).first()
+                if not exists:
+                    app.logger.info("[auto-migrate] adding sales.opportunity_id...")
+                    conn.execute(text("ALTER TABLE sales ADD COLUMN opportunity_id UUID"))
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ux_sales_opportunity_id "
+                    "ON sales (opportunity_id) WHERE opportunity_id IS NOT NULL"
+                ))
+                fk_exists = conn.execute(text("""
+                    SELECT 1 FROM pg_constraint
+                    WHERE conrelid = 'sales'::regclass
+                      AND conname = 'sales_opportunity_id_fkey'
+                """)).first()
+                if not fk_exists:
+                    conn.execute(text("""
+                        UPDATE sales s
+                        SET opportunity_id = NULL
+                        WHERE opportunity_id IS NOT NULL
+                          AND NOT EXISTS (
+                            SELECT 1 FROM oportunidades o WHERE o.id = s.opportunity_id
+                          )
+                    """))
+                    conn.execute(text("""
+                        ALTER TABLE sales
+                        ADD CONSTRAINT sales_opportunity_id_fkey
+                        FOREIGN KEY (opportunity_id)
+                        REFERENCES oportunidades(id)
+                        ON DELETE SET NULL
+                    """))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] sales.opportunity_id failed: %s", e)
+
+        # ─── Account/Contact FKs reales para evitar referencias huérfanas ───
+        try:
+            with db.engine.begin() as conn:
+                for table in ("leads", "oportunidades"):
+                    for col, parent in (("account_id", "accounts"), ("contact_id", "contacts")):
+                        cname = f"{table}_{col}_fkey"
+                        exists = conn.execute(text("""
+                            SELECT 1 FROM pg_constraint
+                            WHERE conrelid = to_regclass(:table)
+                              AND conname = :cname
+                        """), {"table": table, "cname": cname}).first()
+                        if exists:
+                            continue
+                        conn.execute(text(f"""
+                            UPDATE {table} child
+                            SET {col} = NULL
+                            WHERE {col} IS NOT NULL
+                              AND NOT EXISTS (
+                                SELECT 1 FROM {parent} p WHERE p.id = child.{col}
+                              )
+                        """))
+                        conn.execute(text(f"""
+                            ALTER TABLE {table}
+                            ADD CONSTRAINT {cname}
+                            FOREIGN KEY ({col})
+                            REFERENCES {parent}(id)
+                            ON DELETE SET NULL
+                        """))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] account/contact FKs failed: %s", e)
+
         # ─── metas_vendedor: meta_recurrente_mxn + meta_eventual_mxn (FEAT-2026-06-25) ───
         try:
             with db.engine.begin() as conn:

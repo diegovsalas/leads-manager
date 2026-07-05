@@ -18,7 +18,9 @@ CREATE TYPE origen_lead_enum AS ENUM (
     'Meta Ads',
     'WhatsApp Organico',
     'Web',
-    'Prospeccion'
+    'Prospeccion',
+    'Upselling',
+    'Cross-selling'
 );
 
 CREATE TYPE etapa_pipeline_enum AS ENUM (
@@ -27,6 +29,7 @@ CREATE TYPE etapa_pipeline_enum AS ENUM (
     '2do Contacto',
     '3er Contacto',
     '4to Contacto',
+    'Presentación',
     'Cotización',
     'Demo',
     'Negociación',
@@ -65,7 +68,7 @@ CREATE INDEX idx_usuarios_roundrobin
 -- ============================================================
 CREATE TABLE leads (
     id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    telefono              VARCHAR(30)           NOT NULL UNIQUE,
+    telefono              VARCHAR(30)           NOT NULL,
     nombre                VARCHAR(200),
     origen                origen_lead_enum,
     marca_interes         VARCHAR(80),
@@ -91,6 +94,7 @@ CREATE TABLE leads (
 
 -- Índices para consultas frecuentes del Kanban y filtros
 CREATE INDEX idx_leads_etapa       ON leads (etapa_pipeline);
+CREATE INDEX idx_leads_telefono    ON leads (telefono);
 CREATE INDEX idx_leads_vendedor    ON leads (usuario_asignado_id);
 CREATE INDEX idx_leads_marca       ON leads (marca_interes);
 CREATE INDEX idx_leads_fecha_upd   ON leads (fecha_actualizacion DESC);

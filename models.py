@@ -208,9 +208,9 @@ class Lead(db.Model):
     empresa_nombre = db.Column(db.String(200), nullable=True)  # Nombre de la empresa (del bot) — legacy, se reemplaza por account_id
     notas = db.Column(db.Text, nullable=True)  # Información importante / contexto libre del lead
 
-    # Account + Contact (Fase 3) — referencias opcionales sin FK estricto en DB
-    account_id = db.Column(UUID(as_uuid=True), nullable=True, index=True)
-    contact_id = db.Column(UUID(as_uuid=True), nullable=True, index=True)
+    # Account + Contact (Fase 3)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True, index=True)
+    contact_id = db.Column(UUID(as_uuid=True), db.ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True, index=True)
 
     # FK → usuarios
     usuario_asignado_id = db.Column(
@@ -1824,6 +1824,7 @@ class Sale(db.Model):
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
     lead_id = db.Column(UUID(as_uuid=True), db.ForeignKey("leads.id"), nullable=True, index=True)
+    opportunity_id = db.Column(UUID(as_uuid=True), db.ForeignKey("oportunidades.id"), nullable=True, unique=True, index=True)
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=True, index=True)  # vendedor
     unit = db.Column(db.String(40), nullable=False, index=True)  # aromatex/pestex/weldex
     sale_type = db.Column(db.String(40), nullable=False)  # suscripcion_nueva/servicio_unico/upsell
@@ -1850,6 +1851,7 @@ class Sale(db.Model):
         return {
             "id": str(self.id),
             "lead_id": str(self.lead_id) if self.lead_id else None,
+            "opportunity_id": str(self.opportunity_id) if self.opportunity_id else None,
             "user_id": str(self.user_id) if self.user_id else None,
             "unit": self.unit, "sale_type": self.sale_type,
             "sale_category": self.sale_category, "uen": self.uen,
@@ -2117,9 +2119,9 @@ class Oportunidad(db.Model):
     lead_id = db.Column(UUID(as_uuid=True), db.ForeignKey("leads.id"), nullable=True, index=True)
     zoho_deal_id = db.Column(db.String(80), nullable=True, unique=True, index=True)
 
-    # Account + Contact (Fase 3) — soft links sin FK estricto en DB
-    account_id = db.Column(UUID(as_uuid=True), nullable=True, index=True)
-    contact_id = db.Column(UUID(as_uuid=True), nullable=True, index=True)
+    # Account + Contact (Fase 3)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True, index=True)
+    contact_id = db.Column(UUID(as_uuid=True), db.ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True, index=True)
 
     fecha_creacion = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
     fecha_actualizacion = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
@@ -2127,6 +2129,8 @@ class Oportunidad(db.Model):
 
     propietario = db.relationship("Usuario", foreign_keys=[propietario_id])
     lead = db.relationship("Lead", foreign_keys=[lead_id])
+    account = db.relationship("Account", foreign_keys=[account_id])
+    contact = db.relationship("Contact", foreign_keys=[contact_id])
 
     @property
     def valor_ponderado(self):

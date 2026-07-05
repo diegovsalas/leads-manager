@@ -13,7 +13,7 @@ from sqlalchemy import func, or_
 from extensions import db
 from models import (
     Oportunidad, EtapaOportunidad, PROBABILIDAD_OPORTUNIDAD,
-    Lead, EtapaPipeline, Usuario, Contact,
+    Lead, EtapaPipeline, Usuario, Contact, Account, Sale,
 )
 
 oportunidades_bp = Blueprint("oportunidades", __name__)
@@ -67,6 +67,119 @@ def _to_decimal(v):
         return Decimal(str(v))
     except (ValueError, TypeError):
         return None
+
+
+def _truthy(v):
+    return str(v).strip().lower() in ("1", "true", "yes", "si", "sí")
+
+
+def _unit_from_marca(marca):
+    raw = (marca or "").strip()
+    if not raw:
+        return "sin_un"
+    low = raw.lower().replace(" ", "_")
+    if low in ("aromatex_home", "aromatexhome"):
+        return "aromatex"
+    if low in ("aromatex", "pestex", "weldex", "nexo"):
+        return low
+    return low[:40]
+
+
+def _calc_commission(sale_type: str, commission_type: str | None,
+                     monthly_amount: float, total_amount: float) -> tuple[float, float]:
+    rate = 1.0 if commission_type == "autogenerado" else 0.5
+    if sale_type in ("suscripcion_nueva", "upsell"):
+        return rate, (monthly_amount or 0) * rate
+    return rate, (total_amount or 0) * 0.08
+
+
+def _find_duplicate_open_opportunity(account_id=None, lead_id=None, marca=None, empresa=None, exclude_id=None):
+    """Evita duplicar el mismo deal abierto para una empresa/UN.
+
+    Se permite tener varias oportunidades para la misma empresa si son de
+    distinta UN, o si el caller manda allow_duplicate=true.
+    """
+    empresa_norm = (empresa or "").strip().lower()
+    if not account_id and not lead_id and not empresa_norm:
+        return None
+
+    q = Oportunidad.query.filter(
+        Oportunidad.etapa.notin_([
+            EtapaOportunidad.CIERRE_GANADO,
+            EtapaOportunidad.CIERRE_PERDIDO,
+        ])
+    )
+    if exclude_id:
+        q = q.filter(Oportunidad.id != exclude_id)
+    if account_id and empresa_norm:
+        q = q.filter(or_(
+            Oportunidad.account_id == account_id,
+            func.lower(Oportunidad.empresa) == empresa_norm,
+        ))
+    elif account_id:
+        q = q.filter(Oportunidad.account_id == account_id)
+    else:
+        filters = []
+        if lead_id:
+            filters.append(Oportunidad.lead_id == lead_id)
+        if empresa_norm:
+            filters.append(func.lower(Oportunidad.empresa) == empresa_norm)
+        q = q.filter(or_(*filters))
+    if marca:
+        q = q.filter(func.lower(Oportunidad.marca_interes) == str(marca).lower())
+    else:
+        q = q.filter(or_(Oportunidad.marca_interes.is_(None), Oportunidad.marca_interes == ""))
+    return q.order_by(Oportunidad.fecha_actualizacion.desc()).first()
+
+
+def _sync_sale_from_oportunidad(op):
+    """Cierre ganado: refleja la oportunidad en Sales de forma idempotente."""
+    if op.etapa != EtapaOportunidad.CIERRE_GANADO:
+        return None
+    if not op.id:
+        db.session.flush()
+
+    monthly = float(op.monthly_amount or 0)
+    total = float(op.valor or 0)
+    sale_type = op.sale_type or ("suscripcion_nueva" if monthly > 0 else "servicio_unico")
+    if sale_type in ("suscripcion_nueva", "upsell") and monthly <= 0:
+        monthly = total
+    sale_category = "recurrente" if sale_type in ("suscripcion_nueva", "upsell") or monthly > 0 else "eventual"
+    commission_type = "lead_otorgado" if op.lead_id else "autogenerado"
+    rate, amount = _calc_commission(sale_type, commission_type, monthly, total)
+
+    sale = Sale.query.filter(Sale.opportunity_id == op.id).first()
+    if not sale:
+        sale = Sale(opportunity_id=op.id)
+        db.session.add(sale)
+
+    sale.lead_id = op.lead_id
+    sale.user_id = op.propietario_id
+    sale.unit = _unit_from_marca(op.marca_interes)
+    sale.sale_type = sale_type
+    sale.sale_category = sale_category
+    sale.uen = op.marca_interes
+    sale.monthly_amount = Decimal(str(monthly))
+    sale.total_amount = Decimal(str(total))
+    sale.commission_type = commission_type
+    sale.commission_rate = Decimal(str(rate))
+    sale.commission_amount = Decimal(str(amount))
+    sale.status = "activa"
+
+    if op.lead and op.lead.origen:
+        sale.lead_source = op.lead.origen.value
+
+    if op.account_id:
+        acc = db.session.get(Account, op.account_id)
+        if acc:
+            acc.is_cliente = True
+
+    if op.lead:
+        op.lead.etapa_pipeline = EtapaPipeline.CIERRE_GANADO
+        if op.valor and not op.lead.valor_estimado:
+            op.lead.valor_estimado = op.valor
+
+    return sale
 
 
 # ── List + filters ────────────────────────────────────────────────
@@ -179,6 +292,36 @@ def create_oportunidad():
     # Auto-vincular/crear Contact si vienen datos suficientes y no se pasó contact_id
     contact_id = data.get("contact_id")
     account_id = data.get("account_id")
+    empresa_str = (data.get("empresa") or "").strip()
+    if not account_id and empresa_str:
+        existing_acc = Account.query.filter(func.lower(Account.nombre) == empresa_str.lower()).first()
+        if existing_acc:
+            account_id = existing_acc.id
+        else:
+            new_acc = Account(
+                nombre=empresa_str,
+                estado=data.get("estado_cliente"),
+                num_sucursales=data.get("num_sucursales"),
+                owner_id=_valid_user_id(data.get("propietario_id") or _current_user_id()),
+            )
+            db.session.add(new_acc)
+            db.session.flush()
+            account_id = new_acc.id
+
+    marca_interes = data.get("marca_interes")
+    if not _truthy(data.get("allow_duplicate")):
+        dup = _find_duplicate_open_opportunity(
+            account_id=account_id,
+            lead_id=data.get("lead_id"),
+            marca=marca_interes,
+            empresa=empresa_str,
+        )
+        if dup:
+            return jsonify({
+                "error": "Ya existe una oportunidad abierta para esta empresa/lead y unidad de negocio.",
+                "duplicate": dup.to_dict(),
+            }), 409
+
     contacto_nombre = (data.get("contacto_nombre") or "").strip()
     contacto_telefono = (data.get("contacto_telefono") or "").strip()
     contacto_email = (data.get("contacto_email") or "").strip().lower() or None
@@ -209,7 +352,7 @@ def create_oportunidad():
 
     op = Oportunidad(
         nombre=data["nombre"],
-        empresa=data.get("empresa"),
+        empresa=empresa_str or data.get("empresa"),
         contacto_nombre=contacto_nombre or None,
         contacto_telefono=contacto_telefono or None,
         contacto_email=contacto_email,
@@ -218,7 +361,7 @@ def create_oportunidad():
         fecha_cierre_esperada=_parse_date(data.get("fecha_cierre_esperada")),
         etapa=etapa,
         propietario_id=_valid_user_id(data.get("propietario_id") or _current_user_id()),
-        marca_interes=data.get("marca_interes"),
+        marca_interes=marca_interes,
         estado_cliente=data.get("estado_cliente"),
         num_sucursales=data.get("num_sucursales"),
         monthly_amount=_to_decimal(data.get("monthly_amount")),
@@ -235,6 +378,8 @@ def create_oportunidad():
         except (ValueError, TypeError):
             pass
     db.session.add(op)
+    if op.etapa == EtapaOportunidad.CIERRE_GANADO:
+        _sync_sale_from_oportunidad(op)
     db.session.commit()
     return jsonify(op.to_dict()), 201
 
@@ -267,11 +412,32 @@ def update_oportunidad(opp_id):
         if new_etapa:
             op.etapa = new_etapa
             _propagate_close_to_lead(op)
+            _sync_sale_from_oportunidad(op)
     if "probabilidad" in data:
         try:
             op.probabilidad = max(0, min(100, int(data["probabilidad"])))
         except (ValueError, TypeError):
             pass
+
+    if (
+        op.etapa not in (EtapaOportunidad.CIERRE_GANADO, EtapaOportunidad.CIERRE_PERDIDO)
+        and not _truthy(data.get("allow_duplicate"))
+    ):
+        dup = _find_duplicate_open_opportunity(
+            account_id=op.account_id,
+            lead_id=op.lead_id,
+            marca=op.marca_interes,
+            empresa=op.empresa,
+            exclude_id=op.id,
+        )
+        if dup:
+            return jsonify({
+                "error": "Ya existe otra oportunidad abierta para esta empresa/lead y unidad de negocio.",
+                "duplicate": dup.to_dict(),
+            }), 409
+
+    if op.etapa == EtapaOportunidad.CIERRE_GANADO:
+        _sync_sale_from_oportunidad(op)
 
     db.session.commit()
     return jsonify(op.to_dict())
@@ -306,6 +472,7 @@ def mover_oportunidad(opp_id):
         return jsonify({"error": "Etapa inválida"}), 400
     op.etapa = nueva
     _propagate_close_to_lead(op)
+    _sync_sale_from_oportunidad(op)
     db.session.commit()
     return jsonify(op.to_dict())
 
@@ -331,6 +498,22 @@ def from_lead(lead_id):
     if not lead:
         return jsonify({"error": "Lead no encontrado"}), 404
     data = request.get_json() or {}
+    account_id = data.get("account_id") or lead.account_id
+    contact_id = data.get("contact_id") or lead.contact_id
+    marca_interes = data.get("marca_interes") or lead.marca_interes
+
+    if not _truthy(data.get("allow_duplicate")):
+        dup = _find_duplicate_open_opportunity(
+            account_id=account_id,
+            lead_id=lead.id,
+            marca=marca_interes,
+            empresa=data.get("empresa") or lead.empresa_nombre,
+        )
+        if dup:
+            return jsonify({
+                "error": "Ya existe una oportunidad abierta para este lead/empresa y unidad de negocio.",
+                "duplicate": dup.to_dict(),
+            }), 409
 
     # Defaults desde el Lead
     valor_inicial = (
@@ -358,15 +541,19 @@ def from_lead(lead_id):
             or (str(lead.usuario_asignado_id) if lead.usuario_asignado_id else None)
             or _current_user_id()
         ),
-        marca_interes=data.get("marca_interes") or lead.marca_interes,
+        marca_interes=marca_interes,
         estado_cliente=data.get("estado_cliente") or lead.estado_cliente,
         num_sucursales=data.get("num_sucursales") or lead.num_sucursales,
         monthly_amount=monthly,
         sale_type=data.get("sale_type"),
         notas=data.get("notas") or lead.notas,
         lead_id=lead.id,
+        account_id=account_id,
+        contact_id=contact_id,
     )
     db.session.add(op)
+    if op.etapa == EtapaOportunidad.CIERRE_GANADO:
+        _sync_sale_from_oportunidad(op)
     # Marca lead como convertido subiéndolo de etapa si todavía no llegó
     if lead.etapa_pipeline and lead.etapa_pipeline.value not in ("Cerrado Ganado", "Cerrado Perdido"):
         if lead.etapa_pipeline not in (EtapaPipeline.NEGOCIACION, EtapaPipeline.COTIZACION,
