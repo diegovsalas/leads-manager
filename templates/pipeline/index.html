@@ -102,8 +102,27 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 
 /* Dash */
 .dash-grid{display:grid;grid-template-columns:1fr 340px;gap:16px;padding:16px 48px;min-height:0;}
+.dash-grid-full{grid-template-columns:1fr;}
 .dash-card{border:1px solid var(--border);border-radius:14px;padding:16px;overflow-y:auto;background:var(--bg-card);box-shadow:var(--shadow);}
 .dash-card-title{font-size:14px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;}
+.dash-card-title-stack{display:flex;flex-direction:column;gap:2px;}
+.dash-card-subtitle{font-size:11px;font-weight:400;color:var(--text3);}
+.funnel-layout{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:16px;align-items:start;}
+.funnel-row{display:grid;grid-template-columns:minmax(110px,150px) minmax(0,1fr) 78px 78px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-light);}
+.funnel-row:last-child{border-bottom:none;}
+.funnel-name{font-size:12px;font-weight:600;color:var(--text);}
+.funnel-count{font-size:11px;color:var(--text3);margin-top:2px;}
+.funnel-track{height:34px;background:var(--border-light);border-radius:var(--r);overflow:hidden;position:relative;}
+.funnel-fill{height:100%;min-width:3px;border-radius:var(--r);display:flex;align-items:center;justify-content:flex-end;padding-right:10px;color:#fff;font-size:12px;font-weight:700;transition:width .18s ease;}
+.funnel-pct{font-size:12px;text-align:right;color:var(--text2);font-family:var(--mono);}
+.funnel-pct strong{display:block;color:var(--text);font-family:var(--font);font-size:11px;font-weight:600;}
+.funnel-side{display:grid;gap:10px;}
+.funnel-side-card{border:1px solid var(--border-light);border-radius:var(--r2);padding:12px;background:#f8fafc;}
+.funnel-side-label{font-size:11px;color:var(--text3);margin-bottom:4px;}
+.funnel-side-value{font-size:20px;font-weight:700;letter-spacing:-.02em;}
+.funnel-side-note{font-size:11px;color:var(--text2);margin-top:2px;}
+.funnel-visual-wrap{display:grid;gap:8px;max-width:760px;margin:auto;}
+.funnel-segment{height:48px;margin:auto;border-radius:var(--r);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;box-shadow:inset 0 -10px 18px rgba(0,0,0,.08);}
 .kpi-row{display:flex;gap:14px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-light);}
 .kpi{font-size:13px;color:var(--text2);}
 .kpi strong{font-weight:600;}
@@ -113,6 +132,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .toggle-btn.active{background:var(--accent);color:#fff;}
 .gasto-item{display:flex;align-items:center;gap:10px;padding:8px;border-radius:var(--r);transition:background 80ms;}
 .gasto-item:hover{background:var(--bg-hover);}
+@media(max-width:900px){
+  .dash-grid{padding:12px 20px;}
+  .funnel-layout{grid-template-columns:1fr;}
+  .funnel-row{grid-template-columns:1fr;gap:6px;}
+  .funnel-pct{text-align:left;display:inline-block;margin-right:12px;}
+}
 
 /* Kanban */
 .kanban-scroll{flex:1;overflow-x:auto;overflow-y:hidden;padding:12px 48px 20px;display:flex;gap:12px;}
@@ -435,10 +460,6 @@ fbq('track','PageView');
     <span style="font-size:13px;color:var(--text2);">Periodo:</span>
     <select class="filter-select" id="dash-mes" onchange="loadDashboard()">
       <option value="">Mes actual</option>
-      <option value="2026-01">Enero 2026</option>
-      <option value="2026-02">Febrero 2026</option>
-      <option value="2026-03">Marzo 2026</option>
-      <option value="2026-04">Abril 2026</option>
     </select>
     <div style="margin-left:auto;display:flex;gap:6px;">
       <button class="btn btn-filled" onclick="openLeadModal()">+ Nuevo lead</button>
@@ -498,9 +519,13 @@ fbq('track','PageView');
       <div id="pipe-bars" style="display:flex;gap:12px;align-items:flex-end;height:160px;"></div>
     </div>
   </div>
-  <div class="dash-grid">
+  <div class="dash-grid dash-grid-full">
     <div class="dash-card">
-      <div class="dash-card-title">Embudo de conversion
+      <div class="dash-card-title">
+        <div class="dash-card-title-stack">
+          <span>Embudo de conversion</span>
+          <span class="dash-card-subtitle">Leads creados en el periodo seleccionado</span>
+        </div>
         <div class="toggle-group">
           <button class="toggle-btn active" onclick="setFunnelView('bars',this)">Barras</button>
           <button class="toggle-btn" onclick="setFunnelView('visual',this)">Embudo</button>
@@ -1098,11 +1123,9 @@ fbq('track','PageView');
     <span style="font-size:16px;font-weight:600;">Equipo</span>
     <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
       <select class="filter-select" id="metas-mes" onchange="loadVendedores()" style="font-size:12px;">
+        <!-- FIX-2026-07-06: opciones se pueblan dinámicamente desde /api/dashboard/meses.
+             Antes hardcoded hasta abril → no se veía mayo/junio/julio. -->
         <option value="">Mes actual</option>
-        <option value="2026-01">Ene 2026</option>
-        <option value="2026-02">Feb 2026</option>
-        <option value="2026-03">Mar 2026</option>
-        <option value="2026-04">Abr 2026</option>
       </select>
       <button class="btn btn-filled" onclick="openVendedorModal()">+ Agregar</button>
     </div>
@@ -2778,6 +2801,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
 });
 const ETAPA_COLORS={'Nuevo Lead':'#6366f1','1er Contacto':'#9333ea','2do Contacto':'#9333ea','3er Contacto':'#9333ea','4to Contacto':'#9333ea','Cotizaci\u00f3n':'#2563eb','Demo':'#0891b2','Negociaci\u00f3n':'#d97706','Cerrado Ganado':'#16a34a','Cerrado Perdido':'#dc2626'};
 function fmt$(n){return '$'+Number(n).toLocaleString('es-MX',{minimumFractionDigits:0});}
+const DASH_MONTHS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 // SocketIO
 socket.on('connect',()=>{document.getElementById('ws-dot').classList.add('live');document.getElementById('ws-label').textContent='En vivo';});
@@ -3371,6 +3395,28 @@ async function loadVendedorDetail(vendedorId){
     if(!r.ok){detail.innerHTML='<div class="dash-card" style="padding:40px;color:var(--red);">Error cargando</div>';return;}
     const d=await r.json();
     const k=d.kpis||{};
+    const split=k.split_tipo_venta||{};
+    const splitRows=[
+      {key:'recurrente',label:'Recurrente',color:'var(--orange)',bg:'var(--orange-bg)'},
+      {key:'eventual',label:'Eventual',color:'var(--purple)',bg:'var(--purple-bg)'},
+      {key:'sin_tipo',label:'Sin tipo',color:'var(--text2)',bg:'var(--bg-tag)'},
+    ].filter(x=>{
+      const s=split[x.key]||{};
+      return x.key!=='sin_tipo'||s.leads_activos||s.ganados_mes||s.revenue_mes||s.pipe_activo||s.leads_mes;
+    });
+    const splitHtml=splitRows.map(x=>{
+      const s=split[x.key]||{};
+      return `<div style="display:grid;grid-template-columns:130px repeat(5,1fr);gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--border-light);font-size:12px;">
+        <div style="display:flex;align-items:center;gap:6px;font-weight:700;color:${x.color};">
+          <span style="width:8px;height:8px;border-radius:99px;background:${x.color};display:inline-block;"></span>${x.label}
+        </div>
+        <div style="text-align:right;color:var(--orange);font-weight:600;">${_fmtMxn(s.pipe_activo||0)}</div>
+        <div style="text-align:right;font-weight:600;">${s.leads_activos||0}</div>
+        <div style="text-align:right;color:var(--green);font-weight:600;">${s.ganados_mes||0}</div>
+        <div style="text-align:right;color:var(--green);font-weight:600;">${_fmtMxn(s.revenue_mes||0)}</div>
+        <div style="text-align:right;font-weight:700;color:${(s.tasa_cierre||0)>=20?'var(--green)':(s.tasa_cierre||0)>=10?'var(--orange)':'var(--red)'};">${s.tasa_cierre||0}%</div>
+      </div>`;
+    }).join('');
     // KPI strip
     let html=`
       <div class="dash-card" style="margin-bottom:14px;">
@@ -3384,6 +3430,17 @@ async function loadVendedorDetail(vendedorId){
           <div><div style="font-size:10px;color:var(--text3);">GANADOS MES</div><div style="font-size:22px;font-weight:700;color:var(--green);">${k.ganados_mes}</div></div>
           <div><div style="font-size:10px;color:var(--text3);">REVENUE MES</div><div style="font-size:22px;font-weight:700;color:var(--green);">${_fmtMxn(k.revenue_mes)}</div></div>
           <div><div style="font-size:10px;color:var(--text3);">% CIERRE</div><div style="font-size:22px;font-weight:700;color:${k.tasa_cierre>=20?'var(--green)':k.tasa_cierre>=10?'var(--orange)':'var(--red)'};">${k.tasa_cierre}%</div></div>
+        </div>
+        <div style="padding:0 18px 16px;">
+          <div style="display:grid;grid-template-columns:130px repeat(5,1fr);gap:10px;color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.04em;">
+            <div>Tipo venta</div>
+            <div style="text-align:right;">Pipe activo</div>
+            <div style="text-align:right;">Activos</div>
+            <div style="text-align:right;">Ganados</div>
+            <div style="text-align:right;">Revenue</div>
+            <div style="text-align:right;">% cierre</div>
+          </div>
+          ${splitHtml||'<div style="padding:10px 0;border-top:1px solid var(--border-light);font-size:12px;color:var(--text3);">Sin clasificacion recurrente/eventual.</div>'}
         </div>
       </div>`;
 
@@ -3709,8 +3766,16 @@ async function loadRoi(){
 
   // Mapping plataforma→origen para que el usuario sepa cómo se atribuye
   const mp=d.platform_to_origen_map||{};
+  const sources=d.spend_sources||{};
+  const metaInfo=d.meta_ads_api||{};
+  const metaLabel=metaInfo.has_registered_campaigns
+    ? `Meta API ${_fmtMxn(sources.meta_api||0)}`
+    : 'Meta API sin campañas registradas';
+  const sourceLabel=metaInfo.available
+    ? `${metaLabel} • Manual ${_fmtMxn(sources.manual||0)}`
+    : `Manual ${_fmtMxn(sources.manual||0)} • Meta API no configurada`;
   document.getElementById('roi-mapping').innerHTML=
-    'Atribución: '+Object.entries(mp).map(([p,o])=>`${p} → ${o||'sin atribuir'}`).join(' • ');
+    sourceLabel+'<br>Atribución: '+Object.entries(mp).map(([p,o])=>`${p} → ${o||'sin atribuir'}`).join(' • ');
 }
 
 // Modal de gasto manual
@@ -4241,6 +4306,38 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 
 // Dashboard (from API)
+async function loadDashboardMonths(){
+  const sel=document.getElementById('dash-mes');
+  const selMetas=document.getElementById('metas-mes');
+  if(!sel && !selMetas) return;
+  const currentValue = sel ? sel.value : '';
+  const currentMetasValue = selMetas ? selMetas.value : '';
+  let months=[];
+  try{
+    const r=await fetch('/api/dashboard/meses');
+    if(r.ok)months=await r.json();
+  }catch(e){}
+  if(!months.length){
+    const start=new Date(2026,0,1);
+    const now=new Date();
+    for(let d=new Date(now.getFullYear(),now.getMonth(),1);d>=start;d.setMonth(d.getMonth()-1)){
+      const value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+      months.push({value,label:DASH_MONTHS[d.getMonth()]+' '+d.getFullYear()});
+    }
+  }
+  const opts = '<option value="">Mes actual</option>' + months.map(m=>`<option value="${m.value}">${m.label}</option>`).join('');
+  // FIX-2026-07-06: poblar también el selector de mes en la vista Vendedores
+  // (metas-mes), antes tenía opciones hardcoded solo hasta abril 2026.
+  if(sel){
+    sel.innerHTML = opts;
+    if(currentValue && months.some(m=>m.value===currentValue)) sel.value = currentValue;
+  }
+  if(selMetas){
+    selMetas.innerHTML = opts;
+    if(currentMetasValue && months.some(m=>m.value===currentMetasValue)) selMetas.value = currentMetasValue;
+  }
+}
+
 async function loadDashboard(){
   document.getElementById('dash-date').textContent=new Date().toLocaleDateString('es-MX',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   try{
@@ -4274,7 +4371,13 @@ async function loadDashboard(){
     document.getElementById('m-ganados').textContent=embudo.ganados;
     document.getElementById('m-revenue').textContent=fmt$(embudo.revenue_ganado)+' revenue';
     document.getElementById('m-gasto').textContent=fmt$(embudo.gasto_ads);
-    document.getElementById('m-cpl').textContent='CPL: '+fmt$(embudo.costo_por_lead);
+    const metaSpend=embudo.gasto_ads_meta||0;
+    const manualSpend=embudo.gasto_ads_manual||0;
+    const metaInfo=embudo.meta_ads_api||{};
+    const spendSource=metaInfo.has_registered_campaigns
+      ? `Meta API ${fmt$(metaSpend)} · Manual ${fmt$(manualSpend)}`
+      : (metaInfo.available ? `Manual ${fmt$(manualSpend)} · sin campañas Meta` : `Manual ${fmt$(manualSpend)}`);
+    document.getElementById('m-cpl').textContent='CPL: '+fmt$(embudo.costo_por_lead)+' · '+spendSource;
     document.getElementById('f-cpl').textContent=fmt$(embudo.costo_por_lead);
     document.getElementById('f-cpa').textContent=fmt$(embudo.costo_por_cierre);
     document.getElementById('f-roi').textContent=embudo.roi+'x';
@@ -4303,40 +4406,55 @@ async function loadDashboard(){
       {label:'Calificados',count:embudo.calificados,color:'#9065b0',bg:'#e8deee'},
       {label:'Cotizados',count:embudo.cotizados,color:'#e07c1a',bg:'#faebdd'},
       {label:'Ganados',count:embudo.ganados,color:'#0f7b6c',bg:'#dbeddb'},
-      {label:'Perdidos',count:embudo.perdidos,color:'#eb5757',bg:'#fbe4e4'},
     ];
     const fb=document.getElementById('funnel-bars');fb.innerHTML='';
     const total=embudo.leads_totales||1;
-    steps.forEach((s,i)=>{
-      const w=Math.max((s.count/total)*100,15);
-      const conv=i>0&&steps[i-1].count>0?Math.round((s.count/steps[i-1].count)*100)+'%':'';
-      fb.innerHTML+=`<div style="display:flex;align-items:center;gap:12px;padding:5px 0;">
-        <div style="width:${w}%;min-width:80px;background:${s.bg};border-left:3px solid ${s.color};padding:8px 12px;border-radius:0 6px 6px 0;">
-          <div style="font-size:18px;font-weight:700;color:${s.color};">${s.count}</div>
-          <div style="font-size:12px;color:var(--text2);">${s.label}</div>
+    const lostPct=embudo.leads_totales?Math.round((embudo.perdidos/embudo.leads_totales)*100):0;
+    const closeRate=embudo.leads_totales?Math.round((embudo.ganados/embudo.leads_totales)*100):0;
+    const qualifiedRate=embudo.leads_totales?Math.round((embudo.calificados/embudo.leads_totales)*100):0;
+    const rowsHtml=steps.map((s,i)=>{
+      const w=Math.max((s.count/total)*100,1);
+      const totalPct=embudo.leads_totales?Math.round((s.count/embudo.leads_totales)*100):0;
+      const prev=steps[i-1]?.count;
+      const prevPct=i>0&&prev?Math.round((s.count/prev)*100):100;
+      return `<div class="funnel-row">
+        <div>
+          <div class="funnel-name">${s.label}</div>
+          <div class="funnel-count">${_fmtNum(s.count)} registros</div>
         </div>
-        ${conv?`<span style="font-size:12px;color:var(--text3);">${conv}</span>`:''}
+        <div class="funnel-track"><div class="funnel-fill" style="width:${w}%;background:${s.color};">${w>12?totalPct+'%':''}</div></div>
+        <div class="funnel-pct"><strong>Total</strong>${totalPct}%</div>
+        <div class="funnel-pct"><strong>${i?'Anterior':'Base'}</strong>${i?prevPct+'%':'100%'}</div>
       </div>`;
-    });
+    }).join('');
+    fb.innerHTML=`<div class="funnel-layout">
+      <div>${rowsHtml}</div>
+      <div class="funnel-side">
+        <div class="funnel-side-card">
+          <div class="funnel-side-label">Tasa de cierre</div>
+          <div class="funnel-side-value" style="color:var(--green);">${closeRate}%</div>
+          <div class="funnel-side-note">${_fmtNum(embudo.ganados)} ganados de ${_fmtNum(embudo.leads_totales)} leads</div>
+        </div>
+        <div class="funnel-side-card">
+          <div class="funnel-side-label">Calificacion</div>
+          <div class="funnel-side-value" style="color:var(--blue);">${qualifiedRate}%</div>
+          <div class="funnel-side-note">${_fmtNum(embudo.calificados)} leads avanzaron del primer contacto</div>
+        </div>
+        <div class="funnel-side-card">
+          <div class="funnel-side-label">Salida perdida</div>
+          <div class="funnel-side-value" style="color:var(--red);">${_fmtNum(embudo.perdidos)}</div>
+          <div class="funnel-side-note">${lostPct}% del total del periodo</div>
+        </div>
+      </div>
+    </div>`;
 
     // Visual funnel SVG
     const fv=document.getElementById('funnel-visual');
-    const svgW=440,svgH=300,padR=150;
-    const activeSteps=steps.filter(s=>s.count>0);
-    if(activeSteps.length>0){
-      const rowH=svgH/activeSteps.length;
-      let svg='';
-      activeSteps.forEach((s,i)=>{
-        const pct=s.count/total;
-        const nextPct=i<activeSteps.length-1?activeSteps[i+1].count/total:pct*0.5;
-        const w1=Math.max(pct*(svgW-padR),30),w2=Math.max(nextPct*(svgW-padR),20);
-        const cx=(svgW-padR)/2,y1=i*rowH,y2=y1+rowH;
-        svg+=`<polygon points="${cx-w1/2},${y1} ${cx+w1/2},${y1} ${cx+w2/2},${y2} ${cx-w2/2},${y2}" fill="${s.color}" opacity="0.7"/>`;
-        svg+=`<text x="${svgW-padR+10}" y="${y1+rowH/2-6}" fill="${s.color}" font-size="14" font-weight="700">${s.count}</text>`;
-        svg+=`<text x="${svgW-padR+10}" y="${y1+rowH/2+10}" fill="#787774" font-size="11">${s.label}</text>`;
-      });
-      fv.innerHTML=`<svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${svgW}px;">${svg}</svg>`;
-    }
+    fv.innerHTML=`<div class="funnel-visual-wrap">${steps.map((s,i)=>{
+      const w=Math.max((s.count/total)*100,18);
+      const pct=embudo.leads_totales?Math.round((s.count/embudo.leads_totales)*100):0;
+      return `<div class="funnel-segment" style="width:${w}%;background:${s.color};">${s.label}: ${_fmtNum(s.count)} · ${pct}%</div>`;
+    }).join('')}</div>`;
 
   }catch(e){console.error('Dashboard error:',e);}
 }
@@ -5603,7 +5721,7 @@ function openScanPage(){
 }
 
 // Init
-initPipeView();loadDashboard();loadMiHoy();loadProyecto();loadVendedores();toggleVendedorSelect();loadMetaVendedor();
+initPipeView();loadDashboardMonths().then(loadDashboard);loadMiHoy();loadProyecto();loadVendedores();toggleVendedorSelect();loadMetaVendedor();
 // Load ICP industrias dropdown
 fetch('/api/leads/icp-opciones').then(r=>r.json()).then(d=>{
   const sel=document.getElementById('f-industria');
