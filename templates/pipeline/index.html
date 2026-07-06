@@ -3407,11 +3407,14 @@ async function loadVendedorDetail(vendedorId){
     const k=d.kpis||{};
     const split=k.split_tipo_venta||{};
 
-    // FIX-2026-07-06: si Recurrente Y Eventual tienen TODO en 0, no
-    // renderizamos la tabla (era confusa: "$0 · 0 · 0 · $0 · 0%").
-    // Mostramos mensaje explícito con botón para saltar al mes anterior.
-    const _isBlank = s => !s || (!s.pipe_activo && !s.leads_activos && !s.ganados_mes && !s.revenue_mes && !s.leads_mes);
-    const _todoEnCero = _isBlank(split.recurrente) && _isBlank(split.eventual) && _isBlank(split.sin_tipo);
+    // FIX-2026-07-06: activar el mensaje 'Sin actividad' SOLO si el
+    // vendedor NO tiene NADA de actividad global en el mes. Antes usaba
+    // _isBlank sobre split.recurrente/eventual/sin_tipo — si el endpoint
+    // no retornaba alguna key, esos undefined marcaban 'sin actividad'
+    // aunque el vendedor sí tuviera datos. Ahora la fuente de verdad son
+    // los KPIs globales que siempre vienen (leads_mes, ganados_mes, etc).
+    const _todoEnCero = !k.leads_mes && !k.ganados_mes && !k.pipe_activo
+                     && !k.revenue_mes && !k.leads_activos;
 
     const splitRows=[
       {key:'recurrente',label:'Recurrente',color:'var(--orange)',bg:'var(--orange-bg)'},
