@@ -747,8 +747,13 @@ class CSAccount(db.Model):
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
     client_id = db.Column(db.String(10), unique=True, nullable=True)  # AX-0001, AX-0002, ...
     nombre = db.Column(db.String(200), nullable=False, unique=True)
-    kam_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users_crm.id"), nullable=False)
+    # FEAT-2026-07-06: kam_id nullable para cuentas Due Diligence (aún sin KAM)
+    kam_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users_crm.id"), nullable=True)
     es_cuenta_nueva = db.Column(db.Boolean, default=False)
+    # FEAT-2026-07-06: adquisiciones (Fugaci, futuros)
+    en_due_diligence = db.Column(db.Boolean, default=False, index=True)
+    origen_adquisicion = db.Column(db.String(80), nullable=True)  # 'Fugaci'
+    dd_metadata = db.Column(db.JSON, nullable=True)  # precio, contrato, portal, etc.
     mrr = db.Column(db.Numeric(14, 2), default=0)            # MRR contratado (subs Savio activas)
     mrr_observado = db.Column(db.Numeric(14, 2), default=0)  # MRR real (promedio facturación recurrente últimos 5m)
     arr_proyectado = db.Column(db.Numeric(14, 2), default=0)
@@ -906,6 +911,39 @@ class CSEncuesta(db.Model):
         vals = [v for v in [self.csat, self.csat_calidad, self.csat_respuesta,
                             self.csat_comunicacion, self.csat_precio, self.csat_tecnico] if v is not None]
         return round(sum(vals) / len(vals), 1) if vals else None
+
+
+class CSDDSurvey(db.Model):
+    """FEAT-2026-07-06: Encuesta NPS específica para cuentas en Due Diligence.
+
+    Se envía a clientes que aún NO saben de la adquisición. El template público
+    muestra look & feel 100% de Fugaci (verde oscuro), sin ninguna referencia
+    a Avantex / Grupo Avantex / Pestex.
+
+    Preguntas DD (distintas al CSEncuesta operativo):
+      - NPS (0-10)
+      - Satisfacción del servicio actual (1-5)
+      - Continuidad a 12 meses (Sí / Sí con cambios / No)
+      - Preocupaciones (texto abierto)
+      - Áreas de mejora (texto abierto)
+    """
+    __tablename__ = "cs_dd_surveys"
+    id                 = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    account_id         = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=False, index=True)
+    token              = db.Column(db.String(48), unique=True, nullable=False, index=True)
+    contacto_email     = db.Column(db.String(200), nullable=True)  # opcional al enviar
+    enviado_at         = db.Column(db.DateTime(timezone=True), default=_utcnow)
+    respondido_at      = db.Column(db.DateTime(timezone=True), nullable=True)
+    # Respuestas
+    nps                = db.Column(db.Integer, nullable=True)  # 0-10
+    satisfaccion       = db.Column(db.Integer, nullable=True)  # 1-5
+    continuidad        = db.Column(db.String(30), nullable=True)  # 'Si' / 'Si con cambios' / 'No'
+    preocupaciones     = db.Column(db.Text, nullable=True)
+    areas_mejora       = db.Column(db.Text, nullable=True)
+    contacto_nombre    = db.Column(db.String(200), nullable=True)  # quien respondió
+    contacto_puesto    = db.Column(db.String(120), nullable=True)
+
+    account = db.relationship("CSAccount")
 
 
 class CSPropiedad(db.Model):

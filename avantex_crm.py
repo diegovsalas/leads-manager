@@ -210,6 +210,42 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] metas_vendedor split rec/ev failed: %s", e)
 
+        # ─── cs_accounts: Due Diligence (FEAT-2026-07-06) ───
+        # Para cuentas adquiridas que aún no tienen KAM asignado (ej. Fugaci).
+        # NO cuentan en KPIs actuales del dashboard hasta que se 'promocionan'.
+        try:
+            with db.engine.begin() as conn:
+                cols_a_agregar = [
+                    ("en_due_diligence",  "BOOLEAN DEFAULT FALSE"),
+                    ("origen_adquisicion", "VARCHAR(80)"),
+                    ("dd_metadata",       "JSONB"),
+                ]
+                for col, ddl in cols_a_agregar:
+                    exists = conn.execute(text("""
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'cs_accounts' AND column_name = :c
+                    """), {"c": col}).first()
+                    if not exists:
+                        app.logger.info(f"[auto-migrate] adding cs_accounts.{col}...")
+                        conn.execute(text(f"ALTER TABLE cs_accounts ADD COLUMN {col} {ddl}"))
+                # kam_id → nullable (para cuentas DD sin KAM asignado)
+                col_info = conn.execute(text("""
+                    SELECT is_nullable FROM information_schema.columns
+                    WHERE table_name = 'cs_accounts' AND column_name = 'kam_id'
+                """)).first()
+                if col_info and col_info[0] == "NO":
+                    app.logger.info("[auto-migrate] dropping NOT NULL on cs_accounts.kam_id...")
+                    conn.execute(text(
+                        "ALTER TABLE cs_accounts ALTER COLUMN kam_id DROP NOT NULL"
+                    ))
+                # Index para filtrar rápido por en_due_diligence
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_cs_accounts_dd "
+                    "ON cs_accounts (en_due_diligence) WHERE en_due_diligence = TRUE"
+                ))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] cs_accounts DD columns failed: %s", e)
+
         # ─── cs_invoices.savio_invoice_id UNIQUE (SECURITY-2026-06-24) ───
         # Sin esto, una corrida con bug del sync podía duplicar filas de la
         # misma factura de Savio y romper el cálculo de facturación / MRR.
@@ -353,6 +389,7 @@ def create_app():
     from blueprints.meta_campaigns import meta_campaigns_bp
     from blueprints.sales_emails    import sales_emails_bp
     from blueprints.chat_ai         import chat_ai_bp
+    from blueprints.due_diligence   import dd_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp,      url_prefix="/webhook")
@@ -368,6 +405,9 @@ def create_app():
     app.register_blueprint(api_v2_bp,       url_prefix="/api/v2")
     app.register_blueprint(cs_bp,            url_prefix="/cs")
     app.register_blueprint(encuesta_bp,      url_prefix="/encuesta")
+    # FEAT-2026-07-06 (Fugaci Due Diligence): sin url_prefix porque expone
+    # tanto rutas admin bajo /cs/due-diligence como públicas /dd-encuesta/
+    app.register_blueprint(dd_bp)
     app.register_blueprint(savio_bp,         url_prefix="/api/savio")
     app.register_blueprint(sdr_bp,           url_prefix="/api/sdr")
     app.register_blueprint(sdr_directivo_bp, url_prefix="/api/sdr-directivo")
@@ -402,7 +442,8 @@ def create_app():
     # ── Proteger todas las rutas excepto login y webhooks ──
     @app.before_request
     def require_login():
-        allowed = ("/login", "/auth/google", "/webhook/", "/static/", "/api/v1/", "/encuesta/")
+        allowed = ("/login", "/auth/google", "/webhook/", "/static/", "/api/v1/",
+                   "/encuesta/", "/dd-encuesta/")  # dd-encuesta: público sin login
         if any(request.path.startswith(p) for p in allowed):
             return
         if not session.get("user_id"):

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {# FEAT-2026-07-06: encuesta pública con look 100% Fugaci — sin ninguna
+       referencia a Avantex / Grupo Avantex / Pestex. El cliente NO sabe de
+       la adquisición todavía. #}
+    <title>Fugaci · Encuesta de satisfacción</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🌿%3C/text%3E%3C/svg%3E">
+    <style>
+      /* ── Fugaci brand ─────────────────────────────────────────────
+         Verde oscuro dominante · sans-serif limpia · look profesional
+         Basado en fugaci.mx (verificado 2026-07-06)
+      */
+      :root{
+        --fugaci-verde:       #1F4E3D;
+        --fugaci-verde-hover: #163828;
+        --fugaci-verde-soft:  #E8F0EB;
+        --fugaci-verde-linea: #C9DBD0;
+        --fugaci-ink:         #1A2E27;
+        --fugaci-text2:       #4A5F55;
+        --fugaci-text3:       #8A9B93;
+        --fugaci-bg:          #FAFBF9;
+        --fugaci-white:       #FFFFFF;
+        --fugaci-border:      #E5EAE7;
+        --fugaci-red:         #B54848;
+      }
+      *{box-sizing:border-box;margin:0;padding:0;}
+      html,body{background:var(--fugaci-bg);color:var(--fugaci-ink);
+        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,
+        "Helvetica Neue",Arial,sans-serif;
+        font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;}
+      .wrap{max-width:640px;margin:0 auto;padding:24px 20px 60px;}
+      /* ── Header con logo Fugaci ── */
+      .brand{text-align:center;padding:20px 0 28px;}
+      .logo{display:inline-flex;align-items:center;gap:10px;
+        font-size:32px;font-weight:700;color:var(--fugaci-verde);
+        letter-spacing:-.02em;}
+      .logo-mark{width:44px;height:44px;border-radius:12px;
+        background:var(--fugaci-verde);color:#fff;
+        display:flex;align-items:center;justify-content:center;font-size:22px;}
+      .tagline{margin-top:6px;color:var(--fugaci-text2);font-size:13px;}
+      /* ── Card principal ── */
+      .card{background:var(--fugaci-white);border:1px solid var(--fugaci-border);
+        border-radius:16px;padding:28px 26px;box-shadow:0 1px 3px rgba(31,78,61,.05);}
+      h1{font-size:22px;font-weight:600;color:var(--fugaci-ink);
+        margin-bottom:8px;letter-spacing:-.01em;}
+      .subtitle{color:var(--fugaci-text2);font-size:14px;margin-bottom:24px;}
+      .section{margin-bottom:26px;}
+      .section-label{display:block;font-size:14px;font-weight:600;
+        color:var(--fugaci-ink);margin-bottom:4px;}
+      .section-help{color:var(--fugaci-text3);font-size:12px;margin-bottom:12px;}
+      /* ── NPS 0-10 ── */
+      .nps-scale{display:grid;grid-template-columns:repeat(11,1fr);gap:4px;}
+      .nps-btn{display:flex;align-items:center;justify-content:center;
+        height:44px;border:1.5px solid var(--fugaci-border);border-radius:8px;
+        cursor:pointer;font-weight:600;color:var(--fugaci-text2);
+        background:var(--fugaci-white);transition:.15s;font-size:14px;}
+      .nps-btn:hover{border-color:var(--fugaci-verde);color:var(--fugaci-verde);}
+      .nps-btn.selected{background:var(--fugaci-verde);border-color:var(--fugaci-verde);color:#fff;}
+      .nps-legend{display:flex;justify-content:space-between;
+        margin-top:6px;font-size:11px;color:var(--fugaci-text3);}
+      /* ── Satisfacción 1-5 estrellas ── */
+      .sat-scale{display:flex;gap:6px;}
+      .sat-btn{flex:1;height:52px;border:1.5px solid var(--fugaci-border);
+        border-radius:10px;cursor:pointer;background:var(--fugaci-white);
+        display:flex;flex-direction:column;align-items:center;justify-content:center;
+        transition:.15s;color:var(--fugaci-text2);font-weight:600;font-size:13px;}
+      .sat-btn:hover{border-color:var(--fugaci-verde);background:var(--fugaci-verde-soft);}
+      .sat-btn.selected{background:var(--fugaci-verde);border-color:var(--fugaci-verde);color:#fff;}
+      .sat-btn small{font-size:10px;font-weight:500;opacity:.9;}
+      /* ── Radio continuidad ── */
+      .radio-group{display:flex;flex-direction:column;gap:8px;}
+      .radio-item{display:flex;align-items:center;gap:10px;padding:12px 14px;
+        border:1.5px solid var(--fugaci-border);border-radius:10px;cursor:pointer;
+        transition:.15s;background:var(--fugaci-white);}
+      .radio-item:hover{border-color:var(--fugaci-verde);background:var(--fugaci-verde-soft);}
+      .radio-item.selected{border-color:var(--fugaci-verde);background:var(--fugaci-verde-soft);
+        color:var(--fugaci-verde);font-weight:600;}
+      .radio-item input{display:none;}
+      .radio-item span{flex:1;font-size:14px;}
+      /* ── Text areas ── */
+      textarea,input[type="text"]{width:100%;padding:12px 14px;font-family:inherit;
+        font-size:14px;border:1.5px solid var(--fugaci-border);border-radius:10px;
+        background:var(--fugaci-white);color:var(--fugaci-ink);resize:vertical;
+        transition:.15s;}
+      textarea:focus,input[type="text"]:focus{outline:none;border-color:var(--fugaci-verde);
+        background:var(--fugaci-white);}
+      textarea{min-height:80px;}
+      .contacto-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+      /* ── Submit ── */
+      .actions{margin-top:32px;}
+      .btn-primary{display:block;width:100%;padding:14px 20px;
+        background:var(--fugaci-verde);color:#fff;font-size:15px;font-weight:600;
+        border:none;border-radius:10px;cursor:pointer;transition:.15s;
+        letter-spacing:.01em;}
+      .btn-primary:hover{background:var(--fugaci-verde-hover);}
+      .btn-primary:disabled{opacity:.5;cursor:not-allowed;}
+      /* ── Estado success ── */
+      .thanks{text-align:center;padding:40px 20px;}
+      .thanks-icon{width:80px;height:80px;margin:0 auto 20px;border-radius:50%;
+        background:var(--fugaci-verde-soft);color:var(--fugaci-verde);
+        display:flex;align-items:center;justify-content:center;font-size:36px;}
+      .thanks h2{font-size:22px;color:var(--fugaci-ink);margin-bottom:8px;}
+      .thanks p{color:var(--fugaci-text2);font-size:14px;max-width:400px;margin:0 auto;}
+      /* ── Footer ── */
+      .footer{text-align:center;margin-top:32px;padding:16px 0;
+        font-size:11px;color:var(--fugaci-text3);border-top:1px solid var(--fugaci-border);}
+      .footer a{color:var(--fugaci-verde);text-decoration:none;}
+      /* ── Mobile ── */
+      @media (max-width:520px){
+        .card{padding:22px 18px;}
+        .nps-scale{grid-template-columns:repeat(6,1fr);}
+        .contacto-row{grid-template-columns:1fr;}
+      }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="brand">
+            <div class="logo">
+                <div class="logo-mark">🌿</div>
+                Fugaci
+            </div>
+            <div class="tagline">Tu espacio libre de plagas</div>
+        </div>
+
+        {% if ya_respondida %}
+        <div class="card">
+            <div class="thanks">
+                <div class="thanks-icon">✓</div>
+                <h2>{% if acabo_de_responder %}¡Gracias por tu respuesta!{% else %}Ya recibimos tu respuesta{% endif %}</h2>
+                <p>Tu opinión es muy valiosa para nosotros. Nos ayuda a seguir mejorando el servicio que brindamos.</p>
+            </div>
+        </div>
+        {% else %}
+        <div class="card">
+            <h1>Nos importa tu opinión</h1>
+            <p class="subtitle">Nos tomará 2 minutos. Tu retroalimentación nos ayuda a mejorar el servicio que te brindamos.</p>
+
+            <form method="POST" action="/dd-encuesta/{{ survey.token }}" id="nps-form">
+
+                <!-- 1. NPS -->
+                <div class="section">
+                    <label class="section-label">1. En una escala del 0 al 10, ¿qué tan probable es que recomiendes Fugaci a un colega o amigo?</label>
+                    <div class="section-help">0 = para nada probable · 10 = extremadamente probable</div>
+                    <div class="nps-scale" id="nps-scale">
+                        {% for n in range(11) %}
+                        <div class="nps-btn" data-val="{{ n }}">{{ n }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="nps-legend">
+                        <span>Nada probable</span>
+                        <span>Muy probable</span>
+                    </div>
+                    <input type="hidden" name="nps" id="nps-input" required>
+                </div>
+
+                <!-- 2. Satisfacción -->
+                <div class="section">
+                    <label class="section-label">2. ¿Cómo calificarías la calidad del servicio actual?</label>
+                    <div class="sat-scale" id="sat-scale">
+                        <div class="sat-btn" data-val="1">1<small>Malo</small></div>
+                        <div class="sat-btn" data-val="2">2<small>Regular</small></div>
+                        <div class="sat-btn" data-val="3">3<small>Aceptable</small></div>
+                        <div class="sat-btn" data-val="4">4<small>Bueno</small></div>
+                        <div class="sat-btn" data-val="5">5<small>Excelente</small></div>
+                    </div>
+                    <input type="hidden" name="satisfaccion" id="sat-input">
+                </div>
+
+                <!-- 3. Continuidad -->
+                <div class="section">
+                    <label class="section-label">3. ¿Continuarás tomando servicio con Fugaci los próximos 12 meses?</label>
+                    <div class="radio-group" id="cont-group">
+                        <label class="radio-item" data-val="Si">
+                            <input type="radio" name="continuidad" value="Si">
+                            <span>Sí, definitivamente</span>
+                        </label>
+                        <label class="radio-item" data-val="Si con cambios">
+                            <input type="radio" name="continuidad" value="Si con cambios">
+                            <span>Sí, si hacen algunos cambios</span>
+                        </label>
+                        <label class="radio-item" data-val="No">
+                            <input type="radio" name="continuidad" value="No">
+                            <span>No estoy seguro / No</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 4. Preocupaciones -->
+                <div class="section">
+                    <label class="section-label">4. ¿Hay algo que te preocupe del servicio? <span style="font-weight:400;color:var(--fugaci-text3);">(opcional)</span></label>
+                    <textarea name="preocupaciones" placeholder="Ej: tiempos de respuesta, costos, comunicación, resultado del servicio..."></textarea>
+                </div>
+
+                <!-- 5. Áreas de mejora -->
+                <div class="section">
+                    <label class="section-label">5. ¿Qué mejorarías del servicio? <span style="font-weight:400;color:var(--fugaci-text3);">(opcional)</span></label>
+                    <textarea name="areas_mejora" placeholder="Comparte tus ideas..."></textarea>
+                </div>
+
+                <!-- 6. Contacto -->
+                <div class="section">
+                    <label class="section-label">6. Datos de contacto <span style="font-weight:400;color:var(--fugaci-text3);">(opcional — nos ayuda a hacer seguimiento personalizado)</span></label>
+                    <div class="contacto-row">
+                        <input type="text" name="contacto_nombre" placeholder="Tu nombre">
+                        <input type="text" name="contacto_puesto" placeholder="Tu puesto">
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button type="submit" class="btn-primary" id="submit-btn" disabled>
+                        Enviar mi respuesta
+                    </button>
+                </div>
+            </form>
+        </div>
+        {% endif %}
+
+        <div class="footer">
+            © Fugaci · Fumigación excepcional para cuidar a nuestros clientes y al medio ambiente<br>
+            Nuevo León · Coahuila · Yucatán · <a href="mailto:ventas@fugaci.mx">ventas@fugaci.mx</a>
+        </div>
+    </div>
+
+    {% if not ya_respondida %}
+    <script>
+      // NPS 0-10
+      const npsInput = document.getElementById('nps-input');
+      document.querySelectorAll('#nps-scale .nps-btn').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+          document.querySelectorAll('#nps-scale .nps-btn').forEach(b=>b.classList.remove('selected'));
+          btn.classList.add('selected');
+          npsInput.value = btn.dataset.val;
+          document.getElementById('submit-btn').disabled = false;
+        });
+      });
+      // Satisfacción 1-5
+      const satInput = document.getElementById('sat-input');
+      document.querySelectorAll('#sat-scale .sat-btn').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+          document.querySelectorAll('#sat-scale .sat-btn').forEach(b=>b.classList.remove('selected'));
+          btn.classList.add('selected');
+          satInput.value = btn.dataset.val;
+        });
+      });
+      // Continuidad radios (visual)
+      document.querySelectorAll('#cont-group .radio-item').forEach(item=>{
+        item.addEventListener('click',()=>{
+          document.querySelectorAll('#cont-group .radio-item').forEach(i=>i.classList.remove('selected'));
+          item.classList.add('selected');
+          item.querySelector('input').checked = true;
+        });
+      });
+    </script>
+    {% endif %}
+</body>
+</html>

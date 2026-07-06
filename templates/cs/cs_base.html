@@ -205,6 +205,10 @@ function switchTab(name){
             <a href="/cs/cargar-datos" class="side-link {% if request.endpoint == 'cs.cargar_datos' %}active{% endif %}">
                 {{ icon('upload') }}<span class="label">Cargar Datos</span>
             </a>
+            <!-- FEAT-2026-07-06: Due Diligence (adquisiciones antes de asignar KAM) -->
+            <a href="/cs/due-diligence" class="side-link {% if request.endpoint == 'due_diligence.index' %}active{% endif %}">
+                {{ icon('search') }}<span class="label">Due Diligence</span>
+            </a>
             <a href="/" class="side-link" style="color:var(--ink-4)">
                 {{ icon('arrow-left') }}<span class="label">CRM Pipeline</span>
             </a>

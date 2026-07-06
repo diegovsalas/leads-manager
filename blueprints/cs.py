@@ -294,6 +294,9 @@ def dashboard():
     q = CSAccount.query
     if kam_filter:
         q = q.filter_by(kam_id=kam_filter)
+    # FEAT-2026-07-06: excluir cuentas en Due Diligence de los KPIs generales
+    q = q.filter(db.or_(CSAccount.en_due_diligence.is_(None),
+                        CSAccount.en_due_diligence.is_(False)))
     # FEAT-2026-06-29: filtro global por UN
     from un_filter import filtrar_cs_accounts_por_un
     q = filtrar_cs_accounts_por_un(q, CSAccount, request.args.get("un"))
@@ -464,6 +467,9 @@ def clientes():
     q = CSAccount.query
     if kam_filter:
         q = q.filter_by(kam_id=kam_filter)
+    # FEAT-2026-07-06: excluir cuentas Due Diligence del directorio de clientes
+    q = q.filter(db.or_(CSAccount.en_due_diligence.is_(None),
+                        CSAccount.en_due_diligence.is_(False)))
     accounts = q.order_by(CSAccount.nombre).all()
     scores_map = calcular_health_scores_batch(accounts)
 
@@ -1001,7 +1007,7 @@ def kam_view(kam_id=None):
 # ══════════════════════════════════════════════
 @cs_bp.route("/alertas")
 def alertas_view():
-    accounts = CSAccount.query.all()
+    accounts = CSAccount.query.filter(db.or_(CSAccount.en_due_diligence.is_(None), CSAccount.en_due_diligence.is_(False))).all()
     scores_map = calcular_health_scores_batch(accounts)
     alertas = generar_alertas(accounts=accounts, scores_map=scores_map)
     por_severidad = {"critica": [], "alta": [], "media": []}
@@ -1036,7 +1042,7 @@ def oportunidades():
         func.coalesce(func.sum(CSOpportunity.valor_estimado), 0)
     ).filter_by(etapa="ganada").scalar()
 
-    accounts = CSAccount.query.order_by(CSAccount.nombre).all()
+    accounts = CSAccount.query.filter(db.or_(CSAccount.en_due_diligence.is_(None), CSAccount.en_due_diligence.is_(False))).order_by(CSAccount.nombre).all()
     kams = _get_kams()
 
     return render_template(
@@ -1565,7 +1571,7 @@ def _match_account(cliente_nombre, accounts_map, client_id_map=None):
 def cargar_datos():
     """Vista para cargar CSVs de cobros y citas."""
     import zoho_analytics
-    accounts = CSAccount.query.order_by(CSAccount.nombre).all()
+    accounts = CSAccount.query.filter(db.or_(CSAccount.en_due_diligence.is_(None), CSAccount.en_due_diligence.is_(False))).order_by(CSAccount.nombre).all()
     num_invoices = CSInvoice.query.count()
     num_appointments = CSAppointment.query.count()
     return render_template(
@@ -1613,7 +1619,7 @@ def cargar_cobros():
         return redirect(url_for("cs.cargar_datos"))
 
     # Build account name + client_id maps
-    accounts = CSAccount.query.all()
+    accounts = CSAccount.query.filter(db.or_(CSAccount.en_due_diligence.is_(None), CSAccount.en_due_diligence.is_(False))).all()
     accounts_map = {a.nombre: str(a.id) for a in accounts}
     client_id_map = {a.client_id.upper(): str(a.id) for a in accounts if a.client_id}
 
@@ -1708,7 +1714,7 @@ def cargar_citas():
         flash("Subí un archivo .csv válido (cualquier mayúscula/minúscula). No se procesó nada.", "error")
         return redirect(url_for("cs.cargar_datos"))
 
-    accounts = CSAccount.query.all()
+    accounts = CSAccount.query.filter(db.or_(CSAccount.en_due_diligence.is_(None), CSAccount.en_due_diligence.is_(False))).all()
     accounts_map = {a.nombre: str(a.id) for a in accounts}
 
     try:
@@ -1928,7 +1934,7 @@ def zoho_sync_citas():
         flash("Zoho Analytics devolvió 0 filas.", "error")
         return redirect(url_for("cs.cargar_datos"))
 
-    accounts = CSAccount.query.all()
+    accounts = CSAccount.query.filter(db.or_(CSAccount.en_due_diligence.is_(None), CSAccount.en_due_diligence.is_(False))).all()
     accounts_map = {a.nombre: str(a.id) for a in accounts}
     has_zoho_col = _has_zoho_appointment_col()
 
@@ -2254,7 +2260,7 @@ def contactos_directory():
             )
         )
     contactos = q.order_by(CSContacto.is_owner.desc(), CSContacto.nombre).all()
-    accounts = CSAccount.query.order_by(CSAccount.nombre).all()
+    accounts = CSAccount.query.filter(db.or_(CSAccount.en_due_diligence.is_(None), CSAccount.en_due_diligence.is_(False))).order_by(CSAccount.nombre).all()
     return render_template(
         "cs_contactos.html",
         contactos=contactos, accounts=accounts, buscar=buscar, **_ctx(),
