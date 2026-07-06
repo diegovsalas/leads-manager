@@ -792,16 +792,35 @@ class CSAccount(db.Model):
 
 @db.event.listens_for(CSAccount, "before_insert")
 def _auto_client_id(mapper, connection, target):
-    """Auto-asigna client_id secuencial si no se proporcionó."""
+    """Auto-asigna client_id secuencial si no se proporcionó.
+
+    FIX-2026-07-06: los client_ids legacy son números puros ('900', '3820')
+    sin prefijo 'AX-'. El código anterior asumía siempre formato 'AX-XXXX'
+    y explotaba con IndexError en el .split('-')[1]. Ahora tolera ambos.
+    """
+    # Cuentas en Due Diligence no reciben client_id automático — se
+    # asignará cuando se promuevan a cuenta activa (con KAM).
+    if getattr(target, "en_due_diligence", False):
+        return
     if not target.client_id:
-        result = connection.execute(
-            db.text("SELECT MAX(client_id) FROM cs_accounts WHERE client_id IS NOT NULL")
-        ).scalar()
-        if result:
-            num = int(result.split("-")[1]) + 1
-        else:
-            num = 1
-        target.client_id = f"AX-{num:04d}"
+        # Escanear TODOS los client_ids, extraer números y tomar el mayor
+        rows = connection.execute(
+            db.text("SELECT client_id FROM cs_accounts WHERE client_id IS NOT NULL")
+        ).fetchall()
+        max_num = 0
+        for (cid,) in rows:
+            if not cid:
+                continue
+            # Formato AX-XXXX
+            if "-" in cid:
+                parts = cid.split("-")
+                if len(parts) >= 2 and parts[-1].isdigit():
+                    max_num = max(max_num, int(parts[-1]))
+                    continue
+            # Formato numérico puro (legacy)
+            if cid.isdigit():
+                max_num = max(max_num, int(cid))
+        target.client_id = f"AX-{max_num + 1:04d}"
 
 
 class CSInvoice(db.Model):
