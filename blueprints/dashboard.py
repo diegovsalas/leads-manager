@@ -3,12 +3,13 @@
 API para metricas del dashboard.
 Filtra automaticamente por vendedor si el usuario logueado es vendedor.
 """
-from datetime import date
+from datetime import date, timedelta
 from flask import Blueprint, request, jsonify, session
 from sqlalchemy import func
 from extensions import db
-from models import Lead, EtapaPipeline, OrigenLead, GastoPublicidad, PlataformaAds
+from models import Lead, EtapaPipeline, OrigenLead, GastoPublicidad, PlataformaAds, MetaCampaign
 from blueprints.auth import get_vendedor_filter, require_role
+import scip_meta
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -42,6 +43,95 @@ def _get_date_range(mes_param):
     return inicio, fin
 
 
+def _month_label(inicio):
+    meses = [
+        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+    ]
+    return f"{meses[inicio.month - 1]} {inicio.year}"
+
+
+def _iter_months(inicio, fin):
+    cur = inicio.replace(day=1)
+    end = fin.replace(day=1)
+    while cur <= end:
+        yield cur
+        if cur.month == 12:
+            cur = cur.replace(year=cur.year + 1, month=1)
+        else:
+            cur = cur.replace(month=cur.month + 1)
+
+
+def _meta_date_range(inicio, fin):
+    """Meta Insights usa rangos inclusivos; fin_mes en el CRM es exclusivo."""
+    until = fin - timedelta(days=1)
+    return inicio.isoformat(), until.isoformat()
+
+
+def _manual_spend(inicio, fin, marca_filter=None, exclude_meta=False):
+    q = GastoPublicidad.query.filter(
+        GastoPublicidad.fecha >= inicio,
+        GastoPublicidad.fecha < fin,
+    )
+    if marca_filter:
+        q = q.filter(GastoPublicidad.marca == marca_filter)
+    if exclude_meta:
+        q = q.filter(GastoPublicidad.plataforma.notin_([
+            PlataformaAds.FACEBOOK,
+            PlataformaAds.INSTAGRAM,
+        ]))
+    total = q.with_entities(func.coalesce(func.sum(GastoPublicidad.monto), 0)).scalar()
+    return float(total or 0)
+
+
+def _get_meta_ads_spend(inicio, fin, marca_filter=None):
+    """Suma gasto real de Meta API usando campañas registradas en meta_campaigns."""
+    result = {
+        "available": False,
+        "spend": 0.0,
+        "has_registered_campaigns": False,
+        "campaigns": [],
+        "errors": [],
+    }
+    if not scip_meta.is_configured():
+        result["errors"].append("META_ACCESS_TOKEN no configurado")
+        return result
+
+    result["available"] = True
+    since, until = _meta_date_range(inicio, fin)
+    campaigns_q = MetaCampaign.query.filter(MetaCampaign.activa.is_(True))
+    if marca_filter:
+        campaigns_q = campaigns_q.filter(MetaCampaign.marca == marca_filter)
+
+    registered_campaigns = campaigns_q.order_by(MetaCampaign.marca, MetaCampaign.nombre).all()
+    result["has_registered_campaigns"] = bool(registered_campaigns)
+
+    for campaign in registered_campaigns:
+        try:
+            metrics = scip_meta.get_campaign_metrics(
+                campaign.campaign_id,
+                date_range=(since, until),
+            )
+            spend = float(metrics.get("spend") or 0)
+            result["spend"] += spend
+            result["campaigns"].append({
+                "campaign_id": campaign.campaign_id,
+                "nombre": campaign.nombre,
+                "marca": campaign.marca,
+                "unidad": campaign.unidad,
+                "spend": spend,
+            })
+        except Exception as exc:
+            result["errors"].append({
+                "campaign_id": campaign.campaign_id,
+                "nombre": campaign.nombre,
+                "error": str(exc),
+            })
+
+    result["spend"] = round(result["spend"], 2)
+    return result
+
+
 @dashboard_bp.route("/pipeline-valores", methods=["GET"])
 def pipeline_valores():
     q = db.session.query(
@@ -71,6 +161,25 @@ def pipeline_valores():
             data[etapa.value] = {"cantidad": 0, "valor": 0}
 
     return jsonify(data)
+
+
+@dashboard_bp.route("/meses", methods=["GET"])
+def meses_disponibles():
+    """Meses para filtros del dashboard, desde el primer registro hasta hoy."""
+    first_lead = db.session.query(func.min(Lead.fecha_creacion)).scalar()
+    first_gasto = db.session.query(func.min(GastoPublicidad.fecha)).scalar()
+    candidates = []
+    for d in (first_lead, first_gasto):
+        if d:
+            candidates.append(d.date() if hasattr(d, "date") else d)
+    start = min(candidates) if candidates else date.today()
+    today = date.today()
+    months = [
+        {"value": m.strftime("%Y-%m"), "label": _month_label(m)}
+        for m in _iter_months(start.replace(day=1), today.replace(day=1))
+    ]
+    months.reverse()
+    return jsonify(months)
 
 
 @dashboard_bp.route("/embudo", methods=["GET"])
@@ -147,11 +256,22 @@ def embudo():
 
     # Gastos (solo super_admin ve gastos reales, vendedor ve 0)
     gasto_ads = 0.0
+    gasto_ads_manual = 0.0
+    meta_ads_api = {
+        "available": False,
+        "spend": 0.0,
+        "has_registered_campaigns": False,
+        "campaigns": [],
+        "errors": [],
+    }
     if not vid:
-        gasto_row = db.session.query(func.coalesce(func.sum(GastoPublicidad.monto), 0)).filter(
-            GastoPublicidad.fecha >= inicio_mes, GastoPublicidad.fecha < fin_mes,
-        ).scalar()
-        gasto_ads = float(gasto_row or 0)
+        meta_ads_api = _get_meta_ads_spend(inicio_mes, fin_mes)
+        gasto_ads_manual = _manual_spend(
+            inicio_mes,
+            fin_mes,
+            exclude_meta=meta_ads_api["has_registered_campaigns"],
+        )
+        gasto_ads = round(gasto_ads_manual + meta_ads_api["spend"], 2)
 
     costo_por_lead = round(gasto_ads / total, 2) if total > 0 else 0
     costo_por_cierre = round(gasto_ads / ganados, 2) if ganados > 0 else 0
@@ -168,6 +288,9 @@ def embudo():
         "revenue_ganado": revenue,
         "pipe_total": pipe_total,
         "gasto_ads": gasto_ads,
+        "gasto_ads_manual": gasto_ads_manual,
+        "gasto_ads_meta": meta_ads_api["spend"],
+        "meta_ads_api": meta_ads_api,
         "costo_por_lead": costo_por_lead,
         "costo_por_cierre": costo_por_cierre,
         "roi": roi,
@@ -318,7 +441,18 @@ def marketing_roi():
 
     # Spend por origen (solo super_admin lo ve real, vendedor=0)
     vid = get_vendedor_filter()
+    manual_spend_total = 0.0
+    meta_ads_api = {
+        "available": False,
+        "spend": 0.0,
+        "has_registered_campaigns": False,
+        "campaigns": [],
+        "errors": [],
+    }
     if not vid:
+        meta_ads_api = _get_meta_ads_spend(inicio_mes, fin_mes, marca_filter)
+        por_origen[OrigenLead.META_ADS.value]["spend"] += meta_ads_api["spend"]
+
         gastos_q = GastoPublicidad.query.filter(
             GastoPublicidad.fecha >= inicio_mes,
             GastoPublicidad.fecha < fin_mes,
@@ -326,9 +460,16 @@ def marketing_roi():
         if marca_filter:
             gastos_q = gastos_q.filter(GastoPublicidad.marca == marca_filter)
         for g in gastos_q.all():
+            if meta_ads_api["has_registered_campaigns"] and g.plataforma in (
+                PlataformaAds.FACEBOOK,
+                PlataformaAds.INSTAGRAM,
+            ):
+                continue
             origen = _PLATAFORMA_TO_ORIGEN.get(g.plataforma)
             target = por_origen[origen.value] if origen else sin_origen
-            target["spend"] += float(g.monto or 0)
+            amount = float(g.monto or 0)
+            target["spend"] += amount
+            manual_spend_total += amount
 
     # Calcular CPL, CAC, ROI, tasa cierre por bucket
     def _finish(b):
@@ -352,6 +493,11 @@ def marketing_roi():
         "total": total,
         "por_origen": por_origen,
         "sin_origen": sin_origen,
+        "spend_sources": {
+            "meta_api": meta_ads_api["spend"],
+            "manual": round(manual_spend_total, 2),
+        },
+        "meta_ads_api": meta_ads_api,
         "platform_to_origen_map": {
             p.value: (o.value if o else None) for p, o in _PLATAFORMA_TO_ORIGEN.items()
         },
@@ -487,6 +633,11 @@ def leads_por_origen():
 def _kpis_vendedor(vendedor_usuario_id: str, inicio: date, fin: date) -> dict:
     """KPIs resumen del vendedor para la lista master de revisión."""
     base = Lead.query.filter(Lead.usuario_asignado_id == vendedor_usuario_id)
+    valor_expr = func.coalesce(
+        Lead.factura_monto,
+        Lead.cantidad_productos * Lead.precio_unitario,
+        Lead.valor_estimado, 0,
+    )
 
     leads_mes = base.filter(
         Lead.fecha_creacion >= inicio, Lead.fecha_creacion < fin,
@@ -505,21 +656,44 @@ def _kpis_vendedor(vendedor_usuario_id: str, inicio: date, fin: date) -> dict:
         EtapaPipeline.CIERRE_GANADO, EtapaPipeline.CIERRE_PERDIDO,
     ]))
     leads_activos = activos_q.count()
-    pipe_activo = float(activos_q.with_entities(func.coalesce(func.sum(func.coalesce(
-        Lead.factura_monto,
-        Lead.cantidad_productos * Lead.precio_unitario,
-        Lead.valor_estimado, 0,
-    )), 0)).scalar() or 0)
+    pipe_activo = float(activos_q.with_entities(func.coalesce(func.sum(valor_expr), 0)).scalar() or 0)
 
     # Revenue ganado del mes
     revenue_mes = float(base.filter(
         Lead.fecha_creacion >= inicio, Lead.fecha_creacion < fin,
         Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO,
-    ).with_entities(func.coalesce(func.sum(func.coalesce(
-        Lead.factura_monto,
-        Lead.cantidad_productos * Lead.precio_unitario,
-        Lead.valor_estimado, 0,
-    )), 0)).scalar() or 0)
+    ).with_entities(func.coalesce(func.sum(valor_expr), 0)).scalar() or 0)
+
+    def _type_filter(tipo):
+        return Lead.tipo_venta == tipo if tipo else Lead.tipo_venta.is_(None)
+
+    split_tipo_venta = {}
+    for key, label in [
+        ("recurrente", "Recurrente"),
+        ("eventual", "Eventual"),
+        ("sin_tipo", None),
+    ]:
+        tipo_base = base.filter(_type_filter(label))
+        tipo_mes = tipo_base.filter(Lead.fecha_creacion >= inicio, Lead.fecha_creacion < fin)
+        tipo_activos = tipo_base.filter(Lead.etapa_pipeline.notin_([
+            EtapaPipeline.CIERRE_GANADO, EtapaPipeline.CIERRE_PERDIDO,
+        ]))
+        tipo_ganados_mes = tipo_mes.filter(Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO).count()
+        tipo_revenue_mes = float(tipo_mes.filter(
+            Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO,
+        ).with_entities(func.coalesce(func.sum(valor_expr), 0)).scalar() or 0)
+        tipo_leads_mes = tipo_mes.count()
+        split_tipo_venta[key] = {
+            "label": label or "Sin tipo",
+            "leads_mes": tipo_leads_mes,
+            "leads_activos": tipo_activos.count(),
+            "pipe_activo": float(tipo_activos.with_entities(
+                func.coalesce(func.sum(valor_expr), 0),
+            ).scalar() or 0),
+            "ganados_mes": tipo_ganados_mes,
+            "revenue_mes": tipo_revenue_mes,
+            "tasa_cierre": round(tipo_ganados_mes / tipo_leads_mes * 100, 1) if tipo_leads_mes > 0 else 0,
+        }
 
     return {
         "leads_mes":       leads_mes,
@@ -529,6 +703,7 @@ def _kpis_vendedor(vendedor_usuario_id: str, inicio: date, fin: date) -> dict:
         "pipe_activo":     pipe_activo,
         "revenue_mes":     revenue_mes,
         "tasa_cierre":     round(ganados_mes / leads_mes * 100, 1) if leads_mes > 0 else 0,
+        "split_tipo_venta": split_tipo_venta,
     }
 
 
@@ -773,6 +948,7 @@ def vendedor_review(vendedor_id):
             "valor":            valor,
             "estado":           l.estado_cliente,
             "tipo_cliente":     l.tipo_cliente,
+            "tipo_venta":       l.tipo_venta,  # FEAT-2026-07-06: warning "sin clasificar"
             "icp_nivel":        l.icp_nivel,
             "dias_sin_contacto": dias,
             "dias_en_etapa":    dias_etapa,

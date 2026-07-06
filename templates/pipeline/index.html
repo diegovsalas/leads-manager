@@ -2116,6 +2116,23 @@ fbq('track','PageView');
   <div class="modal-actions"><button class="btn" onclick="closeGastoModal()">Cancelar</button><button class="btn btn-filled" onclick="crearGasto()">Registrar</button></div>
 </div></div>
 
+<!-- FEAT-2026-07-06: Modal para clasificar leads sin tipo_venta -->
+<div class="modal-overlay" id="modal-sin-clasificar" onclick="if(event.target===this)_cerrarSinClasificarModal()">
+  <div class="modal" style="max-width:720px;width:96%;max-height:80vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+      <div>
+        <div class="modal-title" style="margin-bottom:2px;">⚠️ Leads sin clasificar</div>
+        <div style="font-size:11px;color:var(--text3);">Selecciona el tipo de venta para cada uno. No cuenta en meta Recurrente ni Eventual hasta que se clasifique.</div>
+      </div>
+      <button onclick="_cerrarSinClasificarModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text3);line-height:1;">×</button>
+    </div>
+    <div id="sin-clasificar-body" style="max-height:60vh;overflow-y:auto;"></div>
+    <div class="modal-actions" style="margin-top:12px;">
+      <button class="btn" onclick="_cerrarSinClasificarModal()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Vendedor (completo: perfil + login) -->
 <div class="modal-overlay" id="modal-vendedor" onclick="if(event.target===this)closeVendedorModal()"><div class="modal" style="max-width:640px;width:96%;max-height:90vh;overflow-y:auto;">
   <div class="modal-title" id="mv-title">Nuevo vendedor</div>
@@ -3294,6 +3311,63 @@ function _revirseAMes(yyyymm){
   loadRevision();
 }
 
+// FEAT-2026-07-06: modal para clasificar leads sin tipo_venta.
+// window._leadsSinClasificarActuales viene poblado por loadVendedorDetail.
+function _abrirSinClasificarModal(){
+  const leads = window._leadsSinClasificarActuales || [];
+  const body  = document.getElementById('sin-clasificar-body');
+  if(!leads.length){
+    body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text3);">Nada por clasificar. Todos los leads del vendedor tienen tipo_venta seteado.</div>';
+  }else{
+    body.innerHTML = leads.map(l=>`
+      <div class="sc-row" data-lead-id="${l.id}" style="display:grid;grid-template-columns:1fr 220px;gap:12px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border-light);">
+        <div>
+          <div style="font-weight:600;font-size:13px;">${(l.nombre||'(sin nombre)').replace(/[<>]/g,'')}</div>
+          <div style="font-size:11px;color:var(--text3);">${l.empresa||''}${l.empresa?' · ':''}${l.etapa||'—'} · ${l.marca_interes||'sin UN'}</div>
+        </div>
+        <div style="display:flex;gap:4px;">
+          <button class="btn" onclick="_guardarTipoVenta('${l.id}','Recurrente',this)" style="flex:1;font-size:11px;padding:5px 8px;background:var(--orange);color:#fff;border:none;">🔁 Recurrente</button>
+          <button class="btn" onclick="_guardarTipoVenta('${l.id}','Eventual',this)" style="flex:1;font-size:11px;padding:5px 8px;background:var(--purple);color:#fff;border:none;">📅 Eventual</button>
+        </div>
+      </div>
+    `).join('');
+  }
+  document.getElementById('modal-sin-clasificar').classList.add('open');
+}
+
+function _cerrarSinClasificarModal(){
+  document.getElementById('modal-sin-clasificar').classList.remove('open');
+  // Recargar el detail si estamos en la vista de revisión (para reflejar cambios en split)
+  const rev = document.getElementById('view-revision');
+  if(rev && !rev.classList.contains('hidden') && window._revVendedorActualId){
+    loadVendedorDetail(window._revVendedorActualId);
+  }
+}
+
+async function _guardarTipoVenta(leadId, tipo, btn){
+  const row = btn.closest('.sc-row');
+  const originalHtml = row.innerHTML;
+  row.style.opacity = '.5';
+  try{
+    const r = await fetch('/api/leads/'+leadId, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({tipo_venta: tipo}),
+    });
+    if(!r.ok){
+      const e = await r.json().catch(()=>({error:'Error'}));
+      throw new Error(e.error || 'HTTP '+r.status);
+    }
+    // Éxito: marcar la fila como clasificada y quitarla del array global
+    row.innerHTML = `<div style="grid-column:1/-1;padding:6px 0;color:var(--green);font-size:12px;">✓ Guardado como <strong>${tipo}</strong></div>`;
+    window._leadsSinClasificarActuales = (window._leadsSinClasificarActuales||[]).filter(l=>l.id!==leadId);
+    setTimeout(()=>{ row.remove(); }, 700);
+  }catch(err){
+    row.style.opacity = '';
+    row.innerHTML = originalHtml + `<div style="grid-column:1/-1;padding:4px 0;color:var(--red);font-size:11px;">Error: ${err.message}</div>`;
+  }
+}
+
 async function loadRevision(){
   const mesInput=document.getElementById('rev-mes');
   if(!mesInput.value){
@@ -3398,6 +3472,7 @@ async function selectVendedorRevision(vendedorId){
 }
 
 async function loadVendedorDetail(vendedorId){
+  window._revVendedorActualId = vendedorId;  // FEAT-2026-07-06: para poder recargar tras clasificar
   const detail=document.getElementById('rev-detail');
   detail.innerHTML='<div class="dash-card" style="padding:40px;text-align:center;color:var(--text3);">Cargando vendedor...</div>';
   try{
@@ -3458,6 +3533,33 @@ async function loadVendedorDetail(vendedorId){
           📅 Ver ${_mesLabelES(_prevY,_prevM)}
         </button>
       </div>`;
+
+    // FEAT-2026-07-06: warning discreto cuando hay leads sin tipo_venta clasificado.
+    // Recolectamos los leads activos sin clasificar de leads_por_etapa.
+    // (los cerrados no entran porque el endpoint solo trae activos; para los
+    //  cerrados se usa el split.sin_tipo que sí los cuenta).
+    const _leadsSinClasificar = [];
+    for(const etapa in (d.leads_por_etapa||{})){
+      for(const l of d.leads_por_etapa[etapa]){
+        if(!l.tipo_venta){
+          _leadsSinClasificar.push({...l, etapa});
+        }
+      }
+    }
+    const _sinClasCount = _leadsSinClasificar.length;
+    // Guardamos en window para que el modal lo pueda usar
+    window._leadsSinClasificarActuales = _leadsSinClasificar;
+    const _warningSinClasificarHtml = _sinClasCount > 0 ? `
+      <div style="margin-top:10px;padding:8px 12px;background:#FEF3C7;border:1px solid #FBBF24;border-radius:6px;display:flex;align-items:center;gap:10px;font-size:12px;">
+        <span style="font-size:16px;">⚠️</span>
+        <div style="flex:1;">
+          <strong style="color:#92400E;">${_sinClasCount} lead${_sinClasCount===1?'':'s'} sin clasificar</strong>
+          <span style="color:#78350F;"> · no cuenta${_sinClasCount===1?'':'n'} en meta Recurrente ni Eventual</span>
+        </div>
+        <button onclick="_abrirSinClasificarModal()" class="btn" style="font-size:11px;padding:4px 10px;background:#F59E0B;color:#fff;border:none;font-weight:600;">
+          Ver y clasificar
+        </button>
+      </div>` : '';
     // KPI strip
     let html=`
       <div class="dash-card" style="margin-bottom:14px;">
@@ -3482,6 +3584,7 @@ async function loadVendedorDetail(vendedorId){
             <div style="text-align:right;">% cierre</div>
           </div>
           ${_todoEnCero ? _sinActividadHtml : (splitHtml||'<div style="padding:10px 0;border-top:1px solid var(--border-light);font-size:12px;color:var(--text3);">Sin clasificacion recurrente/eventual.</div>')}
+          ${_warningSinClasificarHtml||''}
         </div>
       </div>`;
 
