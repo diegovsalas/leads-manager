@@ -3284,6 +3284,16 @@ function _revMesParam(){
   return mes ? '?mes='+mes : '';
 }
 
+// FIX-2026-07-06: cambia el input rev-mes al mes indicado y recarga
+// la revisión. Se usa desde el botón "Ver mes anterior" cuando el
+// vendedor no tiene actividad en el mes actual.
+function _revirseAMes(yyyymm){
+  const inp = document.getElementById('rev-mes');
+  if(!inp) return;
+  inp.value = yyyymm;
+  loadRevision();
+}
+
 async function loadRevision(){
   const mesInput=document.getElementById('rev-mes');
   if(!mesInput.value){
@@ -3396,6 +3406,13 @@ async function loadVendedorDetail(vendedorId){
     const d=await r.json();
     const k=d.kpis||{};
     const split=k.split_tipo_venta||{};
+
+    // FIX-2026-07-06: si Recurrente Y Eventual tienen TODO en 0, no
+    // renderizamos la tabla (era confusa: "$0 · 0 · 0 · $0 · 0%").
+    // Mostramos mensaje explícito con botón para saltar al mes anterior.
+    const _isBlank = s => !s || (!s.pipe_activo && !s.leads_activos && !s.ganados_mes && !s.revenue_mes && !s.leads_mes);
+    const _todoEnCero = _isBlank(split.recurrente) && _isBlank(split.eventual) && _isBlank(split.sin_tipo);
+
     const splitRows=[
       {key:'recurrente',label:'Recurrente',color:'var(--orange)',bg:'var(--orange-bg)'},
       {key:'eventual',label:'Eventual',color:'var(--purple)',bg:'var(--purple-bg)'},
@@ -3417,6 +3434,27 @@ async function loadVendedorDetail(vendedorId){
         <div style="text-align:right;font-weight:700;color:${(s.tasa_cierre||0)>=20?'var(--green)':(s.tasa_cierre||0)>=10?'var(--orange)':'var(--red)'};">${s.tasa_cierre||0}%</div>
       </div>`;
     }).join('');
+
+    // Label del mes actual + mes anterior para el mensaje "sin actividad"
+    const _mesInputVal = document.getElementById('rev-mes')?.value
+      || (new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'));
+    const [_y,_m] = _mesInputVal.split('-').map(Number);
+    const _prevY = _m===1 ? _y-1 : _y;
+    const _prevM = _m===1 ? 12  : _m-1;
+    const _prevYm = _prevY+'-'+String(_prevM).padStart(2,'0');
+    const _mesLabelES = (y,m)=>{
+      const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+      return MESES[m-1]+' '+y;
+    };
+    const _sinActividadHtml = `
+      <div style="padding:24px 12px;border-top:1px solid var(--border-light);text-align:center;">
+        <div style="font-size:32px;line-height:1;margin-bottom:6px;opacity:.5;">⚪</div>
+        <div style="font-size:14px;font-weight:600;color:var(--text2);margin-bottom:4px;">Sin actividad en ${_mesLabelES(_y,_m)}</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Este vendedor no tiene leads ni cierres en el mes seleccionado.</div>
+        <button onclick="_revirseAMes('${_prevYm}')" class="btn" style="font-size:12px;padding:6px 14px;background:var(--purple);color:#fff;border:none;">
+          📅 Ver ${_mesLabelES(_prevY,_prevM)}
+        </button>
+      </div>`;
     // KPI strip
     let html=`
       <div class="dash-card" style="margin-bottom:14px;">
@@ -3440,7 +3478,7 @@ async function loadVendedorDetail(vendedorId){
             <div style="text-align:right;">Revenue</div>
             <div style="text-align:right;">% cierre</div>
           </div>
-          ${splitHtml||'<div style="padding:10px 0;border-top:1px solid var(--border-light);font-size:12px;color:var(--text3);">Sin clasificacion recurrente/eventual.</div>'}
+          ${_todoEnCero ? _sinActividadHtml : (splitHtml||'<div style="padding:10px 0;border-top:1px solid var(--border-light);font-size:12px;color:var(--text3);">Sin clasificacion recurrente/eventual.</div>')}
         </div>
       </div>`;
 
