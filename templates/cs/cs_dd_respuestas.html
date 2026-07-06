@@ -103,6 +103,10 @@
 
 {% block scripts %}
 <script>
+function _dsEsc(v){
+    return String(v ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
 function _dsChangeOrigen(v){
     const url = new URL(window.location.href);
     if(!v) url.searchParams.delete('origen');
@@ -186,12 +190,12 @@ function _dsCargarRespuestas(){
         }
         body.innerHTML = respondidas.map(r=>`
             <tr>
-                <td class="primary"><strong>${r.cuenta_nombre}</strong></td>
+                <td class="primary"><strong>${_dsEsc(r.cuenta_nombre)}</strong></td>
                 <td class="c"><strong style="color:${_dsNpsColor(r.nps)};font-size:16px;">${r.nps ?? '—'}</strong></td>
                 <td class="c">${r.satisfaccion ? r.satisfaccion + '/5' : '—'}</td>
-                <td class="c" style="font-size:11px;">${r.continuidad || '—'}</td>
-                <td style="font-size:12px;">${r.contacto_nombre || '—'}${r.contacto_puesto ? '<div class="muted" style="font-size:10px;">'+r.contacto_puesto+'</div>' : ''}</td>
-                <td style="font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(r.preocupaciones||'').replace(/"/g,'&quot;')}">${r.preocupaciones || '—'}</td>
+                <td class="c" style="font-size:11px;">${_dsEsc(r.continuidad || '—')}</td>
+                <td style="font-size:12px;">${_dsEsc(r.contacto_nombre || '—')}${r.contacto_puesto ? '<div class="muted" style="font-size:10px;">'+_dsEsc(r.contacto_puesto)+'</div>' : ''}</td>
+                <td style="font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${_dsEsc(r.preocupaciones||'')}">${_dsEsc(r.preocupaciones || '—')}</td>
                 <td class="r" style="font-size:11px;color:var(--ink-3);">
                     ${_dsFmtFecha(r.respondido_at)}
                     <div><button onclick="_dsVerDetail('${r.survey_id}')" style="background:none;border:none;color:var(--brand);text-decoration:underline;cursor:pointer;font-size:11px;padding:0;">ver todo</button></div>
@@ -206,7 +210,7 @@ function _dsCargarRespuestas(){
 function _dsVerDetail(surveyId){
     const r = (window._ddRespuestas || []).find(x => x.survey_id === surveyId);
     if(!r){ alert('No se encontró la respuesta'); return; }
-    document.getElementById('detail-titulo').textContent = 'Respuesta · ' + r.cuenta_nombre;
+    document.getElementById('detail-titulo').textContent = 'Respuesta · ' + (r.cuenta_nombre || '');
     document.getElementById('detail-body').innerHTML = `
         <table style="width:100%;font-size:14px;line-height:1.5;">
             <tr><td style="padding:8px 0;color:var(--ink-2);width:180px;vertical-align:top;">NPS</td>
@@ -217,13 +221,13 @@ function _dsVerDetail(surveyId){
             <tr><td style="padding:8px 0;color:var(--ink-2);vertical-align:top;">Satisfacción</td>
                 <td>${r.satisfaccion ? r.satisfaccion + ' / 5' : '—'}</td></tr>
             <tr><td style="padding:8px 0;color:var(--ink-2);vertical-align:top;">Continuidad 12m</td>
-                <td>${r.continuidad || '—'}</td></tr>
+                <td>${_dsEsc(r.continuidad || '—')}</td></tr>
             <tr><td style="padding:8px 0;color:var(--ink-2);vertical-align:top;">Preocupaciones</td>
-                <td style="white-space:pre-wrap;">${r.preocupaciones || '—'}</td></tr>
+                <td style="white-space:pre-wrap;">${_dsEsc(r.preocupaciones || '—')}</td></tr>
             <tr><td style="padding:8px 0;color:var(--ink-2);vertical-align:top;">Áreas de mejora</td>
-                <td style="white-space:pre-wrap;">${r.areas_mejora || '—'}</td></tr>
+                <td style="white-space:pre-wrap;">${_dsEsc(r.areas_mejora || '—')}</td></tr>
             <tr><td style="padding:8px 0;color:var(--ink-2);vertical-align:top;">Contacto</td>
-                <td>${r.contacto_nombre || '—'}${r.contacto_puesto ? ' · ' + r.contacto_puesto : ''}${r.contacto_email ? '<br><span class="muted" style="font-size:12px;">'+r.contacto_email+'</span>' : ''}</td></tr>
+                <td>${_dsEsc(r.contacto_nombre || '—')}${r.contacto_puesto ? ' · ' + _dsEsc(r.contacto_puesto) : ''}${r.contacto_email ? '<br><span class="muted" style="font-size:12px;">'+_dsEsc(r.contacto_email)+'</span>' : ''}</td></tr>
             <tr><td style="padding:8px 0;color:var(--ink-3);font-size:12px;vertical-align:top;">Respondido</td>
                 <td style="color:var(--ink-3);font-size:12px;">${_dsFmtFecha(r.respondido_at)}</td></tr>
         </table>

@@ -50,6 +50,50 @@
     </div>
 </div>
 
+<!-- Mapeo cartera + riesgo transicion -->
+<div class="grid g-4 mb-4">
+    <div class="kpi">
+        <div class="label">Riesgo transición</div>
+        <div class="value" style="font-size:26px;color:{% if dd_summary.riesgo_alto > 0 %}var(--danger-ink){% else %}var(--ok-ink){% endif %}">{{ dd_summary.riesgo_alto }}</div>
+        <div class="foot"><span class="muted">{{ dd_summary.riesgo_medio }} medio · {{ dd_summary.riesgo_bajo }} bajo</span></div>
+    </div>
+    <div class="kpi">
+        <div class="label">Baseline NPS</div>
+        <div class="value" style="font-size:26px;color:{% if dd_summary.nps_score is none %}var(--ink-3){% elif dd_summary.nps_score >= 30 %}var(--ok-ink){% elif dd_summary.nps_score >= 0 %}var(--warn-ink){% else %}var(--danger-ink){% endif %}">
+            {% if dd_summary.nps_score is none %}—{% else %}{{ "%+.1f"|format(dd_summary.nps_score) }}{% endif %}
+        </div>
+        <div class="foot"><span class="muted">{{ dd_summary.baseline_count }} respuestas · {{ dd_summary.baseline_pct }}% cartera</span></div>
+    </div>
+    <div class="kpi">
+        <div class="label">Satisfacción base</div>
+        <div class="value" style="font-size:26px">{% if dd_summary.sat_promedio is none %}—{% else %}{{ dd_summary.sat_promedio }} / 5{% endif %}</div>
+        <div class="foot"><span class="muted">clientes adquiridos</span></div>
+    </div>
+    <div class="kpi">
+        <div class="label">ARR cartera DD</div>
+        <div class="value" style="font-size:26px">${{ "{:,.0f}".format(dd_summary.total_arr) }}</div>
+        <div class="foot"><span class="muted">mapeado por precio mensual</span></div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-head">
+        <h3>Mapa de cartera</h3>
+        <div class="meta">Tamaño · rentabilidad · riesgo de transición</div>
+    </div>
+    <div style="padding:14px 16px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;">
+        {% for seg in ['Grande', 'Mediano', 'Chico'] %}
+        {% set s = dd_summary.segmentos.get(seg, {'cuentas':0,'arr':0,'riesgo_alto':0}) %}
+        <div style="border:1px solid var(--border);border-radius:10px;padding:12px;background:#fff;">
+            <div style="font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.06em;">{{ seg }}</div>
+            <div style="font-size:22px;font-weight:700;margin-top:3px;">{{ s.cuentas }}</div>
+            <div style="font-size:12px;color:var(--ink-2);">ARR ${{ "{:,.0f}".format(s.arr) }}</div>
+            <div style="font-size:11px;margin-top:4px;color:{% if s.riesgo_alto > 0 %}var(--danger-ink){% else %}var(--ok-ink){% endif %};">{{ s.riesgo_alto }} en riesgo alto</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
 <!-- Bulk actions -->
 {% if cuentas %}
 <div class="card mb-4">
@@ -85,10 +129,14 @@
             <tr>
                 <th>Cliente</th>
                 <th class="r">Precio</th>
+                <th>Tamaño</th>
+                <th>Rentabilidad</th>
+                <th>Riesgo transición</th>
                 <th>Tipo</th>
                 <th>Comportamiento</th>
                 <th class="r">Fact YTD</th>
                 <th class="r">CxC</th>
+                <th class="c">Baseline</th>
                 <th class="c">Encuesta</th>
                 <th class="c">Respuesta</th>
             </tr>
@@ -96,6 +144,7 @@
         <tbody>
             {% for c in cuentas %}
             {% set m = c.dd_metadata or {} %}
+            {% set p = dd_profiles.get(c.id|string) %}
             {% set resp = (respuestas.get(c.id|string) or []) %}
             {% set resp_completa = resp|selectattr('respondido_at')|list %}
             <tr>
@@ -104,6 +153,11 @@
                     {% if m.contacto_fugaci %}<div class="muted" style="font-size:11px;">Contacto: {{ m.contacto_fugaci }}</div>{% endif %}
                 </td>
                 <td class="r"><strong>${{ "{:,.0f}".format((m.precio or 0)|float) }}</strong></td>
+                <td><span class="tag" style="font-size:10px;">{{ p.tamano }}</span></td>
+                <td><span class="tag" style="font-size:10px;background:{% if p.rentabilidad == 'Alta' %}#D4EDDA;color:#1B5E20;{% elif p.rentabilidad == 'Media' %}#E0F2FE;color:#075985;{% elif p.rentabilidad == 'Eventual' %}#EDE9FE;color:#6D28D9;{% else %}#F8D7DA;color:#721C24;{% endif %}">{{ p.rentabilidad }}</span></td>
+                <td>
+                    <span class="tag" title="{{ (p.riesgo_motivos or [])|join(' · ') }}" style="font-size:10px;background:{% if p.riesgo == 'Alto' %}#F8D7DA;color:#721C24;{% elif p.riesgo == 'Medio' %}#FFF3CD;color:#856404;{% else %}#D4EDDA;color:#1B5E20;{% endif %}">{{ p.riesgo }} · {{ p.riesgo_score }}</span>
+                </td>
                 <td><span class="tag" style="font-size:10px;">{{ m.tipo_cliente or '—' }}</span></td>
                 <td>
                     {% set comp = (m.comportamiento_pago or '')|lower %}
@@ -111,6 +165,14 @@
                 </td>
                 <td class="r">${{ "{:,.0f}".format((m.facturacion_ytd or 0)|float) }}</td>
                 <td class="r">{% if (m.cxc_junio or 0)|float > 0 %}<span style="color:var(--warn-ink);">${{ "{:,.0f}".format((m.cxc_junio or 0)|float) }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+                <td class="c">
+                    {% if p.baseline %}
+                    <span style="font-size:11px;font-weight:700;color:{% if p.nps and p.nps >= 9 %}#059669{% elif p.nps and p.nps >= 7 %}#D97706{% else %}#DC2626{% endif %};">NPS {{ p.nps if p.nps is not none else '—' }}</span>
+                    <div class="muted" style="font-size:10px;">Sat {{ p.satisfaccion if p.satisfaccion is not none else '—' }}/5</div>
+                    {% else %}
+                    <span class="muted" style="font-size:11px;">sin baseline</span>
+                    {% endif %}
+                </td>
                 <td class="c">
                     <button onclick="_ddGenerarToken('{{ c.id }}', '{{ c.nombre|e }}')" class="btn ghost" style="font-size:11px;padding:4px 10px;">📤 Enviar</button>
                 </td>
@@ -129,7 +191,7 @@
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="8" style="text-align:center;padding:36px 20px;">
+            <tr><td colspan="12" style="text-align:center;padding:36px 20px;">
                 <div style="font-size:48px;margin-bottom:12px;opacity:.4;">📦</div>
                 <div style="font-size:16px;font-weight:600;color:var(--ink-2);margin-bottom:6px;">Sin cuentas en Due Diligence</div>
                 <div style="font-size:13px;color:var(--ink-3);margin-bottom:20px;">Carga los 130 clientes de Fugaci con un clic</div>
@@ -170,6 +232,10 @@
 
 {% block scripts %}
 <script>
+function _ddEsc(v){
+    return String(v ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
 function _ddChangeOrigen(v){
     const url = new URL(window.location.href);
     if(!v) url.searchParams.delete('origen');
@@ -213,7 +279,7 @@ async function _ddPromoverTodas(){
         });
         const d = await r.json();
         if(!r.ok || !d.ok){ alert('Error: ' + (d.error || 'desconocido')); return; }
-        alert(`✓ ${d.cuentas_promovidas} cuentas asignadas a ${d.kam}`);
+        alert(`✓ ${d.cuentas_promovidas} cuentas asignadas a ${d.kam}\nMRR activado: $${Number(d.mrr_activado||0).toLocaleString('es-MX')}`);
         window.location.reload();
     }catch(e){ alert('Falló: ' + e.message); }
 }
@@ -238,13 +304,13 @@ async function _ddVerRespuesta(accountId){
                     nps >= 9 ? 'Promotor' : nps >= 7 ? 'Pasivo' : 'Detractor';
         modalBody.innerHTML = `
           <table style="width:100%;font-size:14px;">
-            <tr><td style="padding:6px 0;color:var(--ink-2);">Cuenta</td><td style="font-weight:600;">${r.cuenta_nombre}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--ink-2);">Cuenta</td><td style="font-weight:600;">${_ddEsc(r.cuenta_nombre)}</td></tr>
             <tr><td style="padding:6px 0;color:var(--ink-2);">NPS</td><td><strong style="color:${npsColor};font-size:20px;">${nps ?? '—'}</strong> <span class="muted" style="font-size:12px;margin-left:6px;">${cat}</span></td></tr>
             <tr><td style="padding:6px 0;color:var(--ink-2);">Satisfacción</td><td>${r.satisfaccion ? r.satisfaccion + ' / 5' : '—'}</td></tr>
-            <tr><td style="padding:6px 0;color:var(--ink-2);">Continuidad 12m</td><td>${r.continuidad || '—'}</td></tr>
-            <tr><td style="padding:6px 0;color:var(--ink-2);vertical-align:top;">Preocupaciones</td><td style="white-space:pre-wrap;">${r.preocupaciones || '—'}</td></tr>
-            <tr><td style="padding:6px 0;color:var(--ink-2);vertical-align:top;">Áreas mejora</td><td style="white-space:pre-wrap;">${r.areas_mejora || '—'}</td></tr>
-            <tr><td style="padding:6px 0;color:var(--ink-2);">Contacto</td><td>${r.contacto_nombre || '—'}${r.contacto_puesto?' · '+r.contacto_puesto:''}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--ink-2);">Continuidad 12m</td><td>${_ddEsc(r.continuidad || '—')}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--ink-2);vertical-align:top;">Preocupaciones</td><td style="white-space:pre-wrap;">${_ddEsc(r.preocupaciones || '—')}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--ink-2);vertical-align:top;">Áreas mejora</td><td style="white-space:pre-wrap;">${_ddEsc(r.areas_mejora || '—')}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--ink-2);">Contacto</td><td>${_ddEsc(r.contacto_nombre || '—')}${r.contacto_puesto?' · '+_ddEsc(r.contacto_puesto):''}</td></tr>
             <tr><td style="padding:6px 0;color:var(--ink-3);font-size:12px;">Respondido</td><td style="color:var(--ink-3);font-size:12px;">${r.respondido_at ? new Date(r.respondido_at).toLocaleString('es-MX') : '—'}</td></tr>
           </table>
         `;

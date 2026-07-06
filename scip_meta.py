@@ -236,11 +236,11 @@ def get_ads_by_adset(adset_id: str) -> list:
 
 
 def _get_metrics(entity_id: str, kind: str, date_range: Optional[tuple] = None) -> dict:
-    cache_key = f"metrics_{kind}_{entity_id}"
+    since, until = date_range or _default_date_range()
+    cache_key = f"metrics_{kind}_{entity_id}_{since}_{until}"
     cached = _cache.get(cache_key)
     if cached:
         return cached
-    since, until = date_range or _default_date_range()
     fields = "impressions,clicks,spend,actions,action_values,cpc,cpm,frequency,ctr,reach"
     import json
     data = _make_request(f"{entity_id}/insights", {

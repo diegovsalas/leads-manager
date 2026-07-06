@@ -21,7 +21,7 @@ Ruta pública (por token, sin login):
   POST /dd-encuesta/<token>                 → recibe respuesta
 """
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from flask import (
     Blueprint, render_template, request, jsonify, session, redirect,
@@ -33,6 +33,7 @@ from models import CSAccount, CSDDSurvey, UserCRM, RolCRM
 
 
 dd_bp = Blueprint("due_diligence", __name__)
+TOKEN_TTL_DAYS = 45
 
 
 # ── Helpers ────────────────────────────────────────────────────────
@@ -44,6 +45,162 @@ def _es_super_admin() -> bool:
 
 def _genera_token() -> str:
     return secrets.token_urlsafe(24)
+
+
+def _to_float(value, default=0.0):
+    try:
+        return float(value or default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _is_token_expired(survey: CSDDSurvey) -> bool:
+    if survey.respondido_at:
+        return False
+    enviado = survey.enviado_at
+    if not enviado:
+        return False
+    if enviado.tzinfo is None:
+        enviado = enviado.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - enviado > timedelta(days=TOKEN_TTL_DAYS)
+
+
+def _latest_answered_by_account(account_ids):
+    if not account_ids:
+        return {}
+    rows = (
+        CSDDSurvey.query
+        .filter(CSDDSurvey.account_id.in_(account_ids), CSDDSurvey.respondido_at.isnot(None))
+        .order_by(CSDDSurvey.respondido_at.desc())
+        .all()
+    )
+    latest = {}
+    for s in rows:
+        latest.setdefault(str(s.account_id), s)
+    return latest
+
+
+def _dd_account_profile(account: CSAccount, survey: CSDDSurvey | None = None) -> dict:
+    """Clasifica cartera DD por tamaño, rentabilidad proxy y riesgo de transición."""
+    m = account.dd_metadata or {}
+    precio = _to_float(m.get("precio"))
+    fact_ytd = _to_float(m.get("facturacion_ytd"))
+    cxc = _to_float(m.get("cxc_junio"))
+    comportamiento = (m.get("comportamiento_pago") or "").lower()
+    tipo_cliente = (m.get("tipo_cliente") or "").lower()
+    arr = precio * 12
+
+    if precio >= 10000:
+        tamano, tamano_rank = "Grande", 3
+    elif precio >= 3000:
+        tamano, tamano_rank = "Mediano", 2
+    else:
+        tamano, tamano_rank = "Chico", 1
+
+    cxc_ratio = cxc / precio if precio > 0 else 0
+    if "eventual" in tipo_cliente:
+        rentabilidad = "Eventual"
+    elif arr >= 120000 and cxc_ratio <= 1:
+        rentabilidad = "Alta"
+    elif arr >= 36000 and cxc_ratio <= 2:
+        rentabilidad = "Media"
+    else:
+        rentabilidad = "Baja"
+
+    score = 0
+    reasons = []
+    if "moroso" in comportamiento:
+        score += 35
+        reasons.append("Pago moroso")
+    elif "moderado" in comportamiento:
+        score += 15
+        reasons.append("Pago moderado")
+    elif "sin historial" in comportamiento:
+        score += 10
+        reasons.append("Sin historial de pago")
+    if cxc > 0:
+        bump = min(30, int(cxc_ratio * 15) or 8)
+        score += bump
+        reasons.append(f"CxC ${cxc:,.0f}")
+    if survey:
+        if survey.nps is not None:
+            if survey.nps <= 6:
+                score += 30
+                reasons.append(f"NPS detractor ({survey.nps})")
+            elif survey.nps <= 8:
+                score += 12
+                reasons.append(f"NPS pasivo ({survey.nps})")
+        if survey.satisfaccion is not None and survey.satisfaccion <= 2:
+            score += 25
+            reasons.append(f"Satisfaccion baja ({survey.satisfaccion}/5)")
+        if survey.continuidad == "No":
+            score += 40
+            reasons.append("No quiere continuidad")
+        elif survey.continuidad == "Si con cambios":
+            score += 15
+            reasons.append("Continuidad condicionada")
+    else:
+        score += 8
+        reasons.append("Sin baseline NPS")
+
+    score = min(score, 100)
+    if score >= 55:
+        riesgo = "Alto"
+    elif score >= 25:
+        riesgo = "Medio"
+    else:
+        riesgo = "Bajo"
+
+    return {
+        "precio": precio,
+        "arr": arr,
+        "facturacion_ytd": fact_ytd,
+        "cxc": cxc,
+        "cxc_ratio": round(cxc_ratio, 2),
+        "tamano": tamano,
+        "tamano_rank": tamano_rank,
+        "rentabilidad": rentabilidad,
+        "riesgo": riesgo,
+        "riesgo_score": score,
+        "riesgo_motivos": reasons[:4],
+        "nps": survey.nps if survey else None,
+        "satisfaccion": survey.satisfaccion if survey else None,
+        "continuidad": survey.continuidad if survey else None,
+        "baseline": bool(survey),
+    }
+
+
+def _portfolio_summary(cuentas):
+    latest = _latest_answered_by_account([c.id for c in cuentas])
+    profiles = {str(c.id): _dd_account_profile(c, latest.get(str(c.id))) for c in cuentas}
+    total_arr = sum(p["arr"] for p in profiles.values())
+    alto = sum(1 for p in profiles.values() if p["riesgo"] == "Alto")
+    medio = sum(1 for p in profiles.values() if p["riesgo"] == "Medio")
+    bajo = sum(1 for p in profiles.values() if p["riesgo"] == "Bajo")
+    baseline = [p for p in profiles.values() if p["baseline"]]
+    nps_vals = [p["nps"] for p in baseline if p["nps"] is not None]
+    sat_vals = [p["satisfaccion"] for p in baseline if p["satisfaccion"] is not None]
+    promotores = sum(1 for n in nps_vals if n >= 9)
+    detractores = sum(1 for n in nps_vals if n <= 6)
+    nps_score = round((promotores - detractores) / len(nps_vals) * 100, 1) if nps_vals else None
+    segmentos = {}
+    for p in profiles.values():
+        segmentos.setdefault(p["tamano"], {"cuentas": 0, "arr": 0.0, "riesgo_alto": 0})
+        segmentos[p["tamano"]]["cuentas"] += 1
+        segmentos[p["tamano"]]["arr"] += p["arr"]
+        if p["riesgo"] == "Alto":
+            segmentos[p["tamano"]]["riesgo_alto"] += 1
+    return profiles, {
+        "total_arr": total_arr,
+        "riesgo_alto": alto,
+        "riesgo_medio": medio,
+        "riesgo_bajo": bajo,
+        "baseline_count": len(baseline),
+        "baseline_pct": round(len(baseline) / len(cuentas) * 100, 1) if cuentas else 0,
+        "nps_score": nps_score,
+        "sat_promedio": round(sum(sat_vals) / len(sat_vals), 1) if sat_vals else None,
+        "segmentos": segmentos,
+    }
 
 
 # ── Vista admin ────────────────────────────────────────────────────
@@ -62,6 +219,7 @@ def index():
     if origen:
         q = q.filter(CSAccount.origen_adquisicion == origen)
     cuentas = q.order_by(CSAccount.nombre).all()
+    dd_profiles, dd_summary = _portfolio_summary(cuentas)
 
     # KPIs agregados
     total_cuentas = len(cuentas)
@@ -107,6 +265,8 @@ def index():
         origenes=origenes,
         origen_filtro=origen,
         kams=kams,
+        dd_profiles=dd_profiles,
+        dd_summary=dd_summary,
         total_cuentas=total_cuentas,
         valor_mensual=valor_mensual,
         valor_anual=valor_anual,
@@ -156,11 +316,13 @@ def generar_token():
     if not acc or not acc.en_due_diligence:
         return jsonify({"error": "Cuenta no en Due Diligence"}), 404
 
-    # Reusar el token más reciente sin respuesta, o crear uno nuevo
+    # Reusar el token más reciente sin respuesta y vigente, o crear uno nuevo.
     survey = (CSDDSurvey.query
               .filter_by(account_id=acc.id, respondido_at=None)
               .order_by(CSDDSurvey.enviado_at.desc())
               .first())
+    if survey and _is_token_expired(survey):
+        survey = None
     if not survey:
         survey = CSDDSurvey(
             account_id=acc.id,
@@ -200,17 +362,39 @@ def promover_a_activas():
         q = q.filter(CSAccount.origen_adquisicion == origen)
     cuentas = q.all()
     n = 0
+    total_mrr = 0.0
     for c in cuentas:
+        m = c.dd_metadata or {}
+        precio = _to_float(m.get("precio"))
+        tipo = (m.get("tipo_cliente") or "").lower()
+        recurrente = "eventual" not in tipo
         c.kam_id = kam.id
         c.en_due_diligence = False
+        c.es_cuenta_nueva = True
+        c.mrr = precio if recurrente else 0
+        c.mrr_observado = precio if recurrente else 0
+        c.arr_proyectado = (precio * 12) if recurrente else 0
+        c.sucursales = int(_to_float(m.get("visitas_mes"), 0)) or (c.sucursales or 0)
+        total_mrr += float(c.mrr or 0)
         n += 1
     db.session.commit()
+    try:
+        from actividad import log_actividad
+        log_actividad(
+            "promover",
+            "due_diligence",
+            None,
+            f"{n} cuentas promovidas a {kam.nombre} · origen={origen or 'todos'} · MRR ${total_mrr:,.2f}",
+        )
+    except Exception:
+        pass
 
     return jsonify({
         "ok": True,
         "cuentas_promovidas": n,
         "kam": kam.nombre,
         "origen": origen,
+        "mrr_activado": round(total_mrr, 2),
     })
 
 
@@ -249,6 +433,9 @@ def seed_fugaci_endpoint():
                 existing.origen_adquisicion = "Fugaci"
                 existing.dd_metadata = metadata
                 existing.unidades_contratadas = existing.unidades_contratadas or "PESTEX"
+                existing.mrr = 0
+                existing.mrr_observado = 0
+                existing.arr_proyectado = 0
                 actualizadas += 1
             else:
                 acc = CSAccount(
@@ -372,6 +559,8 @@ def encuesta_publica(token):
     survey = CSDDSurvey.query.filter_by(token=token).first()
     if not survey:
         abort(404)
+    if _is_token_expired(survey):
+        abort(410)
     ya_respondida = survey.respondido_at is not None
     return render_template(
         "cs/dd_encuesta_fugaci.html",
@@ -386,6 +575,8 @@ def enviar_respuesta(token):
     survey = CSDDSurvey.query.filter_by(token=token).first()
     if not survey:
         abort(404)
+    if _is_token_expired(survey):
+        abort(410)
     if survey.respondido_at is not None:
         return render_template("cs/dd_encuesta_fugaci.html",
                                survey=survey, ya_respondida=True)
