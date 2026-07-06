@@ -116,6 +116,28 @@ def index():
     )
 
 
+@dd_bp.route("/cs/due-diligence/respuestas")
+def respuestas_view():
+    """Vista dedicada de respuestas + NPS Score calculado."""
+    if not session.get("user_id"):
+        return redirect(url_for("auth.login_page"))
+    if not _es_super_admin():
+        return "Acceso solo para Super Admin", 403
+    origen = (request.args.get("origen") or "").strip() or None
+    origenes = [r[0] for r in db.session.query(
+        CSAccount.origen_adquisicion
+    ).filter(
+        CSAccount.en_due_diligence.is_(True),
+        CSAccount.origen_adquisicion.isnot(None),
+    ).distinct().all() if r[0]]
+    return render_template(
+        "cs/cs_dd_respuestas.html",
+        origenes=origenes,
+        origen_filtro=origen,
+        user_rol=session.get("user_rol", ""),
+    )
+
+
 # ── Endpoints admin ────────────────────────────────────────────────
 
 
@@ -256,7 +278,15 @@ def seed_fugaci_endpoint():
 
 @dd_bp.route("/cs/due-diligence/api/respuestas", methods=["GET"])
 def respuestas_json():
-    """Lista todas las respuestas de encuestas DD para análisis."""
+    """Lista todas las respuestas de encuestas DD + agregado NPS.
+
+    FEAT-2026-07-06: retorna 3 secciones:
+      - resumen: NPS Score, distribución (Promotores/Pasivos/Detractores),
+                 tasa de respuesta, promedio satisfacción, distribución
+                 de continuidad.
+      - respuestas: array con cada respuesta detallada (incluye survey_id).
+      - por_cuenta: {account_id: [respuestas]} para lookup rápido en UI.
+    """
     if not _es_super_admin():
         return jsonify({"error": "Solo Super Admin"}), 403
     origen = (request.args.get("origen") or "").strip() or None
@@ -264,10 +294,22 @@ def respuestas_json():
          .join(CSAccount, CSAccount.id == CSDDSurvey.account_id))
     if origen:
         q = q.filter(CSAccount.origen_adquisicion == origen)
-    out = []
-    for s, a in q.order_by(CSDDSurvey.respondido_at.desc().nullslast(),
-                           CSDDSurvey.enviado_at.desc()).all():
-        out.append({
+
+    all_rows = q.order_by(CSDDSurvey.respondido_at.desc().nullslast(),
+                          CSDDSurvey.enviado_at.desc()).all()
+
+    respuestas = []
+    por_cuenta = {}
+    enviadas = 0
+    respondidas = 0
+    promotores = pasivos = detractores = 0
+    sat_vals = []
+    cont_dist = {"Si": 0, "Si con cambios": 0, "No": 0}
+
+    for s, a in all_rows:
+        enviadas += 1
+        item = {
+            "survey_id":        str(s.id),
             "account_id":       str(a.id),
             "cuenta_nombre":    a.nombre,
             "origen":           a.origen_adquisicion,
@@ -280,8 +322,43 @@ def respuestas_json():
             "areas_mejora":     s.areas_mejora,
             "contacto_nombre":  s.contacto_nombre,
             "contacto_puesto":  s.contacto_puesto,
-        })
-    return jsonify({"total": len(out), "respuestas": out})
+            "contacto_email":   s.contacto_email,
+        }
+        respuestas.append(item)
+        por_cuenta.setdefault(str(a.id), []).append(item)
+        if s.respondido_at:
+            respondidas += 1
+            if s.nps is not None:
+                if s.nps >= 9:   promotores  += 1
+                elif s.nps >= 7: pasivos     += 1
+                else:            detractores += 1
+            if s.satisfaccion is not None:
+                sat_vals.append(s.satisfaccion)
+            if s.continuidad in cont_dist:
+                cont_dist[s.continuidad] += 1
+
+    # NPS Score = (%Promotores - %Detractores) sobre respuestas con NPS
+    con_nps = promotores + pasivos + detractores
+    nps_score = round(((promotores - detractores) / con_nps * 100), 1) if con_nps else None
+    tasa_respuesta = round(respondidas / enviadas * 100, 1) if enviadas else 0.0
+    sat_promedio = round(sum(sat_vals) / len(sat_vals), 1) if sat_vals else None
+
+    return jsonify({
+        "total": len(respuestas),
+        "resumen": {
+            "enviadas":            enviadas,
+            "respondidas":         respondidas,
+            "tasa_respuesta_pct":  tasa_respuesta,
+            "nps_score":           nps_score,
+            "promotores":          promotores,
+            "pasivos":             pasivos,
+            "detractores":         detractores,
+            "sat_promedio":        sat_promedio,
+            "continuidad_dist":    cont_dist,
+        },
+        "respuestas": respuestas,
+        "por_cuenta": por_cuenta,
+    })
 
 
 # ── Endpoints PÚBLICOS (por token, sin login) ──────────────────────

@@ -20,6 +20,9 @@
             <option value="{{ o }}" {% if o == origen_filtro %}selected{% endif %}>{{ o }}</option>
             {% endfor %}
         </select>
+        <a href="/cs/due-diligence/respuestas{% if origen_filtro %}?origen={{ origen_filtro }}{% endif %}" class="btn" style="background:#1F4E3D;color:#fff;">
+            📊 Ver Respuestas NPS
+        </a>
     </div>
 </div>
 
@@ -116,10 +119,10 @@
                     {% set r = resp_completa[0] %}
                     <span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;">
                         <span style="font-weight:700;color:{% if r.nps and r.nps >= 9 %}#059669{% elif r.nps and r.nps >= 7 %}#D97706{% else %}#DC2626{% endif %};">NPS {{ r.nps }}</span>
-                        · <button onclick="_ddVerRespuesta('{{ r.id }}')" style="background:none;border:none;color:var(--brand);text-decoration:underline;cursor:pointer;font-size:11px;padding:0;">ver</button>
+                        · <button onclick="_ddVerRespuesta('{{ c.id }}')" style="background:none;border:none;color:var(--brand);text-decoration:underline;cursor:pointer;font-size:11px;padding:0;">ver</button>
                     </span>
                     {% elif resp %}
-                    <span class="muted" style="font-size:11px;">📤 Enviada</span>
+                    <span class="muted" style="font-size:11px;" title="Se generó una URL pero no ha respondido aún. Reenvíala si es necesario.">🔗 Link creado</span>
                     {% else %}
                     <span class="muted" style="font-size:11px;">—</span>
                     {% endif %}
@@ -215,39 +218,39 @@ async function _ddPromoverTodas(){
     }catch(e){ alert('Falló: ' + e.message); }
 }
 
-function _ddVerRespuesta(surveyId){
-    // Trae respuestas desde /respuestas y busca por id (simple: sólo 1 endpoint)
-    fetch('/cs/due-diligence/api/respuestas').then(r=>r.json()).then(d=>{
-        const r = (d.respuestas||[]).find(x=>x.account_id && x.respondido_at);
-        // Idealmente buscamos por survey_id — endpoint retorna todas. Mostramos las que
-        // corresponden a esta cuenta. Simple: buscamos por account_id.
-        // (Este handler recibe survey_id pero el endpoint no retorna survey_id;
-        //  para MVP mostramos la respuesta más reciente de la cuenta seleccionada
-        //  al hacer clic — trabajaremos con account_id.)
-    });
-    // Handler simplificado: buscamos por survey_id no está en /respuestas. Usamos otra ruta:
+// FIX-2026-07-06: buscar por account_id (no survey_id) — el botón envía el
+// ID de la cuenta clickeada y buscamos la respuesta más reciente de esa cuenta.
+async function _ddVerRespuesta(accountId){
     const modalBody = document.getElementById('modal-resp-body');
     modalBody.innerHTML = '<div class="muted">Cargando…</div>';
     document.getElementById('modal-resp').style.display = 'flex';
-    // Buscamos por survey_id no está expuesto — usamos endpoint que retorna todas
-    // y filtramos por survey_id en el objeto (asumimos que backend agrega survey_id).
-    // Para MVP simplificado, cargamos la primera respuesta que matchee:
-    fetch('/cs/due-diligence/api/respuestas').then(r=>r.json()).then(d=>{
-        const r = (d.respuestas||[])[0];  // MVP: primera respuesta
+    try{
+        const res = await fetch('/cs/due-diligence/api/respuestas');
+        const d = await res.json();
+        // Buscar en por_cuenta[account_id] la primera respondida
+        const respsCuenta = (d.por_cuenta || {})[accountId] || [];
+        const r = respsCuenta.find(x => x.respondido_at) || respsCuenta[0];
         if(!r){ modalBody.innerHTML = '<div class="muted">No hay datos</div>'; return; }
+        const nps = r.nps;
+        const npsColor = nps === null || nps === undefined ? 'var(--ink-3)' :
+                        nps >= 9 ? '#059669' : nps >= 7 ? '#D97706' : '#DC2626';
+        const cat = nps === null || nps === undefined ? '' :
+                    nps >= 9 ? 'Promotor' : nps >= 7 ? 'Pasivo' : 'Detractor';
         modalBody.innerHTML = `
           <table style="width:100%;font-size:14px;">
             <tr><td style="padding:6px 0;color:var(--ink-2);">Cuenta</td><td style="font-weight:600;">${r.cuenta_nombre}</td></tr>
-            <tr><td style="padding:6px 0;color:var(--ink-2);">NPS</td><td><strong style="color:${r.nps>=9?'#059669':r.nps>=7?'#D97706':'#DC2626'};font-size:18px;">${r.nps ?? '—'}</strong></td></tr>
-            <tr><td style="padding:6px 0;color:var(--ink-2);">Satisfacción</td><td>${r.satisfaccion ?? '—'} / 5</td></tr>
-            <tr><td style="padding:6px 0;color:var(--ink-2);">Continuidad</td><td>${r.continuidad || '—'}</td></tr>
-            <tr><td style="padding:6px 0;color:var(--ink-2);vertical-align:top;">Preocupaciones</td><td>${r.preocupaciones || '—'}</td></tr>
-            <tr><td style="padding:6px 0;color:var(--ink-2);vertical-align:top;">Áreas mejora</td><td>${r.areas_mejora || '—'}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--ink-2);">NPS</td><td><strong style="color:${npsColor};font-size:20px;">${nps ?? '—'}</strong> <span class="muted" style="font-size:12px;margin-left:6px;">${cat}</span></td></tr>
+            <tr><td style="padding:6px 0;color:var(--ink-2);">Satisfacción</td><td>${r.satisfaccion ? r.satisfaccion + ' / 5' : '—'}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--ink-2);">Continuidad 12m</td><td>${r.continuidad || '—'}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--ink-2);vertical-align:top;">Preocupaciones</td><td style="white-space:pre-wrap;">${r.preocupaciones || '—'}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--ink-2);vertical-align:top;">Áreas mejora</td><td style="white-space:pre-wrap;">${r.areas_mejora || '—'}</td></tr>
             <tr><td style="padding:6px 0;color:var(--ink-2);">Contacto</td><td>${r.contacto_nombre || '—'}${r.contacto_puesto?' · '+r.contacto_puesto:''}</td></tr>
-            <tr><td style="padding:6px 0;color:var(--ink-3);font-size:12px;">Respondido</td><td style="color:var(--ink-3);font-size:12px;">${r.respondido_at||'—'}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--ink-3);font-size:12px;">Respondido</td><td style="color:var(--ink-3);font-size:12px;">${r.respondido_at ? new Date(r.respondido_at).toLocaleString('es-MX') : '—'}</td></tr>
           </table>
         `;
-    });
+    }catch(e){
+        modalBody.innerHTML = '<div style="color:var(--danger-ink);">Error: ' + e.message + '</div>';
+    }
 }
 
 function _ddCerrarResp(){ document.getElementById('modal-resp').style.display='none'; }

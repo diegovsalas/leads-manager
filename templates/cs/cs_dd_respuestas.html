@@ -1,0 +1,236 @@
+{% extends "cs/cs_base.html" %}
+{% block title %}Respuestas NPS — Due Diligence{% endblock %}
+{% block breadcrumb %}<a href="/cs/due-diligence">Due Diligence</a> · Respuestas{% endblock %}
+
+{% block content %}
+
+<div class="page-head">
+    <div>
+        <h1>📊 Respuestas NPS</h1>
+        <p class="sub">Encuestas contestadas por clientes en Due Diligence</p>
+    </div>
+    <div class="actions" style="display:flex;gap:8px;align-items:center;">
+        <select onchange="_dsChangeOrigen(this.value)" class="btn" style="appearance:auto;padding-right:24px;">
+            <option value="">Todos los orígenes</option>
+            {% for o in origenes %}
+            <option value="{{ o }}" {% if o == origen_filtro %}selected{% endif %}>{{ o }}</option>
+            {% endfor %}
+        </select>
+        <a href="/cs/due-diligence{% if origen_filtro %}?origen={{ origen_filtro }}{% endif %}" class="btn">
+            ← Volver a lista
+        </a>
+    </div>
+</div>
+
+<!-- KPIs de resumen -->
+<div class="grid g-4 mb-4">
+    <div class="kpi primary">
+        <div class="label">NPS Score</div>
+        <div class="value" id="kpi-nps" style="font-size:38px;">—</div>
+        <div class="foot"><span class="muted" id="kpi-nps-detail">Sin respuestas</span></div>
+    </div>
+    <div class="kpi">
+        <div class="label">Respuestas recibidas</div>
+        <div class="value" style="font-size:26px" id="kpi-respondidas">0</div>
+        <div class="foot"><span class="muted"><span id="kpi-tasa">0%</span> tasa de respuesta</span></div>
+    </div>
+    <div class="kpi">
+        <div class="label">Satisfacción promedio</div>
+        <div class="value" style="font-size:26px" id="kpi-sat">—</div>
+        <div class="foot"><span class="muted">de 5</span></div>
+    </div>
+    <div class="kpi">
+        <div class="label">Continuidad 12m</div>
+        <div class="value" style="font-size:20px" id="kpi-cont">—</div>
+        <div class="foot"><span class="muted" id="kpi-cont-detail">Sin datos</span></div>
+    </div>
+</div>
+
+<!-- Distribución Promotores/Pasivos/Detractores -->
+<div class="card mb-4">
+    <div class="card-head">
+        <h3>Distribución NPS</h3>
+        <div class="meta"><span class="muted">Promotores (9-10) · Pasivos (7-8) · Detractores (0-6)</span></div>
+    </div>
+    <div style="padding:16px 20px;">
+        <div id="nps-bar" style="display:flex;height:32px;border-radius:8px;overflow:hidden;background:#F3F4F6;">
+            <div id="bar-detractores" style="background:#DC2626;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:600;transition:width .3s;"></div>
+            <div id="bar-pasivos" style="background:#F59E0B;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:600;transition:width .3s;"></div>
+            <div id="bar-promotores" style="background:#059669;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:600;transition:width .3s;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--ink-3);">
+            <div>🔴 <span id="cnt-detractores">0</span> Detractores</div>
+            <div>🟠 <span id="cnt-pasivos">0</span> Pasivos</div>
+            <div>🟢 <span id="cnt-promotores">0</span> Promotores</div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabla de respuestas -->
+<div class="card mb-4">
+    <div class="card-head">
+        <h3>Todas las respuestas</h3>
+        <div class="meta"><span class="muted" id="tabla-count">Cargando…</span></div>
+    </div>
+    <table class="tbl">
+        <thead>
+            <tr>
+                <th>Cliente</th>
+                <th class="c">NPS</th>
+                <th class="c">Sat.</th>
+                <th class="c">Continuidad</th>
+                <th>Contacto</th>
+                <th>Preocupaciones</th>
+                <th class="r">Fecha</th>
+            </tr>
+        </thead>
+        <tbody id="tabla-respuestas">
+            <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--ink-3);">Cargando…</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- Modal Ver respuesta completa -->
+<div id="modal-detail" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;" onclick="if(event.target===this)_dsCerrarDetail()">
+    <div style="background:#fff;padding:24px;border-radius:12px;max-width:640px;width:92%;max-height:80vh;overflow-y:auto;">
+        <h3 id="detail-titulo" style="margin-bottom:16px;">Respuesta</h3>
+        <div id="detail-body"></div>
+        <div style="text-align:right;margin-top:16px;"><button onclick="_dsCerrarDetail()" class="btn">Cerrar</button></div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function _dsChangeOrigen(v){
+    const url = new URL(window.location.href);
+    if(!v) url.searchParams.delete('origen');
+    else url.searchParams.set('origen', v);
+    window.location = url.toString();
+}
+
+function _dsCerrarDetail(){ document.getElementById('modal-detail').style.display='none'; }
+
+function _dsFmtFecha(iso){
+    if(!iso) return '—';
+    return new Date(iso).toLocaleDateString('es-MX', {day:'2-digit', month:'short', year:'numeric'});
+}
+
+function _dsNpsColor(nps){
+    if(nps === null || nps === undefined) return 'var(--ink-3)';
+    if(nps >= 9) return '#059669';
+    if(nps >= 7) return '#F59E0B';
+    return '#DC2626';
+}
+
+function _dsCargarRespuestas(){
+    const origen = new URLSearchParams(window.location.search).get('origen');
+    const url = '/cs/due-diligence/api/respuestas' + (origen ? '?origen=' + encodeURIComponent(origen) : '');
+    fetch(url).then(r=>r.json()).then(d=>{
+        if(d.error){ alert('Error: ' + d.error); return; }
+        window._ddRespuestas = d.respuestas || [];
+        const res = d.resumen || {};
+
+        // KPIs
+        const npsEl = document.getElementById('kpi-nps');
+        const npsDetail = document.getElementById('kpi-nps-detail');
+        if(res.nps_score === null){
+            npsEl.textContent = '—';
+            npsEl.style.color = 'var(--ink-3)';
+            npsDetail.textContent = 'Sin respuestas con NPS';
+        }else{
+            npsEl.textContent = (res.nps_score > 0 ? '+' : '') + res.nps_score;
+            npsEl.style.color = res.nps_score >= 30 ? '#059669' : res.nps_score >= 0 ? '#F59E0B' : '#DC2626';
+            const nivel = res.nps_score >= 50 ? 'Excelente' : res.nps_score >= 30 ? 'Bueno' : res.nps_score >= 0 ? 'Aceptable' : 'Necesita atención';
+            npsDetail.textContent = nivel + ' · sobre ' + (res.promotores + res.pasivos + res.detractores) + ' con NPS';
+        }
+        document.getElementById('kpi-respondidas').textContent = res.respondidas || 0;
+        document.getElementById('kpi-tasa').textContent = (res.tasa_respuesta_pct || 0) + '%';
+        document.getElementById('kpi-tasa').parentElement.innerHTML = `<span class="muted">${res.tasa_respuesta_pct||0}% respondieron de ${res.enviadas||0} enviadas</span>`;
+        document.getElementById('kpi-sat').textContent = res.sat_promedio !== null ? res.sat_promedio + ' / 5' : '—';
+
+        // Continuidad
+        const cont = res.continuidad_dist || {};
+        const contTotal = (cont['Si']||0) + (cont['Si con cambios']||0) + (cont['No']||0);
+        if(contTotal > 0){
+            const pctSi = Math.round((cont['Si']||0) / contTotal * 100);
+            document.getElementById('kpi-cont').textContent = pctSi + '% Sí';
+            document.getElementById('kpi-cont-detail').textContent = `${cont['Si']||0} Sí · ${cont['Si con cambios']||0} con cambios · ${cont['No']||0} No`;
+        }
+
+        // Barra distribución
+        const total = res.promotores + res.pasivos + res.detractores;
+        if(total > 0){
+            const pctD = Math.round(res.detractores / total * 100);
+            const pctPa = Math.round(res.pasivos / total * 100);
+            const pctPr = Math.round(res.promotores / total * 100);
+            const barD  = document.getElementById('bar-detractores');
+            const barPa = document.getElementById('bar-pasivos');
+            const barPr = document.getElementById('bar-promotores');
+            barD.style.width  = pctD  + '%'; if(pctD  > 8) barD.textContent  = pctD  + '%';
+            barPa.style.width = pctPa + '%'; if(pctPa > 8) barPa.textContent = pctPa + '%';
+            barPr.style.width = pctPr + '%'; if(pctPr > 8) barPr.textContent = pctPr + '%';
+        }
+        document.getElementById('cnt-detractores').textContent = res.detractores;
+        document.getElementById('cnt-pasivos').textContent    = res.pasivos;
+        document.getElementById('cnt-promotores').textContent = res.promotores;
+
+        // Tabla
+        const respondidas = (d.respuestas || []).filter(r => r.respondido_at);
+        document.getElementById('tabla-count').textContent = respondidas.length + ' respuesta(s)';
+        const body = document.getElementById('tabla-respuestas');
+        if(!respondidas.length){
+            body.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--ink-3);">Aún no hay respuestas. Envía las URLs a los clientes y las respuestas aparecerán aquí en tiempo real.</td></tr>';
+            return;
+        }
+        body.innerHTML = respondidas.map(r=>`
+            <tr>
+                <td class="primary"><strong>${r.cuenta_nombre}</strong></td>
+                <td class="c"><strong style="color:${_dsNpsColor(r.nps)};font-size:16px;">${r.nps ?? '—'}</strong></td>
+                <td class="c">${r.satisfaccion ? r.satisfaccion + '/5' : '—'}</td>
+                <td class="c" style="font-size:11px;">${r.continuidad || '—'}</td>
+                <td style="font-size:12px;">${r.contacto_nombre || '—'}${r.contacto_puesto ? '<div class="muted" style="font-size:10px;">'+r.contacto_puesto+'</div>' : ''}</td>
+                <td style="font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(r.preocupaciones||'').replace(/"/g,'&quot;')}">${r.preocupaciones || '—'}</td>
+                <td class="r" style="font-size:11px;color:var(--ink-3);">
+                    ${_dsFmtFecha(r.respondido_at)}
+                    <div><button onclick="_dsVerDetail('${r.survey_id}')" style="background:none;border:none;color:var(--brand);text-decoration:underline;cursor:pointer;font-size:11px;padding:0;">ver todo</button></div>
+                </td>
+            </tr>
+        `).join('');
+    }).catch(e=>{
+        alert('Falló: ' + e.message);
+    });
+}
+
+function _dsVerDetail(surveyId){
+    const r = (window._ddRespuestas || []).find(x => x.survey_id === surveyId);
+    if(!r){ alert('No se encontró la respuesta'); return; }
+    document.getElementById('detail-titulo').textContent = 'Respuesta · ' + r.cuenta_nombre;
+    document.getElementById('detail-body').innerHTML = `
+        <table style="width:100%;font-size:14px;line-height:1.5;">
+            <tr><td style="padding:8px 0;color:var(--ink-2);width:180px;vertical-align:top;">NPS</td>
+                <td><strong style="color:${_dsNpsColor(r.nps)};font-size:20px;">${r.nps ?? '—'}</strong>
+                <span style="color:var(--ink-3);font-size:12px;margin-left:8px;">
+                    ${r.nps>=9?'Promotor':r.nps>=7?'Pasivo':r.nps!==null?'Detractor':''}
+                </span></td></tr>
+            <tr><td style="padding:8px 0;color:var(--ink-2);vertical-align:top;">Satisfacción</td>
+                <td>${r.satisfaccion ? r.satisfaccion + ' / 5' : '—'}</td></tr>
+            <tr><td style="padding:8px 0;color:var(--ink-2);vertical-align:top;">Continuidad 12m</td>
+                <td>${r.continuidad || '—'}</td></tr>
+            <tr><td style="padding:8px 0;color:var(--ink-2);vertical-align:top;">Preocupaciones</td>
+                <td style="white-space:pre-wrap;">${r.preocupaciones || '—'}</td></tr>
+            <tr><td style="padding:8px 0;color:var(--ink-2);vertical-align:top;">Áreas de mejora</td>
+                <td style="white-space:pre-wrap;">${r.areas_mejora || '—'}</td></tr>
+            <tr><td style="padding:8px 0;color:var(--ink-2);vertical-align:top;">Contacto</td>
+                <td>${r.contacto_nombre || '—'}${r.contacto_puesto ? ' · ' + r.contacto_puesto : ''}${r.contacto_email ? '<br><span class="muted" style="font-size:12px;">'+r.contacto_email+'</span>' : ''}</td></tr>
+            <tr><td style="padding:8px 0;color:var(--ink-3);font-size:12px;vertical-align:top;">Respondido</td>
+                <td style="color:var(--ink-3);font-size:12px;">${_dsFmtFecha(r.respondido_at)}</td></tr>
+        </table>
+    `;
+    document.getElementById('modal-detail').style.display = 'flex';
+}
+
+_dsCargarRespuestas();
+</script>
+{% endblock %}
