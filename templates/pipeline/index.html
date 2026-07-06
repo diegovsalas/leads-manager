@@ -72,6 +72,16 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .toolbar{display:flex;align-items:center;gap:6px;padding:10px 48px;border-bottom:1px solid var(--border-light);flex-shrink:0;flex-wrap:wrap;}
 .toolbar-search{padding:4px 8px;border:none;background:transparent;font-size:14px;color:var(--text);font-family:var(--font);outline:none;flex:1;max-width:260px;}
 .toolbar-search::placeholder{color:var(--text3);}
+.pipe-toolbar{align-items:flex-start;gap:8px;}
+.pipe-toolbar-main{display:flex;align-items:center;gap:8px;width:100%;min-width:0;}
+.pipe-filter-row{display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;}
+.pipe-filter-control{height:30px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;color:var(--text);font-size:12px;font-family:var(--font);outline:none;}
+.pipe-filter-control:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(63,73,148,.12);}
+.pipe-summary{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:auto;}
+.pipe-chip{font-size:11px;color:var(--text2);background:rgba(255,255,255,.7);border:1px solid var(--border-light);border-radius:99px;padding:4px 9px;white-space:nowrap;}
+.pipe-chip strong{font-weight:700;color:var(--text);}
+.pipe-chip.warn strong{color:var(--orange);}
+.pipe-chip.danger strong{color:var(--red);}
 .btn{padding:4px 10px;border-radius:var(--r);font-size:13px;font-weight:400;cursor:pointer;border:none;transition:background 80ms;font-family:var(--font);color:var(--text2);background:transparent;display:inline-flex;align-items:center;gap:4px;}
 .btn:hover{background:var(--bg-hover);color:var(--text);}
 .btn-blue{color:var(--accent);background:var(--blue-bg);}
@@ -121,6 +131,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .k-card.dragging{opacity:.4;}
 .k-card.is-converted{border-color:var(--green);background:linear-gradient(180deg,rgba(45,122,79,.04),var(--bg-card));}
 .k-card.needs-icp{border-left:3px solid #f59e0b;}
+.k-card.is-stale{border-left:3px solid var(--orange);}
+.k-card.is-old{border-left:3px solid var(--red);}
 body.hide-converted .k-card.is-converted{display:none;}
 body.show-uncalified-only .k-card:not(.needs-icp){display:none;}
 .k-card-oppo{border-left:4px solid #d97706;background:linear-gradient(180deg,rgba(217,119,6,.06),var(--bg-card));}
@@ -130,6 +142,10 @@ body.show-uncalified-only .k-card:not(.needs-icp){display:none;}
 .k-card-name{font-size:14px;font-weight:500;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .k-card-phone{font-size:12px;color:var(--text3);font-family:var(--mono);}
 .k-card-detail{font-size:12px;color:var(--text2);margin-top:4px;}
+.k-card-meta-row{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:6px;font-size:10px;color:var(--text3);}
+.k-age{font-family:var(--mono);padding:1px 5px;border-radius:99px;background:var(--bg-tag);color:var(--text2);white-space:nowrap;}
+.k-age.warn{background:var(--orange-bg);color:var(--orange);}
+.k-age.danger{background:var(--red-bg);color:var(--red);}
 .k-card-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;}
 .k-card-foot{display:flex;align-items:center;justify-content:space-between;margin-top:6px;}
 .tag{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:500;display:inline-block;}
@@ -540,7 +556,8 @@ fbq('track','PageView');
 
 <!-- ===== PIPELINE ===== -->
 <div class="view" id="view-pipeline">
-  <div class="toolbar">
+  <div class="toolbar pipe-toolbar">
+    <div class="pipe-toolbar-main">
     <input class="toolbar-search" type="text" placeholder="Buscar lead..." id="search-input" oninput="filterCards(this.value)"/>
     {% if vendedores_list %}
     <select class="form-input" id="filtro-vendedor" onchange="cambiarFiltroVendedor(this.value)" style="font-size:12px;max-width:180px;margin-left:8px;" title="Filtrar pipe por vendedor">
@@ -551,7 +568,7 @@ fbq('track','PageView');
       {% endfor %}
     </select>
     {% endif %}
-    <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
+    <div style="margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
       <label style="display:flex;gap:5px;align-items:center;font-size:12px;color:var(--text2);cursor:pointer;user-select:none;" title="Solo leads con industria o tamaño sin definir">
         <input type="checkbox" id="show-uncalified-toggle" onchange="toggleShowUncalifiedOnly(this.checked)"/>
         Solo sin calificar ⚠
@@ -563,6 +580,37 @@ fbq('track','PageView');
       <span style="font-size:13px;color:var(--text2);">Pipe total:</span>
       <span style="font-size:14px;font-weight:600;color:var(--green);" id="pipe-total">$0</span>
       <button class="btn btn-filled" onclick="openLeadModal()">+ Nuevo lead</button>
+    </div>
+    </div>
+    <div class="pipe-filter-row">
+      <select class="pipe-filter-control" id="pipe-date-mode" onchange="applyPipeFilters()" title="Fecha usada por filtro de mes">
+        <option value="all">Todo el pipe</option>
+        <option value="created">Creados en mes</option>
+        <option value="updated">Actualizados en mes</option>
+      </select>
+      <input class="pipe-filter-control" id="pipe-month" type="month" onchange="applyPipeFilters()" title="Mes"/>
+      <select class="pipe-filter-control" id="pipe-origin" onchange="applyPipeFilters()" title="Origen">
+        <option value="">Todos los origenes</option>
+        <option value="Meta Ads">Meta Ads</option>
+        <option value="WhatsApp Organico">WhatsApp</option>
+        <option value="Web">Web</option>
+        <option value="Prospeccion">Prospeccion</option>
+        <option value="Upselling">Upselling</option>
+        <option value="Cross-selling">Cross-selling</option>
+        <option value="Manual">Manual</option>
+      </select>
+      <select class="pipe-filter-control" id="pipe-age" onchange="applyPipeFilters()" title="Antiguedad">
+        <option value="">Cualquier antiguedad</option>
+        <option value="stale">15+ dias sin mover</option>
+        <option value="old">30+ dias en pipe</option>
+        <option value="fresh">0-7 dias</option>
+      </select>
+      <button class="btn" onclick="resetPipeFilters()">Limpiar filtros</button>
+      <div class="pipe-summary">
+        <span class="pipe-chip"><strong id="pipe-visible-count">0</strong> visibles</span>
+        <span class="pipe-chip warn"><strong id="pipe-stale-count">0</strong> 15+d</span>
+        <span class="pipe-chip danger"><strong id="pipe-old-count">0</strong> 30+d</span>
+      </div>
     </div>
   </div>
   <div style="display:flex;flex:1;overflow:hidden;">
@@ -589,7 +637,12 @@ fbq('track','PageView');
           {% for op in grupo.oppos %}
           <div class="k-card k-card-oppo" data-oppo-id="{{ op.id }}"
                data-nombre="{{ op.nombre or '' }}" data-telefono=""
+               data-empresa="{{ op.empresa or '' }}"
                data-marca="{{ op.marca_interes or '' }}"
+               data-origen="Oportunidad"
+               data-created="{{ op.fecha_creacion.isoformat() if op.fecha_creacion else '' }}"
+               data-updated="{{ op.fecha_actualizacion.isoformat() if op.fecha_actualizacion else '' }}"
+               data-valor="{{ op.valor or 0 }}"
                onclick="openOppById('{{ op.id }}')">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
               <span class="k-card-oppo-label">💰 OPORTUNIDAD</span>
@@ -601,7 +654,10 @@ fbq('track','PageView');
               <span style="font-size:10px;color:var(--text2);">{{ op.etapa.value if op.etapa else '' }} · {{ op.probabilidad or 0 }}%</span>
               <span style="font-size:13px;font-weight:600;color:var(--green);font-family:var(--mono);">${{ "{:,.0f}".format(op.valor or 0) }}</span>
             </div>
-            {% if op.fecha_cierre_esperada %}<div style="font-size:10px;color:var(--text3);margin-top:2px;">cierra {{ op.fecha_cierre_esperada }}</div>{% endif %}
+            <div class="k-card-meta-row">
+              <span>{% if op.fecha_cierre_esperada %}cierra {{ op.fecha_cierre_esperada }}{% else %}sin fecha cierre{% endif %}</span>
+              <span class="k-age" data-age-pill></span>
+            </div>
           </div>
           {% endfor %}
           {% for lead in grupo.leads %}
@@ -609,6 +665,10 @@ fbq('track','PageView');
                data-nombre="{{ lead.nombre or 'Sin nombre' }}" data-telefono="{{ lead.telefono or '' }}"
                data-empresa="{{ lead.empresa_nombre or '' }}"
                data-marca="{{ lead.marca_interes or '' }}"
+               data-origen="{{ lead.origen.value if lead.origen else 'Manual' }}"
+               data-created="{{ lead.fecha_creacion.isoformat() if lead.fecha_creacion else '' }}"
+               data-updated="{{ lead.fecha_actualizacion.isoformat() if lead.fecha_actualizacion else '' }}"
+               data-valor="{{ lead.valor_calculado or 0 }}"
                {% if lead.needs_icp %}data-needs-icp="true"{% endif %}
                draggable="true" ondragstart="onDragStart(event,'{{ lead.id }}')" ondragend="this.classList.remove('dragging')"
                onclick="abrirLeadPanel('{{ lead.id }}')">
@@ -662,6 +722,10 @@ fbq('track','PageView');
                 {% if has_opp %}<span class="tag" style="background:var(--copper-soft);color:var(--copper);cursor:pointer;font-weight:600;" onclick="event.stopPropagation();convertirLeadAOportunidad('{{ lead.id }}')" title="Convertir a Oportunidad">&#127919;</span>{% endif %}
               </div>
               {% endif %}
+            </div>
+            <div class="k-card-meta-row">
+              <span>{{ lead.fecha_creacion.strftime('%d/%m/%Y') if lead.fecha_creacion else '' }}</span>
+              <span class="k-age" data-age-pill></span>
             </div>
           </div>
           {% endfor %}
@@ -3920,15 +3984,11 @@ function clearFiltroMarca(){
   applyFilter();
 }
 function applyFilter(){
-  // Filter kanban cards
-  document.querySelectorAll('.k-card').forEach(c=>{
-    c.style.display=(!filtroMarca||c.dataset.marca===filtroMarca)?'':'none';
-  });
+  applyPipeFilters();
   // Filter table rows
   document.querySelectorAll('#leads-tbody tr').forEach(r=>{
     r.style.display=(!filtroMarca||r.dataset.marca===filtroMarca)?'':'none';
   });
-  updateCounts();
   loadDashboard();
 }
 
@@ -3965,22 +4025,119 @@ function onDrop(e,etapa){
 }
 function updateCounts(){
   let total=0;
+  let visibleCount=0,staleCount=0,oldCount=0;
   document.querySelectorAll('.k-col').forEach(col=>{
     const etapa=col.dataset.etapa;
-    const visible=[...col.querySelectorAll('.k-card')].filter(c=>c.style.display!=='none');
+    const visible=[...col.querySelectorAll('.k-card')].filter(c=>window.getComputedStyle(c).display!=='none');
     document.getElementById('kc-'+etapa).textContent=visible.length;
   });
-  document.querySelectorAll('.k-card').forEach(c=>{if(c.style.display!=='none'){const v=c.querySelector('.tag-valor');if(v)total+=parseFloat(v.textContent.replace(/[$,]/g,''))||0;}});
-  document.getElementById('pipe-total').textContent=fmt$(total);
+  document.querySelectorAll('.k-card').forEach(c=>{
+    if(window.getComputedStyle(c).display!=='none'){
+      visibleCount++;
+      total+=parseFloat(c.dataset.valor||'0')||0;
+      if(c.classList.contains('is-stale'))staleCount++;
+      if(c.classList.contains('is-old'))oldCount++;
+    }
+  });
+  const totalEl=document.getElementById('pipe-total');if(totalEl)totalEl.textContent=fmt$(total);
+  const visibleEl=document.getElementById('pipe-visible-count');if(visibleEl)visibleEl.textContent=visibleCount;
+  const staleEl=document.getElementById('pipe-stale-count');if(staleEl)staleEl.textContent=staleCount;
+  const oldEl=document.getElementById('pipe-old-count');if(oldEl)oldEl.textContent=oldCount;
 }
-function filterCards(q){const ql=q.toLowerCase();document.querySelectorAll('.k-card').forEach(c=>{const n=(c.dataset.nombre||'').toLowerCase(),p=(c.dataset.telefono||'').toLowerCase(),emp=(c.dataset.empresa||'').toLowerCase();c.style.display=(n.includes(ql)||p.includes(ql)||emp.includes(ql))?'':'none';});}
+function _pipeDaysSince(iso){
+  if(!iso)return null;
+  const d=new Date(iso);
+  if(Number.isNaN(d.getTime()))return null;
+  return Math.max(0,Math.floor((Date.now()-d.getTime())/86400000));
+}
+function _pipeMonthMatches(iso,month){
+  if(!month)return true;
+  if(!iso)return false;
+  const d=new Date(iso);
+  if(Number.isNaN(d.getTime()))return false;
+  return d.toISOString().slice(0,7)===month;
+}
+function decoratePipeCards(){
+  document.querySelectorAll('.k-card').forEach(c=>{
+    const createdDays=_pipeDaysSince(c.dataset.created);
+    const updatedDays=_pipeDaysSince(c.dataset.updated);
+    c.dataset.createdDays=createdDays==null?'':String(createdDays);
+    c.dataset.updatedDays=updatedDays==null?'':String(updatedDays);
+    c.classList.toggle('is-stale',updatedDays!=null&&updatedDays>=15);
+    c.classList.toggle('is-old',createdDays!=null&&createdDays>=30);
+    const pill=c.querySelector('[data-age-pill]');
+    if(pill){
+      const label=updatedDays==null?'sin fecha':`${updatedDays}d`;
+      pill.textContent=label;
+      pill.title=createdDays==null?'Sin fecha':'Creado hace '+createdDays+' dias · Actualizado hace '+updatedDays+' dias';
+      pill.classList.toggle('warn',updatedDays!=null&&updatedDays>=15&&createdDays<30);
+      pill.classList.toggle('danger',createdDays!=null&&createdDays>=30);
+    }
+  });
+}
+function applyPipeFilters(){
+  const q=(document.getElementById('search-input')?.value||'').trim().toLowerCase();
+  const dateMode=document.getElementById('pipe-date-mode')?.value||'all';
+  const month=document.getElementById('pipe-month')?.value||'';
+  const origin=document.getElementById('pipe-origin')?.value||'';
+  const age=document.getElementById('pipe-age')?.value||'';
+  const hideConverted=document.getElementById('hide-converted-toggle')?.checked||false;
+  const onlyUncalified=document.getElementById('show-uncalified-toggle')?.checked||false;
+  document.querySelectorAll('.k-card').forEach(c=>{
+    const n=(c.dataset.nombre||'').toLowerCase();
+    const p=(c.dataset.telefono||'').toLowerCase();
+    const emp=(c.dataset.empresa||'').toLowerCase();
+    const cardOrigin=c.dataset.origen||'Manual';
+    let show=true;
+    if(filtroMarca&&c.dataset.marca!==filtroMarca)show=false;
+    if(q&&!(n.includes(q)||p.includes(q)||emp.includes(q)))show=false;
+    if(origin&&cardOrigin!==origin)show=false;
+    if(month&&dateMode==='created'&&!_pipeMonthMatches(c.dataset.created,month))show=false;
+    if(month&&dateMode==='updated'&&!_pipeMonthMatches(c.dataset.updated,month))show=false;
+    const createdDays=parseInt(c.dataset.createdDays||'');
+    const updatedDays=parseInt(c.dataset.updatedDays||'');
+    if(age==='stale'&&!(updatedDays>=15))show=false;
+    if(age==='old'&&!(createdDays>=30))show=false;
+    if(age==='fresh'&&!(createdDays>=0&&createdDays<=7))show=false;
+    if(hideConverted&&c.classList.contains('is-converted'))show=false;
+    if(onlyUncalified&&!c.classList.contains('needs-icp'))show=false;
+    c.style.display=show?'':'none';
+  });
+  updateCounts();
+}
+function filterCards(){applyPipeFilters();}
 function toggleHideConverted(checked){
   document.body.classList.toggle('hide-converted',checked);
   try{localStorage.setItem('pipeHideConverted',checked?'1':'0');}catch(e){}
+  applyPipeFilters();
 }
 function toggleShowUncalifiedOnly(checked){
   document.body.classList.toggle('show-uncalified-only',checked);
   try{localStorage.setItem('pipeShowUncalified',checked?'1':'0');}catch(e){}
+  applyPipeFilters();
+}
+function resetPipeFilters(){
+  const ids=['search-input','pipe-month'];
+  ids.forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const dateMode=document.getElementById('pipe-date-mode');if(dateMode)dateMode.value='all';
+  const origin=document.getElementById('pipe-origin');if(origin)origin.value='';
+  const age=document.getElementById('pipe-age');if(age)age.value='';
+  const hide=document.getElementById('hide-converted-toggle');if(hide){hide.checked=false;document.body.classList.remove('hide-converted');}
+  const uncal=document.getElementById('show-uncalified-toggle');if(uncal){uncal.checked=false;document.body.classList.remove('show-uncalified-only');}
+  try{localStorage.removeItem('pipeHideConverted');localStorage.removeItem('pipeShowUncalified');}catch(e){}
+  applyPipeFilters();
+}
+function initPipeView(){
+  decoratePipeCards();
+  try{
+    const hide=localStorage.getItem('pipeHideConverted')==='1';
+    const uncal=localStorage.getItem('pipeShowUncalified')==='1';
+    const hideEl=document.getElementById('hide-converted-toggle');
+    const uncalEl=document.getElementById('show-uncalified-toggle');
+    if(hideEl){hideEl.checked=hide;document.body.classList.toggle('hide-converted',hide);}
+    if(uncalEl){uncalEl.checked=uncal;document.body.classList.toggle('show-uncalified-only',uncal);}
+  }catch(e){}
+  applyPipeFilters();
 }
 function cambiarFiltroVendedor(uuid){
   const url=new URL(location.href);
@@ -5446,7 +5603,7 @@ function openScanPage(){
 }
 
 // Init
-updateCounts();loadDashboard();loadMiHoy();loadProyecto();loadVendedores();toggleVendedorSelect();loadMetaVendedor();
+initPipeView();loadDashboard();loadMiHoy();loadProyecto();loadVendedores();toggleVendedorSelect();loadMetaVendedor();
 // Load ICP industrias dropdown
 fetch('/api/leads/icp-opciones').then(r=>r.json()).then(d=>{
   const sel=document.getElementById('f-industria');
