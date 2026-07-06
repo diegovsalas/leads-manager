@@ -192,6 +192,68 @@ def promover_a_activas():
     })
 
 
+@dd_bp.route("/cs/due-diligence/api/seed-fugaci", methods=["POST"])
+def seed_fugaci_endpoint():
+    """FEAT-2026-07-06: dispara el seed de los 130 clientes Fugaci
+    desde el navegador (super_admin). Idempotente — si ya existen,
+    actualiza. Reemplaza tener que abrir Terminal o Render Shell."""
+    if not _es_super_admin():
+        return jsonify({"error": "Solo Super Admin"}), 403
+    try:
+        # Import diferido para no tener que reiniciar si el archivo cambia
+        import importlib, _seed_fugaci
+        importlib.reload(_seed_fugaci)
+
+        creadas = actualizadas = 0
+        for row in _seed_fugaci.CLIENTES:
+            (nombre, precio, tipo_cliente, contacto, fact_ytd, cxc,
+             comport, visitas, tiempo, tecnicos) = row
+            nombre = _seed_fugaci._clean(nombre)
+            metadata = {
+                "precio": precio,
+                "tipo_cliente": tipo_cliente,
+                "contacto_fugaci": _seed_fugaci._clean(contacto),
+                "facturacion_ytd": fact_ytd,
+                "cxc_junio": cxc,
+                "comportamiento_pago": _seed_fugaci._clean(comport),
+                "visitas_mes": visitas,
+                "tiempo_visita": _seed_fugaci._clean(tiempo),
+                "tecnicos": tecnicos,
+                "contrato_vigente": True,
+            }
+            existing = CSAccount.query.filter_by(nombre=nombre).first()
+            if existing:
+                existing.en_due_diligence = True
+                existing.origen_adquisicion = "Fugaci"
+                existing.dd_metadata = metadata
+                existing.unidades_contratadas = existing.unidades_contratadas or "PESTEX"
+                actualizadas += 1
+            else:
+                acc = CSAccount(
+                    nombre=nombre, kam_id=None,
+                    en_due_diligence=True, origen_adquisicion="Fugaci",
+                    dd_metadata=metadata, unidades_contratadas="PESTEX",
+                    mrr=0, mrr_observado=0, arr_proyectado=0, sucursales=0,
+                )
+                db.session.add(acc)
+                creadas += 1
+        db.session.commit()
+        total = CSAccount.query.filter_by(en_due_diligence=True).count()
+        return jsonify({
+            "ok": True,
+            "creadas": creadas,
+            "actualizadas": actualizadas,
+            "total_dd_ahora": total,
+        })
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        return jsonify({
+            "error": f"{type(e).__name__}: {e}",
+            "traceback": traceback.format_exc()[-800:],
+        }), 500
+
+
 @dd_bp.route("/cs/due-diligence/api/respuestas", methods=["GET"])
 def respuestas_json():
     """Lista todas las respuestas de encuestas DD para análisis."""

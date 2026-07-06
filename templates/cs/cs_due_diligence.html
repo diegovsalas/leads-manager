@@ -126,7 +126,14 @@
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="8" style="text-align:center;color:var(--ink-3);padding:24px;">Sin cuentas en due diligence. Cárgalas con el seed o promoción manual.</td></tr>
+            <tr><td colspan="8" style="text-align:center;padding:36px 20px;">
+                <div style="font-size:48px;margin-bottom:12px;opacity:.4;">📦</div>
+                <div style="font-size:16px;font-weight:600;color:var(--ink-2);margin-bottom:6px;">Sin cuentas en Due Diligence</div>
+                <div style="font-size:13px;color:var(--ink-3);margin-bottom:20px;">Carga los 130 clientes de Fugaci con un clic</div>
+                <button onclick="_ddCargarSeedFugaci(this)" class="btn" style="background:#1F4E3D;color:#fff;font-weight:600;padding:10px 20px;">
+                    📥 Cargar 130 clientes Fugaci
+                </button>
+            </td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -244,5 +251,25 @@ function _ddVerRespuesta(surveyId){
 }
 
 function _ddCerrarResp(){ document.getElementById('modal-resp').style.display='none'; }
+
+// FEAT-2026-07-06: Cargar seed Fugaci desde el navegador (super_admin).
+// Reemplaza tener que correr python3 _seed_fugaci.py desde Terminal/Render.
+async function _ddCargarSeedFugaci(btn){
+    if(!confirm('Se cargarán ~130 clientes de Fugaci en modo Due Diligence. Idempotente — si ya existen, actualiza. ¿Continuar?')) return;
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Cargando…';
+    try{
+        const r = await fetch('/cs/due-diligence/api/seed-fugaci', {method:'POST'});
+        const d = await r.json();
+        if(!r.ok || !d.ok){ throw new Error(d.error || 'Error desconocido'); }
+        alert(`✓ Seed OK — ${d.creadas} creadas · ${d.actualizadas} actualizadas · Total ahora: ${d.total_dd_ahora}`);
+        window.location.reload();
+    }catch(e){
+        alert('Falló: ' + e.message);
+        btn.disabled = false;
+        btn.innerHTML = original;
+    }
+}
 </script>
 {% endblock %}
