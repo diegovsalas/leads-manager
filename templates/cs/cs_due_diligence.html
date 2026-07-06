@@ -7,11 +7,35 @@
 <!-- FEAT-2026-07-06: Vista admin (look CS interno) para gestionar cuentas
      adquiridas antes de tener KAM. La encuesta pública tiene look Fugaci
      puro, esto NO — es la vista interna del equipo Avantex. -->
+<style>
+.dd-hero{border:1px solid var(--border);border-radius:18px;background:linear-gradient(135deg,#ffffff 0%,#f8fafc 60%,rgba(63,73,148,.08) 100%);padding:20px 22px;margin-bottom:16px;box-shadow:var(--shadow-xs);}
+.dd-hero h1{margin:0;font-family:var(--font-display);font-weight:500;font-size:28px;letter-spacing:-.02em;color:var(--ink-1);}
+.dd-hero .sub{margin:5px 0 0;color:var(--ink-3);font-size:13px;}
+.dd-client{border:1px solid var(--border);border-radius:14px;background:#fff;box-shadow:var(--shadow-xs);overflow:hidden;margin-bottom:12px;}
+.dd-client-head{display:grid;grid-template-columns:minmax(220px,1.4fr) repeat(5,minmax(90px,1fr));gap:12px;align-items:center;padding:14px 16px;background:#fff;}
+.dd-client-name{font-weight:700;color:var(--ink-1);font-size:14px;}
+.dd-client-sub{font-size:11px;color:var(--ink-3);margin-top:3px;}
+.dd-metric-label{font-size:9px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em;}
+.dd-metric-value{font-size:14px;font-weight:700;color:var(--ink-1);margin-top:2px;font-variant-numeric:tabular-nums;}
+.dd-props{border-top:1px solid var(--border-subtle);background:#f8fafc;}
+.dd-prop{display:grid;grid-template-columns:minmax(220px,1.2fr) repeat(6,minmax(82px,1fr)) 170px;gap:10px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border-subtle);font-size:12px;}
+.dd-prop:last-child{border-bottom:none;}
+.dd-prop-name{font-weight:600;color:var(--ink-1);}
+.dd-chip{display:inline-flex;align-items:center;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:700;white-space:nowrap;}
+.dd-chip.ok{background:#D4EDDA;color:#1B5E20}.dd-chip.warn{background:#FFF3CD;color:#856404}.dd-chip.danger{background:#F8D7DA;color:#721C24}.dd-chip.info{background:#EDE9FE;color:#6D28D9}.dd-chip.neutral{background:#E5E7EB;color:#4B5563}
+.dd-modal{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1000;align-items:center;justify-content:center;padding:20px;}
+.dd-modal-card{background:#fff;border-radius:14px;max-width:760px;width:96%;max-height:86vh;overflow:auto;box-shadow:0 24px 80px rgba(15,23,42,.22);}
+.dd-modal-head{display:flex;justify-content:space-between;align-items:center;padding:18px 20px;border-bottom:1px solid var(--border-subtle);}
+.dd-modal-body{padding:18px 20px;display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.dd-field label{display:block;font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;font-weight:700;}
+.dd-field input,.dd-field select{width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px;background:#fff;color:var(--ink-1);}
+@media(max-width:1100px){.dd-client-head,.dd-prop{grid-template-columns:1fr 1fr}.dd-modal-body{grid-template-columns:1fr}}
+</style>
 
-<div class="page-head">
+<div class="page-head dd-hero">
     <div>
         <h1>🔍 Due Diligence</h1>
-        <p class="sub">Cuentas de adquisiciones pendientes de asignación a KAM · {{ total_cuentas }} cuentas</p>
+        <p class="sub">Mapa de cartera adquirida: cliente → propiedades, riesgo de transición, rentabilidad y baseline NPS · {{ dd_groups|length }} clientes · {{ total_cuentas }} propiedades/cuentas</p>
     </div>
     <div class="actions" style="display:flex;gap:8px;align-items:center;">
         <select onchange="_ddChangeOrigen(this.value)" class="btn" style="appearance:auto;padding-right:24px;">
@@ -118,90 +142,88 @@
 </div>
 {% endif %}
 
-<!-- Tabla -->
+<!-- Cartera agrupada -->
 <div class="card mb-4">
     <div class="card-head">
-        <h3>Clientes {% if origen_filtro %}· {{ origen_filtro }}{% endif %}</h3>
-        <div class="meta">Click en 📤 para generar URL de encuesta</div>
+        <h3>Clientes agrupados {% if origen_filtro %}· {{ origen_filtro }}{% endif %}</h3>
+        <div class="meta">Cada cliente puede contener varias propiedades/sucursales</div>
     </div>
-    <table class="tbl">
-        <thead>
-            <tr>
-                <th>Cliente</th>
-                <th class="r">Precio</th>
-                <th>Tamaño</th>
-                <th>Rentabilidad</th>
-                <th>Riesgo transición</th>
-                <th>Tipo</th>
-                <th>Comportamiento</th>
-                <th class="r">Fact YTD</th>
-                <th class="r">CxC</th>
-                <th class="c">Baseline</th>
-                <th class="c">Encuesta</th>
-                <th class="c">Respuesta</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for c in cuentas %}
-            {% set m = c.dd_metadata or {} %}
-            {% set p = dd_profiles.get(c.id|string) %}
-            {% set resp = (respuestas.get(c.id|string) or []) %}
-            {% set resp_completa = resp|selectattr('respondido_at')|list %}
-            <tr>
-                <td class="primary">
-                    <strong>{{ c.nombre }}</strong>
-                    {% if m.contacto_fugaci %}<div class="muted" style="font-size:11px;">Contacto: {{ m.contacto_fugaci }}</div>{% endif %}
-                </td>
-                <td class="r"><strong>${{ "{:,.0f}".format((m.precio or 0)|float) }}</strong></td>
-                <td><span class="tag" style="font-size:10px;">{{ p.tamano }}</span></td>
-                <td><span class="tag" style="font-size:10px;background:{% if p.rentabilidad == 'Alta' %}#D4EDDA;color:#1B5E20;{% elif p.rentabilidad == 'Media' %}#E0F2FE;color:#075985;{% elif p.rentabilidad == 'Eventual' %}#EDE9FE;color:#6D28D9;{% else %}#F8D7DA;color:#721C24;{% endif %}">{{ p.rentabilidad }}</span></td>
-                <td>
-                    <span class="tag" title="{{ (p.riesgo_motivos or [])|join(' · ') }}" style="font-size:10px;background:{% if p.riesgo == 'Alto' %}#F8D7DA;color:#721C24;{% elif p.riesgo == 'Medio' %}#FFF3CD;color:#856404;{% else %}#D4EDDA;color:#1B5E20;{% endif %}">{{ p.riesgo }} · {{ p.riesgo_score }}</span>
-                </td>
-                <td><span class="tag" style="font-size:10px;">{{ m.tipo_cliente or '—' }}</span></td>
-                <td>
-                    {% set comp = (m.comportamiento_pago or '')|lower %}
-                    <span class="tag" style="font-size:10px;background:{% if 'puntual' in comp %}#D4EDDA;color:#1B5E20;{% elif 'moderado' in comp %}#FFF3CD;color:#856404;{% elif 'moroso' in comp %}#F8D7DA;color:#721C24;{% else %}#E5E7EB;color:#4B5563;{% endif %}">{{ m.comportamiento_pago or '—' }}</span>
-                </td>
-                <td class="r">${{ "{:,.0f}".format((m.facturacion_ytd or 0)|float) }}</td>
-                <td class="r">{% if (m.cxc_junio or 0)|float > 0 %}<span style="color:var(--warn-ink);">${{ "{:,.0f}".format((m.cxc_junio or 0)|float) }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
-                <td class="c">
-                    {% if p.baseline %}
-                    <span style="font-size:11px;font-weight:700;color:{% if p.nps and p.nps >= 9 %}#059669{% elif p.nps and p.nps >= 7 %}#D97706{% else %}#DC2626{% endif %};">NPS {{ p.nps if p.nps is not none else '—' }}</span>
-                    <div class="muted" style="font-size:10px;">Sat {{ p.satisfaccion if p.satisfaccion is not none else '—' }}/5</div>
-                    {% else %}
-                    <span class="muted" style="font-size:11px;">sin baseline</span>
-                    {% endif %}
-                </td>
-                <td class="c">
-                    <button onclick="_ddGenerarToken('{{ c.id }}', '{{ c.nombre|e }}')" class="btn ghost" style="font-size:11px;padding:4px 10px;">📤 Enviar</button>
-                </td>
-                <td class="c">
-                    {% if resp_completa %}
-                    {% set r = resp_completa[0] %}
-                    <span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;">
-                        <span style="font-weight:700;color:{% if r.nps and r.nps >= 9 %}#059669{% elif r.nps and r.nps >= 7 %}#D97706{% else %}#DC2626{% endif %};">NPS {{ r.nps }}</span>
-                        · <button onclick="_ddVerRespuesta('{{ c.id }}')" style="background:none;border:none;color:var(--brand);text-decoration:underline;cursor:pointer;font-size:11px;padding:0;">ver</button>
-                    </span>
-                    {% elif resp %}
-                    <span class="muted" style="font-size:11px;" title="Se generó una URL pero no ha respondido aún. Reenvíala si es necesario.">🔗 Link creado</span>
-                    {% else %}
-                    <span class="muted" style="font-size:11px;">—</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="12" style="text-align:center;padding:36px 20px;">
+    <div style="padding:0 14px 14px;">
+        {% for g in dd_groups %}
+        <div class="dd-client">
+            <div class="dd-client-head">
+                <div>
+                    <div class="dd-client-name">{{ g.nombre }}</div>
+                    <div class="dd-client-sub">{{ g.propiedades|length }} propiedad(es) · {{ g.baseline_count }} baseline(s)</div>
+                </div>
+                <div><div class="dd-metric-label">Precio mensual</div><div class="dd-metric-value">${{ "{:,.0f}".format(g.precio_total) }}</div></div>
+                <div><div class="dd-metric-label">ARR</div><div class="dd-metric-value">${{ "{:,.0f}".format(g.arr_total) }}</div></div>
+                <div><div class="dd-metric-label">Fact YTD</div><div class="dd-metric-value">${{ "{:,.0f}".format(g.facturacion_ytd) }}</div></div>
+                <div><div class="dd-metric-label">CxC</div><div class="dd-metric-value" style="color:{% if g.cxc > 0 %}var(--warn-ink){% else %}var(--ok-ink){% endif %};">${{ "{:,.0f}".format(g.cxc) }}</div></div>
+                <div><div class="dd-metric-label">Riesgo máximo</div><div class="dd-metric-value"><span class="dd-chip {% if g.riesgo == 'Alto' %}danger{% elif g.riesgo == 'Medio' %}warn{% else %}ok{% endif %}">{{ g.riesgo }} · {{ g.riesgo_score }}</span></div></div>
+            </div>
+            <div class="dd-props">
+                {% for prop in g.propiedades %}
+                {% set c = prop.account %}
+                {% set m = prop.metadata %}
+                {% set p = prop.profile %}
+                {% set resp = prop.respuestas or [] %}
+                {% set resp_completa = resp|selectattr('respondido_at')|list %}
+                <div class="dd-prop">
+                    <div>
+                        <div class="dd-prop-name">{{ prop.nombre }}</div>
+                        <div class="muted" style="font-size:10px;">{{ prop.nombre_completo }}</div>
+                    </div>
+                    <div><div class="dd-metric-label">Precio</div><strong>${{ "{:,.0f}".format((m.precio or 0)|float) }}</strong></div>
+                    <div><span class="dd-chip neutral">{{ p.tamano }}</span></div>
+                    <div><span class="dd-chip {% if p.rentabilidad == 'Alta' %}ok{% elif p.rentabilidad == 'Media' %}neutral{% elif p.rentabilidad == 'Eventual' %}info{% else %}danger{% endif %}">{{ p.rentabilidad }}</span></div>
+                    <div><span class="dd-chip {% if p.riesgo == 'Alto' %}danger{% elif p.riesgo == 'Medio' %}warn{% else %}ok{% endif %}" title="{{ (p.riesgo_motivos or [])|join(' · ') }}">{{ p.riesgo }} · {{ p.riesgo_score }}</span></div>
+                    <div><span class="dd-chip neutral">{{ m.tipo_cliente or '—' }}</span></div>
+                    <div>
+                        {% if p.baseline %}
+                        <strong style="color:{% if p.nps and p.nps >= 9 %}#059669{% elif p.nps and p.nps >= 7 %}#D97706{% else %}#DC2626{% endif %};">NPS {{ p.nps if p.nps is not none else '—' }}</strong>
+                        <div class="muted" style="font-size:10px;">Sat {{ p.satisfaccion if p.satisfaccion is not none else '—' }}/5</div>
+                        {% else %}
+                        <span class="muted">sin baseline</span>
+                        {% endif %}
+                    </div>
+                    <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">
+                        <button onclick="_ddOpenEdit(this)" data-account='{{ {
+                            "id": c.id|string,
+                            "nombre": c.nombre,
+                            "propiedad_nombre": prop.nombre,
+                            "precio": m.precio or 0,
+                            "tipo_cliente": m.tipo_cliente or "",
+                            "contacto_fugaci": m.contacto_fugaci or "",
+                            "facturacion_ytd": m.facturacion_ytd or 0,
+                            "cxc_junio": m.cxc_junio or 0,
+                            "comportamiento_pago": m.comportamiento_pago or "",
+                            "visitas_mes": m.visitas_mes or 0,
+                            "tiempo_visita": m.tiempo_visita or "",
+                            "tecnicos": m.tecnicos or 0
+                        }|tojson|forceescape }}' class="btn ghost" style="font-size:11px;padding:4px 8px;">Editar</button>
+                        <button onclick="_ddGenerarToken('{{ c.id }}', '{{ c.nombre|e }}')" class="btn ghost" style="font-size:11px;padding:4px 8px;">📤 Encuesta</button>
+                        {% if resp_completa %}
+                        <button onclick="_ddVerRespuesta('{{ c.id }}')" class="btn ghost" style="font-size:11px;padding:4px 8px;color:var(--ok-ink);">NPS {{ resp_completa[0].nps }}</button>
+                        {% elif resp %}
+                        <span class="muted" style="font-size:11px;align-self:center;">🔗 Link creado</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div style="text-align:center;padding:36px 20px;">
                 <div style="font-size:48px;margin-bottom:12px;opacity:.4;">📦</div>
                 <div style="font-size:16px;font-weight:600;color:var(--ink-2);margin-bottom:6px;">Sin cuentas en Due Diligence</div>
                 <div style="font-size:13px;color:var(--ink-3);margin-bottom:20px;">Carga los 130 clientes de Fugaci con un clic</div>
                 <button onclick="_ddCargarSeedFugaci(this)" class="btn" style="background:#1F4E3D;color:#fff;font-weight:600;padding:10px 20px;">
                     📥 Cargar 130 clientes Fugaci
                 </button>
-            </td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+        </div>
+        {% endfor %}
+    </div>
 </div>
 
 <!-- Modal: URL generada -->
@@ -225,6 +247,39 @@
         <h3 style="margin-bottom:16px;">Respuesta de encuesta</h3>
         <div id="modal-resp-body"></div>
         <div style="text-align:right;margin-top:16px;"><button onclick="_ddCerrarResp()" class="btn">Cerrar</button></div>
+    </div>
+</div>
+
+<!-- Modal: Editar ficha DD -->
+<div id="modal-edit-dd" class="dd-modal" onclick="if(event.target===this)_ddCloseEdit()">
+    <div class="dd-modal-card">
+        <div class="dd-modal-head">
+            <div>
+                <h3 style="margin:0;">Editar propiedad / cliente DD</h3>
+                <div class="muted" style="font-size:12px;margin-top:2px;">Actualiza la información de cartera y sincroniza la propiedad.</div>
+            </div>
+            <button class="btn ghost" onclick="_ddCloseEdit()">Cerrar</button>
+        </div>
+        <div class="dd-modal-body">
+            <input type="hidden" id="dd-edit-id">
+            <div class="dd-field" style="grid-column:1/-1;"><label>Nombre cuenta</label><input id="dd-edit-nombre"></div>
+            <div class="dd-field"><label>Propiedad / sucursal</label><input id="dd-edit-propiedad"></div>
+            <div class="dd-field"><label>Contacto Fugaci</label><input id="dd-edit-contacto"></div>
+            <div class="dd-field"><label>Precio mensual</label><input id="dd-edit-precio" type="number" step="0.01"></div>
+            <div class="dd-field"><label>Tipo cliente</label><select id="dd-edit-tipo"><option>Recurrente</option><option>Eventual</option><option>Bimestral</option><option>Trimestral</option><option>Cuatrimestral</option></select></div>
+            <div class="dd-field"><label>Facturación YTD</label><input id="dd-edit-ytd" type="number" step="0.01"></div>
+            <div class="dd-field"><label>CxC</label><input id="dd-edit-cxc" type="number" step="0.01"></div>
+            <div class="dd-field"><label>Comportamiento pago</label><select id="dd-edit-comportamiento"><option>Puntual</option><option>Moderado</option><option>Moroso</option><option>Sin historial</option></select></div>
+            <div class="dd-field"><label>Visitas mes</label><input id="dd-edit-visitas" type="number" step="1"></div>
+            <div class="dd-field"><label>Tiempo visita</label><input id="dd-edit-tiempo"></div>
+            <div class="dd-field"><label>Técnicos</label><input id="dd-edit-tecnicos" type="number" step="1"></div>
+            <div class="dd-field"><label>Zona</label><input id="dd-edit-zona"></div>
+            <div class="dd-field"><label>Dirección</label><input id="dd-edit-direccion"></div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;padding:0 20px 20px;">
+            <button class="btn ghost" onclick="_ddCloseEdit()">Cancelar</button>
+            <button class="btn primary" onclick="_ddSaveEdit()">Guardar cambios</button>
+        </div>
     </div>
 </div>
 
@@ -320,6 +375,53 @@ async function _ddVerRespuesta(accountId){
 }
 
 function _ddCerrarResp(){ document.getElementById('modal-resp').style.display='none'; }
+
+function _ddOpenEdit(btn){
+    const d = JSON.parse(btn.dataset.account || '{}');
+    document.getElementById('dd-edit-id').value=d.id||'';
+    document.getElementById('dd-edit-nombre').value=d.nombre||'';
+    document.getElementById('dd-edit-propiedad').value=d.propiedad_nombre||'Principal';
+    document.getElementById('dd-edit-contacto').value=d.contacto_fugaci||'';
+    document.getElementById('dd-edit-precio').value=d.precio||0;
+    document.getElementById('dd-edit-tipo').value=d.tipo_cliente||'Recurrente';
+    document.getElementById('dd-edit-ytd').value=d.facturacion_ytd||0;
+    document.getElementById('dd-edit-cxc').value=d.cxc_junio||0;
+    document.getElementById('dd-edit-comportamiento').value=d.comportamiento_pago||'Sin historial';
+    document.getElementById('dd-edit-visitas').value=d.visitas_mes||0;
+    document.getElementById('dd-edit-tiempo').value=d.tiempo_visita||'';
+    document.getElementById('dd-edit-tecnicos').value=d.tecnicos||0;
+    document.getElementById('dd-edit-zona').value='';
+    document.getElementById('dd-edit-direccion').value='';
+    document.getElementById('modal-edit-dd').style.display='flex';
+}
+function _ddCloseEdit(){document.getElementById('modal-edit-dd').style.display='none';}
+async function _ddSaveEdit(){
+    const id=document.getElementById('dd-edit-id').value;
+    const body={
+        nombre:document.getElementById('dd-edit-nombre').value.trim(),
+        propiedad_nombre:document.getElementById('dd-edit-propiedad').value.trim(),
+        contacto_fugaci:document.getElementById('dd-edit-contacto').value.trim(),
+        precio:document.getElementById('dd-edit-precio').value,
+        tipo_cliente:document.getElementById('dd-edit-tipo').value,
+        facturacion_ytd:document.getElementById('dd-edit-ytd').value,
+        cxc_junio:document.getElementById('dd-edit-cxc').value,
+        comportamiento_pago:document.getElementById('dd-edit-comportamiento').value,
+        visitas_mes:document.getElementById('dd-edit-visitas').value,
+        tiempo_visita:document.getElementById('dd-edit-tiempo').value.trim(),
+        tecnicos:document.getElementById('dd-edit-tecnicos').value,
+        zona:document.getElementById('dd-edit-zona').value.trim(),
+        direccion:document.getElementById('dd-edit-direccion').value.trim(),
+        unidad_negocio:'PESTEX'
+    };
+    try{
+        const r=await fetch('/cs/due-diligence/api/cuenta/'+id+'/editar',{
+            method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
+        });
+        const d=await r.json();
+        if(!r.ok||!d.ok){throw new Error(d.error||'No se pudo guardar');}
+        window.location.reload();
+    }catch(e){alert('Error: '+e.message);}
+}
 
 // FEAT-2026-07-06: Cargar seed Fugaci desde el navegador (super_admin).
 // Reemplaza tener que correr python3 _seed_fugaci.py desde Terminal/Render.

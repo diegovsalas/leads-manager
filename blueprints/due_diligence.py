@@ -29,7 +29,7 @@ from flask import (
 )
 
 from extensions import db
-from models import CSAccount, CSDDSurvey, UserCRM, RolCRM
+from models import CSAccount, CSDDSurvey, CSPropiedad, UserCRM, RolCRM
 
 
 dd_bp = Blueprint("due_diligence", __name__)
@@ -203,6 +203,64 @@ def _portfolio_summary(cuentas):
     }
 
 
+def _split_account_property(nombre: str) -> tuple[str, str]:
+    """Detecta nombres tipo 'Boru (Cumbres)' como cliente='Boru', propiedad='Cumbres'."""
+    raw = (nombre or "").strip()
+    if raw.endswith(")") and "(" in raw:
+        base, prop = raw.rsplit("(", 1)
+        base = base.strip()
+        prop = prop[:-1].strip()
+        if base and prop:
+            return base, prop
+    return raw, "Principal"
+
+
+def _group_dd_accounts(cuentas, profiles, respuestas):
+    groups = {}
+    for c in cuentas:
+        base, prop_name = _split_account_property(c.nombre)
+        key = base.lower()
+        p = profiles.get(str(c.id), {})
+        m = c.dd_metadata or {}
+        resp = respuestas.get(str(c.id), [])
+        g = groups.setdefault(key, {
+            "nombre": base,
+            "cuentas": 0,
+            "precio_total": 0.0,
+            "arr_total": 0.0,
+            "facturacion_ytd": 0.0,
+            "cxc": 0.0,
+            "riesgo": "Bajo",
+            "riesgo_score": 0,
+            "baseline_count": 0,
+            "propiedades": [],
+        })
+        g["cuentas"] += 1
+        g["precio_total"] += _to_float(m.get("precio"))
+        g["arr_total"] += p.get("arr", 0.0)
+        g["facturacion_ytd"] += _to_float(m.get("facturacion_ytd"))
+        g["cxc"] += _to_float(m.get("cxc_junio"))
+        if p.get("riesgo_score", 0) > g["riesgo_score"]:
+            g["riesgo_score"] = p.get("riesgo_score", 0)
+            g["riesgo"] = p.get("riesgo", "Bajo")
+        if p.get("baseline"):
+            g["baseline_count"] += 1
+        g["propiedades"].append({
+            "account": c,
+            "account_id": str(c.id),
+            "nombre": prop_name,
+            "nombre_completo": c.nombre,
+            "metadata": m,
+            "profile": p,
+            "respuestas": resp,
+        })
+    ordered = list(groups.values())
+    for g in ordered:
+        g["propiedades"].sort(key=lambda x: x["nombre"])
+    ordered.sort(key=lambda g: (-g["precio_total"], g["nombre"]))
+    return ordered
+
+
 # ── Vista admin ────────────────────────────────────────────────────
 
 
@@ -243,6 +301,7 @@ def index():
             CSDDSurvey.account_id.in_([c.id for c in cuentas]),
         ).all():
             respuestas.setdefault(str(s.account_id), []).append(s)
+    dd_groups = _group_dd_accounts(cuentas, dd_profiles, respuestas)
 
     # Orígenes disponibles (para el selector)
     origenes = [r[0] for r in db.session.query(
@@ -267,6 +326,7 @@ def index():
         kams=kams,
         dd_profiles=dd_profiles,
         dd_summary=dd_summary,
+        dd_groups=dd_groups,
         total_cuentas=total_cuentas,
         valor_mensual=valor_mensual,
         valor_anual=valor_anual,
@@ -274,6 +334,52 @@ def index():
         cxc_junio=cxc_junio,
         user_rol=session.get("user_rol", ""),
     )
+
+
+@dd_bp.route("/cs/due-diligence/api/cuenta/<uuid:account_id>/editar", methods=["POST"])
+def editar_cuenta_dd(account_id):
+    """Edita ficha DD y sincroniza una propiedad para la sucursal si aplica."""
+    if not _es_super_admin():
+        return jsonify({"error": "Solo Super Admin"}), 403
+    acc = db.session.get(CSAccount, account_id)
+    if not acc or not acc.en_due_diligence:
+        return jsonify({"error": "Cuenta no en Due Diligence"}), 404
+    data = request.get_json() or {}
+    nombre = (data.get("nombre") or "").strip()
+    if nombre and nombre != acc.nombre:
+        existing = CSAccount.query.filter(CSAccount.nombre == nombre, CSAccount.id != acc.id).first()
+        if existing:
+            return jsonify({"error": "Ya existe una cuenta con ese nombre"}), 400
+        acc.nombre = nombre
+
+    m = dict(acc.dd_metadata or {})
+    for field in (
+        "tipo_cliente", "contacto_fugaci", "comportamiento_pago",
+        "tiempo_visita", "contrato_vigente",
+    ):
+        if field in data:
+            m[field] = data.get(field)
+    for field in ("precio", "facturacion_ytd", "cxc_junio", "visitas_mes", "tecnicos"):
+        if field in data:
+            m[field] = _to_float(data.get(field))
+    acc.dd_metadata = m
+
+    prop_name = (data.get("propiedad_nombre") or "").strip()
+    if prop_name:
+        prop = (
+            CSPropiedad.query
+            .filter(CSPropiedad.account_id == acc.id, CSPropiedad.nombre.ilike(prop_name))
+            .first()
+        )
+        if not prop:
+            prop = CSPropiedad(account_id=acc.id, nombre=prop_name, unidad_negocio="PESTEX")
+            db.session.add(prop)
+        prop.zona = (data.get("zona") or prop.zona or "").strip()
+        prop.direccion = (data.get("direccion") or prop.direccion or "").strip()
+        prop.unidad_negocio = (data.get("unidad_negocio") or prop.unidad_negocio or "PESTEX").strip().upper()
+
+    db.session.commit()
+    return jsonify({"ok": True, "account_id": str(acc.id)})
 
 
 @dd_bp.route("/cs/due-diligence/respuestas")
