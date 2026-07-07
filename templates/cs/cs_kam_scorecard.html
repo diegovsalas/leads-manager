@@ -13,27 +13,28 @@
 .ks-wrap{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;align-items:start}
 .ks-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:16px}
 .ks-card{padding:16px 18px}
-.ks-row{display:grid;grid-template-columns:210px 120px minmax(0,1fr) 136px;gap:18px;align-items:center;padding:18px 0;border-top:1px solid var(--border-subtle)}
-.ks-row:first-child{border-top:0;padding-top:4px}
+.ks-row{display:grid;grid-template-columns:minmax(220px,1fr) 108px 130px;gap:16px;align-items:center;padding:16px 0;border-top:1px solid var(--border-subtle)}
+.ks-row:first-child{border-top:0;padding-top:2px}
 .ks-name{font-size:14px;font-weight:750;color:var(--ink-1);line-height:1.2}
 .ks-meta{font-size:11px;color:var(--ink-3);margin-top:4px}
-.ks-score{width:88px;height:88px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--score-color) var(--score-pct),var(--bg-sunken) 0);position:relative}
+.ks-score-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ks-score{width:86px;height:86px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--score-color) var(--score-pct),var(--bg-sunken) 0);position:relative}
 .ks-score:before{content:"";position:absolute;inset:8px;border-radius:50%;background:var(--bg-surface)}
 .ks-score span{position:relative;font-size:22px;font-weight:800;color:var(--ink-1);font-variant-numeric:tabular-nums}
-.ks-score small{position:relative;display:block;font-size:10px;color:var(--ink-3);font-weight:600;text-transform:uppercase;text-align:center;margin-top:-18px}
-.ks-metrics{display:grid;grid-template-columns:repeat(5,minmax(96px,1fr));gap:10px}
-.ks-metric{min-height:70px;border:1px solid var(--border-subtle);border-radius:10px;padding:9px 10px;background:var(--bg-surface)}
+.ks-score-label{display:block;width:86px;text-align:center;margin-top:6px;color:var(--ink-3);font-size:10px;font-weight:700;text-transform:uppercase}
+.ks-metrics{grid-column:1/-1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;align-items:stretch}
+.ks-metric{min-width:0;min-height:72px;border:1px solid var(--border-subtle);border-radius:10px;padding:10px;background:var(--bg-surface)}
 .ks-metric b{display:block;font-size:15px;color:var(--ink-1);font-variant-numeric:tabular-nums;line-height:1.2}
-.ks-metric span{display:block;font-size:10.5px;color:var(--ink-3);margin-top:5px;line-height:1.25}
+.ks-metric span{display:block;font-size:10.5px;color:var(--ink-3);margin-top:5px;line-height:1.25;overflow-wrap:anywhere}
 .ks-actions{display:flex;flex-direction:column;gap:8px;align-items:stretch}
+.ks-actions .btn{justify-content:center;width:100%;min-width:0}
 .play-card{border:1px solid var(--border);border-left:3px solid var(--play-color);border-radius:10px;padding:12px;background:var(--bg-surface);box-shadow:var(--shadow-xs)}
 .play-title{font-size:13px;font-weight:750;color:var(--ink-1);display:flex;justify-content:space-between;gap:8px}
 .play-detail{font-size:12px;color:var(--ink-3);line-height:1.45;margin-top:5px}
 .play-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
 .play-kam{font-size:11px;color:var(--ink-2);font-weight:650}
-.formula-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
-@media(max-width:1280px){.ks-wrap{grid-template-columns:1fr}.ks-kpis{grid-template-columns:repeat(2,1fr)}.ks-row{grid-template-columns:180px 110px minmax(0,1fr)}.ks-actions{grid-column:1/-1;flex-direction:row;flex-wrap:wrap}.ks-actions .btn{width:auto}}
-@media(max-width:900px){.ks-row{grid-template-columns:1fr}.ks-score{width:74px;height:74px}.ks-metrics{grid-template-columns:repeat(2,1fr)}.formula-grid{grid-template-columns:1fr}.ks-kpis{grid-template-columns:1fr}}
+@media(max-width:1280px){.ks-wrap{grid-template-columns:1fr}.ks-kpis{grid-template-columns:repeat(2,1fr)}.ks-actions{flex-direction:row}.ks-actions .btn{width:auto}}
+@media(max-width:900px){.ks-row{grid-template-columns:1fr}.ks-score-wrap{align-items:flex-start}.ks-score{width:74px;height:74px}.ks-score-label{text-align:left;width:auto}.ks-metrics{grid-template-columns:repeat(2,1fr)}.ks-kpis{grid-template-columns:1fr}.ks-actions{flex-direction:row;flex-wrap:wrap}}
 </style>
 
 <div class="page-head">
@@ -94,11 +95,16 @@
                 </div>
             </div>
 
-            <div>
+            <div class="ks-score-wrap">
                 <div class="ks-score" style="--score-pct:{{ row.score or 0 }}%;--score-color:{{ tone_color(row.status.tone) }}">
                     <span>{% if row.score is not none %}{{ "{:.0f}".format(row.score) }}{% else %}S/D{% endif %}</span>
                 </div>
-                <small style="display:block;width:88px;text-align:center;margin-top:6px;color:var(--ink-3);font-size:10px;font-weight:700;text-transform:uppercase">Execution</small>
+                <small class="ks-score-label">Execution</small>
+            </div>
+
+            <div class="ks-actions">
+                <a class="btn primary" href="/cs/kam/{{ row.kam.id }}">Ver cartera</a>
+                <a class="btn" href="/cs/mis-pendientes">Pendientes</a>
             </div>
 
             <div class="ks-metrics">
@@ -122,11 +128,6 @@
                     <b>{% if row.operation_score is not none %}{{ "{:.0f}".format(row.operation_score) }}%{% else %}S/D{% endif %}</b>
                     <span>{{ row.completed_appointments }}/{{ row.appointments }} citas terminadas</span>
                 </div>
-            </div>
-
-            <div class="ks-actions">
-                <a class="btn primary" href="/cs/kam/{{ row.kam.id }}">Ver cartera</a>
-                <a class="btn" href="/cs/mis-pendientes">Pendientes</a>
             </div>
         </div>
         {% else %}
