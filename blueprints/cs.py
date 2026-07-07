@@ -12,7 +12,7 @@ from extensions import db
 from models import (
     CSAccount, CSInvoice, CSAppointment, CSNote, CSTask,
     CSOnboardingAccount, CSOpportunity, CSContacto, CSEntregable,
-    CSEncuesta, CSIncidencia, CSPropiedad, UserCRM, RolCRM,
+    CSEncuesta, CSIncidencia, CSPropiedad, CSTimeRatio, UserCRM, RolCRM,
 )
 from cs_health_score import calcular_health_score, calcular_health_scores_batch
 from cs_alerts import generar_alertas, alertas_por_cuenta
@@ -31,6 +31,24 @@ TIPOS_OPORTUNIDAD = [
     ("upsell_un", "Upsell de UN"),
     ("expansion_sucursales", "Expansión de sucursales"),
     ("nuevo_servicio", "Nuevo servicio"),
+]
+
+DEFAULT_TIME_RATIO_ACTIVITIES = [
+    "Descarga de evidencias de servicio",
+    "Carga de evidencias en plataformas",
+    "Solicitud de permisos de acceso",
+    "Seguimiento de permisos",
+    "Seguimiento de citas y programación",
+    "Atención de incidencias",
+    "Coordinación de incidencias con Operaciones",
+    "Solicitud y seguimiento de órdenes de compra",
+    "Comunicación con técnicos",
+    "Comunicación con clientes",
+    "Elaboración de reportes",
+    "Reuniones internas",
+    "Seguimiento a facturación y cobranza",
+    "Planeación y coordinación de servicios",
+    "Otras actividades",
 ]
 
 
@@ -281,6 +299,22 @@ def _calc_facturacion_periodo(account_ids, inicio, fin):
             "num_facturas": num,
         }
     return result
+
+
+def _get_or_seed_time_ratios(account_id):
+    ratios = CSTimeRatio.query.filter_by(account_id=account_id).order_by(CSTimeRatio.orden, CSTimeRatio.created_at).all()
+    if ratios:
+        return ratios
+
+    for idx, actividad in enumerate(DEFAULT_TIME_RATIO_ACTIVITIES, start=1):
+        db.session.add(CSTimeRatio(
+            account_id=account_id,
+            actividad=actividad,
+            porcentaje=0,
+            orden=idx,
+        ))
+    db.session.commit()
+    return CSTimeRatio.query.filter_by(account_id=account_id).order_by(CSTimeRatio.orden, CSTimeRatio.created_at).all()
 
 
 def _mrr_operativo(account):
@@ -1250,6 +1284,9 @@ def account_detail(account_id):
     for e in entregables:
         un = e.unidad_negocio or "General"
         entregables_por_un.setdefault(un, []).append(e)
+    time_ratios = _get_or_seed_time_ratios(account.id)
+    time_ratio_total = round(sum(float(r.porcentaje or 0) for r in time_ratios), 2)
+    top_time_ratios = sorted(time_ratios, key=lambda r: float(r.porcentaje or 0), reverse=True)[:5]
 
     # Incidencias
     incidencias = CSIncidencia.query.filter_by(account_id=account.id).order_by(CSIncidencia.created_at.desc()).limit(100).all()
@@ -1296,6 +1333,8 @@ def account_detail(account_id):
         notes=notes, tasks=tasks, tareas_pendientes=tareas_pendientes,
         contactos=contactos,
         entregables=entregables, entregables_por_un=entregables_por_un,
+        time_ratios=time_ratios, time_ratio_total=time_ratio_total,
+        top_time_ratios=top_time_ratios,
         incidencias=incidencias, propiedades=propiedades,
         encuestas=encuestas, survey_link=survey_link,
         avg_nps=avg_nps, avg_csat=avg_csat, kpi_satisfaccion=kpi_satisfaccion,
@@ -3040,6 +3079,73 @@ def eliminar_entregable(account_id, ent_id):
         db.session.delete(e)
         db.session.commit()
     return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=entregables#entregables")
+
+
+# ══════════════════════════════════════════════
+# RATIOS DE TIEMPO KAM — Actividades por cuenta
+# ══════════════════════════════════════════════
+@cs_bp.route("/account/<uuid:account_id>/time-ratios", methods=["POST"])
+def guardar_time_ratios(account_id):
+    account = db.session.get(CSAccount, account_id)
+    if not account:
+        return "Cuenta no encontrada", 404
+    if not _can_edit_account(account):
+        return "Sin permisos", 403
+
+    ratio_ids = request.form.getlist("ratio_id")
+    actividades = request.form.getlist("actividad")
+    porcentajes = request.form.getlist("porcentaje")
+
+    for idx, ratio_id in enumerate(ratio_ids):
+        ratio = db.session.get(CSTimeRatio, ratio_id)
+        if not ratio or str(ratio.account_id) != str(account.id):
+            continue
+        actividad = actividades[idx].strip() if idx < len(actividades) else ""
+        if not actividad:
+            continue
+        try:
+            pct = float(porcentajes[idx] or 0) if idx < len(porcentajes) else 0
+        except (ValueError, TypeError):
+            pct = 0
+        ratio.actividad = actividad[:200]
+        ratio.porcentaje = max(0, min(100, pct))
+        ratio.orden = idx + 1
+
+    nuevas = request.form.getlist("nueva_actividad")
+    nuevas_pct = request.form.getlist("nuevo_porcentaje")
+    max_orden = db.session.query(func.coalesce(func.max(CSTimeRatio.orden), 0)).filter_by(account_id=account.id).scalar()
+    for idx, actividad in enumerate(nuevas):
+        actividad = (actividad or "").strip()
+        if not actividad:
+            continue
+        try:
+            pct = float(nuevas_pct[idx] or 0) if idx < len(nuevas_pct) else 0
+        except (ValueError, TypeError):
+            pct = 0
+        max_orden += 1
+        db.session.add(CSTimeRatio(
+            account_id=account.id,
+            actividad=actividad[:200],
+            porcentaje=max(0, min(100, pct)),
+            orden=max_orden,
+        ))
+
+    db.session.commit()
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=time-ratios#time-ratios")
+
+
+@cs_bp.route("/account/<uuid:account_id>/time-ratios/<uuid:ratio_id>/delete", methods=["POST"])
+def eliminar_time_ratio(account_id, ratio_id):
+    account = db.session.get(CSAccount, account_id)
+    if not account:
+        return "Cuenta no encontrada", 404
+    if not _can_edit_account(account):
+        return "Sin permisos", 403
+    ratio = db.session.get(CSTimeRatio, ratio_id)
+    if ratio and str(ratio.account_id) == str(account.id):
+        db.session.delete(ratio)
+        db.session.commit()
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=time-ratios#time-ratios")
 
 
 # ══════════════════════════════════════════════

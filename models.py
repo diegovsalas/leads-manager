@@ -1019,6 +1019,21 @@ class CSEntregable(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
 
 
+class CSTimeRatio(db.Model):
+    """Distribución estimada del tiempo KAM por actividad dentro de una cuenta."""
+    __tablename__ = "cs_time_ratios"
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=False, index=True)
+    actividad = db.Column(db.String(200), nullable=False)
+    porcentaje = db.Column(db.Numeric(5, 2), default=0)
+    orden = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    account = db.relationship("CSAccount", backref="time_ratios")
+
+
 class CSOnboardingAccount(db.Model):
     __tablename__ = "cs_onboarding_accounts"
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
