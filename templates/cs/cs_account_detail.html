@@ -897,7 +897,7 @@
                     <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Horas por actividad</h3>
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
                         {% for actividad in workload_activities %}
-                        {% set selected_hours = workload_activity_values.get(actividad, '0 h') %}
+                        {% set selected_hours = workload_activity_values.get(actividad, 'No aplica') %}
                         <div class="grid grid-cols-[minmax(0,1fr)_140px] gap-3 items-center rounded-xl border border-gray-100 p-3">
                             <input type="hidden" name="actividad" value="{{ actividad }}">
                             <span class="text-sm font-medium text-gray-700">{{ actividad }}</span>
@@ -908,6 +908,34 @@
                             </select>
                         </div>
                         {% endfor %}
+                    </div>
+                    <div class="mt-4 rounded-2xl border border-dashed border-gray-200 p-4">
+                        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
+                            <div>
+                                <h4 class="text-sm font-semibold text-gray-700">Actividades manuales</h4>
+                                <p class="text-xs text-gray-400">Agrega actividades que no estén en la lista base.</p>
+                            </div>
+                            <button type="button" onclick="addWorkloadActivityRow()"
+                                    class="px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">
+                                + Agregar actividad
+                            </button>
+                        </div>
+                        <div id="custom-workload-activities" class="space-y-2">
+                            {% for item in workload_custom_activities %}
+                            <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_140px_34px] gap-3 items-center rounded-xl border border-gray-100 p-3 bg-gray-50">
+                                <input type="text" name="actividad" value="{{ item.actividad }}" required
+                                       class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                                <select name="actividad_horas" class="text-sm border border-gray-300 rounded-lg px-3 py-2">
+                                    {% for opt in workload_options.activity_hours %}
+                                    <option value="{{ opt }}" {% if item.horas == opt %}selected{% endif %}>{{ opt }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="button" onclick="this.closest('.grid').remove()"
+                                        class="text-xs text-red-400 hover:text-red-600 justify-self-start lg:justify-self-center"
+                                        title="Quitar actividad">✕</button>
+                            </div>
+                            {% endfor %}
+                        </div>
                     </div>
                 </div>
 
@@ -1651,6 +1679,29 @@ async function cancelarCita(citaId){
         if(!r.ok){const e=await r.json();throw new Error(e.error||'Error');}
         location.reload();
     }catch(e){alert('Error: '+e.message);}
+}
+
+function addWorkloadActivityRow(){
+    const host=document.getElementById('custom-workload-activities');
+    if(!host)return;
+    const row=document.createElement('div');
+    row.className='grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_140px_34px] gap-3 items-center rounded-xl border border-indigo-100 p-3 bg-indigo-50/30';
+    row.innerHTML=`
+        <input type="text" name="actividad" required placeholder="Nombre de actividad"
+               class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+        <select name="actividad_horas" class="text-sm border border-gray-300 rounded-lg px-3 py-2">
+            <option value="No aplica">No aplica</option>
+            <option value="1-2 h">1-2 h</option>
+            <option value="3-5 h">3-5 h</option>
+            <option value="6-10 h">6-10 h</option>
+            <option value="11-15 h">11-15 h</option>
+            <option value="Más de 15 h">Más de 15 h</option>
+        </select>
+        <button type="button" class="text-xs text-red-400 hover:text-red-600 justify-self-start lg:justify-self-center" title="Quitar actividad">✕</button>
+    `;
+    row.querySelector('button').addEventListener('click',()=>row.remove());
+    host.appendChild(row);
+    row.querySelector('input').focus();
 }
 </script>
 

@@ -49,11 +49,10 @@ WORKLOAD_ACTIVITIES = [
     "Reuniones internas",
     "Seguimiento a facturación y cobranza",
     "Planeación y coordinación de servicios",
-    "Otras actividades",
 ]
 
-WORKLOAD_HOUR_OPTIONS = ["0 h", "1-2 h", "3-5 h", "6-10 h", "11-15 h", "16-20 h", "Más de 20 h"]
-WORKLOAD_ACTIVITY_HOUR_OPTIONS = ["0 h", "1-2 h", "3-5 h", "6-10 h", "11-15 h", "Más de 15 h"]
+WORKLOAD_HOUR_OPTIONS = ["No aplica", "1-2 h", "3-5 h", "6-10 h", "11-15 h", "16-20 h", "Más de 20 h"]
+WORKLOAD_ACTIVITY_HOUR_OPTIONS = ["No aplica", "1-2 h", "3-5 h", "6-10 h", "11-15 h", "Más de 15 h"]
 WORKLOAD_COUNT_OPTIONS = ["0", "1-2", "3-5", "6-10", "11-20", "Más de 20"]
 WORKLOAD_SURVEY_OPTIONS = {
     "hours": WORKLOAD_HOUR_OPTIONS,
@@ -1379,10 +1378,14 @@ def account_detail(account_id):
         periodo=periodo_param,
     ).first()
     workload_activity_values = {
-        item.get("actividad"): item.get("horas", "0 h")
+        item.get("actividad"): item.get("horas", "No aplica")
         for item in (workload_survey.actividades_horas if workload_survey else [])
         if isinstance(item, dict)
     }
+    workload_custom_activities = [
+        item for item in (workload_survey.actividades_horas if workload_survey else [])
+        if isinstance(item, dict) and item.get("actividad") not in WORKLOAD_ACTIVITIES
+    ]
 
     # Incidencias
     incidencias = CSIncidencia.query.filter_by(account_id=account.id).order_by(CSIncidencia.created_at.desc()).limit(100).all()
@@ -1431,6 +1434,7 @@ def account_detail(account_id):
         entregables=entregables, entregables_por_un=entregables_por_un,
         workload_survey=workload_survey,
         workload_activity_values=workload_activity_values,
+        workload_custom_activities=workload_custom_activities,
         workload_activities=WORKLOAD_ACTIVITIES,
         workload_options=WORKLOAD_SURVEY_OPTIONS,
         incidencias=incidencias, propiedades=propiedades,
@@ -3203,9 +3207,9 @@ def guardar_workload_survey(account_id):
         actividad = (actividad or "").strip()
         if not actividad:
             continue
-        horas = activity_hours[idx] if idx < len(activity_hours) else "0 h"
+        horas = activity_hours[idx] if idx < len(activity_hours) else "No aplica"
         if horas not in WORKLOAD_ACTIVITY_HOUR_OPTIONS:
-            horas = "0 h"
+            horas = "No aplica"
         actividades_horas.append({"actividad": actividad[:200], "horas": horas})
 
     survey.kam_id = account.kam_id
