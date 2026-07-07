@@ -1,0 +1,208 @@
+{% extends "cs/cs_base.html" %}
+{% block title %}Carga Operativa — CS Avantex{% endblock %}
+{% block breadcrumb %}Carga Operativa{% endblock %}
+
+{% macro money(value) -%}${{ "{:,.0f}".format(value or 0) }}{%- endmacro %}
+{% macro tone_color(tone) -%}
+{% if tone == 'danger' %}var(--danger){% elif tone == 'warn' %}var(--warn){% elif tone == 'info' %}var(--info){% else %}var(--ok){% endif %}
+{%- endmacro %}
+
+{% block content %}
+<style>
+.co-grid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;align-items:start}
+.co-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:16px}
+.co-rank{display:flex;flex-direction:column;gap:10px}
+.co-row{display:grid;grid-template-columns:minmax(0,1fr) 88px;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--border-subtle)}
+.co-row:first-child{border-top:0}
+.co-name{font-size:13px;font-weight:700;color:var(--ink-1);line-height:1.25}
+.co-meta{font-size:11px;color:var(--ink-3);margin-top:3px}
+.co-hours{text-align:right;font-size:17px;font-weight:800;color:var(--ink-1);font-variant-numeric:tabular-nums}
+.co-bar{height:7px;background:var(--bg-sunken);border-radius:999px;overflow:hidden;margin-top:8px}
+.co-bar span{display:block;height:100%;background:var(--copper);border-radius:999px}
+.co-table{width:100%;border-collapse:collapse}
+.co-table th{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:700;text-align:left;padding:8px;border-bottom:1px solid var(--border)}
+.co-table td{font-size:12px;color:var(--ink-2);padding:10px 8px;border-bottom:1px solid var(--border-subtle);vertical-align:top}
+.co-alert{border:1px solid var(--border);border-left:3px solid var(--alert-color);border-radius:10px;padding:12px;background:var(--bg-surface)}
+@media(max-width:1200px){.co-grid{grid-template-columns:1fr}.co-kpis{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:760px){.co-kpis{grid-template-columns:1fr}.co-table{min-width:760px}}
+</style>
+
+<div class="page-head">
+    <div>
+        <h1>Carga Operativa</h1>
+        <p class="sub">CS Ops Command Center · {{ periodo_label }}</p>
+    </div>
+    <form method="get" class="actions">
+        <select name="periodo" class="input" onchange="this.form.submit()" style="min-width:190px">
+            {% for p in periodos %}
+            <option value="{{ p.value }}" {% if p.value == periodo_param %}selected{% endif %}>{{ p.label }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+<div class="co-kpis">
+    <div class="kpi primary">
+        <div class="label">Horas operativas</div>
+        <div class="value">{{ "{:,.0f}".format(totals.hours) }}<span class="unit">h</span></div>
+        <div class="foot">estimadas por encuesta</div>
+    </div>
+    <div class="kpi">
+        <div class="label">Avance captura</div>
+        <div class="value">{{ totals.surveys }}/{{ totals.accounts }}</div>
+        <div class="foot">{{ totals.pending }} clientes pendientes</div>
+    </div>
+    <div class="kpi">
+        <div class="label">Actividad principal</div>
+        <div style="font-size:15px;font-weight:750;color:var(--ink-1);line-height:1.3;margin-top:8px">{{ totals.top_activity }}</div>
+        <div class="foot">mayor carga reportada</div>
+    </div>
+    <div class="kpi">
+        <div class="label">Bloqueo principal</div>
+        <div style="font-size:15px;font-weight:750;color:var(--ink-1);line-height:1.3;margin-top:8px">{{ totals.top_blocker }}</div>
+        <div class="foot">por horas perdidas</div>
+    </div>
+</div>
+
+<div class="co-grid">
+    <main style="display:flex;flex-direction:column;gap:16px">
+        <div class="card">
+            <div class="card-head">
+                <h3>Vista por KAM</h3>
+                <span class="muted" style="font-size:12px">avance, horas y fricción principal</span>
+            </div>
+            <div class="card-body" style="overflow-x:auto">
+                <table class="co-table">
+                    <thead>
+                        <tr>
+                            <th>KAM</th>
+                            <th>Avance</th>
+                            <th>Horas</th>
+                            <th>Cliente con mayor carga</th>
+                            <th>Actividad principal</th>
+                            <th>Bloqueo principal</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in kam_rows %}
+                        <tr>
+                            <td><strong style="color:var(--ink-1)">{{ row.kam_name }}</strong></td>
+                            <td>{{ row.answered }}/{{ row.assigned }} · {{ "{:.0f}".format(row.progress) }}%</td>
+                            <td><strong>{{ "{:.0f}".format(row.hours) }}h</strong></td>
+                            <td>{% if row.top_client %}{{ row.top_client.name }} · {{ "{:.0f}".format(row.top_client.hours) }}h{% else %}Sin datos{% endif %}</td>
+                            <td>{{ row.top_activity }}</td>
+                            <td>{{ row.top_blocker }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" style="text-align:center;color:var(--ink-3);padding:24px">Sin encuestas capturadas en este periodo</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <h3>Top clientes con mayor carga</h3>
+                <span class="muted" style="font-size:12px">comparar horas vs MRR y health</span>
+            </div>
+            <div class="card-body" style="overflow-x:auto">
+                <table class="co-table">
+                    <thead>
+                        <tr>
+                            <th>Cliente</th>
+                            <th>KAM</th>
+                            <th>Horas</th>
+                            <th>MRR</th>
+                            <th>Health</th>
+                            <th>Motivo</th>
+                            <th>Bloqueo</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in client_rows %}
+                        <tr>
+                            <td><strong style="color:var(--ink-1)">{{ row.account.nombre }}</strong></td>
+                            <td>{{ row.kam_name }}</td>
+                            <td><strong>{{ "{:.0f}".format(row.hours) }}h</strong></td>
+                            <td>{{ money(row.mrr) }}</td>
+                            <td>{{ row.health.categoria }}{% if row.health.score is not none %} · {{ row.health.score }}{% endif %}</td>
+                            <td>{{ row.motivo }}</td>
+                            <td>{{ row.bloqueo }}</td>
+                            <td><a class="btn" href="{{ row.url }}">Ver</a></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="8" style="text-align:center;color:var(--ink-3);padding:24px">Sin clientes con encuesta</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <aside style="display:flex;flex-direction:column;gap:16px">
+        <div class="card">
+            <div class="card-head"><h3>Alertas de dirección</h3></div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+                {% for alert in alerts %}
+                <a href="{{ alert.url }}" class="co-alert" style="--alert-color:{{ tone_color(alert.tone) }}">
+                    <div style="font-size:13px;font-weight:750;color:var(--ink-1)">{{ alert.title }}</div>
+                    <div class="muted" style="font-size:12px;line-height:1.45;margin-top:4px">{{ alert.detail }}</div>
+                </a>
+                {% else %}
+                <div class="co-alert" style="--alert-color:var(--ok)">
+                    <div style="font-size:13px;font-weight:750;color:var(--ink-1)">Sin alertas</div>
+                    <div class="muted" style="font-size:12px;line-height:1.45;margin-top:4px">No hay señales críticas con la información capturada.</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h3>Actividades por carga</h3></div>
+            <div class="card-body co-rank">
+                {% set max_activity = activity_rows[0].hours if activity_rows else 1 %}
+                {% for item in activity_rows %}
+                <div class="co-row">
+                    <div><div class="co-name">{{ item.name }}</div><div class="co-bar"><span style="width:{{ (item.hours / max_activity * 100) if max_activity else 0 }}%"></span></div></div>
+                    <div class="co-hours">{{ "{:.0f}".format(item.hours) }}h</div>
+                </div>
+                {% else %}
+                <div class="muted" style="font-size:12px">Sin datos</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h3>Bloqueos</h3></div>
+            <div class="card-body co-rank">
+                {% set max_blocker = blocker_rows[0].hours if blocker_rows else 1 %}
+                {% for item in blocker_rows %}
+                <div class="co-row">
+                    <div><div class="co-name">{{ item.name }}</div><div class="co-bar"><span style="width:{{ (item.hours / max_blocker * 100) if max_blocker else 0 }}%"></span></div></div>
+                    <div class="co-hours">{{ "{:.0f}".format(item.hours) }}h</div>
+                </div>
+                {% else %}
+                <div class="muted" style="font-size:12px">Sin datos</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h3>Entregables recurrentes</h3></div>
+            <div class="card-body co-rank">
+                {% set max_deliverable = deliverable_rows[0].count if deliverable_rows else 1 %}
+                {% for item in deliverable_rows %}
+                <div class="co-row">
+                    <div><div class="co-name">{{ item.name }}</div><div class="co-bar"><span style="width:{{ (item.count / max_deliverable * 100) if max_deliverable else 0 }}%"></span></div></div>
+                    <div class="co-hours">{{ item.count }}</div>
+                </div>
+                {% else %}
+                <div class="muted" style="font-size:12px">Sin datos</div>
+                {% endfor %}
+            </div>
+        </div>
+    </aside>
+</div>
+{% endblock %}

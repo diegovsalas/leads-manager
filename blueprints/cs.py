@@ -444,6 +444,198 @@ def _score_status(score):
     return {"label": "Riesgo", "tone": "danger"}
 
 
+def _workload_hours_midpoint(value):
+    if not value or value == "No aplica":
+        return 0.0
+    if value.startswith("Más de"):
+        digits = "".join(ch for ch in value if ch.isdigit())
+        return float(digits or 0)
+    if "-" in value:
+        nums = []
+        for part in value.replace("h", "").split("-"):
+            part = part.strip()
+            if part.isdigit():
+                nums.append(float(part))
+        if len(nums) == 2:
+            return sum(nums) / 2
+    digits = "".join(ch for ch in value if ch.isdigit())
+    return float(digits or 0)
+
+
+def _workload_count_midpoint(value):
+    if not value:
+        return 0.0
+    if value.startswith("Más de"):
+        digits = "".join(ch for ch in value if ch.isdigit())
+        return float(digits or 0)
+    if "-" in value:
+        nums = [float(part.strip()) for part in value.split("-") if part.strip().isdigit()]
+        if len(nums) == 2:
+            return sum(nums) / 2
+    return float(value) if value.isdigit() else 0.0
+
+
+def _build_carga_operativa(periodo_param):
+    from collections import Counter, defaultdict
+
+    surveys = (
+        db.session.query(CSWorkloadSurvey, CSAccount, UserCRM)
+        .join(CSAccount, CSAccount.id == CSWorkloadSurvey.account_id)
+        .outerjoin(UserCRM, UserCRM.id == CSWorkloadSurvey.kam_id)
+        .filter(CSWorkloadSurvey.periodo == periodo_param)
+        .order_by(CSAccount.nombre)
+        .all()
+    )
+
+    accounts_q = CSAccount.query.filter(db.or_(CSAccount.en_due_diligence.is_(None), CSAccount.en_due_diligence.is_(False)))
+    if _is_kam():
+        accounts_q = accounts_q.filter_by(kam_id=_current_kam_id())
+        surveys = [row for row in surveys if str(row[0].kam_id) == str(_current_kam_id())]
+    accounts = accounts_q.all()
+    account_ids = [a.id for a in accounts]
+    scores_map = calcular_health_scores_batch(accounts)
+
+    account_by_id = {str(a.id): a for a in accounts}
+    survey_account_ids = {str(s.account_id) for s, _, _ in surveys}
+
+    activity_counter = Counter()
+    blocker_counter = Counter()
+    deliverable_counter = Counter()
+    client_rows = []
+    kam_rows = {}
+    alerts = []
+
+    kams = _get_kams()
+    if _is_kam():
+        current_kam_id = str(_current_kam_id())
+        kams = [kam for kam in kams if str(kam.id) == current_kam_id]
+    for kam in kams:
+        kam_key = str(kam.id)
+        kam_accounts = [a for a in accounts if str(a.kam_id) == kam_key]
+        kam_rows[kam_key] = {
+            "kam": kam,
+            "kam_name": kam.nombre,
+            "assigned": len(kam_accounts),
+            "answered": 0,
+            "hours": 0.0,
+            "top_client": None,
+            "top_activity": "",
+            "top_blocker": "",
+            "activities": Counter(),
+            "blockers": Counter(),
+        }
+
+    for survey, account, kam in surveys:
+        if str(account.id) not in account_by_id:
+            continue
+        kam_key = str(kam.id) if kam else "sin_kam"
+        kam_name = kam.nombre if kam else "Sin KAM"
+        if kam_key not in kam_rows:
+            kam_accounts = [a for a in accounts if str(a.kam_id) == kam_key]
+            kam_rows[kam_key] = {
+                "kam": kam,
+                "kam_name": kam_name,
+                "assigned": len(kam_accounts),
+                "answered": 0,
+                "hours": 0.0,
+                "top_client": None,
+                "top_activity": "",
+                "top_blocker": "",
+                "activities": Counter(),
+                "blockers": Counter(),
+            }
+
+        client_hours = _workload_hours_midpoint(survey.horas_cliente)
+        activity_hours = 0.0
+        for item in survey.actividades_horas or []:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("actividad") or "Sin actividad"
+            hours = _workload_hours_midpoint(item.get("horas"))
+            if hours > 0:
+                activity_counter[name] += hours
+                kam_rows[kam_key]["activities"][name] += hours
+                activity_hours += hours
+
+        blocker_hours = _workload_hours_midpoint(survey.horas_bloqueos)
+        if survey.tipo_bloqueo and survey.tipo_bloqueo != "No aplica" and blocker_hours > 0:
+            blocker_counter[survey.tipo_bloqueo] += blocker_hours
+            kam_rows[kam_key]["blockers"][survey.tipo_bloqueo] += blocker_hours
+
+        for entregable in survey.entregables_tipos or []:
+            deliverable_counter[entregable] += 1
+
+        health = scores_map.get(str(account.id), {"score": None, "categoria": "Sin datos"})
+        mrr = _mrr_operativo(account)
+        client_row = {
+            "account": account,
+            "kam_name": kam_name,
+            "hours": client_hours,
+            "activity_hours": activity_hours,
+            "mrr": mrr,
+            "health": health,
+            "motivo": survey.motivo_carga or "Sin dato",
+            "bloqueo": survey.tipo_bloqueo or "Sin dato",
+            "entregables": len(survey.entregables_tipos or []),
+            "dependencia": survey.dependencia_externa or "Sin dato",
+            "url": url_for("cs.account_detail", account_id=account.id) + f"?periodo={periodo_param}&tab=workload-survey",
+        }
+        client_rows.append(client_row)
+
+        kam_rows[kam_key]["answered"] += 1
+        kam_rows[kam_key]["hours"] += client_hours
+        if not kam_rows[kam_key]["top_client"] or client_hours > kam_rows[kam_key]["top_client"]["hours"]:
+            kam_rows[kam_key]["top_client"] = {"name": account.nombre, "hours": client_hours}
+
+        if client_hours >= 16 and mrr < 50000:
+            alerts.append({
+                "tone": "warn",
+                "title": "Carga alta con bajo MRR",
+                "detail": f"{account.nombre} reporta {client_hours:.0f}h y MRR ${mrr:,.0f}.",
+                "url": client_row["url"],
+            })
+        if client_hours >= 16 and health.get("categoria") in ("Riesgo", "Atención"):
+            alerts.append({
+                "tone": "danger" if health.get("categoria") == "Riesgo" else "warn",
+                "title": "Carga alta con salud comprometida",
+                "detail": f"{account.nombre} está en {health.get('categoria')} y consume {client_hours:.0f}h.",
+                "url": client_row["url"],
+            })
+        if blocker_hours >= 6 or survey.recurrencia_bloqueo in ("Sí, frecuentemente", "Sí, todos los meses"):
+            alerts.append({
+                "tone": "info",
+                "title": "Bloqueo recurrente",
+                "detail": f"{account.nombre}: {survey.tipo_bloqueo or 'bloqueo'} ({survey.recurrencia_bloqueo or 'sin recurrencia'}).",
+                "url": client_row["url"],
+            })
+
+    for row in kam_rows.values():
+        row["progress"] = round(row["answered"] / row["assigned"] * 100, 1) if row["assigned"] else 0
+        row["top_activity"] = row["activities"].most_common(1)[0][0] if row["activities"] else "Sin dato"
+        row["top_blocker"] = row["blockers"].most_common(1)[0][0] if row["blockers"] else "Sin dato"
+
+    answered_ids = survey_account_ids & set(account_by_id)
+    pending = max(len(account_ids) - len(answered_ids), 0)
+    totals = {
+        "surveys": len(client_rows),
+        "accounts": len(account_ids),
+        "pending": pending,
+        "hours": round(sum(r["hours"] for r in client_rows), 1),
+        "top_activity": activity_counter.most_common(1)[0][0] if activity_counter else "Sin datos",
+        "top_blocker": blocker_counter.most_common(1)[0][0] if blocker_counter else "Sin datos",
+    }
+
+    return {
+        "totals": totals,
+        "kam_rows": sorted(kam_rows.values(), key=lambda r: (-r["hours"], r["kam_name"])),
+        "client_rows": sorted(client_rows, key=lambda r: r["hours"], reverse=True)[:20],
+        "activity_rows": [{"name": k, "hours": round(v, 1)} for k, v in activity_counter.most_common(12)],
+        "blocker_rows": [{"name": k, "hours": round(v, 1)} for k, v in blocker_counter.most_common(12)],
+        "deliverable_rows": [{"name": k, "count": v} for k, v in deliverable_counter.most_common(12)],
+        "alerts": alerts[:10],
+    }
+
+
 def _kam_success_plays(row):
     """Playbook accionable a partir de brechas visibles en el scorecard."""
     plays = []
@@ -1474,6 +1666,23 @@ def kam_scorecard():
         periodo_label=periodo_label,
         periodo_param=periodo_param,
         periodos=_periodos_disponibles(),
+        **_ctx(),
+    )
+
+
+# ══════════════════════════════════════════════
+# CARGA OPERATIVA
+# ══════════════════════════════════════════════
+@cs_bp.route("/carga-operativa")
+def carga_operativa():
+    inicio, fin, periodo_label, periodo_param = _get_periodo()
+    data = _build_carga_operativa(periodo_param)
+    return render_template(
+        "cs_carga_operativa.html",
+        periodo_label=periodo_label,
+        periodo_param=periodo_param,
+        periodos=_periodos_disponibles(),
+        **data,
         **_ctx(),
     )
 
