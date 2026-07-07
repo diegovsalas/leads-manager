@@ -321,6 +321,76 @@ def _score_status(score):
     return {"label": "Riesgo", "tone": "danger"}
 
 
+def _kam_success_plays(row):
+    """Playbook accionable a partir de brechas visibles en el scorecard."""
+    plays = []
+    kam_url = f"/cs/kam/{row['kam'].id}"
+
+    def add(title, detail, priority, tone, action_label="Abrir cartera", url=None):
+        plays.append({
+            "title": title,
+            "detail": detail,
+            "priority": priority,
+            "tone": tone,
+            "action_label": action_label,
+            "url": url or kam_url,
+        })
+
+    if row["risk_without_plan"] > 0:
+        add(
+            "Plan de rescate",
+            f"{row['risk_without_plan']} cuenta(s) en riesgo no tienen tarea abierta de seguimiento.",
+            1,
+            "danger",
+        )
+    if row["overdue_tasks"] > 0:
+        add(
+            "Backlog vencido",
+            f"Cerrar o reprogramar {row['overdue_tasks']} tarea(s) vencidas antes del siguiente corte.",
+            2,
+            "warn",
+            "Ver pendientes",
+            "/cs/mis-pendientes",
+        )
+    if row["no_touch_30"] > 0:
+        add(
+            "Reactivar contacto",
+            f"{row['no_touch_30']} cuenta(s) no registran contacto en los ultimos 30 dias.",
+            3,
+            "warn",
+        )
+    if row["avg_response_hours"] is not None and row["avg_response_hours"] > 24:
+        add(
+            "SLA de respuesta",
+            f"Respuesta promedio de {row['avg_response_hours']}h; objetivo recomendado menor a 24h.",
+            4,
+            "warn",
+        )
+    if row["incidents_open"] > 0:
+        add(
+            "Cierre operativo",
+            f"{row['incidents_open']} incidencia(s) abiertas requieren empuje con operaciones.",
+            5,
+            "info",
+        )
+    if row["qbr_period"] == 0 and row["accounts"] >= 3:
+        add(
+            "QBR pendiente",
+            "No hay QBRs creados en el periodo para una cartera activa.",
+            6,
+            "info",
+        )
+    if not plays and row["accounts"] > 0:
+        add(
+            "Mantener cadencia",
+            "La cartera no muestra brechas criticas; mantener revisiones y actualizar notas.",
+            9,
+            "ok",
+        )
+
+    return sorted(plays, key=lambda p: p["priority"])[:3]
+
+
 def _build_kam_scorecard(inicio, fin):
     """Scorecard de ejecución KAM.
 
@@ -550,6 +620,7 @@ def _build_kam_scorecard(inicio, fin):
             "avg_response_hours": round(avg_response_hours, 1) if avg_response_hours is not None else None,
             "incidents_open": incidents_open,
         }
+        row["plays"] = _kam_success_plays(row)
         rows.append(row)
 
         totals["accounts"] += account_count
@@ -562,6 +633,16 @@ def _build_kam_scorecard(inicio, fin):
     rows.sort(key=lambda r: (r["score"] is None, -(r["score"] or 0), r["kam"].nombre))
     scored = [r["score"] for r in rows if r["score"] is not None]
     totals["score_avg"] = round(sum(scored) / len(scored), 1) if scored else None
+    all_plays = []
+    for row in rows:
+        for play in row["plays"]:
+            if play["tone"] == "ok":
+                continue
+            item = dict(play)
+            item["kam"] = row["kam"].nombre
+            item["kam_id"] = row["kam"].id
+            all_plays.append(item)
+    totals["plays"] = sorted(all_plays, key=lambda p: p["priority"])[:6]
     return rows, totals
 
 
