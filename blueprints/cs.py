@@ -1809,6 +1809,110 @@ def cuentas_sin_sub_savio():
     })
 
 
+@cs_bp.route("/api/zoho/diagnose", methods=["POST"])
+def zoho_diagnose():
+    """FEAT-2026-07-07: Diagnóstico del error 'invalid_code' — prueba las 4
+    regiones de Zoho con las credenciales configuradas en Render.
+
+    Retorna qué región (si alguna) acepta el refresh_token actual, y para
+    las que fallan muestra el mensaje exacto de Zoho para debug.
+    """
+    if session.get("user_rol", "").lower().replace(" ", "_") != "super_admin":
+        return jsonify({"error": "Solo Super Admin"}), 403
+    import os as _os
+    import requests as _rq
+
+    refresh = _os.getenv("ZOHO_REFRESH_TOKEN")
+    cid     = _os.getenv("ZOHO_CLIENT_ID")
+    csec    = _os.getenv("ZOHO_CLIENT_SECRET")
+    if not (refresh and cid and csec):
+        return jsonify({
+            "error": "Faltan credenciales base",
+            "faltantes": [k for k, v in [
+                ("ZOHO_REFRESH_TOKEN", refresh),
+                ("ZOHO_CLIENT_ID", cid),
+                ("ZOHO_CLIENT_SECRET", csec),
+            ] if not v],
+        }), 400
+
+    dominios = [
+        ("accounts.zoho.com",    "Global (US)"),
+        ("accounts.zoho.eu",     "Europa"),
+        ("accounts.zoho.in",     "India"),
+        ("accounts.zoho.com.au", "Australia"),
+        ("accounts.zoho.jp",     "Japón"),
+    ]
+
+    resultados = []
+    region_ok = None
+    for dominio, region in dominios:
+        try:
+            r = _rq.post(
+                f"https://{dominio}/oauth/v2/token",
+                data={
+                    "grant_type":    "refresh_token",
+                    "refresh_token": refresh,
+                    "client_id":     cid,
+                    "client_secret": csec,
+                },
+                timeout=12,
+            )
+            body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {"raw": r.text[:200]}
+            if body.get("access_token"):
+                resultados.append({
+                    "region":   region,
+                    "dominio":  dominio,
+                    "ok":       True,
+                    "detalle":  f"expires_in={body.get('expires_in')}s",
+                })
+                if not region_ok:
+                    region_ok = dominio
+            else:
+                resultados.append({
+                    "region":   region,
+                    "dominio":  dominio,
+                    "ok":       False,
+                    "detalle":  body.get("error") or str(body)[:100],
+                })
+        except Exception as e:
+            resultados.append({
+                "region": region, "dominio": dominio, "ok": False,
+                "detalle": f"{type(e).__name__}: {str(e)[:80]}",
+            })
+
+    # Detectar el problema más probable
+    todos_invalid_code = all(not r["ok"] and r["detalle"] == "invalid_code" for r in resultados)
+    algun_invalid_client = any(r["detalle"] == "invalid_client" for r in resultados)
+
+    diagnostico = None
+    accion = None
+    if region_ok:
+        actual_dominio = _os.getenv("ZOHO_ACCOUNTS_DOMAIN", "accounts.zoho.com")
+        if region_ok != actual_dominio:
+            diagnostico = f"✓ El refresh_token funciona en {region_ok}, pero tu ETL está apuntando a {actual_dominio}"
+            accion = f"Agrega en Render: ZOHO_ACCOUNTS_DOMAIN={region_ok}"
+        else:
+            diagnostico = f"✓ Todo bien: refresh_token válido en {region_ok} (la región que ya usas)"
+            accion = "El error 'invalid_code' del sync viene de otra causa — revisa logs de Render"
+    elif algun_invalid_client:
+        diagnostico = "✗ ZOHO_CLIENT_ID + ZOHO_CLIENT_SECRET no matchean con el refresh_token"
+        accion = "Regenera el refresh_token con el MISMO Self-Client cuyo Client ID/Secret están en Render"
+    elif todos_invalid_code:
+        diagnostico = "✗ El refresh_token es inválido (revocado o expirado) en TODAS las regiones"
+        accion = "Genera un nuevo refresh_token desde Zoho API Console (Self-Client → Generate Code)"
+    else:
+        diagnostico = "✗ Ninguna región aceptó el token; revisa el detalle por región"
+        accion = "Verifica que copiaste el refresh_token completo sin espacios"
+
+    return jsonify({
+        "diagnostico":       diagnostico,
+        "accion_sugerida":   accion,
+        "region_correcta":   region_ok,
+        "dominio_configurado": _os.getenv("ZOHO_ACCOUNTS_DOMAIN", "accounts.zoho.com"),
+        "por_region":        resultados,
+    })
+
+
 @cs_bp.route("/api/zoho/sync-appointments", methods=["POST"])
 def zoho_sync_appointments():
     """Trigger manual del ETL Zoho Analytics → cs_appointments (super_admin).

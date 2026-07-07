@@ -29,6 +29,9 @@
         <button type="button" onclick="_csSyncZoho(this)" class="btn" title="Fuerza el sync de Zoho Analytics → cs_appointments (operación/citas)">
             🔄 Zoho (Citas)
         </button>
+        <button type="button" onclick="_csDiagnoseZoho(this)" class="btn" title="Diagnostica el error del refresh_token probando las 4 regiones de Zoho" style="font-size:12px;padding:4px 8px;">
+            🔍
+        </button>
         <button type="button" onclick="_csSyncSavio(this)" class="btn" title="Fuerza el sync de Savio → savio_invoices + savio_payments + cs_invoices (facturación y pagos)">
             💰 Savio (Facturas+Pagos)
         </button>
@@ -73,6 +76,40 @@ function _csChangePeriodo(p){
 })();
 
 // FEAT-2026-07-03: forzar sync Zoho → cs_appointments (super_admin)
+// FEAT-2026-07-07: diagnóstico de Zoho — prueba las 4 regiones automáticamente
+async function _csDiagnoseZoho(btn){
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '⏳';
+    try{
+        const r = await fetch('/cs/api/zoho/diagnose', {method:'POST'});
+        const d = await r.json();
+        if(!r.ok){
+            alert('Error: ' + (d.error || 'HTTP ' + r.status));
+            return;
+        }
+        // Armar mensaje con los resultados
+        let msg = 'DIAGNÓSTICO ZOHO\n';
+        msg += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+        msg += (d.diagnostico || 'sin diagnóstico') + '\n\n';
+        msg += '🔧 ACCIÓN: ' + (d.accion_sugerida || '—') + '\n\n';
+        msg += 'Dominio actual en Render: ' + (d.dominio_configurado || 'accounts.zoho.com') + '\n';
+        if(d.region_correcta){
+            msg += '✓ Región correcta: ' + d.region_correcta + '\n';
+        }
+        msg += '\n━━━ POR REGIÓN ━━━\n';
+        (d.por_region || []).forEach(r => {
+            msg += (r.ok ? '✓' : '✗') + ' ' + r.region + ' (' + r.dominio + '): ' + r.detalle + '\n';
+        });
+        alert(msg);
+    }catch(e){
+        alert('Falló: ' + e.message);
+    }finally{
+        btn.disabled = false;
+        btn.innerHTML = original;
+    }
+}
+
 async function _csSyncZoho(btn){
   const original = btn.innerHTML;
   btn.disabled = true;
