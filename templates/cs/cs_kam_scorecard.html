@@ -1,0 +1,173 @@
+{% extends "cs/cs_base.html" %}
+{% block title %}KAM Scorecard — CS Avantex{% endblock %}
+{% block breadcrumb %}KAM Scorecard{% endblock %}
+
+{% macro money(value) -%}
+${{ "{:,.0f}".format(value or 0) }}
+{%- endmacro %}
+
+{% macro score_badge(score, status) -%}
+<span class="pill {{ status.tone }}" style="font-weight:700">
+    {% if score is not none %}{{ "{:.1f}".format(score) }}{% else %}S/D{% endif %}
+</span>
+{%- endmacro %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>KAM Scorecard</h1>
+        <p class="sub">Ejecucion comercial y operativa del portafolio CS · {{ periodo_label }}</p>
+    </div>
+    <form method="get" class="actions">
+        <select name="periodo" class="input" onchange="this.form.submit()" style="min-width:190px">
+            {% for p in periodos %}
+            <option value="{{ p.value }}" {% if p.value == periodo_param %}selected{% endif %}>{{ p.label }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+<div class="grid g-4 mb-4" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+    <div class="kpi">
+        <div class="label">Score promedio</div>
+        <div class="value" style="font-size:28px;color:var(--copper)">
+            {% if totals.score_avg is not none %}{{ "{:.1f}".format(totals.score_avg) }}{% else %}S/D{% endif %}
+        </div>
+        <div class="foot"><span class="muted">{{ totals.kams }} KAMs evaluados</span></div>
+    </div>
+    <div class="kpi">
+        <div class="label">Cartera gestionada</div>
+        <div class="value" style="font-size:24px">{{ totals.accounts }}</div>
+        <div class="foot"><span class="muted">{{ money(totals.mrr) }} MRR operativo</span></div>
+    </div>
+    <div class="kpi">
+        <div class="label">Riesgo sin plan</div>
+        <div class="value" style="font-size:24px;color:{% if totals.risk_without_plan %}var(--danger){% else %}var(--ok){% endif %}">
+            {{ totals.risk_without_plan }}
+        </div>
+        <div class="foot"><span class="muted">de {{ totals.risk_accounts }} cuentas en riesgo</span></div>
+    </div>
+    <div class="kpi">
+        <div class="label">Tareas vencidas</div>
+        <div class="value" style="font-size:24px;color:{% if totals.overdue_tasks %}var(--warn){% else %}var(--ok){% endif %}">
+            {{ totals.overdue_tasks }}
+        </div>
+        <div class="foot"><span class="muted">{{ totals.open_tasks }} abiertas</span></div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-head">
+        <h3>Ranking de ejecucion KAM</h3>
+        <span class="muted" style="font-size:12px">Score de trabajo, separado del health score del cliente</span>
+    </div>
+    <div class="card-body" style="overflow-x:auto">
+        <table class="table" style="min-width:1180px">
+            <thead>
+                <tr>
+                    <th>KAM</th>
+                    <th>Score</th>
+                    <th>Cartera</th>
+                    <th>Health</th>
+                    <th>Contacto</th>
+                    <th>Tareas</th>
+                    <th>Plan riesgo</th>
+                    <th>Email</th>
+                    <th>Operacion</th>
+                    <th>Incidencias</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td>
+                        <div style="font-weight:700;color:var(--ink-1)">{{ row.kam.nombre }}</div>
+                        <div class="muted" style="font-size:11px">{{ row.status.label }}</div>
+                    </td>
+                    <td>
+                        {{ score_badge(row.score, row.status) }}
+                        <div style="height:6px;width:92px;background:var(--border-subtle);border-radius:999px;margin-top:7px;overflow:hidden">
+                            <span style="display:block;height:100%;width:{{ row.score or 0 }}%;background:{% if row.status.tone == 'ok' %}var(--ok){% elif row.status.tone == 'info' %}var(--info){% elif row.status.tone == 'warn' %}var(--warn){% elif row.status.tone == 'danger' %}var(--danger){% else %}var(--ink-4){% endif %}"></span>
+                        </div>
+                    </td>
+                    <td>
+                        <div style="font-weight:650">{{ row.accounts }} cuentas</div>
+                        <div class="muted" style="font-size:11px">{{ money(row.mrr) }} MRR</div>
+                    </td>
+                    <td>
+                        <div style="font-weight:650">{% if row.health_avg is not none %}{{ "{:.1f}".format(row.health_avg) }}{% else %}S/D{% endif %}</div>
+                        <div class="muted" style="font-size:11px">{{ row.risk_accounts }} riesgo · {{ row.attention_accounts }} atencion</div>
+                    </td>
+                    <td>
+                        <div style="font-weight:650">{{ "{:.1f}".format(row.touch_pct) }}%</div>
+                        <div class="muted" style="font-size:11px">{{ row.touched_accounts }}/{{ row.accounts }} tocadas · {{ row.no_touch_30 }} sin 30d</div>
+                    </td>
+                    <td>
+                        <div style="font-weight:650;color:{% if row.overdue_tasks %}var(--warn){% else %}var(--ok){% endif %}">
+                            {{ row.overdue_tasks }} vencidas
+                        </div>
+                        <div class="muted" style="font-size:11px">{{ row.open_tasks }} abiertas · {{ row.tasks_created }} creadas</div>
+                    </td>
+                    <td>
+                        <div style="font-weight:650;color:{% if row.risk_without_plan %}var(--danger){% else %}var(--ok){% endif %}">
+                            {{ row.risk_without_plan }} sin plan
+                        </div>
+                        <div class="muted" style="font-size:11px">{{ row.risk_with_plan }}/{{ row.risk_accounts }} con tarea abierta</div>
+                    </td>
+                    <td>
+                        <div style="font-weight:650">
+                            {% if row.avg_response_hours is not none %}{{ "{:.1f}".format(row.avg_response_hours) }}h{% else %}S/D{% endif %}
+                        </div>
+                        <div class="muted" style="font-size:11px">{{ row.emails }} respuestas</div>
+                    </td>
+                    <td>
+                        <div style="font-weight:650">
+                            {% if row.operation_score is not none %}{{ "{:.1f}".format(row.operation_score) }}%{% else %}S/D{% endif %}
+                        </div>
+                        <div class="muted" style="font-size:11px">{{ row.completed_appointments }}/{{ row.appointments }} citas terminadas</div>
+                    </td>
+                    <td>
+                        <div style="font-weight:650;color:{% if row.incidents_open %}var(--warn){% else %}var(--ok){% endif %}">
+                            {{ row.incidents_open }}
+                        </div>
+                        <div class="muted" style="font-size:11px">abiertas</div>
+                    </td>
+                    <td><a class="btn" href="/cs/kam/{{ row.kam.id }}">Ver</a></td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="11" style="text-align:center;padding:28px;color:var(--ink-3)">Sin KAMs activos para mostrar</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="grid g-2 mb-4" style="grid-template-columns:1.15fr .85fr">
+    <div class="card">
+        <div class="card-head"><h3>Formula del score</h3></div>
+        <div class="card-body">
+            <div class="grid" style="grid-template-columns:repeat(5,minmax(0,1fr));gap:10px">
+                <div class="kpi" style="box-shadow:none"><div class="label">30%</div><div style="font-weight:700">Cobertura</div><div class="muted" style="font-size:11px">cuentas tocadas en el periodo</div></div>
+                <div class="kpi" style="box-shadow:none"><div class="label">25%</div><div style="font-weight:700">Tareas</div><div class="muted" style="font-size:11px">penaliza vencidas abiertas</div></div>
+                <div class="kpi" style="box-shadow:none"><div class="label">20%</div><div style="font-weight:700">Riesgo</div><div class="muted" style="font-size:11px">cuentas rojas con plan abierto</div></div>
+                <div class="kpi" style="box-shadow:none"><div class="label">15%</div><div style="font-weight:700">Email</div><div class="muted" style="font-size:11px">tiempo promedio de respuesta</div></div>
+                <div class="kpi" style="box-shadow:none"><div class="label">10%</div><div style="font-weight:700">Operacion</div><div class="muted" style="font-size:11px">citas terminadas contra programadas</div></div>
+            </div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-head"><h3>Lectura correcta</h3></div>
+        <div class="card-body">
+            <p class="muted" style="font-size:13px;line-height:1.65;margin:0">
+                Este score mide disciplina de gestion del KAM, no reemplaza el Health Score.
+                Las tareas completadas usan el estado actual porque el modelo todavia no guarda
+                fecha de cierre; por eso el dato mas confiable para accion diaria son vencidas,
+                abiertas, cuentas sin contacto y riesgo sin plan.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

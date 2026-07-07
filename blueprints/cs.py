@@ -5,7 +5,7 @@ Rutas bajo /cs/
 """
 import csv
 import io
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, send_file, flash
 from sqlalchemy import func
 from extensions import db
@@ -281,6 +281,288 @@ def _calc_facturacion_periodo(account_ids, inicio, fin):
             "num_facturas": num,
         }
     return result
+
+
+def _mrr_operativo(account):
+    """MRR usado para capacidad de cartera: observado si existe, contratado si no."""
+    return float(getattr(account, "mrr_observado", 0) or account.mrr or 0)
+
+
+def _score_email_response(avg_hours):
+    if avg_hours is None:
+        return None
+    if avg_hours <= 2:
+        return 100
+    if avg_hours <= 8:
+        return 85
+    if avg_hours <= 24:
+        return 65
+    if avg_hours <= 48:
+        return 35
+    return 10
+
+
+def _weighted_score(parts):
+    usable = [(score, weight) for score, weight in parts if score is not None and weight > 0]
+    if not usable:
+        return None
+    return round(sum(score * weight for score, weight in usable) / sum(weight for _, weight in usable), 1)
+
+
+def _score_status(score):
+    if score is None:
+        return {"label": "Sin datos", "tone": "neutral"}
+    if score >= 80:
+        return {"label": "Excelente", "tone": "ok"}
+    if score >= 65:
+        return {"label": "Bien", "tone": "info"}
+    if score >= 45:
+        return {"label": "Atención", "tone": "warn"}
+    return {"label": "Riesgo", "tone": "danger"}
+
+
+def _build_kam_scorecard(inicio, fin):
+    """Scorecard de ejecución KAM.
+
+    El health score mide la salud del cliente. Este score mide gestión:
+    cobertura de contacto, control de tareas, planes para cuentas en riesgo,
+    respuesta por email y seguimiento operativo.
+    """
+    from models import KAMEmailResponse
+
+    inicio_dt = datetime.combine(inicio, datetime.min.time())
+    fin_dt = datetime.combine(fin, datetime.min.time())
+    last_30_dt = datetime.now() - timedelta(days=30)
+    today = date.today()
+
+    kams = _get_kams()
+    if _is_kam():
+        current_id = str(_current_kam_id())
+        kams = [k for k in kams if str(k.id) == current_id]
+
+    accounts_query = CSAccount.query.filter(
+        db.or_(CSAccount.en_due_diligence.is_(None), CSAccount.en_due_diligence.is_(False))
+    )
+    if _is_kam():
+        accounts_query = accounts_query.filter_by(kam_id=_current_kam_id())
+    accounts = accounts_query.all()
+    scores_map = calcular_health_scores_batch(accounts)
+    accounts_by_kam = {}
+    for account in accounts:
+        accounts_by_kam.setdefault(str(account.kam_id), []).append(account)
+
+    rows = []
+    totals = {
+        "kams": len(kams),
+        "accounts": 0,
+        "mrr": 0,
+        "risk_accounts": 0,
+        "overdue_tasks": 0,
+        "open_tasks": 0,
+        "risk_without_plan": 0,
+        "score_avg": None,
+    }
+
+    for kam in kams:
+        kam_accounts = accounts_by_kam.get(str(kam.id), [])
+        account_ids = [a.id for a in kam_accounts]
+        account_id_set = {str(a.id) for a in kam_accounts}
+        account_count = len(kam_accounts)
+
+        valid_scores = []
+        risk_accounts = []
+        attention_accounts = []
+        for account in kam_accounts:
+            health = scores_map.get(str(account.id), {})
+            score = health.get("score")
+            if score is not None:
+                valid_scores.append(score)
+            if health.get("categoria") == "Riesgo":
+                risk_accounts.append(account)
+            elif health.get("categoria") == "Atención":
+                attention_accounts.append(account)
+
+        health_avg = round(sum(valid_scores) / len(valid_scores), 1) if valid_scores else None
+
+        if account_ids:
+            open_tasks = CSTask.query.filter(
+                CSTask.account_id.in_(account_ids),
+                CSTask.completada.is_(False),
+            ).all()
+            overdue_tasks = [t for t in open_tasks if t.fecha_limite and t.fecha_limite < today]
+            tasks_created_period = CSTask.query.filter(
+                CSTask.account_id.in_(account_ids),
+                CSTask.created_at >= inicio_dt,
+                CSTask.created_at < fin_dt,
+            ).count()
+            tasks_completed_period = CSTask.query.filter(
+                CSTask.account_id.in_(account_ids),
+                CSTask.created_at >= inicio_dt,
+                CSTask.created_at < fin_dt,
+                CSTask.completada.is_(True),
+            ).count()
+            qbr_period = CSTask.query.filter(
+                CSTask.account_id.in_(account_ids),
+                CSTask.created_at >= inicio_dt,
+                CSTask.created_at < fin_dt,
+                CSTask.tipo.ilike("%qbr%"),
+            ).count()
+
+            notes_touch = {
+                str(row[0]) for row in db.session.query(CSNote.account_id).filter(
+                    CSNote.account_id.in_(account_ids),
+                    CSNote.created_at >= inicio_dt,
+                    CSNote.created_at < fin_dt,
+                ).distinct().all()
+            }
+            appointments_touch = {
+                str(row[0]) for row in db.session.query(CSAppointment.account_id).filter(
+                    CSAppointment.account_id.in_(account_ids),
+                    CSAppointment.fecha_inicio >= inicio_dt,
+                    CSAppointment.fecha_inicio < fin_dt,
+                ).distinct().all()
+            }
+            task_touch = {
+                str(row[0]) for row in db.session.query(CSTask.account_id).filter(
+                    CSTask.account_id.in_(account_ids),
+                    CSTask.created_at >= inicio_dt,
+                    CSTask.created_at < fin_dt,
+                ).distinct().all()
+            }
+            email_touch = {
+                str(row[0]) for row in db.session.query(KAMEmailResponse.account_id).filter(
+                    KAMEmailResponse.kam_id == kam.id,
+                    KAMEmailResponse.account_id.in_(account_ids),
+                    KAMEmailResponse.replied_at >= inicio_dt,
+                    KAMEmailResponse.replied_at < fin_dt,
+                ).distinct().all() if row[0]
+            }
+            touched_accounts = notes_touch | appointments_touch | task_touch | email_touch
+
+            recent_notes = {
+                str(row[0]) for row in db.session.query(CSNote.account_id).filter(
+                    CSNote.account_id.in_(account_ids),
+                    CSNote.created_at >= last_30_dt,
+                ).distinct().all()
+            }
+            recent_appointments = {
+                str(row[0]) for row in db.session.query(CSAppointment.account_id).filter(
+                    CSAppointment.account_id.in_(account_ids),
+                    CSAppointment.fecha_inicio >= last_30_dt,
+                ).distinct().all()
+            }
+            recent_emails = {
+                str(row[0]) for row in db.session.query(KAMEmailResponse.account_id).filter(
+                    KAMEmailResponse.kam_id == kam.id,
+                    KAMEmailResponse.account_id.in_(account_ids),
+                    KAMEmailResponse.replied_at >= last_30_dt,
+                ).distinct().all() if row[0]
+            }
+
+            appointment_rows = CSAppointment.query.filter(
+                CSAppointment.account_id.in_(account_ids),
+                CSAppointment.fecha_inicio >= inicio_dt,
+                CSAppointment.fecha_inicio < fin_dt,
+            ).all()
+            completed_appointments = [
+                a for a in appointment_rows
+                if (a.estatus or "").strip().lower() in ("terminada", "completada", "realizada")
+            ]
+
+            incidents_open = CSIncidencia.query.filter(
+                CSIncidencia.account_id.in_(account_ids),
+                db.or_(CSIncidencia.status.is_(None), ~CSIncidencia.status.ilike("%resuelta%")),
+            ).count()
+
+            email_stats = db.session.query(
+                func.count(KAMEmailResponse.id),
+                func.avg(KAMEmailResponse.response_hours),
+            ).filter(
+                KAMEmailResponse.kam_id == kam.id,
+                KAMEmailResponse.replied_at >= inicio_dt,
+                KAMEmailResponse.replied_at < fin_dt,
+            ).first()
+        else:
+            open_tasks = []
+            overdue_tasks = []
+            tasks_created_period = 0
+            tasks_completed_period = 0
+            qbr_period = 0
+            touched_accounts = set()
+            recent_notes = set()
+            recent_appointments = set()
+            recent_emails = set()
+            appointment_rows = []
+            completed_appointments = []
+            incidents_open = 0
+            email_stats = (0, None)
+
+        risk_ids = {str(a.id) for a in risk_accounts}
+        risk_with_plan = {
+            str(t.account_id) for t in open_tasks
+            if str(t.account_id) in risk_ids
+        }
+        risk_without_plan = max(len(risk_ids) - len(risk_with_plan), 0)
+        no_touch_30 = max(account_count - len((recent_notes | recent_appointments | recent_emails) & account_id_set), 0)
+
+        touch_pct = round((len(touched_accounts) / account_count * 100), 1) if account_count else 0
+        task_score = max(0, 100 - (len(overdue_tasks) * 12))
+        touch_score = min(100, (touch_pct / 80) * 100) if account_count else None
+        risk_plan_score = (len(risk_with_plan) / len(risk_ids) * 100) if risk_ids else 100
+        avg_response_hours = float(email_stats[1]) if email_stats and email_stats[1] is not None else None
+        email_score = _score_email_response(avg_response_hours)
+        operation_score = (
+            len(completed_appointments) / len(appointment_rows) * 100
+            if appointment_rows else None
+        )
+
+        score = _weighted_score([
+            (touch_score, 30),
+            (task_score, 25),
+            (risk_plan_score, 20),
+            (email_score, 15),
+            (operation_score, 10),
+        ])
+
+        row = {
+            "kam": kam,
+            "score": score,
+            "status": _score_status(score),
+            "accounts": account_count,
+            "mrr": sum(_mrr_operativo(a) for a in kam_accounts),
+            "health_avg": health_avg,
+            "risk_accounts": len(risk_accounts),
+            "attention_accounts": len(attention_accounts),
+            "risk_with_plan": len(risk_with_plan),
+            "risk_without_plan": risk_without_plan,
+            "open_tasks": len(open_tasks),
+            "overdue_tasks": len(overdue_tasks),
+            "tasks_created": tasks_created_period,
+            "tasks_completed": tasks_completed_period,
+            "qbr_period": qbr_period,
+            "touch_pct": touch_pct,
+            "touched_accounts": len(touched_accounts),
+            "no_touch_30": no_touch_30,
+            "appointments": len(appointment_rows),
+            "completed_appointments": len(completed_appointments),
+            "operation_score": round(operation_score, 1) if operation_score is not None else None,
+            "emails": int(email_stats[0] or 0) if email_stats else 0,
+            "avg_response_hours": round(avg_response_hours, 1) if avg_response_hours is not None else None,
+            "incidents_open": incidents_open,
+        }
+        rows.append(row)
+
+        totals["accounts"] += account_count
+        totals["mrr"] += row["mrr"]
+        totals["risk_accounts"] += row["risk_accounts"]
+        totals["risk_without_plan"] += risk_without_plan
+        totals["overdue_tasks"] += len(overdue_tasks)
+        totals["open_tasks"] += len(open_tasks)
+
+    rows.sort(key=lambda r: (r["score"] is None, -(r["score"] or 0), r["kam"].nombre))
+    scored = [r["score"] for r in rows if r["score"] is not None]
+    totals["score_avg"] = round(sum(scored) / len(scored), 1) if scored else None
+    return rows, totals
 
 
 # ══════════════════════════════════════════════
@@ -940,6 +1222,24 @@ def account_detail(account_id):
         today=date.today(), account_alerts=alertas_por_cuenta(str(account_id)),
         kams=_get_kams(),
         periodo_label=periodo_label, periodo_param=periodo_param,
+        periodos=_periodos_disponibles(),
+        **_ctx(),
+    )
+
+
+# ══════════════════════════════════════════════
+# KAM SCORECARD
+# ══════════════════════════════════════════════
+@cs_bp.route("/kam-scorecard")
+def kam_scorecard():
+    inicio, fin, periodo_label, periodo_param = _get_periodo()
+    rows, totals = _build_kam_scorecard(inicio, fin)
+    return render_template(
+        "cs_kam_scorecard.html",
+        rows=rows,
+        totals=totals,
+        periodo_label=periodo_label,
+        periodo_param=periodo_param,
         periodos=_periodos_disponibles(),
         **_ctx(),
     )
