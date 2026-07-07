@@ -1386,6 +1386,15 @@ def account_detail(account_id):
         item for item in (workload_survey.actividades_horas if workload_survey else [])
         if isinstance(item, dict) and item.get("actividad") not in WORKLOAD_ACTIVITIES
     ]
+    workload_entregable_otro = ""
+    if workload_survey and workload_survey.entregables_tipos:
+        for item in workload_survey.entregables_tipos:
+            if isinstance(item, str) and item.startswith("Otro:"):
+                workload_entregable_otro = item.replace("Otro:", "", 1).strip()
+                break
+    workload_bloqueo_otro = ""
+    if workload_survey and (workload_survey.tipo_bloqueo or "").startswith("Otro:"):
+        workload_bloqueo_otro = workload_survey.tipo_bloqueo.replace("Otro:", "", 1).strip()
 
     # Incidencias
     incidencias = CSIncidencia.query.filter_by(account_id=account.id).order_by(CSIncidencia.created_at.desc()).limit(100).all()
@@ -1435,6 +1444,8 @@ def account_detail(account_id):
         workload_survey=workload_survey,
         workload_activity_values=workload_activity_values,
         workload_custom_activities=workload_custom_activities,
+        workload_entregable_otro=workload_entregable_otro,
+        workload_bloqueo_otro=workload_bloqueo_otro,
         workload_activities=WORKLOAD_ACTIVITIES,
         workload_options=WORKLOAD_SURVEY_OPTIONS,
         incidencias=incidencias, propiedades=propiedades,
@@ -3218,12 +3229,21 @@ def guardar_workload_survey(account_id):
     survey.motivo_carga = request.form.get("motivo_carga", "")
     survey.actividades_horas = actividades_horas
     survey.entregables_count = request.form.get("entregables_count", "")
-    survey.entregables_tipos = request.form.getlist("entregables_tipos")
+    entregables_tipos = request.form.getlist("entregables_tipos")
+    entregable_otro = (request.form.get("entregable_otro") or "").strip()
+    if entregable_otro:
+        entregables_tipos = [t for t in entregables_tipos if t != "Otro operativo"]
+        entregables_tipos.append(f"Otro: {entregable_otro[:120]}")
+    survey.entregables_tipos = entregables_tipos
     survey.frecuencia_entregable = request.form.get("frecuencia_entregable", "")
     survey.horas_entregables = request.form.get("horas_entregables", "")
     survey.dependencia_externa = request.form.get("dependencia_externa", "")
     survey.bloqueos_nivel = request.form.get("bloqueos_nivel", "")
-    survey.tipo_bloqueo = request.form.get("tipo_bloqueo", "")
+    tipo_bloqueo = request.form.get("tipo_bloqueo", "")
+    bloqueo_otro = (request.form.get("bloqueo_otro") or "").strip()
+    if tipo_bloqueo == "Otro operativo" and bloqueo_otro:
+        tipo_bloqueo = f"Otro: {bloqueo_otro[:120]}"
+    survey.tipo_bloqueo = tipo_bloqueo
     survey.horas_bloqueos = request.form.get("horas_bloqueos", "")
     survey.recurrencia_bloqueo = request.form.get("recurrencia_bloqueo", "")
     survey.reprogramaciones_count = request.form.get("reprogramaciones_count", "")
