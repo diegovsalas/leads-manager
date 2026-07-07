@@ -100,37 +100,65 @@ def get_access_token() -> str:
 # Usa el endpoint /api clásico con ZOHO_ACTION=EXPORT y ZOHO_OUTPUT_FORMAT=JSON.
 # Si tu cuenta usa el endpoint v2 /restapi/v2/, ajustá `fetch_table_v2`.
 # ──────────────────────────────────────────────────────────────────
-def fetch_table(access_token: str) -> list[dict[str, Any]]:
+def fetch_table(access_token: str, batch_size: int = 5000):
+    """Generator que rinde batches de filas para procesar sin cargar todo en RAM.
+
+    FIX-2026-07-07: la versión anterior cargaba TODAS las filas de Zoho en
+    memoria (dict de dict). Con ~64k filas eso pega 150-250MB y con el
+    resto del proceso Flask + gevent llega a OOM en Render 512MB.
+
+    Ahora usa Zoho paginación (ZOHO_START_INDEX + ZOHO_NUMBER_OF_ROWS) y
+    rinde batches. Cada batch se procesa, upsertea y libera antes de
+    pedir el siguiente → peak memory << 512MB.
+    """
     user_email = os.environ["ZOHO_USER_EMAIL"]
     workspace  = os.environ["ZOHO_WORKSPACE"]
     table      = os.environ["ZOHO_TABLE"]
 
     url = f"https://analyticsapi.zoho.com/api/{user_email}/{workspace}/{table}"
     headers = {"Authorization": f"Zoho-oauthtoken {access_token}"}
-    params = {
-        "ZOHO_ACTION":        "EXPORT",
-        "ZOHO_OUTPUT_FORMAT": "JSON",
-        "ZOHO_ERROR_FORMAT":  "JSON",
-        "ZOHO_API_VERSION":   "1.0",
-    }
 
-    log.info("export → %s", url)
-    resp = requests.get(url, headers=headers, params=params, timeout=120)
-    resp.raise_for_status()
-    payload = resp.json()
+    start = 1
+    total_yielded = 0
+    while True:
+        params = {
+            "ZOHO_ACTION":         "EXPORT",
+            "ZOHO_OUTPUT_FORMAT":  "JSON",
+            "ZOHO_ERROR_FORMAT":   "JSON",
+            "ZOHO_API_VERSION":    "1.0",
+            "ZOHO_START_INDEX":    str(start),
+            "ZOHO_NUMBER_OF_ROWS": str(batch_size),
+        }
+        log.info("export batch → start=%d size=%d", start, batch_size)
+        resp = requests.get(url, headers=headers, params=params, timeout=120)
+        resp.raise_for_status()
+        payload = resp.json()
 
-    # Zoho v1 EXPORT JSON shape: {"response": {"result": {"column_order": [...], "rows": [[...], ...]}}}
-    try:
-        result = payload["response"]["result"]
-        cols = result["column_order"]
-        rows = result["rows"]
-        records = [dict(zip(cols, r)) for r in rows]
-    except KeyError:
-        # Algunas variantes devuelven una lista plana de dicts
-        records = payload if isinstance(payload, list) else payload.get("data", [])
+        try:
+            result = payload["response"]["result"]
+            cols   = result["column_order"]
+            rows   = result["rows"]
+        except KeyError:
+            # Variantes que devuelven lista plana
+            data = payload if isinstance(payload, list) else payload.get("data", [])
+            if not data:
+                break
+            yield data
+            break
 
-    log.info("filas crudas extraídas: %d", len(records))
-    return records
+        if not rows:
+            break
+
+        batch_records = [dict(zip(cols, r)) for r in rows]
+        total_yielded += len(batch_records)
+        yield batch_records
+
+        # Si el batch vino incompleto, terminamos
+        if len(rows) < batch_size:
+            break
+        start += batch_size
+
+    log.info("total filas extraídas via paginación: %d", total_yielded)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -243,23 +271,34 @@ def upsert_batch(sb: Client, rows: list[dict[str, Any]], batch_size: int = 500) 
 # Orquestador
 # ──────────────────────────────────────────────────────────────────
 def run() -> dict[str, Any]:
+    """FIX-2026-07-07: procesa Zoho por batches para no reventar los 512MB
+    de Render. Antes cargaba TODAS las filas en RAM antes de upsertar."""
     t0 = time.time()
     log.info("=== Zoho → Supabase ETL · %s ===", datetime.utcnow().isoformat())
 
     token = get_access_token()
-    raw_rows = fetch_table(token)
-
     sb = get_supabase()
     accounts_index = fetch_accounts_index(sb)
 
-    transformed = transform(raw_rows, accounts_index)
-    upserted = upsert_batch(sb, transformed) if transformed else 0
+    total_zoho = 0
+    total_transformed = 0
+    total_upserted = 0
+
+    for batch in fetch_table(token, batch_size=5000):
+        total_zoho += len(batch)
+        transformed = transform(batch, accounts_index)
+        total_transformed += len(transformed)
+        if transformed:
+            total_upserted += upsert_batch(sb, transformed)
+        # Liberar referencias explícitamente entre batches
+        del transformed
+        del batch
 
     elapsed = round(time.time() - t0, 1)
     summary = {
-        "rows_zoho": len(raw_rows),
-        "rows_transformed": len(transformed),
-        "rows_upserted": upserted,
+        "rows_zoho": total_zoho,
+        "rows_transformed": total_transformed,
+        "rows_upserted": total_upserted,
         "elapsed_s": elapsed,
     }
     log.info("=== fin · %s ===", json.dumps(summary))

@@ -68,19 +68,29 @@ def _list_tables():
     return [r[0] for r in rows if r[0] not in TABLAS_EXCLUIDAS]
 
 
-def _dump_table_to_csv(table: str) -> bytes:
-    """Dump una tabla a CSV usando COPY TO STDOUT. Retorna bytes UTF-8."""
+def _dump_table_to_file(table: str, target_path: str) -> int:
+    """FIX-2026-07-07: dump directo a archivo — no carga en memoria.
+
+    Antes usaba io.BytesIO() como buffer intermedio; con savio_invoices
+    (85MB) eso pegaba en el heap Python y contribuía al OOM en Render 512MB.
+    Ahora hace COPY TO STDOUT directo a un file handle → memoria constante.
+    Retorna el tamaño en bytes del archivo escrito.
+    """
     raw = db.session.connection().connection
-    # psycopg2 connection — cursor.copy_expert es la forma estándar.
     cur = raw.cursor()
-    buf = io.BytesIO()
-    cur.copy_expert(f'COPY "{table}" TO STDOUT WITH CSV HEADER', buf)
+    with open(target_path, "wb") as fp:
+        cur.copy_expert(f'COPY "{table}" TO STDOUT WITH CSV HEADER', fp)
     cur.close()
-    return buf.getvalue()
+    return os.path.getsize(target_path)
 
 
 def _build_archive() -> tuple:
-    """Genera tar.gz con CSVs de todas las tablas + manifest. Retorna (path, filename, size)."""
+    """Genera tar.gz con CSVs de todas las tablas + manifest. Retorna (path, filename, size).
+
+    FIX-2026-07-07: cada CSV se escribe primero a un archivo temporal
+    individual, luego se agrega al tar con tar.add(<path>) que también
+    hace streaming. Peak memory ~10MB independientemente del tamaño total.
+    """
     ahora = datetime.now(timezone.utc)
     ts = ahora.strftime("%Y%m%d_%H%M%S")
     filename = f"crm_backup_{ts}.tar.gz"
@@ -89,24 +99,36 @@ def _build_archive() -> tuple:
     tablas = _list_tables()
     manifest = [f"# CRM backup — {ahora.isoformat()}", f"# tablas: {len(tablas)}", ""]
 
-    with tarfile.open(path, "w:gz") as tar:
-        for t in tablas:
-            try:
-                data = _dump_table_to_csv(t)
-                info = tarfile.TarInfo(name=f"{t}.csv")
-                info.size = len(data)
-                info.mtime = int(ahora.timestamp())
-                tar.addfile(info, io.BytesIO(data))
-                manifest.append(f"{t}: {len(data)} bytes")
-            except Exception as e:
-                log.warning(f"dump {t}: {e}")
-                manifest.append(f"{t}: ERROR ({e})")
+    # Dir temporal para los CSVs individuales (se limpia al final)
+    tmpdir = tempfile.mkdtemp(prefix="crm_bk_")
+    try:
+        with tarfile.open(path, "w:gz") as tar:
+            for t in tablas:
+                csv_path = os.path.join(tmpdir, f"{t}.csv")
+                try:
+                    size = _dump_table_to_file(t, csv_path)
+                    tar.add(csv_path, arcname=f"{t}.csv")
+                    manifest.append(f"{t}: {size} bytes")
+                    # Liberar el archivo temporal después de agregarlo al tar
+                    try: os.unlink(csv_path)
+                    except OSError: pass
+                except Exception as e:
+                    log.warning(f"dump {t}: {e}")
+                    manifest.append(f"{t}: ERROR ({e})")
 
-        manifest_bytes = "\n".join(manifest).encode("utf-8")
-        minfo = tarfile.TarInfo(name="MANIFEST.txt")
-        minfo.size = len(manifest_bytes)
-        minfo.mtime = int(ahora.timestamp())
-        tar.addfile(minfo, io.BytesIO(manifest_bytes))
+            # Manifest al final (chico, sí cabe en BytesIO)
+            manifest_bytes = "\n".join(manifest).encode("utf-8")
+            minfo = tarfile.TarInfo(name="MANIFEST.txt")
+            minfo.size = len(manifest_bytes)
+            minfo.mtime = int(ahora.timestamp())
+            tar.addfile(minfo, io.BytesIO(manifest_bytes))
+    finally:
+        # Cleanup del dir temporal
+        try:
+            import shutil
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        except Exception:
+            pass
 
     return path, filename, os.path.getsize(path)
 
