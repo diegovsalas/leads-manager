@@ -146,9 +146,9 @@
                 class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
             Entregables <span class="ml-1 text-xs text-gray-400">({{ entregables|length }})</span>
         </button>
-        <button onclick="switchTab('time-ratios')" data-tab-btn="time-ratios"
+        <button onclick="switchTab('workload-survey')" data-tab-btn="workload-survey"
                 class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
-            Carga KAM <span class="ml-1 text-xs text-gray-400">{{ "%.0f"|format(time_ratio_total) }}%</span>
+            Encuesta Operativa
         </button>
         <button onclick="switchTab('incidencias')" data-tab-btn="incidencias"
                 class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
@@ -847,95 +847,201 @@
     </div>
 
     <!-- ============================================================ -->
-    <!-- TAB: CARGA KAM / RATIOS DE TIEMPO -->
+    <!-- TAB: ENCUESTA OPERATIVA -->
     <!-- ============================================================ -->
-    <div data-tab-panel id="panel-time-ratios">
-        <div id="time-ratios" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
+    <div data-tab-panel id="panel-workload-survey">
+        <div id="workload-survey" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
             <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-5">
                 <div>
-                    <h2 class="text-sm font-semibold text-gray-700">Ratios de tiempo KAM — {{ account.nombre }}</h2>
-                    <p class="text-xs text-gray-400 mt-0.5">Distribuye 100% del tiempo mensual dedicado a esta cuenta entre actividades y entregables.</p>
+                    <h2 class="text-sm font-semibold text-gray-700">Encuesta operativa — {{ account.nombre }}</h2>
+                    <p class="text-xs text-gray-400 mt-0.5">Captura cerrada de horas, frecuencia y bloqueos. La decisión de automatizar o delegar la toma dirección.</p>
                 </div>
-                <div class="grid grid-cols-3 gap-3 min-w-[320px]">
-                    <div class="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                        <p class="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Total</p>
-                        <p id="tr-total" class="text-2xl font-bold {% if time_ratio_total == 100 %}text-green-600{% else %}text-amber-600{% endif %}">{{ "%.0f"|format(time_ratio_total) }}%</p>
-                    </div>
-                    <div class="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                        <p class="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Actividades</p>
-                        <p class="text-2xl font-bold text-gray-800">{{ time_ratios|length }}</p>
-                    </div>
-                    <div class="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                        <p class="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Mayor carga</p>
-                        <p class="text-sm font-bold text-gray-800 truncate mt-1">{{ top_time_ratios[0].actividad if top_time_ratios else '—' }}</p>
-                    </div>
+                <div class="rounded-xl border border-gray-100 bg-gray-50 p-3 min-w-[220px]">
+                    <p class="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Periodo</p>
+                    <p class="text-lg font-bold text-gray-800">{{ periodo_label }}</p>
+                    <p class="text-xs text-gray-400">{{ 'Guardada' if workload_survey else 'Sin capturar' }}</p>
                 </div>
             </div>
 
-            {% if top_time_ratios %}
-            <div class="grid grid-cols-1 lg:grid-cols-5 gap-3 mb-5">
-                {% for item in top_time_ratios %}
-                {% set pct = item.porcentaje|float %}
-                <div class="rounded-xl border border-gray-100 p-3">
-                    <div class="flex justify-between items-center gap-2 mb-2">
-                        <span class="text-xs font-semibold text-gray-700 truncate">{{ item.actividad }}</span>
-                        <span class="text-xs font-bold text-brand-700">{{ "%.0f"|format(pct) }}%</span>
+            <form action="/cs/account/{{ account.id }}/workload-survey" method="POST">
+                <input type="hidden" name="periodo" value="{{ periodo_param }}">
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div>
+                        <label class="text-xs text-gray-500 block mb-1">Horas dedicadas a este cliente</label>
+                        <select name="horas_cliente" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                            {% for opt in workload_options.hours %}
+                            <option value="{{ opt }}" {% if workload_survey and workload_survey.horas_cliente == opt %}selected{% endif %}>{{ opt }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
-                    <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
-                        <div class="h-full rounded-full bg-brand-500" style="width:{{ pct }}%"></div>
+                    <div>
+                        <label class="text-xs text-gray-500 block mb-1">¿La carga fue mayor a lo esperado?</label>
+                        <select name="carga_esperada" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                            {% for opt in workload_options.carga_esperada %}
+                            <option value="{{ opt }}" {% if workload_survey and workload_survey.carga_esperada == opt %}selected{% endif %}>{{ opt }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500 block mb-1">Motivo principal de carga</label>
+                        <select name="motivo_carga" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                            {% for opt in workload_options.motivo_carga %}
+                            <option value="{{ opt }}" {% if workload_survey and workload_survey.motivo_carga == opt %}selected{% endif %}>{{ opt }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                 </div>
-                {% endfor %}
-            </div>
-            {% endif %}
 
-            <form action="/cs/account/{{ account.id }}/time-ratios" method="POST" id="time-ratio-form">
-                <div class="space-y-2" id="time-ratio-list">
-                    {% for ratio in time_ratios %}
-                    <div class="grid grid-cols-1 lg:grid-cols-[minmax(260px,1fr)_220px_70px_34px] gap-3 items-center rounded-xl border border-gray-100 p-3 bg-white">
-                        <input type="hidden" name="ratio_id" value="{{ ratio.id }}">
-                        <input type="text" name="actividad" value="{{ ratio.actividad }}" required
-                               class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500">
-                        <input type="range" min="0" max="100" step="1" value="{{ ratio.porcentaje|float }}"
-                               class="tr-range w-full accent-indigo-600" oninput="syncTimeRatio(this)">
-                        <div class="flex items-center gap-1">
-                            <input type="number" name="porcentaje" min="0" max="100" step="1" value="{{ "%.0f"|format(ratio.porcentaje|float) }}"
-                                   class="tr-input w-16 text-sm border border-gray-200 rounded-lg px-2 py-2 text-right" oninput="syncTimeRatio(this)">
-                            <span class="text-xs text-gray-400">%</span>
+                <div class="mb-6">
+                    <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Horas por actividad</h3>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                        {% for actividad in workload_activities %}
+                        {% set selected_hours = workload_activity_values.get(actividad, '0 h') %}
+                        <div class="grid grid-cols-[minmax(0,1fr)_140px] gap-3 items-center rounded-xl border border-gray-100 p-3">
+                            <input type="hidden" name="actividad" value="{{ actividad }}">
+                            <span class="text-sm font-medium text-gray-700">{{ actividad }}</span>
+                            <select name="actividad_horas" class="text-sm border border-gray-300 rounded-lg px-3 py-2">
+                                {% for opt in workload_options.activity_hours %}
+                                <option value="{{ opt }}" {% if selected_hours == opt %}selected{% endif %}>{{ opt }}</option>
+                                {% endfor %}
+                            </select>
                         </div>
-                        <button type="submit" form="delete-ratio-{{ ratio.id }}"
-                                class="text-xs text-red-400 hover:text-red-600 justify-self-start lg:justify-self-center"
-                                title="Eliminar actividad">✕</button>
+                        {% endfor %}
                     </div>
-                    {% endfor %}
                 </div>
 
-                <div id="new-time-ratios" class="space-y-2 mt-2"></div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+                    <div class="rounded-2xl border border-gray-100 p-4">
+                        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Entregables recurrentes</h3>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="text-xs text-gray-500 block mb-1">Cantidad de entregables</label>
+                                <select name="entregables_count" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                                    {% for opt in workload_options.entregables_count %}
+                                    <option value="{{ opt }}" {% if workload_survey and workload_survey.entregables_count == opt %}selected{% endif %}>{{ opt }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-500 block mb-1">Tipo de entregable recurrente</label>
+                                <select name="entregables_tipos" multiple size="5" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                                    {% set selected_tipos = workload_survey.entregables_tipos if workload_survey and workload_survey.entregables_tipos else [] %}
+                                    {% for opt in workload_options.entregables_tipos %}
+                                    <option value="{{ opt }}" {% if opt in selected_tipos %}selected{% endif %}>{{ opt }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-xs text-gray-500 block mb-1">Frecuencia principal</label>
+                                    <select name="frecuencia_entregable" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                                        {% for opt in workload_options.frecuencia %}
+                                        <option value="{{ opt }}" {% if workload_survey and workload_survey.frecuencia_entregable == opt %}selected{% endif %}>{{ opt }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-500 block mb-1">Horas en entregables</label>
+                                    <select name="horas_entregables" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                                        {% for opt in workload_options.hours %}
+                                        <option value="{{ opt }}" {% if workload_survey and workload_survey.horas_entregables == opt %}selected{% endif %}>{{ opt }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-500 block mb-1">Dependencia externa</label>
+                                <select name="dependencia_externa" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                                    {% for opt in workload_options.dependencia %}
+                                    <option value="{{ opt }}" {% if workload_survey and workload_survey.dependencia_externa == opt %}selected{% endif %}>{{ opt }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
 
-                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-5">
-                    <div id="tr-warning" class="text-xs {% if time_ratio_total == 100 %}text-green-600{% else %}text-amber-600{% endif %}">
-                        {% if time_ratio_total == 100 %}
-                        La distribución suma 100%.
-                        {% else %}
-                        La distribución debe sumar 100% para ser comparable.
-                        {% endif %}
+                    <div class="rounded-2xl border border-gray-100 p-4">
+                        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Bloqueos e incidencias</h3>
+                        <div class="space-y-3">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-xs text-gray-500 block mb-1">Nivel de bloqueos</label>
+                                    <select name="bloqueos_nivel" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                                        {% for opt in workload_options.bloqueos_nivel %}
+                                        <option value="{{ opt }}" {% if workload_survey and workload_survey.bloqueos_nivel == opt %}selected{% endif %}>{{ opt }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-500 block mb-1">Horas perdidas por bloqueos</label>
+                                    <select name="horas_bloqueos" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                                        {% for opt in workload_options.hours %}
+                                        <option value="{{ opt }}" {% if workload_survey and workload_survey.horas_bloqueos == opt %}selected{% endif %}>{{ opt }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-500 block mb-1">Tipo principal de bloqueo</label>
+                                <select name="tipo_bloqueo" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                                    {% for opt in workload_options.tipo_bloqueo %}
+                                    <option value="{{ opt }}" {% if workload_survey and workload_survey.tipo_bloqueo == opt %}selected{% endif %}>{{ opt }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-500 block mb-1">¿El bloqueo se repite?</label>
+                                <select name="recurrencia_bloqueo" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                                    {% for opt in workload_options.recurrencia %}
+                                    <option value="{{ opt }}" {% if workload_survey and workload_survey.recurrencia_bloqueo == opt %}selected{% endif %}>{{ opt }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div>
+                                    <label class="text-xs text-gray-500 block mb-1">Reprogramaciones</label>
+                                    <select name="reprogramaciones_count" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                                        {% for opt in workload_options.counts %}
+                                        <option value="{{ opt }}" {% if workload_survey and workload_survey.reprogramaciones_count == opt %}selected{% endif %}>{{ opt }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-500 block mb-1">Incidencias</label>
+                                    <select name="incidencias_count" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                                        {% for opt in workload_options.counts %}
+                                        <option value="{{ opt }}" {% if workload_survey and workload_survey.incidencias_count == opt %}selected{% endif %}>{{ opt }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-500 block mb-1">Horas incidencias</label>
+                                    <select name="horas_incidencias" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                                        {% for opt in workload_options.hours %}
+                                        <option value="{{ opt }}" {% if workload_survey and workload_survey.horas_incidencias == opt %}selected{% endif %}>{{ opt }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-500 block mb-1">Principal causa de incidencias</label>
+                                <select name="causa_incidencias" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                                    {% for opt in workload_options.causa_incidencias %}
+                                    <option value="{{ opt }}" {% if workload_survey and workload_survey.causa_incidencias == opt %}selected{% endif %}>{{ opt }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
                     </div>
-                    <div class="flex gap-2">
-                        <button type="button" onclick="addTimeRatioRow()"
-                                class="px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">
-                            + Agregar actividad
-                        </button>
-                        <button type="submit"
-                                class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700">
-                            Guardar ratios
-                        </button>
-                    </div>
+                </div>
+
+                <div class="flex justify-end">
+                    <button type="submit" class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700">
+                        Guardar encuesta
+                    </button>
                 </div>
             </form>
-
-            {% for ratio in time_ratios %}
-            <form id="delete-ratio-{{ ratio.id }}" action="/cs/account/{{ account.id }}/time-ratios/{{ ratio.id }}/delete" method="POST" onsubmit="return confirm('Eliminar esta actividad?')"></form>
-            {% endfor %}
         </div>
     </div>
 
@@ -1635,64 +1741,5 @@ fetch('/cs/api/mrr-trend-un?account_id='+accId).then(r=>r.json()).then(data=>{
     });
 });
 
-function updateTimeRatioTotal(){
-    const inputs = Array.from(document.querySelectorAll('#time-ratio-form .tr-input'));
-    const total = inputs.reduce((sum, input) => {
-        const value = Math.max(0, Math.min(100, parseFloat(input.value || '0') || 0));
-        return sum + value;
-    }, 0);
-    const totalEl = document.getElementById('tr-total');
-    const warnEl = document.getElementById('tr-warning');
-    if(totalEl){
-        totalEl.textContent = Math.round(total) + '%';
-        totalEl.classList.toggle('text-green-600', Math.round(total) === 100);
-        totalEl.classList.toggle('text-amber-600', Math.round(total) !== 100);
-    }
-    if(warnEl){
-        warnEl.textContent = Math.round(total) === 100
-            ? 'La distribución suma 100%.'
-            : 'La distribución suma ' + Math.round(total) + '%. Ajusta para llegar a 100%.';
-        warnEl.classList.toggle('text-green-600', Math.round(total) === 100);
-        warnEl.classList.toggle('text-amber-600', Math.round(total) !== 100);
-    }
-}
-
-function syncTimeRatio(el){
-    const row = el.closest('.grid');
-    if(!row) return;
-    const range = row.querySelector('.tr-range');
-    const input = row.querySelector('.tr-input');
-    const value = Math.max(0, Math.min(100, parseFloat(el.value || '0') || 0));
-    if(range && el !== range) range.value = value;
-    if(input && el !== input) input.value = Math.round(value);
-    updateTimeRatioTotal();
-}
-
-function addTimeRatioRow(){
-    const host = document.getElementById('new-time-ratios');
-    if(!host) return;
-    const row = document.createElement('div');
-    row.className = 'grid grid-cols-1 lg:grid-cols-[minmax(260px,1fr)_220px_70px_34px] gap-3 items-center rounded-xl border border-indigo-100 p-3 bg-indigo-50/30';
-    row.innerHTML = `
-        <input type="text" name="nueva_actividad" required placeholder="Nueva actividad"
-               class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500">
-        <input type="range" min="0" max="100" step="1" value="0"
-               class="tr-range w-full accent-indigo-600" oninput="syncTimeRatio(this)">
-        <div class="flex items-center gap-1">
-            <input type="number" name="nuevo_porcentaje" min="0" max="100" step="1" value="0"
-                   class="tr-input w-16 text-sm border border-gray-200 rounded-lg px-2 py-2 text-right" oninput="syncTimeRatio(this)">
-            <span class="text-xs text-gray-400">%</span>
-        </div>
-        <button type="button" class="text-xs text-red-400 hover:text-red-600 justify-self-start lg:justify-self-center" title="Quitar fila">✕</button>
-    `;
-    row.querySelector('button').addEventListener('click', () => {
-        row.remove();
-        updateTimeRatioTotal();
-    });
-    host.appendChild(row);
-    row.querySelector('input[name="nueva_actividad"]').focus();
-}
-
-updateTimeRatioTotal();
 </script>
 {% endblock %}

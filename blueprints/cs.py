@@ -12,7 +12,8 @@ from extensions import db
 from models import (
     CSAccount, CSInvoice, CSAppointment, CSNote, CSTask,
     CSOnboardingAccount, CSOpportunity, CSContacto, CSEntregable,
-    CSEncuesta, CSIncidencia, CSPropiedad, CSTimeRatio, UserCRM, RolCRM,
+    CSEncuesta, CSIncidencia, CSPropiedad, CSWorkloadSurvey,
+    UserCRM, RolCRM,
 )
 from cs_health_score import calcular_health_score, calcular_health_scores_batch
 from cs_alerts import generar_alertas, alertas_por_cuenta
@@ -33,7 +34,7 @@ TIPOS_OPORTUNIDAD = [
     ("nuevo_servicio", "Nuevo servicio"),
 ]
 
-DEFAULT_TIME_RATIO_ACTIVITIES = [
+WORKLOAD_ACTIVITIES = [
     "Descarga de evidencias de servicio",
     "Carga de evidencias en plataformas",
     "Solicitud de permisos de acceso",
@@ -50,6 +51,111 @@ DEFAULT_TIME_RATIO_ACTIVITIES = [
     "Planeación y coordinación de servicios",
     "Otras actividades",
 ]
+
+WORKLOAD_HOUR_OPTIONS = ["0 h", "1-2 h", "3-5 h", "6-10 h", "11-15 h", "16-20 h", "Más de 20 h"]
+WORKLOAD_ACTIVITY_HOUR_OPTIONS = ["0 h", "1-2 h", "3-5 h", "6-10 h", "11-15 h", "Más de 15 h"]
+WORKLOAD_COUNT_OPTIONS = ["0", "1-2", "3-5", "6-10", "11-20", "Más de 20"]
+WORKLOAD_SURVEY_OPTIONS = {
+    "hours": WORKLOAD_HOUR_OPTIONS,
+    "activity_hours": WORKLOAD_ACTIVITY_HOUR_OPTIONS,
+    "counts": WORKLOAD_COUNT_OPTIONS,
+    "carga_esperada": [
+        "No aplica / cliente sin actividad este mes",
+        "No",
+        "Sí, ligeramente mayor",
+        "Sí, mucho mayor",
+    ],
+    "motivo_carga": [
+        "Seguimiento normal",
+        "Evidencias / reportes",
+        "Plataformas externas",
+        "Permisos / accesos",
+        "Citas / programación",
+        "Incidencias",
+        "Coordinación con operaciones",
+        "Comunicación con cliente",
+        "Comunicación con técnicos",
+        "Órdenes de compra",
+        "Facturación / cobranza",
+        "Reuniones",
+        "Implementación / onboarding",
+        "Reprogramaciones",
+        "Otro operativo",
+    ],
+    "entregables_count": [
+        "No",
+        "Sí, 1 entregable recurrente",
+        "Sí, 2-3 entregables recurrentes",
+        "Sí, 4-5 entregables recurrentes",
+        "Sí, más de 5 entregables recurrentes",
+    ],
+    "entregables_tipos": [
+        "Evidencias de servicio",
+        "Reporte mensual",
+        "Reporte semanal",
+        "Certificados",
+        "Minutas",
+        "KPIs",
+        "Órdenes de compra",
+        "Facturación especial",
+        "Acceso / permisos",
+        "Seguimiento de incidencias",
+        "Calendario de servicios",
+        "Reunión de seguimiento",
+        "Otro operativo",
+    ],
+    "frecuencia": [
+        "No aplica",
+        "Diario",
+        "Semanal",
+        "Quincenal",
+        "Mensual",
+        "Bimestral",
+        "Trimestral",
+        "Bajo demanda",
+        "Cada servicio realizado",
+    ],
+    "dependencia": [
+        "No",
+        "Sí, del cliente",
+        "Sí, de operaciones",
+        "Sí, de técnicos",
+        "Sí, de administración / facturación",
+        "Sí, de una plataforma externa",
+        "Sí, de varios equipos",
+    ],
+    "bloqueos_nivel": ["No", "Sí, pocos", "Sí, varios", "Sí, muchos", "Sí, críticos"],
+    "tipo_bloqueo": [
+        "No aplica",
+        "Falta de respuesta del cliente",
+        "Falta de respuesta de operaciones",
+        "Evidencias incompletas",
+        "Información incorrecta",
+        "Técnicos sin información completa",
+        "Reprogramaciones",
+        "Permisos / accesos",
+        "Plataformas externas",
+        "Órdenes de compra",
+        "Facturación / cobranza",
+        "Incidencias recurrentes",
+        "Falta de claridad en responsables",
+        "Otro operativo",
+    ],
+    "recurrencia": ["No", "Sí, ocasionalmente", "Sí, frecuentemente", "Sí, todos los meses", "No sé"],
+    "causa_incidencias": [
+        "No aplica",
+        "Servicio no realizado",
+        "Servicio incompleto",
+        "Mala comunicación con técnico",
+        "Mala comunicación con cliente",
+        "Problemas de acceso",
+        "Problemas de calidad",
+        "Falta de evidencia",
+        "Reprogramación por cliente",
+        "Reprogramación por operación",
+        "Otro operativo",
+    ],
+}
 
 
 def _get_kams():
@@ -299,22 +405,6 @@ def _calc_facturacion_periodo(account_ids, inicio, fin):
             "num_facturas": num,
         }
     return result
-
-
-def _get_or_seed_time_ratios(account_id):
-    ratios = CSTimeRatio.query.filter_by(account_id=account_id).order_by(CSTimeRatio.orden, CSTimeRatio.created_at).all()
-    if ratios:
-        return ratios
-
-    for idx, actividad in enumerate(DEFAULT_TIME_RATIO_ACTIVITIES, start=1):
-        db.session.add(CSTimeRatio(
-            account_id=account_id,
-            actividad=actividad,
-            porcentaje=0,
-            orden=idx,
-        ))
-    db.session.commit()
-    return CSTimeRatio.query.filter_by(account_id=account_id).order_by(CSTimeRatio.orden, CSTimeRatio.created_at).all()
 
 
 def _mrr_operativo(account):
@@ -1284,9 +1374,15 @@ def account_detail(account_id):
     for e in entregables:
         un = e.unidad_negocio or "General"
         entregables_por_un.setdefault(un, []).append(e)
-    time_ratios = _get_or_seed_time_ratios(account.id)
-    time_ratio_total = round(sum(float(r.porcentaje or 0) for r in time_ratios), 2)
-    top_time_ratios = sorted(time_ratios, key=lambda r: float(r.porcentaje or 0), reverse=True)[:5]
+    workload_survey = CSWorkloadSurvey.query.filter_by(
+        account_id=account.id,
+        periodo=periodo_param,
+    ).first()
+    workload_activity_values = {
+        item.get("actividad"): item.get("horas", "0 h")
+        for item in (workload_survey.actividades_horas if workload_survey else [])
+        if isinstance(item, dict)
+    }
 
     # Incidencias
     incidencias = CSIncidencia.query.filter_by(account_id=account.id).order_by(CSIncidencia.created_at.desc()).limit(100).all()
@@ -1333,8 +1429,10 @@ def account_detail(account_id):
         notes=notes, tasks=tasks, tareas_pendientes=tareas_pendientes,
         contactos=contactos,
         entregables=entregables, entregables_por_un=entregables_por_un,
-        time_ratios=time_ratios, time_ratio_total=time_ratio_total,
-        top_time_ratios=top_time_ratios,
+        workload_survey=workload_survey,
+        workload_activity_values=workload_activity_values,
+        workload_activities=WORKLOAD_ACTIVITIES,
+        workload_options=WORKLOAD_SURVEY_OPTIONS,
         incidencias=incidencias, propiedades=propiedades,
         encuestas=encuestas, survey_link=survey_link,
         avg_nps=avg_nps, avg_csat=avg_csat, kpi_satisfaccion=kpi_satisfaccion,
@@ -3082,70 +3180,55 @@ def eliminar_entregable(account_id, ent_id):
 
 
 # ══════════════════════════════════════════════
-# RATIOS DE TIEMPO KAM — Actividades por cuenta
+# ENCUESTA OPERATIVA KAM — Respuestas cerradas por cuenta
 # ══════════════════════════════════════════════
-@cs_bp.route("/account/<uuid:account_id>/time-ratios", methods=["POST"])
-def guardar_time_ratios(account_id):
+@cs_bp.route("/account/<uuid:account_id>/workload-survey", methods=["POST"])
+def guardar_workload_survey(account_id):
     account = db.session.get(CSAccount, account_id)
     if not account:
         return "Cuenta no encontrada", 404
     if not _can_edit_account(account):
         return "Sin permisos", 403
 
-    ratio_ids = request.form.getlist("ratio_id")
-    actividades = request.form.getlist("actividad")
-    porcentajes = request.form.getlist("porcentaje")
+    periodo = request.form.get("periodo", "").strip() or date.today().strftime("%Y-%m")
+    survey = CSWorkloadSurvey.query.filter_by(account_id=account.id, periodo=periodo).first()
+    if not survey:
+        survey = CSWorkloadSurvey(account_id=account.id, periodo=periodo)
+        db.session.add(survey)
 
-    for idx, ratio_id in enumerate(ratio_ids):
-        ratio = db.session.get(CSTimeRatio, ratio_id)
-        if not ratio or str(ratio.account_id) != str(account.id):
-            continue
-        actividad = actividades[idx].strip() if idx < len(actividades) else ""
-        if not actividad:
-            continue
-        try:
-            pct = float(porcentajes[idx] or 0) if idx < len(porcentajes) else 0
-        except (ValueError, TypeError):
-            pct = 0
-        ratio.actividad = actividad[:200]
-        ratio.porcentaje = max(0, min(100, pct))
-        ratio.orden = idx + 1
-
-    nuevas = request.form.getlist("nueva_actividad")
-    nuevas_pct = request.form.getlist("nuevo_porcentaje")
-    max_orden = db.session.query(func.coalesce(func.max(CSTimeRatio.orden), 0)).filter_by(account_id=account.id).scalar()
-    for idx, actividad in enumerate(nuevas):
+    activity_names = request.form.getlist("actividad")
+    activity_hours = request.form.getlist("actividad_horas")
+    actividades_horas = []
+    for idx, actividad in enumerate(activity_names):
         actividad = (actividad or "").strip()
         if not actividad:
             continue
-        try:
-            pct = float(nuevas_pct[idx] or 0) if idx < len(nuevas_pct) else 0
-        except (ValueError, TypeError):
-            pct = 0
-        max_orden += 1
-        db.session.add(CSTimeRatio(
-            account_id=account.id,
-            actividad=actividad[:200],
-            porcentaje=max(0, min(100, pct)),
-            orden=max_orden,
-        ))
+        horas = activity_hours[idx] if idx < len(activity_hours) else "0 h"
+        if horas not in WORKLOAD_ACTIVITY_HOUR_OPTIONS:
+            horas = "0 h"
+        actividades_horas.append({"actividad": actividad[:200], "horas": horas})
+
+    survey.kam_id = account.kam_id
+    survey.horas_cliente = request.form.get("horas_cliente", "")
+    survey.carga_esperada = request.form.get("carga_esperada", "")
+    survey.motivo_carga = request.form.get("motivo_carga", "")
+    survey.actividades_horas = actividades_horas
+    survey.entregables_count = request.form.get("entregables_count", "")
+    survey.entregables_tipos = request.form.getlist("entregables_tipos")
+    survey.frecuencia_entregable = request.form.get("frecuencia_entregable", "")
+    survey.horas_entregables = request.form.get("horas_entregables", "")
+    survey.dependencia_externa = request.form.get("dependencia_externa", "")
+    survey.bloqueos_nivel = request.form.get("bloqueos_nivel", "")
+    survey.tipo_bloqueo = request.form.get("tipo_bloqueo", "")
+    survey.horas_bloqueos = request.form.get("horas_bloqueos", "")
+    survey.recurrencia_bloqueo = request.form.get("recurrencia_bloqueo", "")
+    survey.reprogramaciones_count = request.form.get("reprogramaciones_count", "")
+    survey.incidencias_count = request.form.get("incidencias_count", "")
+    survey.horas_incidencias = request.form.get("horas_incidencias", "")
+    survey.causa_incidencias = request.form.get("causa_incidencias", "")
 
     db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=time-ratios#time-ratios")
-
-
-@cs_bp.route("/account/<uuid:account_id>/time-ratios/<uuid:ratio_id>/delete", methods=["POST"])
-def eliminar_time_ratio(account_id, ratio_id):
-    account = db.session.get(CSAccount, account_id)
-    if not account:
-        return "Cuenta no encontrada", 404
-    if not _can_edit_account(account):
-        return "Sin permisos", 403
-    ratio = db.session.get(CSTimeRatio, ratio_id)
-    if ratio and str(ratio.account_id) == str(account.id):
-        db.session.delete(ratio)
-        db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=time-ratios#time-ratios")
+    return redirect(url_for("cs.account_detail", account_id=account_id) + f"?periodo={periodo}&tab=workload-survey#workload-survey")
 
 
 # ══════════════════════════════════════════════

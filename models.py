@@ -1019,19 +1019,42 @@ class CSEntregable(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
 
 
-class CSTimeRatio(db.Model):
-    """Distribución estimada del tiempo KAM por actividad dentro de una cuenta."""
-    __tablename__ = "cs_time_ratios"
+class CSWorkloadSurvey(db.Model):
+    """Encuesta cerrada de carga operativa KAM por cuenta y periodo."""
+    __tablename__ = "cs_workload_surveys"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
     account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=False, index=True)
-    actividad = db.Column(db.String(200), nullable=False)
-    porcentaje = db.Column(db.Numeric(5, 2), default=0)
-    orden = db.Column(db.Integer, default=0)
+    kam_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users_crm.id"), nullable=True, index=True)
+    periodo = db.Column(db.String(20), nullable=False, default="")
+
+    horas_cliente = db.Column(db.String(30), default="")
+    carga_esperada = db.Column(db.String(60), default="")
+    motivo_carga = db.Column(db.String(100), default="")
+
+    actividades_horas = db.Column(db.JSON, default=list)
+
+    entregables_count = db.Column(db.String(60), default="")
+    entregables_tipos = db.Column(db.JSON, default=list)
+    frecuencia_entregable = db.Column(db.String(60), default="")
+    horas_entregables = db.Column(db.String(30), default="")
+    dependencia_externa = db.Column(db.String(80), default="")
+
+    bloqueos_nivel = db.Column(db.String(40), default="")
+    tipo_bloqueo = db.Column(db.String(100), default="")
+    horas_bloqueos = db.Column(db.String(30), default="")
+    recurrencia_bloqueo = db.Column(db.String(60), default="")
+
+    reprogramaciones_count = db.Column(db.String(30), default="")
+    incidencias_count = db.Column(db.String(30), default="")
+    horas_incidencias = db.Column(db.String(30), default="")
+    causa_incidencias = db.Column(db.String(100), default="")
+
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
     updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
-    account = db.relationship("CSAccount", backref="time_ratios")
+    account = db.relationship("CSAccount", backref="workload_surveys")
+    kam = db.relationship("UserCRM", foreign_keys=[kam_id])
 
 
 class CSOnboardingAccount(db.Model):
