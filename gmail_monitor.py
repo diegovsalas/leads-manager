@@ -123,17 +123,35 @@ def _parse_gmail_message(msg: dict, direccion: str = "OUT") -> Optional[dict]:
             return None
     else:  # IN
         # Correo entrante: el remitente debe ser EXTERNO al dominio interno.
-        # Descartamos correos internos (KAM→KAM), notificaciones del sistema,
-        # y notificaciones de Google (calendar-notification@google.com, etc.).
+        # Descartamos internos + notificaciones automáticas / ruido.
         if not from_email:
             return None
         if from_email.endswith("@" + INTERNAL_DOMAIN):
             return None
-        # Filtro extra: no queremos ruido de dominios de sistema (mailer-daemon,
-        # noreply-google, etc.). Estos son casos edge, no bloqueamos todos.
         low = from_email.lower()
-        if low.startswith("mailer-daemon@") or low.startswith("postmaster@"):
+        # HOTFIX-2026-07-08: filtro ampliado de notificaciones automáticas.
+        # Antes solo mailer-daemon/postmaster. Los inbox de vendedores
+        # tienen mucho ruido de notificaciones (LinkedIn, Google, Meta, etc.)
+        # que NO son correos de cliente reales.
+        _RUIDO_PREFIXES = (
+            "mailer-daemon@", "postmaster@", "no-reply@", "noreply@",
+            "notifications-noreply@", "notifications@",
+        )
+        if any(low.startswith(p) for p in _RUIDO_PREFIXES):
             return None
+        _RUIDO_DOMAINS = (
+            "linkedin.com", "google.com", "googlemail.com",
+            "facebookmail.com", "facebook.com", "instagram.com",
+            "meta.com", "twitter.com", "x.com", "microsoft.com",
+            "notion.so", "slack.com", "zoom.us", "atlassian.com",
+            "github.com", "gitlab.com", "bitbucket.org",
+            "salesforce.com", "hubspot.com", "mailchimp.com",
+            "sendgrid.net", "amazonses.com", "amazonaws.com",
+        )
+        if "@" in low:
+            dom = low.split("@", 1)[1]
+            if dom in _RUIDO_DOMAINS or dom.endswith(".mailchimp.com"):
+                return None
 
     # internalDate es ms desde epoch (más confiable que Date header)
     internal_ms = msg.get("internalDate")
@@ -342,6 +360,12 @@ def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN,
                 stats["skipped_internal"] += 1
                 continue
 
+            # HOTFIX-2026-07-08: envolver el flush en un SAVEPOINT para que un
+            # IntegrityError (ej. otro poll insertó el mismo gmail_message_id
+            # en paralelo) NO rompa la transacción completa del vendedor.
+            # Antes, un solo error rompía TODOS los saves siguientes de ese
+            # vendedor porque db.session.rollback() reset la transacción entera.
+            savepoint = db.session.begin_nested()
             try:
                 if existing:
                     # UPDATE: backfill body / dirección en correo viejo
@@ -354,11 +378,18 @@ def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN,
                     email = SalesEmail(vendedor_id=vendedor.id, **parsed)
                     db.session.add(email)
                     stats["saved"] += 1
-                db.session.flush()
+                savepoint.commit()
             except Exception as e:
-                db.session.rollback()
-                log.warning(f"persist msg {mid} falló: {e}")
-                stats["errors"] += 1
+                savepoint.rollback()
+                err_str = str(e)
+                if "duplicate key value" in err_str or "UniqueViolation" in err_str:
+                    # Otro poll ya lo insertó — no es un error real, skip silencioso
+                    stats["skipped_internal"] += 1
+                    if stats["saved"] > 0:
+                        stats["saved"] -= 1
+                else:
+                    log.warning(f"persist msg {mid} falló: {e}")
+                    stats["errors"] += 1
 
     # Marcar backfill como completado (independiente de si hubo saved>0 o no).
     # FEAT-2026-07-07: cada dirección tiene su propio timestamp.
