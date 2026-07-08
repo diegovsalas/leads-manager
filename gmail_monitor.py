@@ -15,6 +15,7 @@ Config:
   GMAIL_RETENTION_DAYS        — días a conservar en BD (default 365)
 """
 import base64
+from email.message import EmailMessage
 import json
 import logging
 import os
@@ -27,7 +28,10 @@ from models import Usuario, SalesEmail
 
 log = logging.getLogger("gmail_monitor")
 
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+]
 INTERNAL_DOMAIN = os.getenv("GMAIL_INTERNAL_DOMAIN", "grupoavantex.com").lower()
 LOOKBACK_MIN = int(os.getenv("GMAIL_POLL_LOOKBACK_MIN", "15"))
 RETENTION_DAYS = int(os.getenv("GMAIL_RETENTION_DAYS", "365"))
@@ -63,6 +67,30 @@ def _build_service(impersonate_email: str):
         creds_info, scopes=SCOPES, subject=impersonate_email,
     )
     return build("gmail", "v1", credentials=creds, cache_discovery=False)
+
+
+def send_email(impersonate_email: str, to_email: str, subject: str, body_text: str,
+               body_html: Optional[str] = None) -> dict:
+    """Envía un correo desde la cuenta impersonada con Gmail API."""
+    if not impersonate_email:
+        raise ValueError("impersonate_email requerido")
+    if not to_email:
+        raise ValueError("to_email requerido")
+
+    msg = EmailMessage()
+    msg["To"] = to_email
+    msg["From"] = impersonate_email
+    msg["Subject"] = subject or ""
+    msg.set_content(body_text or "")
+    if body_html:
+        msg.add_alternative(body_html, subtype="html")
+
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
+    svc = _build_service(impersonate_email)
+    return svc.users().messages().send(
+        userId="me",
+        body={"raw": raw},
+    ).execute()
 
 
 def _header(headers: list, name: str) -> Optional[str]:

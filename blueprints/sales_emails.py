@@ -1,7 +1,7 @@
 """
-API admin para monitoreo de correos salientes de vendedores.
+API admin para monitoreo y envio de correos de vendedores.
 
-Rutas bajo /api/sales-emails. Solo lectura. Requiere rol Super Admin.
+Rutas bajo /api/sales-emails. Requiere rol Super Admin.
 """
 import base64
 from datetime import datetime, timedelta, timezone
@@ -187,6 +187,55 @@ def get_email(email_id):
     if not _puede_ver_vendedor(email.vendedor_id):
         return jsonify({"error": "No autorizado para ver los correos de este vendedor"}), 403
     return jsonify(email.to_dict(include_body=True))
+
+
+@sales_emails_bp.route("/send", methods=["POST"])
+def send_email():
+    """Envía un correo desde el Gmail del vendedor seleccionado."""
+    err = _require_admin()
+    if err: return err
+    data = request.get_json(silent=True) or {}
+    vendedor_id = data.get("vendedor_id")
+    to_email = (data.get("to") or "").strip()
+    subject = (data.get("subject") or "").strip()
+    body = (data.get("body") or "").strip()
+
+    if not vendedor_id:
+        return jsonify({"error": "vendedor_id requerido"}), 400
+    if not _puede_ver_vendedor(vendedor_id):
+        return jsonify({"error": "No autorizado para enviar desde este vendedor"}), 403
+    if not to_email:
+        return jsonify({"error": "Destinatario requerido"}), 400
+    if not subject:
+        return jsonify({"error": "Asunto requerido"}), 400
+    if not body:
+        return jsonify({"error": "Mensaje requerido"}), 400
+    if not gmail_monitor.is_configured():
+        return jsonify({"error": "GMAIL_SERVICE_ACCOUNT_JSON no configurado"}), 500
+
+    vendedor = db.session.get(Usuario, vendedor_id)
+    if not vendedor or not vendedor.gmail_address:
+        return jsonify({"error": "El vendedor no tiene Gmail corporativo configurado"}), 400
+
+    try:
+        result = gmail_monitor.send_email(
+            impersonate_email=vendedor.gmail_address,
+            to_email=to_email,
+            subject=subject,
+            body_text=body,
+        )
+        return jsonify({
+            "ok": True,
+            "message_id": result.get("id"),
+            "thread_id": result.get("threadId"),
+            "from": vendedor.gmail_address,
+            "to": to_email,
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": f"{type(e).__name__}: {str(e)[:240]}",
+        }), 502
 
 
 # ── Disparar poll manual (debug / forzar refresh) ──────────────────
