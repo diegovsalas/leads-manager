@@ -123,6 +123,7 @@ class Usuario(db.Model):
     baileys_session = db.Column(db.String(50), nullable=True)  # ej: "janeth", "azael" — para /scan/{session}
     zona_cobertura = db.Column(ARRAY(db.String(80)), nullable=False, default=list, server_default="{}")  # ej: {"Nuevo León", "Tamaulipas"}
     gmail_address = db.Column(db.String(200), nullable=True)  # Gmail corp para monitoreo (gmail_monitor.py)
+    email_signature = db.Column(db.Text, nullable=True)
     gmail_backfilled_at = db.Column(db.DateTime(timezone=True), nullable=True)  # backfill de OUT (enviados)
     # FEAT-2026-07-07: backfill separado de recibidos (IN)
     gmail_backfilled_in_at = db.Column(db.DateTime(timezone=True), nullable=True)
@@ -153,6 +154,7 @@ class Usuario(db.Model):
             "baileys_session": self.baileys_session,
             "zona_cobertura": self.zona_cobertura or [],
             "gmail_address": self.gmail_address,
+            "email_signature": self.email_signature,
         }
 
 

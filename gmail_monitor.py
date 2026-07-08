@@ -16,6 +16,7 @@ Config:
 """
 import base64
 from email.message import EmailMessage
+from email.utils import formataddr
 from mimetypes import guess_type
 import json
 import logging
@@ -71,7 +72,8 @@ def _build_service(impersonate_email: str):
 
 
 def send_email(impersonate_email: str, to_email: str, subject: str, body_text: str,
-               body_html: Optional[str] = None, attachments: Optional[list] = None) -> dict:
+               body_html: Optional[str] = None, attachments: Optional[list] = None,
+               display_name: Optional[str] = None) -> dict:
     """Envía un correo desde la cuenta impersonada con Gmail API."""
     if not impersonate_email:
         raise ValueError("impersonate_email requerido")
@@ -80,7 +82,7 @@ def send_email(impersonate_email: str, to_email: str, subject: str, body_text: s
 
     msg = EmailMessage()
     msg["To"] = to_email
-    msg["From"] = impersonate_email
+    msg["From"] = formataddr((display_name or "", impersonate_email)) if display_name else impersonate_email
     msg["Subject"] = subject or ""
     msg.set_content(body_text or "")
     if body_html:

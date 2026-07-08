@@ -2230,6 +2230,10 @@ fbq('track','PageView');
     <input class="form-input" id="mv-gmail" type="email" placeholder="nombre@grupoavantex.com"/>
   </div>
   <div class="form-group">
+    <label class="form-label">Firma de correo <span style="color:var(--text3);font-weight:400;font-size:10px;">(se agrega automáticamente al enviar desde Correos vendedores)</span></label>
+    <textarea class="form-input" id="mv-email-signature" rows="5" style="resize:vertical;" placeholder="Nombre&#10;Puesto&#10;Grupo Avantex&#10;Tel. ..."></textarea>
+  </div>
+  <div class="form-group">
     <label class="form-label" style="display:flex;align-items:center;gap:8px;">
       <input type="checkbox" id="mv-turno" checked/> En turno (recibe leads automáticos vía round-robin)
     </label>
@@ -5702,6 +5706,7 @@ function openVendedorModal(){
   document.getElementById('mv-rol-com').value='Asesor Comercial';
   document.getElementById('mv-zonas').value='';
   document.getElementById('mv-gmail').value='';
+  document.getElementById('mv-email-signature').value='';
   document.getElementById('mv-turno').checked=true;
   document.querySelectorAll('#mv-marcas-pills input').forEach(c=>c.checked=false);
   document.getElementById('mv-title').textContent='Nuevo vendedor';
@@ -5720,6 +5725,7 @@ function editVendedor(id){
   document.getElementById('mv-rol-com').value=v.rol_comercial||'Asesor Comercial';
   document.getElementById('mv-zonas').value=(v.zona_cobertura||[]).join(', ');
   document.getElementById('mv-gmail').value=v.gmail_address||'';
+  document.getElementById('mv-email-signature').value=v.email_signature||'';
   document.getElementById('mv-turno').checked=!!v.en_turno;
   document.querySelectorAll('#mv-marcas-pills input').forEach(c=>{
     c.checked=(v.especialidad_marca||[]).includes(c.value);
@@ -5742,6 +5748,7 @@ async function guardarVendedor(){
     especialidad_marca: marcas,
     zona_cobertura:   zonas,
     gmail_address:    document.getElementById('mv-gmail').value.trim().toLowerCase()||null,
+    email_signature:  document.getElementById('mv-email-signature').value.trim()||null,
     en_turno:         document.getElementById('mv-turno').checked,
   };
   if(!body.nombre){document.getElementById('mv-nombre').focus();showToast('Falta','Nombre requerido');return;}

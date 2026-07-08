@@ -105,6 +105,7 @@ def crear_completo():
         zona_cobertura=list(data.get("zona_cobertura") or []),
         en_turno=bool(data.get("en_turno", True)),
         gmail_address=(data.get("gmail_address") or "").strip().lower() or None,
+        email_signature=(data.get("email_signature") or "").strip() or None,
     )
     db.session.add(perfil)
     try:
@@ -169,6 +170,8 @@ def actualizar_completo(vendedor_id):
         perfil.en_turno = bool(data["en_turno"])
     if "gmail_address" in data:
         perfil.gmail_address = (data["gmail_address"] or "").strip().lower() or None
+    if "email_signature" in data:
+        perfil.email_signature = (data["email_signature"] or "").strip() or None
     if "rol_comercial" in data:
         try: perfil.rol_comercial = RolComercial(data["rol_comercial"])
         except ValueError: pass

@@ -240,6 +240,19 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] correos_visibles_para_user_id failed: %s", e)
 
+        # ─── usuarios.email_signature: firma para correos enviados desde CRM ───
+        try:
+            with db.engine.begin() as conn:
+                exists = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'usuarios' AND column_name = 'email_signature'
+                """)).first()
+                if not exists:
+                    app.logger.info("[auto-migrate] adding usuarios.email_signature...")
+                    conn.execute(text("ALTER TABLE usuarios ADD COLUMN email_signature TEXT"))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] usuarios.email_signature failed: %s", e)
+
         # ─── usuarios.gmail_backfilled_in_at (FEAT-2026-07-07) ───
         # Trackeo separado del backfill de recibidos (IN). El original
         # gmail_backfilled_at seguirá aplicando solo a OUT.

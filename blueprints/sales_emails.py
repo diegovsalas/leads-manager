@@ -224,6 +224,10 @@ def send_email():
         return jsonify({"error": "El vendedor no tiene Gmail corporativo configurado"}), 400
 
     try:
+        signature = (vendedor.email_signature or "").strip()
+        body_with_signature = body
+        if signature:
+            body_with_signature = f"{body.rstrip()}\n\n{signature}"
         attachments = []
         total_bytes = 0
         for f in files:
@@ -240,8 +244,9 @@ def send_email():
             impersonate_email=vendedor.gmail_address,
             to_email=to_email,
             subject=subject,
-            body_text=body,
+            body_text=body_with_signature,
             attachments=attachments,
+            display_name=vendedor.nombre,
         )
         return jsonify({
             "ok": True,
