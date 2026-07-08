@@ -2784,6 +2784,8 @@ window.MI_ESPECIALIDAD = {{ mi_especialidad|tojson|safe }};
 const ADMIN_ROLES=new Set(['developer','super_admin','super_admin_aromatex','super_admin_pestex','super_admin_comercial','super_admin_nexo']);
 const IS_ADMIN=ADMIN_ROLES.has(ROL_USUARIO);
 const IS_DEVELOPER=ROL_USUARIO==='developer';
+const EMAIL_SEND_ENABLED=false;
+const EMAIL_INBOX_ENABLED=false;
 let leadActivo=null,draggingId=null,filtroMarca='';
 
 // ── Portal switcher (Admin: Operación vs Administración) ──
@@ -3865,7 +3867,7 @@ function closeCorreosDrawer(){
 }
 
 function toggleCorreoComposer(force){
-  if(!IS_DEVELOPER)return;
+  if(!EMAIL_SEND_ENABLED || !IS_DEVELOPER)return;
   const box=document.getElementById('correos-compose');
   if(!box)return;
   const show = force === undefined ? box.style.display === 'none' : !!force;
@@ -3897,7 +3899,7 @@ function updateCorreoAdjuntosLabel(){
 }
 
 async function sendCorreoVendedor(){
-  if(!IS_DEVELOPER)return;
+  if(!EMAIL_SEND_ENABLED || !IS_DEVELOPER)return;
   const status=document.getElementById('correo-compose-status');
   const btn=document.getElementById('correo-compose-send');
   const to=document.getElementById('correo-compose-to').value.trim();
@@ -6033,9 +6035,8 @@ function applyRoleVisibility(){
 }
 
 function applyDeveloperVisibility(){
-  if(IS_DEVELOPER)return;
   document.querySelectorAll('.developer-only').forEach(el=>el.style.display='none');
-  if(window._correosDireccion==='IN') window._correosDireccion='OUT';
+  if(!EMAIL_INBOX_ENABLED && window._correosDireccion==='IN') window._correosDireccion='OUT';
 }
 
 // ── Integraciones ──

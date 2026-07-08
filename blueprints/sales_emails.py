@@ -16,6 +16,11 @@ import gmail_monitor
 
 sales_emails_bp = Blueprint("sales_emails", __name__)
 
+# Pausa operativa solicitada: enviar correos y consultar recibidos queda
+# apagado para todos hasta nuevo aviso, incluso Developer.
+EMAIL_SEND_ENABLED = False
+EMAIL_INBOX_ENABLED = False
+
 
 def _is_admin():
     return is_admin_role()
@@ -34,6 +39,12 @@ def _is_developer():
 def _require_developer(action="esta función"):
     if not _is_developer():
         return jsonify({"error": f"Solo Developer puede usar {action}"}), 403
+    return None
+
+
+def _require_feature_enabled(enabled, action):
+    if not enabled:
+        return jsonify({"error": f"{action} deshabilitado temporalmente"}), 403
     return None
 
 
@@ -106,7 +117,7 @@ def stats():
             SalesEmail.sent_at >= since,
             SalesEmail.vendedor_id.in_(ids_visibles),
         )
-        if not _is_developer():
+        if not EMAIL_INBOX_ENABLED or not _is_developer():
             q = q.filter(SalesEmail.direccion == "OUT")
         rows = q.group_by(SalesEmail.vendedor_id).all()
         return {str(r[0]): int(r[1]) for r in rows}
@@ -119,7 +130,7 @@ def stats():
     last_q = db.session.query(SalesEmail.vendedor_id, func.max(SalesEmail.sent_at)).filter(
         SalesEmail.vendedor_id.in_(ids_visibles),
     )
-    if not _is_developer():
+    if not EMAIL_INBOX_ENABLED or not _is_developer():
         last_q = last_q.filter(SalesEmail.direccion == "OUT")
     last_rows = last_q.group_by(SalesEmail.vendedor_id).all()
     last_map = {str(r[0]): r[1] for r in last_rows}
@@ -167,7 +178,7 @@ def listar():
     limit = min(int(request.args.get("limit") or 100), 500)
     # FEAT-2026-07-07: filtro por dirección (IN/OUT/all)
     direccion = (request.args.get("direccion") or "").upper().strip()
-    if not _is_developer():
+    if not EMAIL_INBOX_ENABLED or not _is_developer():
         direccion = "OUT"
 
     since = datetime.now(timezone.utc) - timedelta(days=days)
@@ -190,7 +201,7 @@ def listar():
     q_counts = q_counts.filter(SalesEmail.vendedor_id.in_(ids_visibles))
     if vendedor_id:
         q_counts = q_counts.filter(SalesEmail.vendedor_id == vendedor_id)
-    if not _is_developer():
+    if not EMAIL_INBOX_ENABLED or not _is_developer():
         q_counts = q_counts.filter(SalesEmail.direccion == "OUT")
     row = q_counts.with_entities(
         func.sum(case((SalesEmail.direccion == "IN", 1), else_=0)),
@@ -217,8 +228,11 @@ def get_email(email_id):
     # FEAT-2026-07-08: privacidad por vendedor
     if not _puede_ver_vendedor(email.vendedor_id):
         return jsonify({"error": "No autorizado para ver los correos de este vendedor"}), 403
-    if email.direccion == "IN" and not _is_developer():
-        return jsonify({"error": "Solo Developer puede ver correos recibidos"}), 403
+    if email.direccion == "IN":
+        err = _require_feature_enabled(EMAIL_INBOX_ENABLED, "Ver correos recibidos")
+        if err: return err
+        if not _is_developer():
+            return jsonify({"error": "Solo Developer puede ver correos recibidos"}), 403
     return jsonify(email.to_dict(include_body=True))
 
 
@@ -226,6 +240,8 @@ def get_email(email_id):
 def send_email():
     """Envía un correo desde el Gmail del vendedor seleccionado."""
     err = _require_admin()
+    if err: return err
+    err = _require_feature_enabled(EMAIL_SEND_ENABLED, "Enviar correos")
     if err: return err
     err = _require_developer("el envío de correos")
     if err: return err
@@ -311,6 +327,8 @@ def trigger_poll():
     """
     err = _require_admin()
     if err: return err
+    err = _require_feature_enabled(EMAIL_INBOX_ENABLED, "El poll manual de correos")
+    if err: return err
     err = _require_developer("el poll manual de correos")
     if err: return err
     lookback = int(request.args.get("lookback_min") or gmail_monitor.LOOKBACK_MIN)
@@ -333,6 +351,8 @@ def backfill_in():
     este endpoint) traerá los últimos BACKFILL_DAYS de recibidos.
     """
     err = _require_admin()
+    if err: return err
+    err = _require_feature_enabled(EMAIL_INBOX_ENABLED, "El backfill de correos recibidos")
     if err: return err
     err = _require_developer("el backfill de correos recibidos")
     if err: return err
@@ -457,8 +477,11 @@ def download_attachment(email_id, idx):
     # FEAT-2026-07-08: privacidad por vendedor
     if not _puede_ver_vendedor(email.vendedor_id):
         return jsonify({"error": "No autorizado para descargar este adjunto"}), 403
-    if email.direccion == "IN" and not _is_developer():
-        return jsonify({"error": "Solo Developer puede descargar adjuntos de correos recibidos"}), 403
+    if email.direccion == "IN":
+        err = _require_feature_enabled(EMAIL_INBOX_ENABLED, "Descargar adjuntos de correos recibidos")
+        if err: return err
+        if not _is_developer():
+            return jsonify({"error": "Solo Developer puede descargar adjuntos de correos recibidos"}), 403
     atts = email.attachments or []
     if idx < 0 or idx >= len(atts):
         return jsonify({"error": "Adjunto no encontrado"}), 404
