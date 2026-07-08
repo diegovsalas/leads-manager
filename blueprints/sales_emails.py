@@ -168,6 +168,52 @@ def trigger_poll():
         return jsonify({"error": str(e)}), 500
 
 
+@sales_emails_bp.route("/backfill-in", methods=["POST"])
+def backfill_in():
+    """FEAT-2026-07-07: fuerza backfill de correos RECIBIDOS reseteando
+    gmail_backfilled_in_at para uno o todos los vendedores.
+
+    Body/params:
+      ?vendedor_id=<uuid>  → solo un vendedor. Si se omite, TODOS.
+
+    El siguiente tick del cron (o el poll manual inmediato que dispara
+    este endpoint) traerá los últimos BACKFILL_DAYS de recibidos.
+    """
+    err = _require_admin()
+    if err: return err
+    vendedor_id = request.args.get("vendedor_id") or (request.get_json(silent=True) or {}).get("vendedor_id")
+
+    q = Usuario.query.filter(
+        Usuario.gmail_address.isnot(None),
+        Usuario.gmail_address != "",
+    )
+    if vendedor_id:
+        q = q.filter(Usuario.id == vendedor_id)
+    vendedores = q.all()
+    reset_count = len(vendedores)
+    for v in vendedores:
+        v.gmail_backfilled_in_at = None  # forzar backfill inicial en el próximo poll
+    db.session.commit()
+
+    # Disparar poll inmediato para no esperar al cron de 5 min
+    try:
+        poll_result = gmail_monitor.poll_all(lookback_min=gmail_monitor.LOOKBACK_MIN)
+        return jsonify({
+            "ok": True,
+            "vendedores_reseteados": reset_count,
+            "vendedores": [v.nombre for v in vendedores],
+            "poll_result": poll_result,
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": True,
+            "vendedores_reseteados": reset_count,
+            "vendedores": [v.nombre for v in vendedores],
+            "poll_error": str(e),
+            "nota": "El backfill se ejecutará en el próximo tick del cron (5 min)",
+        })
+
+
 @sales_emails_bp.route("/refresh-all", methods=["GET", "POST"])
 def refresh_all():
     """Itera TODOS los SalesEmail en BD y los re-fetcha individualmente desde

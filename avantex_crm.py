@@ -210,6 +210,23 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] metas_vendedor split rec/ev failed: %s", e)
 
+        # ─── usuarios.gmail_backfilled_in_at (FEAT-2026-07-07) ───
+        # Trackeo separado del backfill de recibidos (IN). El original
+        # gmail_backfilled_at seguirá aplicando solo a OUT.
+        try:
+            with db.engine.begin() as conn:
+                exists = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'usuarios' AND column_name = 'gmail_backfilled_in_at'
+                """)).first()
+                if not exists:
+                    app.logger.info("[auto-migrate] adding usuarios.gmail_backfilled_in_at...")
+                    conn.execute(text(
+                        "ALTER TABLE usuarios ADD COLUMN gmail_backfilled_in_at TIMESTAMPTZ"
+                    ))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] usuarios.gmail_backfilled_in_at failed: %s", e)
+
         # ─── sales_emails.direccion (FEAT-2026-07-07): 'IN' entrantes / 'OUT' salientes ───
         try:
             with db.engine.begin() as conn:

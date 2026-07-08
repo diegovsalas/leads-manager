@@ -281,16 +281,26 @@ def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN,
         stats["errors"] = 1
         return stats
 
-    # ── Backfill inicial para vendedores nuevos ─────────────────────
-    is_initial = getattr(vendedor, "gmail_backfilled_at", None) is None
-    effective_lookback = lookback_min
-    if is_initial:
-        effective_lookback = BACKFILL_DAYS * 24 * 60  # días → minutos
+    # ── Backfill inicial SEPARADO por dirección (FEAT-2026-07-07) ────
+    # OUT (enviados): trackea con gmail_backfilled_at (columna original)
+    # IN  (recibidos): trackea con gmail_backfilled_in_at (nueva)
+    # Un vendedor puede ya tener backfill de OUT (funcionaba antes) pero
+    # necesitar backfill inicial de IN porque acabamos de soportarlo.
+    is_initial_out = getattr(vendedor, "gmail_backfilled_at", None) is None
+    is_initial_in  = getattr(vendedor, "gmail_backfilled_in_at", None) is None
+    if is_initial_out or is_initial_in:
         stats["initial_backfill"] = True
-        log.info(f"[gmail] backfill inicial para {vendedor.nombre} ({vendedor.gmail_address}): {BACKFILL_DAYS} días")
+        which = []
+        if is_initial_out: which.append("OUT")
+        if is_initial_in:  which.append("IN")
+        log.info(f"[gmail] backfill inicial para {vendedor.nombre} ({vendedor.gmail_address}): "
+                 f"{BACKFILL_DAYS} días · {'+'.join(which)}")
 
     # FEAT-2026-07-07: hacer poll en AMBAS direcciones (enviados + recibidos)
     for direccion in ("OUT", "IN"):
+        # Cada dirección puede tener su propio backfill si nunca se ha hecho
+        needs_backfill = is_initial_out if direccion == "OUT" else is_initial_in
+        effective_lookback = BACKFILL_DAYS * 24 * 60 if needs_backfill else lookback_min
         query = _query_for_lookback(effective_lookback, direccion=direccion)
         try:
             resp = svc.users().messages().list(userId="me", q=query, maxResults=500).execute()
@@ -350,9 +360,13 @@ def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN,
                 log.warning(f"persist msg {mid} falló: {e}")
                 stats["errors"] += 1
 
-    # Marcar backfill como completado (independiente de si hubo saved>0 o no)
-    if is_initial:
-        vendedor.gmail_backfilled_at = datetime.now(timezone.utc)
+    # Marcar backfill como completado (independiente de si hubo saved>0 o no).
+    # FEAT-2026-07-07: cada dirección tiene su propio timestamp.
+    now = datetime.now(timezone.utc)
+    if is_initial_out:
+        vendedor.gmail_backfilled_at = now
+    if is_initial_in:
+        vendedor.gmail_backfilled_in_at = now
 
     try:
         db.session.commit()

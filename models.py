@@ -123,7 +123,9 @@ class Usuario(db.Model):
     baileys_session = db.Column(db.String(50), nullable=True)  # ej: "janeth", "azael" — para /scan/{session}
     zona_cobertura = db.Column(ARRAY(db.String(80)), nullable=False, default=list, server_default="{}")  # ej: {"Nuevo León", "Tamaulipas"}
     gmail_address = db.Column(db.String(200), nullable=True)  # Gmail corp para monitoreo (gmail_monitor.py)
-    gmail_backfilled_at = db.Column(db.DateTime(timezone=True), nullable=True)  # set tras el primer poll con ventana extendida
+    gmail_backfilled_at = db.Column(db.DateTime(timezone=True), nullable=True)  # backfill de OUT (enviados)
+    # FEAT-2026-07-07: backfill separado de recibidos (IN)
+    gmail_backfilled_in_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     # Relaciones
     leads = db.relationship("Lead", back_populates="usuario_asignado", lazy="dynamic")
