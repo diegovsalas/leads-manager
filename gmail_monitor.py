@@ -16,6 +16,7 @@ Config:
 """
 import base64
 from email.message import EmailMessage
+from mimetypes import guess_type
 import json
 import logging
 import os
@@ -70,7 +71,7 @@ def _build_service(impersonate_email: str):
 
 
 def send_email(impersonate_email: str, to_email: str, subject: str, body_text: str,
-               body_html: Optional[str] = None) -> dict:
+               body_html: Optional[str] = None, attachments: Optional[list] = None) -> dict:
     """Envía un correo desde la cuenta impersonada con Gmail API."""
     if not impersonate_email:
         raise ValueError("impersonate_email requerido")
@@ -84,6 +85,12 @@ def send_email(impersonate_email: str, to_email: str, subject: str, body_text: s
     msg.set_content(body_text or "")
     if body_html:
         msg.add_alternative(body_html, subtype="html")
+    for att in attachments or []:
+        filename = att.get("filename") or "adjunto"
+        content = att.get("content") or b""
+        mime_type = att.get("mime_type") or guess_type(filename)[0] or "application/octet-stream"
+        maintype, subtype = mime_type.split("/", 1) if "/" in mime_type else ("application", "octet-stream")
+        msg.add_attachment(content, maintype=maintype, subtype=subtype, filename=filename)
 
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
     svc = _build_service(impersonate_email)

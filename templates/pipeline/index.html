@@ -2002,6 +2002,11 @@ fbq('track','PageView');
         <label style="display:block;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Mensaje</label>
         <textarea id="correo-compose-body" class="form-input" rows="5" placeholder="Escribe el mensaje..." style="font-size:12px;resize:vertical;"></textarea>
       </div>
+      <div style="margin-top:10px;">
+        <label style="display:block;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Adjuntos</label>
+        <input id="correo-compose-files" class="form-input" type="file" multiple style="font-size:12px;padding:7px 10px;" onchange="updateCorreoAdjuntosLabel()"/>
+        <div id="correo-compose-files-label" style="font-size:11px;color:var(--text3);margin-top:4px;">Máximo 5 archivos, 20 MB en total.</div>
+      </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:10px;">
         <button id="correo-compose-send" class="btn btn-filled" onclick="sendCorreoVendedor()" style="font-size:12px;">Enviar</button>
         <button class="btn" onclick="toggleCorreoComposer(false)" style="font-size:12px;">Cancelar</button>
@@ -3857,28 +3862,52 @@ function toggleCorreoComposer(force){
     document.getElementById('correo-compose-from').value=_correosVendedorActualEmail||'';
     setTimeout(()=>document.getElementById('correo-compose-to').focus(),50);
   }else{
-    ['correo-compose-to','correo-compose-subject','correo-compose-body'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    ['correo-compose-to','correo-compose-subject','correo-compose-body','correo-compose-files'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    updateCorreoAdjuntosLabel();
   }
+}
+
+function updateCorreoAdjuntosLabel(){
+  const input=document.getElementById('correo-compose-files');
+  const label=document.getElementById('correo-compose-files-label');
+  if(!input||!label)return;
+  const files=[...(input.files||[])];
+  if(!files.length){
+    label.textContent='Máximo 5 archivos, 20 MB en total.';
+    label.style.color='var(--text3)';
+    return;
+  }
+  const total=files.reduce((sum,f)=>sum+f.size,0);
+  const names=files.map(f=>f.name).join(', ');
+  label.textContent=`${files.length} archivo${files.length===1?'':'s'} · ${(total/1024/1024).toFixed(1)} MB · ${names}`;
+  label.style.color=(files.length>5||total>20*1024*1024)?'var(--red)':'var(--text2)';
 }
 
 async function sendCorreoVendedor(){
   const status=document.getElementById('correo-compose-status');
   const btn=document.getElementById('correo-compose-send');
-  const payload={
-    vendedor_id:_correosVendedorActual,
-    to:document.getElementById('correo-compose-to').value.trim(),
-    subject:document.getElementById('correo-compose-subject').value.trim(),
-    body:document.getElementById('correo-compose-body').value.trim(),
-  };
-  if(!payload.to){status.textContent='Falta destinatario';return;}
-  if(!payload.subject){status.textContent='Falta asunto';return;}
-  if(!payload.body){status.textContent='Falta mensaje';return;}
+  const to=document.getElementById('correo-compose-to').value.trim();
+  const subject=document.getElementById('correo-compose-subject').value.trim();
+  const body=document.getElementById('correo-compose-body').value.trim();
+  const files=[...(document.getElementById('correo-compose-files').files||[])];
+  const totalBytes=files.reduce((sum,f)=>sum+f.size,0);
+  if(!to){status.textContent='Falta destinatario';return;}
+  if(!subject){status.textContent='Falta asunto';return;}
+  if(!body){status.textContent='Falta mensaje';return;}
+  if(files.length>5){status.textContent='Máximo 5 adjuntos';return;}
+  if(totalBytes>20*1024*1024){status.textContent='Adjuntos mayores a 20 MB';return;}
+  const form=new FormData();
+  form.append('vendedor_id',_correosVendedorActual);
+  form.append('to',to);
+  form.append('subject',subject);
+  form.append('body',body);
+  files.forEach(f=>form.append('attachments',f));
   btn.disabled=true;btn.textContent='Enviando...';status.textContent='';
   try{
-    const r=await fetch('/api/sales-emails/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const r=await fetch('/api/sales-emails/send',{method:'POST',body:form});
     const d=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(d.error||'No se pudo enviar');
-    status.innerHTML='<span style="color:var(--green);font-weight:600;">Correo enviado</span>';
+    status.innerHTML=`<span style="color:var(--green);font-weight:600;">Correo enviado${d.attachments?` · ${d.attachments} adjunto${d.attachments===1?'':'s'}`:''}</span>`;
     setTimeout(()=>{toggleCorreoComposer(false);loadCorreosDeUnVendedor();loadCorreos();},900);
   }catch(e){
     status.innerHTML='<span style="color:var(--red);">'+_esc(e.message)+'</span>';

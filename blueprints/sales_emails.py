@@ -194,11 +194,15 @@ def send_email():
     """Envía un correo desde el Gmail del vendedor seleccionado."""
     err = _require_admin()
     if err: return err
-    data = request.get_json(silent=True) or {}
+    if request.content_type and request.content_type.startswith("multipart/form-data"):
+        data = request.form
+    else:
+        data = request.get_json(silent=True) or {}
     vendedor_id = data.get("vendedor_id")
     to_email = (data.get("to") or "").strip()
     subject = (data.get("subject") or "").strip()
     body = (data.get("body") or "").strip()
+    files = [f for f in request.files.getlist("attachments") if f and f.filename]
 
     if not vendedor_id:
         return jsonify({"error": "vendedor_id requerido"}), 400
@@ -212,17 +216,32 @@ def send_email():
         return jsonify({"error": "Mensaje requerido"}), 400
     if not gmail_monitor.is_configured():
         return jsonify({"error": "GMAIL_SERVICE_ACCOUNT_JSON no configurado"}), 500
+    if len(files) > 5:
+        return jsonify({"error": "Máximo 5 adjuntos por correo"}), 400
 
     vendedor = db.session.get(Usuario, vendedor_id)
     if not vendedor or not vendedor.gmail_address:
         return jsonify({"error": "El vendedor no tiene Gmail corporativo configurado"}), 400
 
     try:
+        attachments = []
+        total_bytes = 0
+        for f in files:
+            content = f.read()
+            total_bytes += len(content)
+            if total_bytes > 20 * 1024 * 1024:
+                return jsonify({"error": "Los adjuntos superan 20 MB en total"}), 400
+            attachments.append({
+                "filename": f.filename,
+                "mime_type": f.mimetype,
+                "content": content,
+            })
         result = gmail_monitor.send_email(
             impersonate_email=vendedor.gmail_address,
             to_email=to_email,
             subject=subject,
             body_text=body,
+            attachments=attachments,
         )
         return jsonify({
             "ok": True,
@@ -230,6 +249,7 @@ def send_email():
             "thread_id": result.get("threadId"),
             "from": vendedor.gmail_address,
             "to": to_email,
+            "attachments": len(attachments),
         })
     except Exception as e:
         return jsonify({
