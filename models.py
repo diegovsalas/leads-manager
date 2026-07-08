@@ -126,6 +126,12 @@ class Usuario(db.Model):
     gmail_backfilled_at = db.Column(db.DateTime(timezone=True), nullable=True)  # backfill de OUT (enviados)
     # FEAT-2026-07-07: backfill separado de recibidos (IN)
     gmail_backfilled_in_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    # FEAT-2026-07-08: privacidad de correos — si está seteado, SOLO ese
+    # users_crm.id puede ver los correos de este vendedor. NULL = todos los
+    # super_admin ven (comportamiento default).
+    correos_visibles_para_user_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("users_crm.id"), nullable=True,
+    )
 
     # Relaciones
     leads = db.relationship("Lead", back_populates="usuario_asignado", lazy="dynamic")

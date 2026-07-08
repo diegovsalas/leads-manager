@@ -25,6 +25,36 @@ def _require_admin():
     return None
 
 
+def _vendedor_ids_visibles():
+    """FEAT-2026-07-08: IDs de vendedores cuyos correos puede ver el
+    super_admin logueado.
+
+    Reglas:
+      - Vendedor con correos_visibles_para_user_id=NULL → visible para todos
+      - Vendedor con correos_visibles_para_user_id != NULL → SOLO ese user
+        puede verlos
+    """
+    my_id = session.get("user_id")
+    rows = db.session.query(Usuario.id).filter(
+        db.or_(
+            Usuario.correos_visibles_para_user_id.is_(None),
+            Usuario.correos_visibles_para_user_id == my_id,
+        )
+    ).all()
+    return [r[0] for r in rows]
+
+
+def _puede_ver_vendedor(vendedor_id) -> bool:
+    """True si el super_admin logueado puede ver los correos del vendedor."""
+    v = db.session.get(Usuario, vendedor_id)
+    if not v:
+        return False
+    restringido = v.correos_visibles_para_user_id
+    if not restringido:
+        return True
+    return str(restringido) == str(session.get("user_id"))
+
+
 # ── KPIs por vendedor ───────────────────────────────────────────────
 
 
@@ -38,10 +68,12 @@ def stats():
     semana_inicio = hoy_inicio - timedelta(days=7)
     mes_inicio = hoy_inicio - timedelta(days=30)
 
-    # Vendedores con gmail_address configurado
+    # Vendedores con gmail_address configurado (aplicando privacidad)
+    ids_visibles = _vendedor_ids_visibles()
     vendedores = (
         Usuario.query
         .filter(Usuario.gmail_address.isnot(None), Usuario.gmail_address != "")
+        .filter(Usuario.id.in_(ids_visibles))
         .order_by(Usuario.nombre.asc()).all()
     )
 
@@ -110,7 +142,13 @@ def listar():
     direccion = (request.args.get("direccion") or "").upper().strip()
 
     since = datetime.now(timezone.utc) - timedelta(days=days)
+    # FEAT-2026-07-08: privacidad — si el vendedor tiene owner restringido,
+    # solo ese user_id puede ver sus correos.
+    ids_visibles = _vendedor_ids_visibles()
+    if vendedor_id and vendedor_id not in [str(i) for i in ids_visibles]:
+        return jsonify({"error": "No autorizado para ver los correos de este vendedor"}), 403
     q = SalesEmail.query.filter(SalesEmail.sent_at >= since)
+    q = q.filter(SalesEmail.vendedor_id.in_(ids_visibles))
     if vendedor_id:
         q = q.filter(SalesEmail.vendedor_id == vendedor_id)
     if direccion in ("IN", "OUT"):
@@ -120,6 +158,7 @@ def listar():
     from sqlalchemy import case
     counts = {"IN": 0, "OUT": 0}
     q_counts = SalesEmail.query.filter(SalesEmail.sent_at >= since)
+    q_counts = q_counts.filter(SalesEmail.vendedor_id.in_(ids_visibles))
     if vendedor_id:
         q_counts = q_counts.filter(SalesEmail.vendedor_id == vendedor_id)
     row = q_counts.with_entities(
@@ -144,6 +183,9 @@ def get_email(email_id):
     email = SalesEmail.query.get(str(email_id))
     if not email:
         return jsonify({"error": "Correo no encontrado"}), 404
+    # FEAT-2026-07-08: privacidad por vendedor
+    if not _puede_ver_vendedor(email.vendedor_id):
+        return jsonify({"error": "No autorizado para ver los correos de este vendedor"}), 403
     return jsonify(email.to_dict(include_body=True))
 
 
@@ -297,6 +339,9 @@ def download_attachment(email_id, idx):
     email = SalesEmail.query.get(str(email_id))
     if not email:
         return jsonify({"error": "Correo no encontrado"}), 404
+    # FEAT-2026-07-08: privacidad por vendedor
+    if not _puede_ver_vendedor(email.vendedor_id):
+        return jsonify({"error": "No autorizado para descargar este adjunto"}), 403
     atts = email.attachments or []
     if idx < 0 or idx >= len(atts):
         return jsonify({"error": "Adjunto no encontrado"}), 404

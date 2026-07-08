@@ -210,6 +210,36 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] metas_vendedor split rec/ev failed: %s", e)
 
+        # ─── usuarios.correos_visibles_para_user_id (FEAT-2026-07-08) ───
+        # Restricción de privacidad: si está seteado, SOLO ese users_crm puede
+        # ver los correos de este vendedor. NULL = comportamiento actual
+        # (todos los super_admin ven). Requerido por Diego para Andres Garza.
+        try:
+            with db.engine.begin() as conn:
+                exists = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'usuarios' AND column_name = 'correos_visibles_para_user_id'
+                """)).first()
+                if not exists:
+                    app.logger.info("[auto-migrate] adding usuarios.correos_visibles_para_user_id...")
+                    conn.execute(text(
+                        "ALTER TABLE usuarios ADD COLUMN correos_visibles_para_user_id UUID"
+                    ))
+                    # Seed inicial: Andres Garza Martinez → Diego Velazquez
+                    # (identificados por nombre para robustez si los UUIDs cambian)
+                    conn.execute(text("""
+                        UPDATE usuarios u
+                        SET correos_visibles_para_user_id = (
+                            SELECT id FROM users_crm
+                            WHERE nombre ILIKE '%diego velazquez%'
+                            LIMIT 1
+                        )
+                        WHERE u.nombre ILIKE '%andres%garza%martinez%'
+                    """))
+                    app.logger.info("[auto-migrate] seed: Andres Garza → Diego privacy set")
+        except Exception as e:
+            app.logger.warning("[auto-migrate] correos_visibles_para_user_id failed: %s", e)
+
         # ─── usuarios.gmail_backfilled_in_at (FEAT-2026-07-07) ───
         # Trackeo separado del backfill de recibidos (IN). El original
         # gmail_backfilled_at seguirá aplicando solo a OUT.
