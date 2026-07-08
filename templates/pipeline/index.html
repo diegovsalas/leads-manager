@@ -1755,6 +1755,7 @@ fbq('track','PageView');
       <button id="rev-tab-origen"     class="btn"           onclick="switchRevisionTab('origen')"     style="font-size:13px;border-radius:0;">Por Origen</button>
     </div>
     <input type="month" id="rev-mes" onchange="loadRevision()" style="font-size:13px;padding:5px 10px;border:1px solid var(--border);border-radius:6px;"/>
+    <button class="btn" onclick="descargarReporteVentas()" style="font-size:13px;">Descargar ventas CSV</button>
     <span id="rev-status" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
   </div>
 
@@ -3308,6 +3309,14 @@ function switchRevisionTab(name){
 function _revMesParam(){
   const mes=document.getElementById('rev-mes').value;
   return mes ? '?mes='+mes : '';
+}
+
+function descargarReporteVentas(){
+  const mes=document.getElementById('rev-mes').value;
+  const params=new URLSearchParams();
+  if(mes)params.set('mes',mes);
+  if(filtroMarca)params.set('un',filtroMarca);
+  window.location.href='/api/dashboard/ventas-reporte.csv'+(params.toString()?('?'+params.toString()):'');
 }
 
 // FIX-2026-07-06: cambia el input rev-mes al mes indicado y recarga

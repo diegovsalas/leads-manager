@@ -3,8 +3,10 @@
 API para metricas del dashboard.
 Filtra automaticamente por vendedor si el usuario logueado es vendedor.
 """
+import csv
+import io
 from datetime import date, timedelta
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, Response
 from sqlalchemy import func
 from extensions import db
 from models import Lead, EtapaPipeline, OrigenLead, GastoPublicidad, PlataformaAds, MetaCampaign
@@ -832,6 +834,123 @@ def vendedores_tabla():
         "total_pipe_activo": sum(f["pipe_activo"] for f in filas),
         "tasa_global":       round(ganados_all / total_all * 100, 1) if total_all > 0 else 0,
     })
+
+
+@dashboard_bp.route("/ventas-reporte.csv", methods=["GET"])
+@require_role(["super_admin"])
+def ventas_reporte_csv():
+    """Descarga ventas ganadas del periodo, una fila por lead_id.
+
+    Fuente actual: Lead en Cerrado Ganado. La tabla sales existe, pero hoy no
+    tiene datos históricos; por eso el reporte operativo se basa en leads y usa
+    lead_id como llave de venta para no duplicar por teléfono/cliente.
+    """
+    from un_filter import normalizar_un
+    from models import Usuario
+
+    mes_param = request.args.get("mes")
+    inicio, fin = _get_date_range(mes_param)
+    un_filter = normalizar_un(request.args.get("un"))
+    vendedor_id = request.args.get("vendedor_id")
+
+    q = (
+        Lead.query
+        .filter(Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO)
+        .order_by(Lead.factura_fecha.desc().nullslast(), Lead.fecha_actualizacion.desc())
+    )
+    if vendedor_id:
+        q = q.filter(Lead.usuario_asignado_id == vendedor_id)
+
+    rows = []
+    seen_leads = set()
+    vendedor_ids = set()
+    for lead in q.all():
+        lead_key = str(lead.id)
+        if lead_key in seen_leads:
+            continue
+        seen_leads.add(lead_key)
+
+        un_canonica = normalizar_un(lead.marca_interes) or "Sin UN"
+        if un_filter and un_canonica != un_filter:
+            continue
+
+        fecha_venta = (
+            lead.factura_fecha
+            or (lead.factura_registrada_at.date() if lead.factura_registrada_at else None)
+            or (lead.fecha_actualizacion.date() if lead.fecha_actualizacion else None)
+        )
+        if not fecha_venta or fecha_venta < inicio or fecha_venta >= fin:
+            continue
+
+        if lead.usuario_asignado_id:
+            vendedor_ids.add(lead.usuario_asignado_id)
+        rows.append((lead, fecha_venta, un_canonica))
+
+    vendedores = {
+        str(v.id): v.nombre
+        for v in Usuario.query.filter(Usuario.id.in_(vendedor_ids)).all()
+    } if vendedor_ids else {}
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "lead_id",
+        "fecha_venta",
+        "vendedor",
+        "vendedor_id",
+        "un_canonica",
+        "un_original",
+        "cliente",
+        "empresa",
+        "telefono",
+        "origen",
+        "tipo_venta",
+        "monto_facturado",
+        "valor_estimado",
+        "valor_reporte",
+        "factura_numero",
+        "factura_fecha",
+        "factura_registrada_at",
+        "fecha_creacion_lead",
+        "fecha_actualizacion_lead",
+        "notas_factura",
+    ])
+    for lead, fecha_venta, un_canonica in rows:
+        valor_estimado = float(lead.valor_estimado or 0)
+        monto_facturado = float(lead.factura_monto or 0)
+        valor_reporte = float(lead.valor_calculado or 0)
+        vendedor_key = str(lead.usuario_asignado_id) if lead.usuario_asignado_id else ""
+        writer.writerow([
+            str(lead.id),
+            fecha_venta.isoformat(),
+            vendedores.get(vendedor_key, "Sin vendedor"),
+            vendedor_key,
+            un_canonica,
+            lead.marca_interes or "",
+            lead.nombre or "",
+            lead.empresa_nombre or "",
+            lead.telefono or "",
+            lead.origen.value if lead.origen else "",
+            lead.tipo_venta or "",
+            f"{monto_facturado:.2f}",
+            f"{valor_estimado:.2f}",
+            f"{valor_reporte:.2f}",
+            lead.factura_numero or "",
+            lead.factura_fecha.isoformat() if lead.factura_fecha else "",
+            lead.factura_registrada_at.isoformat() if lead.factura_registrada_at else "",
+            lead.fecha_creacion.isoformat() if lead.fecha_creacion else "",
+            lead.fecha_actualizacion.isoformat() if lead.fecha_actualizacion else "",
+            lead.factura_notas or "",
+        ])
+
+    label_un = un_filter or "todas"
+    filename = f"reporte_ventas_{inicio.strftime('%Y-%m')}_{label_un}.csv"
+    csv_data = "\ufeff" + output.getvalue()
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @dashboard_bp.route("/vendedores-review", methods=["GET"])
