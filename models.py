@@ -625,7 +625,10 @@ class UserCRM(db.Model):
 
     # FK → usuarios (vincula login con perfil comercial)
     usuario_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=True)
-    usuario = db.relationship("Usuario")
+    # FIX-2026-07-08: especificar foreign_keys explícitamente porque ahora hay
+    # DOS FKs entre usuarios y users_crm (usuario_id ↑ y
+    # Usuario.correos_visibles_para_user_id ↓ agregado en el commit anterior).
+    usuario = db.relationship("Usuario", foreign_keys=[usuario_id])
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
