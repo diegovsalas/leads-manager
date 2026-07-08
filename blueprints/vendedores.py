@@ -1,7 +1,7 @@
 # blueprints/vendedores.py
 import secrets
 import string
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 from extensions import db
 from models import Usuario, RolComercial, UserCRM, RolCRM
 from blueprints.auth import require_role
@@ -9,15 +9,32 @@ from blueprints.auth import require_role
 vendedores_bp = Blueprint("vendedores", __name__)
 
 
+def _is_developer_session():
+    return (session.get("user_rol", "") or "").lower().replace(" ", "_") == "developer"
+
+
+def _validate_developer_exclusivo(rol_login):
+    if rol_login == "Developer" and not _is_developer_session():
+        return jsonify({"error": "Solo Developer puede asignar el rol Developer"}), 403
+    return None
+
+
 @vendedores_bp.route("/", methods=["GET"])
 def listar():
     """Lista vendedores (perfil comercial) enriquecidos con info de login.
     FEAT-2026-06-29: filtro global ?un= por especialidad_marca."""
     from un_filter import usuario_pertenece_a_un
+    from blueprints.auth import allowed_units_for_role
     from flask import request as _req
     vendedores_all = Usuario.query.order_by(Usuario.nombre).all()
     un = _req.args.get("un")
-    if un:
+    role_units = allowed_units_for_role()
+    if role_units:
+        vendedores = [
+            v for v in vendedores_all
+            if any(usuario_pertenece_a_un(v.especialidad_marca, role_un) for role_un in role_units)
+        ]
+    elif un:
         vendedores = [v for v in vendedores_all
                       if usuario_pertenece_a_un(v.especialidad_marca, un)]
     else:
@@ -92,6 +109,9 @@ def crear_completo():
     except ValueError:
         rol_com = RolComercial.ASESOR_COMERCIAL
     try:
+        err = _validate_developer_exclusivo(data.get("rol_login", "Vendedor"))
+        if err:
+            return err
         rol_lg = RolCRM(data.get("rol_login", "Vendedor"))
     except ValueError:
         rol_lg = RolCRM.VENDEDOR
@@ -189,6 +209,9 @@ def actualizar_completo(vendedor_id):
             if dup:
                 return jsonify({"error": f"Ya existe un usuario con correo {correo_in}"}), 409
             try:
+                err = _validate_developer_exclusivo(data.get("rol_login", "Vendedor"))
+                if err:
+                    return err
                 rol_lg = RolCRM(data.get("rol_login", "Vendedor"))
             except ValueError:
                 rol_lg = RolCRM.VENDEDOR
@@ -218,6 +241,9 @@ def actualizar_completo(vendedor_id):
                 return jsonify({"error": f"Correo {correo_in} ya está usado"}), 409
             login.correo = correo_in
         if "rol_login" in data:
+            err = _validate_developer_exclusivo(data["rol_login"])
+            if err:
+                return err
             try: login.rol = RolCRM(data["rol_login"])
             except ValueError: pass
         if "activo" in data:

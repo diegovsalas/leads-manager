@@ -2190,9 +2190,15 @@ fbq('track','PageView');
     <div class="form-group"><label class="form-label">Correo (email login) *</label><input class="form-input" id="mv-correo" type="email" placeholder="nombre@grupoavantex.com"/></div>
     <div class="form-group"><label class="form-label">Rol del sistema</label>
       <select class="form-select" id="mv-rol-login">
+        <option value="Developer">Developer (acceso total)</option>
+        <option value="Super Admin">Super Admin legacy (acceso total)</option>
+        <option value="Super Admin Aromatex">Super Admin Aromatex (Aromatex + Home)</option>
+        <option value="Super Admin Pestex">Super Admin Pestex</option>
+        <option value="Super Admin Comercial">Super Admin Comercial (Admin + Aromatex)</option>
+        <option value="Super Admin Nexo">Super Admin Nexo</option>
+        <option value="Gerente Comercial Aromatex">Gerente Comercial Aromatex</option>
         <option value="Vendedor">Vendedor (ve solo sus leads)</option>
         <option value="KAM">KAM (CS dashboard)</option>
-        <option value="Super Admin">Super Admin (ve todo)</option>
       </select>
     </div>
   </div>
@@ -2772,10 +2778,11 @@ window.setUN = function(un){
 // Default según rol (lo seteamos en DOMContentLoaded, ver más abajo)
 
 // Role-based access
-window.ROL_USUARIO='{{ user_rol }}'.toLowerCase().replace(' ','_');
+window.ROL_USUARIO='{{ user_rol }}'.toLowerCase().replaceAll(' ','_');
 window.VENDEDOR_ID='{{ usuario_id }}';
 window.MI_ESPECIALIDAD = {{ mi_especialidad|tojson|safe }};
-const IS_ADMIN=ROL_USUARIO==='super_admin';
+const ADMIN_ROLES=new Set(['developer','super_admin','super_admin_aromatex','super_admin_pestex','super_admin_comercial','super_admin_nexo']);
+const IS_ADMIN=ADMIN_ROLES.has(ROL_USUARIO);
 let leadActivo=null,draggingId=null,filtroMarca='';
 
 // ── Portal switcher (Admin: Operación vs Administración) ──
@@ -5487,7 +5494,13 @@ let _vendedores=[];
 let _vendedoresTab='Vendedor'; // default: solo vendedores
 
 const ROL_CHIPS = {
+  'Developer':   {bg:'#111827', fg:'#ffffff', label:'Developer'},
   'Super Admin': {bg:'#fce7f3', fg:'#be185d', label:'Super Admin'},
+  'Super Admin Aromatex': {bg:'#ede9fe', fg:'#6d28d9', label:'SA Aromatex'},
+  'Super Admin Pestex':   {bg:'#dcfce7', fg:'#166534', label:'SA Pestex'},
+  'Super Admin Comercial':{bg:'#e0f2fe', fg:'#075985', label:'SA Comercial'},
+  'Super Admin Nexo':     {bg:'#fee2e2', fg:'#991b1b', label:'SA Nexo'},
+  'Gerente Comercial Aromatex': {bg:'#fef3c7', fg:'#92400e', label:'Gerente Aromatex'},
   'KAM':         {bg:'#dbeafe', fg:'#1d4ed8', label:'KAM'},
   'Vendedor':    {bg:'#dcfce7', fg:'#15803d', label:'Vendedor'},
   '_sinlogin':   {bg:'#fef3c7', fg:'#92400e', label:'Sin login'},
@@ -5519,7 +5532,8 @@ async function loadVendedores(){
     const counts={'Vendedor':0,'KAM':0,'Super Admin':0};
     _vendedores.forEach(v=>{
       const rol = _vendedorRol(v);
-      if(rol in counts) counts[rol]++;
+      if(rol==='Vendedor'||rol==='KAM') counts[rol]++;
+      else if(rol) counts['Super Admin']++;
     });
     document.getElementById('vend-cnt-vendedor').textContent = counts['Vendedor'];
     document.getElementById('vend-cnt-kam').textContent      = counts['KAM'];
@@ -5553,13 +5567,17 @@ function renderVendedoresTabla(){
   const tb=document.getElementById('vendedores-tbody');tb.innerHTML='';
   const filtered = _vendedoresTab==='todos'
     ? _vendedores
-    : _vendedores.filter(v => _vendedorRol(v) === _vendedoresTab);
+    : _vendedores.filter(v => {
+        const rol=_vendedorRol(v);
+        if(_vendedoresTab==='Super Admin') return rol && rol!=='Vendedor' && rol!=='KAM';
+        return rol === _vendedoresTab;
+      });
 
   // Hint contextual
   const hint = {
     'Vendedor':    'Equipo de ventas activo. Reciben leads vía round-robin.',
     'KAM':         'Cuentan clientes existentes en Customer Success.',
-    'Super Admin': 'Admins del sistema. Pueden tener perfil comercial para asignarse leads manualmente.',
+    'Super Admin': 'Admins del sistema. Incluye Developer y Super Admin segmentados por unidad de negocio.',
     'todos':       'Todos los perfiles con vínculo a Usuario (comercial).',
   }[_vendedoresTab];
   document.getElementById('vend-tab-hint').textContent = hint;

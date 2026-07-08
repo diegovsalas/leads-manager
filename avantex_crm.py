@@ -27,6 +27,34 @@ def _run_pending_migrations(app):
     Si algo falla, loguea y sigue — la app igual arranca."""
     from sqlalchemy import text
     with app.app_context():
+        # ─── rol_crm_enum: perfiles segmentados + Developer ───
+        try:
+            with db.engine.begin() as conn:
+                for value in (
+                    "Developer",
+                    "Super Admin Aromatex",
+                    "Super Admin Pestex",
+                    "Super Admin Comercial",
+                    "Super Admin Nexo",
+                    "Gerente Comercial Aromatex",
+                ):
+                    conn.execute(text(
+                        f"ALTER TYPE rol_crm_enum ADD VALUE IF NOT EXISTS '{value}'"
+                    ))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] rol_crm_enum scoped roles failed: %s", e)
+
+        # ─── Developer exclusivo Diego Velazquez ───
+        try:
+            with db.engine.begin() as conn:
+                conn.execute(text("""
+                    UPDATE users_crm
+                    SET rol = 'Developer'
+                    WHERE lower(correo) = 'diegovelazquez@grupoavantex.com'
+                """))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] seed Diego Developer failed: %s", e)
+
         # ─── accounts.client_id (EMP-XXXX) ───
         try:
             with db.engine.begin() as conn:
@@ -580,7 +608,8 @@ def create_app():
         from models import Oportunidad, EtapaOportunidad, Usuario
         q = Lead.query.options(joinedload(Lead.usuario_asignado))
 
-        # Vendedores solo ven sus leads, Super Admin ve todo
+        # Vendedores solo ven sus leads, perfiles admin/gerencia se filtran
+        # por UN más abajo según su alcance.
         user_rol = session.get("user_rol", "")
         if user_rol.upper() == "VENDEDOR":
             usuario_id = session.get("usuario_id")
@@ -599,7 +628,9 @@ def create_app():
         # Sin esto, recargar la página mostraba TODOS los leads aunque el
         # selector UN del sidebar dijera 'Pestex'.
         from un_filter import filtrar_leads_por_un
-        q = filtrar_leads_por_un(q, Lead, request.args.get("un"))
+        from blueprints.auth import effective_un_from_request
+        effective_un = effective_un_from_request(request.args.get("un"))
+        q = filtrar_leads_por_un(q, Lead, effective_un)
 
         # Lista de vendedores para el dropdown (solo admins lo usan)
         vendedores_list = []
@@ -634,6 +665,21 @@ def create_app():
         oppo_q = Oportunidad.query.filter(Oportunidad.lead_id.is_(None))
         if user_rol.upper() == "VENDEDOR" and session.get("usuario_id"):
             oppo_q = oppo_q.filter(Oportunidad.propietario_id == session.get("usuario_id"))
+        else:
+            from un_filter import normalizar_un
+            canon = normalizar_un(effective_un)
+            if canon:
+                aliases = {
+                    "Aromatex": ("aromatex", "aromatex home", "aromatex_home", "aromatexhome"),
+                    "Pestex": ("pestex",),
+                    "Weldex": ("weldex",),
+                    "Nexo": ("nexo",),
+                }.get(canon, ())
+                oppo_q = oppo_q.filter(db.or_(
+                    Oportunidad.marca_interes.is_(None),
+                    Oportunidad.marca_interes == "",
+                    db.func.lower(Oportunidad.marca_interes).in_(aliases),
+                ))
         orphan_oppos = oppo_q.order_by(Oportunidad.fecha_actualizacion.desc()).all()
         oppos_by_pipe_etapa = {}
         for op in orphan_oppos:

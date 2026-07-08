@@ -79,7 +79,13 @@ class PlataformaAds(enum.Enum):
 
 
 class RolCRM(enum.Enum):
+    DEVELOPER = "Developer"
     SUPER_ADMIN = "Super Admin"
+    SUPER_ADMIN_AROMATEX = "Super Admin Aromatex"
+    SUPER_ADMIN_PESTEX = "Super Admin Pestex"
+    SUPER_ADMIN_COMERCIAL = "Super Admin Comercial"
+    SUPER_ADMIN_NEXO = "Super Admin Nexo"
+    GERENTE_COMERCIAL_AROMATEX = "Gerente Comercial Aromatex"
     VENDEDOR    = "Vendedor"
     KAM         = "KAM"
 

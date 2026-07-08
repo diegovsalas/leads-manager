@@ -54,7 +54,7 @@ def listar_leads():
     FEAT-2026-06-29: filtro global ?un=Aromatex/Pestex/Weldex/Nexo.
     Leads sin marca_interes siguen visibles aunque haya filtro
     (forzar al equipo a clasificarlos)."""
-    from blueprints.auth import get_vendedor_filter
+    from blueprints.auth import get_vendedor_filter, effective_un_from_request
     from un_filter import filtrar_leads_por_un
     vendedor_id = get_vendedor_filter()
     q = Lead.query
@@ -71,7 +71,7 @@ def listar_leads():
             except (ValueError, TypeError):
                 pass
     # Filtro global por UN
-    q = filtrar_leads_por_un(q, Lead, request.args.get("un"))
+    q = filtrar_leads_por_un(q, Lead, effective_un_from_request(request.args.get("un")))
     leads = q.order_by(Lead.fecha_actualizacion.desc()).all()
     return jsonify([l.to_dict() for l in leads])
 

@@ -10,7 +10,7 @@ from flask import Blueprint, request, jsonify, session, Response
 from sqlalchemy import func
 from extensions import db
 from models import Lead, EtapaPipeline, OrigenLead, GastoPublicidad, PlataformaAds, MetaCampaign
-from blueprints.auth import get_vendedor_filter, require_role
+from blueprints.auth import get_vendedor_filter, require_role, effective_un_from_request
 import scip_meta
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -28,7 +28,7 @@ def _apply_un_filter(query):
     """FEAT-2026-06-29: filtra query de Lead por la UN del request.
     No-op si no viene ?un= o si la UN es 'todas' / inválida."""
     from un_filter import filtrar_leads_por_un
-    return filtrar_leads_por_un(query, Lead, request.args.get("un"))
+    return filtrar_leads_por_un(query, Lead, effective_un_from_request(request.args.get("un")))
 
 
 def _get_date_range(mes_param):
@@ -305,7 +305,7 @@ def embudo():
 @dashboard_bp.route("/gastos", methods=["GET"])
 def listar_gastos():
     mes_param = request.args.get("mes")
-    marca = request.args.get("marca")
+    marca = effective_un_from_request(request.args.get("marca"))
     q = GastoPublicidad.query
     if mes_param:
         inicio, fin = _get_date_range(mes_param)
@@ -325,8 +325,9 @@ def registrar_gasto():
     except (ValueError, KeyError):
         return jsonify({"error": "Plataforma invalida"}), 400
 
+    marca = effective_un_from_request(data.get("marca"))
     gasto = GastoPublicidad(
-        plataforma=plataforma, marca=data.get("marca"),
+        plataforma=plataforma, marca=marca,
         campana=data.get("campana"), monto=data["monto"],
         fecha=date.fromisoformat(data["fecha"]), notas=data.get("notas"),
     )
@@ -341,6 +342,11 @@ def eliminar_gasto(gasto_id):
     gasto = db.session.get(GastoPublicidad, gasto_id)
     if not gasto:
         return jsonify({"error": "No encontrado"}), 404
+    from un_filter import normalizar_un
+    allowed_marca = normalizar_un(effective_un_from_request(gasto.marca))
+    gasto_marca = normalizar_un(gasto.marca)
+    if allowed_marca and gasto_marca and gasto_marca != allowed_marca:
+        return jsonify({"error": "No autorizado para eliminar gastos de otra UN"}), 403
     db.session.delete(gasto)
     db.session.commit()
     return jsonify({"ok": True})
@@ -374,7 +380,7 @@ def marketing_roi():
     Filtros: ?mes=YYYY-MM (default mes actual), ?marca=Aromatex (opcional)."""
     mes_param = request.args.get("mes")
     inicio_mes, fin_mes = _get_date_range(mes_param)
-    marca_filter = request.args.get("marca")
+    marca_filter = effective_un_from_request(request.args.get("marca"))
 
     etapas_calif = [
         EtapaPipeline.CONTACTO_1, EtapaPipeline.CONTACTO_2,
@@ -527,7 +533,7 @@ def leads_por_origen():
     Filtros: ?mes=YYYY-MM (default mes actual), ?marca=Aromatex (opcional)."""
     mes_param = request.args.get("mes")
     inicio_mes, fin_mes = _get_date_range(mes_param)
-    marca = request.args.get("marca")
+    marca = effective_un_from_request(request.args.get("marca"))
 
     etapas_calif = [
         EtapaPipeline.CONTACTO_1, EtapaPipeline.CONTACTO_2,
@@ -718,7 +724,7 @@ def vendedores_tabla():
     from models import Usuario
     mes_param = request.args.get("mes")
     inicio_mes, fin_mes = _get_date_range(mes_param)
-    marca = request.args.get("marca")
+    marca = effective_un_from_request(request.args.get("marca"))
 
     etapas_calif = [
         EtapaPipeline.CONTACTO_1, EtapaPipeline.CONTACTO_2,
@@ -850,7 +856,7 @@ def ventas_reporte_csv():
 
     mes_param = request.args.get("mes")
     inicio, fin = _get_date_range(mes_param)
-    un_filter = normalizar_un(request.args.get("un"))
+    un_filter = normalizar_un(effective_un_from_request(request.args.get("un")))
     vendedor_id = request.args.get("vendedor_id")
 
     q = (

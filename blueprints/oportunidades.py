@@ -85,6 +85,27 @@ def _unit_from_marca(marca):
     return low[:40]
 
 
+def _apply_role_un_scope(query):
+    """Aplica alcance de UN del rol logueado a oportunidades."""
+    from blueprints.auth import effective_un_from_request
+    from un_filter import normalizar_un
+    scoped_un = effective_un_from_request(request.args.get("marca") or request.args.get("un"))
+    canon = normalizar_un(scoped_un)
+    if not canon:
+        return query
+    aliases = {
+        "Aromatex": ("aromatex", "aromatex home", "aromatex_home", "aromatexhome"),
+        "Pestex": ("pestex",),
+        "Weldex": ("weldex",),
+        "Nexo": ("nexo",),
+    }.get(canon, ())
+    return query.filter(or_(
+        Oportunidad.marca_interes.is_(None),
+        Oportunidad.marca_interes == "",
+        func.lower(Oportunidad.marca_interes).in_(aliases),
+    ))
+
+
 def _calc_commission(sale_type: str, commission_type: str | None,
                      monthly_amount: float, total_amount: float) -> tuple[float, float]:
     rate = 1.0 if commission_type == "autogenerado" else 0.5
@@ -208,6 +229,7 @@ def list_oportunidades():
             Oportunidad.contacto_nombre.ilike(like),
         ))
 
+    q = _apply_role_un_scope(q)
     rows = q.order_by(Oportunidad.fecha_actualizacion.desc()).all()
     return jsonify([r.to_dict() for r in rows])
 
@@ -234,6 +256,7 @@ def kanban():
         q = q.filter(Oportunidad.marca_interes == marca)
     if propietario:
         q = q.filter(Oportunidad.propietario_id == propietario)
+    q = _apply_role_un_scope(q)
     rows = q.order_by(Oportunidad.fecha_actualizacion.desc()).all()
 
     grouped = {}

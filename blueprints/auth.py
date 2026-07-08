@@ -8,6 +8,64 @@ from models import UserCRM
 auth_bp = Blueprint("auth", __name__)
 
 
+FULL_ACCESS_ROLES = {"developer", "super_admin"}
+SCOPED_SUPER_ADMIN_ROLES = {
+    "super_admin_aromatex",
+    "super_admin_pestex",
+    "super_admin_comercial",
+    "super_admin_nexo",
+}
+ADMIN_ROLES = FULL_ACCESS_ROLES | SCOPED_SUPER_ADMIN_ROLES
+COMMERCIAL_READ_ROLES = ADMIN_ROLES | {"gerente_comercial_aromatex"}
+
+ROLE_UN_SCOPE = {
+    "super_admin_aromatex": ("Aromatex",),
+    "super_admin_comercial": ("Aromatex",),
+    "gerente_comercial_aromatex": ("Aromatex",),
+    "super_admin_pestex": ("Pestex",),
+    "super_admin_nexo": ("Nexo",),
+}
+
+
+def rol_norm(value=None):
+    """Normaliza roles guardados como texto: 'Super Admin Nexo' -> 'super_admin_nexo'."""
+    raw = value if value is not None else session.get("user_rol", "")
+    return (raw or "").lower().replace(" ", "_")
+
+
+def is_full_access_role(role=None):
+    return rol_norm(role) in FULL_ACCESS_ROLES
+
+
+def is_admin_role(role=None):
+    return rol_norm(role) in ADMIN_ROLES
+
+
+def is_commercial_read_role(role=None):
+    return rol_norm(role) in COMMERCIAL_READ_ROLES
+
+
+def allowed_units_for_role(role=None):
+    """None = ve todas las UN. Tupla = alcance obligatorio por UN."""
+    return ROLE_UN_SCOPE.get(rol_norm(role))
+
+
+def effective_un_from_request(requested_un=None):
+    """UN efectiva para filtrar datos según el rol de sesión.
+
+    Para roles con alcance limitado, ignora cualquier ?un= fuera de su alcance.
+    Para Developer/Super Admin legacy, respeta el filtro solicitado.
+    """
+    allowed = allowed_units_for_role()
+    if not allowed:
+        return requested_un
+    from un_filter import normalizar_un
+    requested = normalizar_un(requested_un)
+    if requested and requested in allowed:
+        return requested
+    return allowed[0]
+
+
 def require_role(roles):
     """
     Decorador para proteger rutas por rol.
@@ -16,10 +74,14 @@ def require_role(roles):
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
-            user_rol = session.get("user_rol", "")
-            # Normalizar: "Super Admin" → "super_admin"
-            rol_norm = user_rol.lower().replace(" ", "_")
-            if rol_norm not in roles:
+            normalized_roles = {rol_norm(r) for r in roles}
+            current = rol_norm()
+            allowed = current in normalized_roles
+            # Compatibilidad: las rutas legacy @require_role(["super_admin"])
+            # aceptan Developer y los cuatro Super Admin segmentados.
+            if not allowed and "super_admin" in normalized_roles:
+                allowed = is_admin_role()
+            if not allowed:
                 return jsonify({"error": "No autorizado", "rol_requerido": roles}), 403
             return f(*args, **kwargs)
         return wrapper
@@ -31,8 +93,7 @@ def get_vendedor_filter():
     Retorna el usuario_id del vendedor logueado para filtrar queries.
     Si es super_admin, retorna None (ve todo).
     """
-    rol = session.get("user_rol", "")
-    if rol.lower().replace(" ", "_") == "super_admin":
+    if is_commercial_read_role():
         return None
     return session.get("usuario_id")
 

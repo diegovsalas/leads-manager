@@ -1,7 +1,7 @@
 """
 API admin para monitoreo y envio de correos de vendedores.
 
-Rutas bajo /api/sales-emails. Requiere rol Super Admin.
+Rutas bajo /api/sales-emails. Requiere rol admin comercial.
 """
 import base64
 from datetime import datetime, timedelta, timezone
@@ -10,13 +10,15 @@ from sqlalchemy import func, desc
 
 from extensions import db
 from models import SalesEmail, Usuario
+from blueprints.auth import is_admin_role, allowed_units_for_role
+from un_filter import usuario_pertenece_a_un
 import gmail_monitor
 
 sales_emails_bp = Blueprint("sales_emails", __name__)
 
 
 def _is_admin():
-    return (session.get("user_rol", "") or "").lower().replace(" ", "_") == "super_admin"
+    return is_admin_role()
 
 
 def _require_admin():
@@ -27,27 +29,38 @@ def _require_admin():
 
 def _vendedor_ids_visibles():
     """FEAT-2026-07-08: IDs de vendedores cuyos correos puede ver el
-    super_admin logueado.
+    admin logueado.
 
     Reglas:
+      - Vendedor fuera de la UN del admin segmentado → no visible
       - Vendedor con correos_visibles_para_user_id=NULL → visible para todos
       - Vendedor con correos_visibles_para_user_id != NULL → SOLO ese user
         puede verlos
     """
     my_id = session.get("user_id")
-    rows = db.session.query(Usuario.id).filter(
+    query = Usuario.query.filter(
         db.or_(
             Usuario.correos_visibles_para_user_id.is_(None),
             Usuario.correos_visibles_para_user_id == my_id,
         )
-    ).all()
-    return [r[0] for r in rows]
+    )
+    allowed_units = allowed_units_for_role()
+    rows = query.all()
+    if allowed_units:
+        rows = [
+            v for v in rows
+            if any(usuario_pertenece_a_un(v.especialidad_marca, un) for un in allowed_units)
+        ]
+    return [v.id for v in rows]
 
 
 def _puede_ver_vendedor(vendedor_id) -> bool:
-    """True si el super_admin logueado puede ver los correos del vendedor."""
+    """True si el admin logueado puede ver los correos del vendedor."""
     v = db.session.get(Usuario, vendedor_id)
     if not v:
+        return False
+    allowed_units = allowed_units_for_role()
+    if allowed_units and not any(usuario_pertenece_a_un(v.especialidad_marca, un) for un in allowed_units):
         return False
     restringido = v.correos_visibles_para_user_id
     if not restringido:
