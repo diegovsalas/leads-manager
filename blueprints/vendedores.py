@@ -4,7 +4,7 @@ import string
 from flask import Blueprint, request, jsonify, session
 from extensions import db
 from models import Usuario, RolComercial, UserCRM, RolCRM
-from blueprints.auth import require_role
+from blueprints.auth import require_role, is_full_access_role
 
 vendedores_bp = Blueprint("vendedores", __name__)
 
@@ -13,9 +13,11 @@ def _is_developer_session():
     return (session.get("user_rol", "") or "").lower().replace(" ", "_") == "developer"
 
 
-def _validate_developer_exclusivo(rol_login):
-    if rol_login == "Developer" and not _is_developer_session():
-        return jsonify({"error": "Solo Developer puede asignar el rol Developer"}), 403
+def _validate_full_access_exclusivo(rol_login):
+    if is_full_access_role(rol_login) and not _is_developer_session():
+        return jsonify({
+            "error": "Solo Developer puede asignar perfiles con acceso total",
+        }), 403
     return None
 
 
@@ -109,7 +111,7 @@ def crear_completo():
     except ValueError:
         rol_com = RolComercial.ASESOR_COMERCIAL
     try:
-        err = _validate_developer_exclusivo(data.get("rol_login", "Vendedor"))
+        err = _validate_full_access_exclusivo(data.get("rol_login", "Vendedor"))
         if err:
             return err
         rol_lg = RolCRM(data.get("rol_login", "Vendedor"))
@@ -209,7 +211,7 @@ def actualizar_completo(vendedor_id):
             if dup:
                 return jsonify({"error": f"Ya existe un usuario con correo {correo_in}"}), 409
             try:
-                err = _validate_developer_exclusivo(data.get("rol_login", "Vendedor"))
+                err = _validate_full_access_exclusivo(data.get("rol_login", "Vendedor"))
                 if err:
                     return err
                 rol_lg = RolCRM(data.get("rol_login", "Vendedor"))
@@ -241,7 +243,7 @@ def actualizar_completo(vendedor_id):
                 return jsonify({"error": f"Correo {correo_in} ya está usado"}), 409
             login.correo = correo_in
         if "rol_login" in data:
-            err = _validate_developer_exclusivo(data["rol_login"])
+            err = _validate_full_access_exclusivo(data["rol_login"])
             if err:
                 return err
             try: login.rol = RolCRM(data["rol_login"])

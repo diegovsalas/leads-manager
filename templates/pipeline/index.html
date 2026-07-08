@@ -1931,7 +1931,7 @@ fbq('track','PageView');
   </div>
   <div style="padding:20px 48px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
     <button class="btn btn-filled" onclick="loadCorreos()" style="font-size:13px;">Refrescar</button>
-    <button class="btn" onclick="triggerCorreosPoll()" style="font-size:13px;">Forzar poll ahora</button>
+    <button class="btn developer-only" onclick="triggerCorreosPoll()" style="font-size:13px;">Forzar poll ahora</button>
     <span id="correos-status" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
   </div>
   <div style="padding:0 48px 20px;">
@@ -1975,10 +1975,10 @@ fbq('track','PageView');
       <div style="display:flex;gap:2px;background:var(--bg-tag);border-radius:6px;padding:2px;">
         <button class="corr-tab" data-dir="" onclick="_setCorreosDireccion('')" style="border:0;background:var(--bg-surface);color:var(--ink-1);font-weight:600;font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;">Todos <span id="corr-cnt-all" style="opacity:.6;">·</span></button>
         <button class="corr-tab" data-dir="OUT" onclick="_setCorreosDireccion('OUT')" style="border:0;background:transparent;color:var(--text2);font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;">📤 Enviados <span id="corr-cnt-out" style="opacity:.6;">·</span></button>
-        <button class="corr-tab" data-dir="IN" onclick="_setCorreosDireccion('IN')" style="border:0;background:transparent;color:var(--text2);font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;">📥 Recibidos <span id="corr-cnt-in" style="opacity:.6;">·</span></button>
+        <button class="corr-tab developer-only" data-dir="IN" onclick="_setCorreosDireccion('IN')" style="border:0;background:transparent;color:var(--text2);font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;">📥 Recibidos <span id="corr-cnt-in" style="opacity:.6;">·</span></button>
       </div>
-      <button onclick="toggleCorreoComposer()" class="btn btn-filled" style="font-size:11px;padding:4px 10px;">Enviar correo</button>
-      <button onclick="_backfillCorreosRecibidos(this)" class="btn" style="font-size:11px;padding:4px 10px;background:var(--accent);color:#fff;border:none;" title="Trae TODOS los correos recibidos de los últimos 30 días (backfill inicial). Puede tardar 1-2 min.">
+      <button onclick="toggleCorreoComposer()" class="btn btn-filled developer-only" style="font-size:11px;padding:4px 10px;">Enviar correo</button>
+      <button onclick="_backfillCorreosRecibidos(this)" class="btn developer-only" style="font-size:11px;padding:4px 10px;background:var(--accent);color:#fff;border:none;" title="Trae TODOS los correos recibidos de los últimos 30 días (backfill inicial). Puede tardar 1-2 min.">
         📥 Traer todos los recibidos
       </button>
       <span id="correos-drawer-status" style="margin-left:auto;color:var(--text2);"></span>
@@ -2783,6 +2783,7 @@ window.VENDEDOR_ID='{{ usuario_id }}';
 window.MI_ESPECIALIDAD = {{ mi_especialidad|tojson|safe }};
 const ADMIN_ROLES=new Set(['developer','super_admin','super_admin_aromatex','super_admin_pestex','super_admin_comercial','super_admin_nexo']);
 const IS_ADMIN=ADMIN_ROLES.has(ROL_USUARIO);
+const IS_DEVELOPER=ROL_USUARIO==='developer';
 let leadActivo=null,draggingId=null,filtroMarca='';
 
 // ── Portal switcher (Admin: Operación vs Administración) ──
@@ -3864,6 +3865,7 @@ function closeCorreosDrawer(){
 }
 
 function toggleCorreoComposer(force){
+  if(!IS_DEVELOPER)return;
   const box=document.getElementById('correos-compose');
   if(!box)return;
   const show = force === undefined ? box.style.display === 'none' : !!force;
@@ -3895,6 +3897,7 @@ function updateCorreoAdjuntosLabel(){
 }
 
 async function sendCorreoVendedor(){
+  if(!IS_DEVELOPER)return;
   const status=document.getElementById('correo-compose-status');
   const btn=document.getElementById('correo-compose-send');
   const to=document.getElementById('correo-compose-to').value.trim();
@@ -5729,6 +5732,7 @@ function openVendedorModal(){
   document.querySelectorAll('#mv-marcas-pills input').forEach(c=>c.checked=false);
   document.getElementById('mv-title').textContent='Nuevo vendedor';
   document.getElementById('modal-vendedor').classList.add('open');
+  enforceRoleSelectSecurity();
 }
 function closeVendedorModal(){document.getElementById('modal-vendedor').classList.remove('open');}
 
@@ -5750,6 +5754,17 @@ function editVendedor(id){
   });
   document.getElementById('mv-title').textContent='Editar vendedor: '+v.nombre;
   document.getElementById('modal-vendedor').classList.add('open');
+  enforceRoleSelectSecurity();
+}
+
+function enforceRoleSelectSecurity(){
+  const sel=document.getElementById('mv-rol-login');
+  if(!sel)return;
+  Array.from(sel.options).forEach(opt=>{
+    const fullAccess = ['Developer','Super Admin'].includes(opt.value);
+    opt.disabled = fullAccess && !IS_DEVELOPER;
+    opt.hidden = fullAccess && !IS_DEVELOPER && sel.value !== opt.value;
+  });
 }
 
 async function guardarVendedor(){
@@ -6017,6 +6032,12 @@ function applyRoleVisibility(){
   document.querySelectorAll('.admin-only').forEach(el=>el.style.display='none');
 }
 
+function applyDeveloperVisibility(){
+  if(IS_DEVELOPER)return;
+  document.querySelectorAll('.developer-only').forEach(el=>el.style.display='none');
+  if(window._correosDireccion==='IN') window._correosDireccion='OUT';
+}
+
 // ── Integraciones ──
 async function loadIntegraciones(){
   // Cloud API status
@@ -6076,6 +6097,7 @@ fetch('/api/leads/icp-opciones').then(r=>r.json()).then(d=>{
   if(sel&&d.industrias){d.industrias.forEach(i=>{sel.innerHTML+=`<option value="${i}">${i}</option>`;});}
 }).catch(()=>{});
 applyRoleVisibility();
+applyDeveloperVisibility();
 
 // ═══ Asistente IA ═══
 function toggleAiChat(){

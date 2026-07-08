@@ -10,7 +10,7 @@ from sqlalchemy import func, desc
 
 from extensions import db
 from models import SalesEmail, Usuario
-from blueprints.auth import is_admin_role, allowed_units_for_role
+from blueprints.auth import is_admin_role, allowed_units_for_role, rol_norm
 from un_filter import usuario_pertenece_a_un
 import gmail_monitor
 
@@ -24,6 +24,16 @@ def _is_admin():
 def _require_admin():
     if not _is_admin():
         return jsonify({"error": "Solo Super Admin puede ver el monitoreo de correos"}), 403
+    return None
+
+
+def _is_developer():
+    return rol_norm() == "developer"
+
+
+def _require_developer(action="esta función"):
+    if not _is_developer():
+        return jsonify({"error": f"Solo Developer puede usar {action}"}), 403
     return None
 
 
@@ -92,11 +102,13 @@ def stats():
 
     # Counts agrupados por vendedor (3 ventanas) en queries separadas
     def count_since(since):
-        rows = (
-            db.session.query(SalesEmail.vendedor_id, func.count(SalesEmail.id))
-            .filter(SalesEmail.sent_at >= since)
-            .group_by(SalesEmail.vendedor_id).all()
+        q = db.session.query(SalesEmail.vendedor_id, func.count(SalesEmail.id)).filter(
+            SalesEmail.sent_at >= since,
+            SalesEmail.vendedor_id.in_(ids_visibles),
         )
+        if not _is_developer():
+            q = q.filter(SalesEmail.direccion == "OUT")
+        rows = q.group_by(SalesEmail.vendedor_id).all()
         return {str(r[0]): int(r[1]) for r in rows}
 
     counts_hoy = count_since(hoy_inicio)
@@ -104,10 +116,12 @@ def stats():
     counts_30d = count_since(mes_inicio)
 
     # Último envío por vendedor
-    last_rows = (
-        db.session.query(SalesEmail.vendedor_id, func.max(SalesEmail.sent_at))
-        .group_by(SalesEmail.vendedor_id).all()
+    last_q = db.session.query(SalesEmail.vendedor_id, func.max(SalesEmail.sent_at)).filter(
+        SalesEmail.vendedor_id.in_(ids_visibles),
     )
+    if not _is_developer():
+        last_q = last_q.filter(SalesEmail.direccion == "OUT")
+    last_rows = last_q.group_by(SalesEmail.vendedor_id).all()
     last_map = {str(r[0]): r[1] for r in last_rows}
 
     data = []
@@ -153,6 +167,8 @@ def listar():
     limit = min(int(request.args.get("limit") or 100), 500)
     # FEAT-2026-07-07: filtro por dirección (IN/OUT/all)
     direccion = (request.args.get("direccion") or "").upper().strip()
+    if not _is_developer():
+        direccion = "OUT"
 
     since = datetime.now(timezone.utc) - timedelta(days=days)
     # FEAT-2026-07-08: privacidad — si el vendedor tiene owner restringido,
@@ -174,6 +190,8 @@ def listar():
     q_counts = q_counts.filter(SalesEmail.vendedor_id.in_(ids_visibles))
     if vendedor_id:
         q_counts = q_counts.filter(SalesEmail.vendedor_id == vendedor_id)
+    if not _is_developer():
+        q_counts = q_counts.filter(SalesEmail.direccion == "OUT")
     row = q_counts.with_entities(
         func.sum(case((SalesEmail.direccion == "IN", 1), else_=0)),
         func.sum(case((SalesEmail.direccion == "OUT", 1), else_=0)),
@@ -199,6 +217,8 @@ def get_email(email_id):
     # FEAT-2026-07-08: privacidad por vendedor
     if not _puede_ver_vendedor(email.vendedor_id):
         return jsonify({"error": "No autorizado para ver los correos de este vendedor"}), 403
+    if email.direccion == "IN" and not _is_developer():
+        return jsonify({"error": "Solo Developer puede ver correos recibidos"}), 403
     return jsonify(email.to_dict(include_body=True))
 
 
@@ -206,6 +226,8 @@ def get_email(email_id):
 def send_email():
     """Envía un correo desde el Gmail del vendedor seleccionado."""
     err = _require_admin()
+    if err: return err
+    err = _require_developer("el envío de correos")
     if err: return err
     if request.content_type and request.content_type.startswith("multipart/form-data"):
         data = request.form
@@ -289,6 +311,8 @@ def trigger_poll():
     """
     err = _require_admin()
     if err: return err
+    err = _require_developer("el poll manual de correos")
+    if err: return err
     lookback = int(request.args.get("lookback_min") or gmail_monitor.LOOKBACK_MIN)
     force = (request.args.get("force") or "").strip() in ("1", "true", "yes")
     try:
@@ -309,6 +333,8 @@ def backfill_in():
     este endpoint) traerá los últimos BACKFILL_DAYS de recibidos.
     """
     err = _require_admin()
+    if err: return err
+    err = _require_developer("el backfill de correos recibidos")
     if err: return err
     vendedor_id = request.args.get("vendedor_id") or (request.get_json(silent=True) or {}).get("vendedor_id")
 
@@ -350,6 +376,8 @@ def refresh_all():
     depender del filtro Gmail/lookback.
     """
     err = _require_admin()
+    if err: return err
+    err = _require_developer("el refresh masivo de correos")
     if err: return err
     if not gmail_monitor.is_configured():
         return jsonify({"error": "GMAIL_SERVICE_ACCOUNT_JSON no configurado"}), 500
@@ -429,6 +457,8 @@ def download_attachment(email_id, idx):
     # FEAT-2026-07-08: privacidad por vendedor
     if not _puede_ver_vendedor(email.vendedor_id):
         return jsonify({"error": "No autorizado para descargar este adjunto"}), 403
+    if email.direccion == "IN" and not _is_developer():
+        return jsonify({"error": "Solo Developer puede descargar adjuntos de correos recibidos"}), 403
     atts = email.attachments or []
     if idx < 0 or idx >= len(atts):
         return jsonify({"error": "Adjunto no encontrado"}), 404
