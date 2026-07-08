@@ -471,11 +471,13 @@ class EstadoBotInterno(db.Model):
 # Tabla: sales_emails — correos salientes de vendedores (monitoreo Gmail)
 # ──────────────────────────────────────────────
 class SalesEmail(db.Model):
-    """Correo enviado por un vendedor desde su Gmail corporativo a un destinatario
-    EXTERNO (no @grupoavantex.com). Populado por gmail_monitor.poll() cada 5 min.
+    """Correo del buzón de un vendedor.
 
-    No se vincula a leads — el propósito es auditar volumen y contenido del
-    seguimiento que cada vendedor da (cotizaciones, follow-ups, etc.).
+    FEAT-2026-07-07: ahora captura AMBAS direcciones:
+      - direccion='OUT': enviado por el vendedor a un cliente externo
+      - direccion='IN':  recibido por el vendedor de un cliente externo
+
+    Externo = no @grupoavantex.com. Populado por gmail_monitor.poll() cada 5 min.
     """
     __tablename__ = "sales_emails"
 
@@ -485,6 +487,9 @@ class SalesEmail(db.Model):
     gmail_message_id = db.Column(db.Text, nullable=False, unique=True)
     gmail_thread_id  = db.Column(db.Text, nullable=True, index=True)
     sent_at          = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
+    # FEAT-2026-07-07: dirección del correo
+    direccion        = db.Column(db.String(4), nullable=False, default="OUT",
+                                 server_default="OUT", index=True)  # 'IN' | 'OUT'
     from_email       = db.Column(db.Text, nullable=False)
     to_emails        = db.Column(ARRAY(db.Text), nullable=False, default=list, server_default="{}")
     cc_emails        = db.Column(ARRAY(db.Text), nullable=False, default=list, server_default="{}")
@@ -506,6 +511,7 @@ class SalesEmail(db.Model):
             "gmail_message_id": self.gmail_message_id,
             "gmail_thread_id": self.gmail_thread_id,
             "sent_at":         self.sent_at.isoformat() if self.sent_at else None,
+            "direccion":       self.direccion or "OUT",  # FEAT-2026-07-07
             "from_email":      self.from_email,
             "to_emails":       list(self.to_emails or []),
             "cc_emails":       list(self.cc_emails or []),

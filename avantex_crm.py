@@ -210,6 +210,25 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] metas_vendedor split rec/ev failed: %s", e)
 
+        # ─── sales_emails.direccion (FEAT-2026-07-07): 'IN' entrantes / 'OUT' salientes ───
+        try:
+            with db.engine.begin() as conn:
+                exists = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'sales_emails' AND column_name = 'direccion'
+                """)).first()
+                if not exists:
+                    app.logger.info("[auto-migrate] adding sales_emails.direccion...")
+                    conn.execute(text(
+                        "ALTER TABLE sales_emails ADD COLUMN direccion VARCHAR(4) DEFAULT 'OUT'"
+                    ))
+                    # Los existentes fueron pollados de in:sent → todos OUT (correcto default)
+                    conn.execute(text(
+                        "CREATE INDEX IF NOT EXISTS ix_sales_emails_direccion ON sales_emails (direccion)"
+                    ))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] sales_emails.direccion failed: %s", e)
+
         # ─── cs_accounts: Due Diligence (FEAT-2026-07-06) ───
         # Para cuentas adquiridas que aún no tienen KAM asignado (ej. Fugaci).
         # NO cuentan en KPIs actuales del dashboard hasta que se 'promocionan'.

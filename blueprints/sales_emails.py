@@ -106,13 +106,34 @@ def listar():
     vendedor_id = request.args.get("vendedor_id")
     days = int(request.args.get("days") or 7)
     limit = min(int(request.args.get("limit") or 100), 500)
+    # FEAT-2026-07-07: filtro por dirección (IN/OUT/all)
+    direccion = (request.args.get("direccion") or "").upper().strip()
 
     since = datetime.now(timezone.utc) - timedelta(days=days)
     q = SalesEmail.query.filter(SalesEmail.sent_at >= since)
     if vendedor_id:
         q = q.filter(SalesEmail.vendedor_id == vendedor_id)
+    if direccion in ("IN", "OUT"):
+        q = q.filter(SalesEmail.direccion == direccion)
     rows = q.order_by(desc(SalesEmail.sent_at)).limit(limit).all()
-    return jsonify({"emails": [r.to_dict() for r in rows], "count": len(rows)})
+    # Contadores por dirección para pintar tabs
+    from sqlalchemy import case
+    counts = {"IN": 0, "OUT": 0}
+    q_counts = SalesEmail.query.filter(SalesEmail.sent_at >= since)
+    if vendedor_id:
+        q_counts = q_counts.filter(SalesEmail.vendedor_id == vendedor_id)
+    row = q_counts.with_entities(
+        func.sum(case((SalesEmail.direccion == "IN", 1), else_=0)),
+        func.sum(case((SalesEmail.direccion == "OUT", 1), else_=0)),
+    ).first()
+    if row:
+        counts["IN"]  = int(row[0] or 0)
+        counts["OUT"] = int(row[1] or 0)
+    return jsonify({
+        "emails": [r.to_dict() for r in rows],
+        "count":  len(rows),
+        "counts_by_direccion": counts,
+    })
 
 
 @sales_emails_bp.route("/<uuid:email_id>", methods=["GET"])

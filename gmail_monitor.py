@@ -91,8 +91,14 @@ def _all_external(emails: list) -> bool:
     return all(not e.endswith("@" + INTERNAL_DOMAIN) for e in emails)
 
 
-def _parse_gmail_message(msg: dict) -> Optional[dict]:
-    """Convierte un message resource de Gmail API a dict listo para SalesEmail."""
+def _parse_gmail_message(msg: dict, direccion: str = "OUT") -> Optional[dict]:
+    """Convierte un message resource de Gmail API a dict listo para SalesEmail.
+
+    FEAT-2026-07-07: acepta direccion='OUT' (saliente) o 'IN' (entrante) y
+    aplica el filtro correspondiente:
+      - OUT: to_list debe ser TODO externo (correo de vendedor → cliente)
+      - IN:  from_email debe ser externo (correo de cliente → vendedor)
+    """
     payload = msg.get("payload") or {}
     headers = payload.get("headers") or []
     to_raw = _header(headers, "To")
@@ -106,15 +112,28 @@ def _parse_gmail_message(msg: dict) -> Optional[dict]:
     from_list = _extract_emails(from_raw)
     from_email = from_list[0] if from_list else ""
 
-    # FILTRO clave: si CUALQUIER destinatario es interno, descartar el correo
-    # (solo capturamos correos genuinamente externos a clientes/prospectos)
-    if not to_list and not cc_list:
-        return None
-    all_dests = to_list + cc_list
-    if any(e.endswith("@" + INTERNAL_DOMAIN) for e in all_dests):
-        return None
-    if not _all_external(all_dests):
-        return None
+    if direccion == "OUT":
+        # Correo saliente: TODOS los destinatarios deben ser externos
+        if not to_list and not cc_list:
+            return None
+        all_dests = to_list + cc_list
+        if any(e.endswith("@" + INTERNAL_DOMAIN) for e in all_dests):
+            return None
+        if not _all_external(all_dests):
+            return None
+    else:  # IN
+        # Correo entrante: el remitente debe ser EXTERNO al dominio interno.
+        # Descartamos correos internos (KAM→KAM), notificaciones del sistema,
+        # y notificaciones de Google (calendar-notification@google.com, etc.).
+        if not from_email:
+            return None
+        if from_email.endswith("@" + INTERNAL_DOMAIN):
+            return None
+        # Filtro extra: no queremos ruido de dominios de sistema (mailer-daemon,
+        # noreply-google, etc.). Estos son casos edge, no bloqueamos todos.
+        low = from_email.lower()
+        if low.startswith("mailer-daemon@") or low.startswith("postmaster@"):
+            return None
 
     # internalDate es ms desde epoch (más confiable que Date header)
     internal_ms = msg.get("internalDate")
@@ -138,6 +157,7 @@ def _parse_gmail_message(msg: dict) -> Optional[dict]:
         "gmail_message_id": msg.get("id"),
         "gmail_thread_id":  msg.get("threadId"),
         "sent_at":          sent_at,
+        "direccion":        direccion,  # FEAT-2026-07-07
         "from_email":       from_email,
         "to_emails":        to_list,
         "cc_emails":        cc_list,
@@ -211,12 +231,17 @@ def _extract_bodies(payload: dict, acc: dict = None) -> dict:
     return acc
 
 
-def _query_for_lookback(minutes: int) -> str:
-    """Gmail query: enviados en los últimos N minutos, excluyendo destinatarios
-    internos. `newer_than` con unidad mínima h; para minutos usamos `after:`."""
+def _query_for_lookback(minutes: int, direccion: str = "OUT") -> str:
+    """Gmail query en los últimos N minutos, según dirección.
+
+    FEAT-2026-07-07: ahora soporta 'IN' (recibidos de externos).
+      OUT → in:sent  -to:@internal
+      IN  → in:inbox -from:@internal (excluye internos y ruido)
+    """
     after_ts = int((datetime.now(timezone.utc) - timedelta(minutes=minutes)).timestamp())
-    # Filtro a nivel de query: -to:@dominio (puede haber falsos negativos si hay
-    # múltiples destinatarios mezclados; el parser hace doble check después)
+    if direccion == "IN":
+        # Recibidos de gente FUERA de nuestro dominio, en Inbox
+        return f"in:inbox after:{after_ts} -from:@{INTERNAL_DOMAIN}"
     return f"in:sent after:{after_ts} -to:@{INTERNAL_DOMAIN}"
 
 
@@ -264,62 +289,66 @@ def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN,
         stats["initial_backfill"] = True
         log.info(f"[gmail] backfill inicial para {vendedor.nombre} ({vendedor.gmail_address}): {BACKFILL_DAYS} días")
 
-    query = _query_for_lookback(effective_lookback)
-    try:
-        resp = svc.users().messages().list(userId="me", q=query, maxResults=500).execute()
-    except Exception as e:
-        log.exception(f"list falló para {vendedor.gmail_address}: {e}")
-        stats["errors"] = 1
-        return stats
-
-    messages = resp.get("messages") or []
-    stats["fetched"] = len(messages)
-
-    for m in messages:
-        mid = m.get("id")
-        if not mid:
-            continue
-
-        existing = SalesEmail.query.filter_by(gmail_message_id=mid).first()
-        if existing:
-            # Decide si re-fetch necesario
-            has_body = existing.body_text or existing.body_html
-            needs_att_ids = bool(existing.attachments) and not _has_attachment_ids(existing)
-            if has_body and not force_refresh and not needs_att_ids:
-                continue
-            if not has_body and not backfill_bodies:
-                continue
-
+    # FEAT-2026-07-07: hacer poll en AMBAS direcciones (enviados + recibidos)
+    for direccion in ("OUT", "IN"):
+        query = _query_for_lookback(effective_lookback, direccion=direccion)
         try:
-            # format=full: trae body + adjuntos + headers
-            msg = svc.users().messages().get(userId="me", id=mid, format="full").execute()
+            resp = svc.users().messages().list(userId="me", q=query, maxResults=500).execute()
         except Exception as e:
-            log.warning(f"get message {mid} falló: {e}")
-            stats["errors"] += 1
+            log.exception(f"list {direccion} falló para {vendedor.gmail_address}: {e}")
+            stats["errors"] = stats.get("errors", 0) + 1
             continue
 
-        parsed = _parse_gmail_message(msg)
-        if not parsed:
-            stats["skipped_internal"] += 1
-            continue
+        messages = resp.get("messages") or []
+        stats["fetched"] += len(messages)
 
-        try:
+        for m in messages:
+            mid = m.get("id")
+            if not mid:
+                continue
+
+            existing = SalesEmail.query.filter_by(gmail_message_id=mid).first()
             if existing:
-                # UPDATE: backfill body en correo viejo
-                for k, v in parsed.items():
-                    if k != "gmail_message_id":  # no toques el PK lógico
-                        setattr(existing, k, v)
-                stats["backfilled"] += 1
-            else:
-                # INSERT nuevo
-                email = SalesEmail(vendedor_id=vendedor.id, **parsed)
-                db.session.add(email)
-                stats["saved"] += 1
-            db.session.flush()
-        except Exception as e:
-            db.session.rollback()
-            log.warning(f"persist msg {mid} falló: {e}")
-            stats["errors"] += 1
+                # Decide si re-fetch necesario
+                has_body = existing.body_text or existing.body_html
+                needs_att_ids = bool(existing.attachments) and not _has_attachment_ids(existing)
+                # Además: si el existente NO tiene direccion o es distinto, actualizar
+                needs_direccion = not existing.direccion or existing.direccion != direccion
+                if has_body and not force_refresh and not needs_att_ids and not needs_direccion:
+                    continue
+                if not has_body and not backfill_bodies and not needs_direccion:
+                    continue
+
+            try:
+                # format=full: trae body + adjuntos + headers
+                msg = svc.users().messages().get(userId="me", id=mid, format="full").execute()
+            except Exception as e:
+                log.warning(f"get message {mid} falló: {e}")
+                stats["errors"] += 1
+                continue
+
+            parsed = _parse_gmail_message(msg, direccion=direccion)
+            if not parsed:
+                stats["skipped_internal"] += 1
+                continue
+
+            try:
+                if existing:
+                    # UPDATE: backfill body / dirección en correo viejo
+                    for k, v in parsed.items():
+                        if k != "gmail_message_id":  # no toques el PK lógico
+                            setattr(existing, k, v)
+                    stats["backfilled"] += 1
+                else:
+                    # INSERT nuevo
+                    email = SalesEmail(vendedor_id=vendedor.id, **parsed)
+                    db.session.add(email)
+                    stats["saved"] += 1
+                db.session.flush()
+            except Exception as e:
+                db.session.rollback()
+                log.warning(f"persist msg {mid} falló: {e}")
+                stats["errors"] += 1
 
     # Marcar backfill como completado (independiente de si hubo saved>0 o no)
     if is_initial:
