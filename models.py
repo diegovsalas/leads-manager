@@ -852,6 +852,7 @@ class CSInvoice(db.Model):
     __tablename__ = "cs_invoices"
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
     account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=False)
+    cs_import_key = db.Column(db.String(80), nullable=True, index=True)
     folio = db.Column(db.String(50), default="")
     serie = db.Column(db.String(20), default="")
     concepto = db.Column(db.String(300), default="")

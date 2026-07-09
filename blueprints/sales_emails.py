@@ -10,7 +10,7 @@ from sqlalchemy import func, desc
 
 from extensions import db
 from models import SalesEmail, Usuario
-from blueprints.auth import is_admin_role, allowed_units_for_role, rol_norm
+from blueprints.auth import is_admin_role, is_developer_role, allowed_units_for_role
 from un_filter import usuario_pertenece_a_un
 import gmail_monitor
 
@@ -22,22 +22,14 @@ EMAIL_SEND_ENABLED = False
 EMAIL_INBOX_ENABLED = False
 
 
-def _is_admin():
-    return is_admin_role()
-
-
 def _require_admin():
-    if not _is_admin():
+    if not is_admin_role():
         return jsonify({"error": "Solo Super Admin puede ver el monitoreo de correos"}), 403
     return None
 
 
-def _is_developer():
-    return rol_norm() == "developer"
-
-
 def _require_developer(action="esta función"):
-    if not _is_developer():
+    if not is_developer_role():
         return jsonify({"error": f"Solo Developer puede usar {action}"}), 403
     return None
 
@@ -57,16 +49,23 @@ def _vendedor_ids_visibles():
       - Vendedor con correos_visibles_para_user_id=NULL → visible para todos
       - Vendedor con correos_visibles_para_user_id != NULL → SOLO ese user
         puede verlos
+
+    Si la columna correos_visibles_para_user_id no existe aún en la BD
+    (migración pendiente), se degrada mostrando todos los vendedores.
     """
     my_id = session.get("user_id")
-    query = Usuario.query.filter(
-        db.or_(
-            Usuario.correos_visibles_para_user_id.is_(None),
-            Usuario.correos_visibles_para_user_id == my_id,
+    try:
+        query = Usuario.query.filter(
+            db.or_(
+                Usuario.correos_visibles_para_user_id.is_(None),
+                Usuario.correos_visibles_para_user_id == my_id,
+            )
         )
-    )
+        rows = query.all()
+    except Exception:
+        # Columna no existe aún — fallback: mostrar todos los vendedores
+        rows = Usuario.query.all()
     allowed_units = allowed_units_for_role()
-    rows = query.all()
     if allowed_units:
         rows = [
             v for v in rows
@@ -117,7 +116,7 @@ def stats():
             SalesEmail.sent_at >= since,
             SalesEmail.vendedor_id.in_(ids_visibles),
         )
-        if not EMAIL_INBOX_ENABLED or not _is_developer():
+        if not EMAIL_INBOX_ENABLED or not is_developer_role():
             q = q.filter(SalesEmail.direccion == "OUT")
         rows = q.group_by(SalesEmail.vendedor_id).all()
         return {str(r[0]): int(r[1]) for r in rows}
@@ -130,7 +129,7 @@ def stats():
     last_q = db.session.query(SalesEmail.vendedor_id, func.max(SalesEmail.sent_at)).filter(
         SalesEmail.vendedor_id.in_(ids_visibles),
     )
-    if not EMAIL_INBOX_ENABLED or not _is_developer():
+    if not EMAIL_INBOX_ENABLED or not is_developer_role():
         last_q = last_q.filter(SalesEmail.direccion == "OUT")
     last_rows = last_q.group_by(SalesEmail.vendedor_id).all()
     last_map = {str(r[0]): r[1] for r in last_rows}
@@ -178,7 +177,7 @@ def listar():
     limit = min(int(request.args.get("limit") or 100), 500)
     # FEAT-2026-07-07: filtro por dirección (IN/OUT/all)
     direccion = (request.args.get("direccion") or "").upper().strip()
-    if not EMAIL_INBOX_ENABLED or not _is_developer():
+    if not EMAIL_INBOX_ENABLED or not is_developer_role():
         direccion = "OUT"
 
     since = datetime.now(timezone.utc) - timedelta(days=days)
@@ -201,7 +200,7 @@ def listar():
     q_counts = q_counts.filter(SalesEmail.vendedor_id.in_(ids_visibles))
     if vendedor_id:
         q_counts = q_counts.filter(SalesEmail.vendedor_id == vendedor_id)
-    if not EMAIL_INBOX_ENABLED or not _is_developer():
+    if not EMAIL_INBOX_ENABLED or not is_developer_role():
         q_counts = q_counts.filter(SalesEmail.direccion == "OUT")
     row = q_counts.with_entities(
         func.sum(case((SalesEmail.direccion == "IN", 1), else_=0)),
@@ -231,7 +230,7 @@ def get_email(email_id):
     if email.direccion == "IN":
         err = _require_feature_enabled(EMAIL_INBOX_ENABLED, "Ver correos recibidos")
         if err: return err
-        if not _is_developer():
+        if not is_developer_role():
             return jsonify({"error": "Solo Developer puede ver correos recibidos"}), 403
     return jsonify(email.to_dict(include_body=True))
 
@@ -480,7 +479,7 @@ def download_attachment(email_id, idx):
     if email.direccion == "IN":
         err = _require_feature_enabled(EMAIL_INBOX_ENABLED, "Descargar adjuntos de correos recibidos")
         if err: return err
-        if not _is_developer():
+        if not is_developer_role():
             return jsonify({"error": "Solo Developer puede descargar adjuntos de correos recibidos"}), 403
     atts = email.attachments or []
     if idx < 0 or idx >= len(atts):

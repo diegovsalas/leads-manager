@@ -12,6 +12,37 @@ ALTER TABLE savio_invoices ADD COLUMN IF NOT EXISTS sub VARCHAR(40);
 ALTER TABLE cs_invoices ADD COLUMN IF NOT EXISTS savio_invoice_id INTEGER;
 CREATE INDEX IF NOT EXISTS idx_cs_invoices_savio_invoice_id ON cs_invoices(savio_invoice_id);
 
+-- CSV de cobros CS: llave idempotente para evitar duplicados al reimportar.
+ALTER TABLE cs_invoices ADD COLUMN IF NOT EXISTS cs_import_key VARCHAR(80);
+UPDATE cs_invoices
+SET cs_import_key = CASE
+    WHEN NULLIF(BTRIM(folio), '') IS NOT NULL THEN
+        'csv:' || md5(concat_ws('|',
+            'folio',
+            account_id::text,
+            lower(BTRIM(coalesce(serie, ''))),
+            lower(BTRIM(folio))
+        ))
+    ELSE
+        'csv:' || md5(concat_ws('|',
+            'fallback',
+            account_id::text,
+            lower(BTRIM(coalesce(concepto, ''))),
+            coalesce(fecha_cobro::text, ''),
+            trim(to_char(coalesce(total, 0), '999999999999990.00'))
+        ))
+END
+WHERE cs_import_key IS NULL
+  AND savio_invoice_id IS NULL;
+DELETE FROM cs_invoices a
+USING cs_invoices b
+WHERE a.cs_import_key IS NOT NULL
+  AND a.cs_import_key = b.cs_import_key
+  AND a.id > b.id;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_cs_invoices_import_key
+    ON cs_invoices(cs_import_key)
+    WHERE cs_import_key IS NOT NULL;
+
 -- Drop FKs en tablas mirror de Savio: solo importamos los ultimos 90d, los
 -- payments pueden referenciar invoices fuera de esa ventana → FK rompe.
 -- Las tablas savio_* son espejo de Savio; no garantizamos integridad local.
@@ -124,3 +155,24 @@ ALTER TABLE oportunidades
     FOREIGN KEY (contact_id)
     REFERENCES contacts(id)
     ON DELETE SET NULL;
+
+-- FEAT-2026-07-07: dirección de correos (IN=recibido / OUT=enviado)
+ALTER TABLE sales_emails ADD COLUMN IF NOT EXISTS direccion VARCHAR(4) DEFAULT 'OUT';
+CREATE INDEX IF NOT EXISTS ix_sales_emails_direccion ON sales_emails (direccion);
+-- Backfill: todos los correos previos son enviados (OUT)
+UPDATE sales_emails SET direccion = 'OUT' WHERE direccion IS NULL;
+
+-- FEAT-2026-07-07: timestamp de backfill inicial de correos recibidos por vendedor
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS gmail_backfilled_in_at TIMESTAMPTZ;
+
+-- FEAT-2026-07-08: privacidad de correos — restringe visibilidad por admin
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS correos_visibles_para_user_id UUID;
+-- Seed: Andrés Garza Martínez solo visible para Diego Velázquez
+UPDATE usuarios u
+SET correos_visibles_para_user_id = (
+    SELECT id FROM users_crm
+    WHERE nombre ILIKE '%diego velazquez%'
+    LIMIT 1
+)
+WHERE u.nombre ILIKE '%andres%garza%martinez%'
+  AND correos_visibles_para_user_id IS NULL;

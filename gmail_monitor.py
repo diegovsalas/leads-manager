@@ -428,20 +428,30 @@ def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN,
                     log.warning(f"persist msg {mid} falló: {e}")
                     stats["errors"] += 1
 
-    # Marcar backfill como completado (independiente de si hubo saved>0 o no).
-    # FEAT-2026-07-07: cada dirección tiene su propio timestamp.
-    now = datetime.now(timezone.utc)
-    if is_initial_out:
-        vendedor.gmail_backfilled_at = now
-    if is_initial_in:
-        vendedor.gmail_backfilled_in_at = now
-
+    # Commit de emails: ya tienen sus propios savepoints individuales pero
+    # necesitamos un commit de sesión para persistirlos.
+    # Se hace ANTES de actualizar los timestamps para que un fallo en las
+    # columnas nuevas (ej. gmail_backfilled_in_at aún no migrada) no
+    # revierta los correos ya guardados.
     try:
         db.session.commit()
     except Exception as e:
         db.session.rollback()
-        log.exception(f"commit final falló: {e}")
+        log.exception(f"commit emails falló: {e}")
         stats["errors"] += 1
+
+    # Marcar backfill como completado (independiente de si hubo saved>0 o no).
+    # FEAT-2026-07-07: cada dirección tiene su propio timestamp.
+    now = datetime.now(timezone.utc)
+    try:
+        if is_initial_out:
+            vendedor.gmail_backfilled_at = now
+        if is_initial_in:
+            vendedor.gmail_backfilled_in_at = now
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        log.warning(f"marcar backfill falló (columna pendiente de migración?): {e}")
 
     return stats
 

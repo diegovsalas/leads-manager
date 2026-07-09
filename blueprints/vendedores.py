@@ -1,20 +1,16 @@
 # blueprints/vendedores.py
 import secrets
 import string
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify
 from extensions import db
 from models import Usuario, RolComercial, UserCRM, RolCRM
-from blueprints.auth import require_role, is_full_access_role
+from blueprints.auth import require_role, is_full_access_role, is_developer_role
 
 vendedores_bp = Blueprint("vendedores", __name__)
 
 
-def _is_developer_session():
-    return (session.get("user_rol", "") or "").lower().replace(" ", "_") == "developer"
-
-
 def _validate_full_access_exclusivo(rol_login):
-    if is_full_access_role(rol_login) and not _is_developer_session():
+    if is_full_access_role(rol_login) and not is_developer_role():
         return jsonify({
             "error": "Solo Developer puede asignar perfiles con acceso total",
         }), 403

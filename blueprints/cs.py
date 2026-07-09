@@ -4,11 +4,14 @@ CS Dashboard — Customer Success para KAMs.
 Rutas bajo /cs/
 """
 import csv
+import hashlib
 import io
 from datetime import datetime, date, timedelta
+from functools import wraps
 from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, send_file, flash
 from sqlalchemy import func
 from extensions import db
+from blueprints.auth import is_admin_role, is_full_access_role
 from models import (
     CSAccount, CSInvoice, CSAppointment, CSNote, CSTask,
     CSOnboardingAccount, CSOpportunity, CSContacto, CSEntregable,
@@ -184,6 +187,125 @@ def _current_kam_id():
 def _current_user_id():
     """ID del usuario logueado (cualquier rol)."""
     return session.get("user_id")
+
+
+def _is_cs_admin():
+    return is_admin_role()
+
+
+def _is_cs_full_access():
+    return is_full_access_role()
+
+
+def _wants_json():
+    return request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json"
+
+
+def _permission_denied(message="Sin permisos", status=403, json_response=None):
+    if json_response is None:
+        json_response = _wants_json()
+    if json_response:
+        return jsonify({"error": message}), status
+    return message, status
+
+
+def _not_found(message="Cuenta no encontrada", status=404, json_response=None):
+    if json_response is None:
+        json_response = _wants_json()
+    if json_response:
+        return jsonify({"error": message}), status
+    return message, status
+
+
+def _get_cs_account(account_id):
+    try:
+        return db.session.get(CSAccount, account_id)
+    except (TypeError, ValueError):
+        return None
+
+
+def _can_edit_account(account):
+    """Admins CS editan todo; KAM solo sus propias cuentas."""
+    if not account:
+        return False
+    if _is_cs_admin():
+        return True
+    if _is_kam():
+        return str(account.kam_id) == str(_current_kam_id())
+    return False
+
+
+def _require_cs_admin(json_response=None):
+    if not _is_cs_admin():
+        return _permission_denied("Solo admin CS", json_response=json_response)
+    return None
+
+
+def _require_cs_full_access(json_response=None):
+    if not _is_cs_full_access():
+        return _permission_denied("Solo acceso total CS", json_response=json_response)
+    return None
+
+
+def _require_account_access(account, json_response=None):
+    if not account:
+        return _not_found(json_response=json_response)
+    if not _can_edit_account(account):
+        return _permission_denied(json_response=json_response)
+    return None
+
+
+def require_cs_admin(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        err = _require_cs_admin()
+        if err:
+            return err
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def require_cs_full_access(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        err = _require_cs_full_access()
+        if err:
+            return err
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def require_cs_account_access(f):
+    """Protege rutas con parámetro account_id."""
+    @wraps(f)
+    def wrapper(account_id, *args, **kwargs):
+        account = _get_cs_account(account_id)
+        err = _require_account_access(account)
+        if err:
+            return err
+        return f(account_id, *args, **kwargs)
+    return wrapper
+
+
+def _can_edit_opportunity(opp):
+    if not opp:
+        return False
+    if _is_cs_admin():
+        return True
+    if not _is_kam():
+        return False
+    if opp.account_id:
+        account = _get_cs_account(opp.account_id)
+        return _can_edit_account(account)
+    return str(opp.kam_id) == str(_current_kam_id())
+
+
+def _require_opportunity_access(opp):
+    if not opp:
+        return _not_found("Oportunidad no encontrada")
+    if not _can_edit_opportunity(opp):
+        return _permission_denied()
+    return None
 
 
 def _parse_adjuntos(form):
@@ -1320,10 +1442,9 @@ def mis_pendientes():
 
 
 @cs_bp.route("/clientes/<uuid:account_id>/editar", methods=["POST"])
+@require_cs_account_access
 def editar_cliente(account_id):
-    acc = db.session.get(CSAccount, account_id)
-    if not acc:
-        return "No encontrado", 404
+    acc = _get_cs_account(account_id)
     # nombre se puede editar también si viene
     if "nombre" in request.form:
         new_nombre = request.form.get("nombre", "").strip()
@@ -1366,10 +1487,9 @@ def editar_cliente(account_id):
 
 
 @cs_bp.route("/clientes/crear", methods=["POST"])
+@require_cs_admin
 def crear_cliente():
     """Crear nueva CSAccount. Solo admin/director (no KAM)."""
-    if _is_kam():
-        return "Sin permisos — los KAMs no crean cuentas", 403
     nombre = (request.form.get("nombre") or "").strip()
     if not nombre:
         return "nombre es requerido", 400
@@ -1413,13 +1533,11 @@ def crear_cliente():
 
 
 @cs_bp.route("/clientes/<uuid:account_id>/eliminar", methods=["POST"])
+@require_cs_full_access
 def eliminar_cliente(account_id):
     """Elimina una CSAccount y todos sus registros relacionados.
     SOLO super_admin (no KAM, no director — es operación destructiva)."""
-    rol = session.get("user_rol", "").lower().replace(" ", "_")
-    if rol != "super_admin":
-        return "Sin permisos — solo super_admin elimina cuentas", 403
-    acc = db.session.get(CSAccount, account_id)
+    acc = _get_cs_account(account_id)
     if not acc:
         return "No encontrada", 404
     # Cascade manual: borrar registros relacionados primero
@@ -1449,10 +1567,11 @@ def eliminar_cliente(account_id):
 # ACCOUNT DETAIL
 # ══════════════════════════════════════════════
 @cs_bp.route("/account/<uuid:account_id>")
+@require_cs_account_access
 def account_detail(account_id):
     inicio, fin, periodo_label, periodo_param = _get_periodo()
 
-    account = db.session.get(CSAccount, account_id)
+    account = _get_cs_account(account_id)
     if not account:
         return "Cuenta no encontrada", 404
     health = calcular_health_score(account)
@@ -1800,6 +1919,13 @@ def oportunidades():
 @cs_bp.route("/oportunidades/crear", methods=["POST"])
 def crear_oportunidad():
     account_id = request.form.get("account_id", "").strip()
+    if account_id:
+        account = _get_cs_account(account_id)
+        err = _require_account_access(account)
+        if err:
+            return err
+    elif not _is_cs_admin() and request.form.get("kam_id") != str(_current_kam_id()):
+        return _permission_denied()
     opp = CSOpportunity(
         account_id=account_id if account_id else None,
         prospecto_nombre=request.form.get("prospecto_nombre", "").strip(),
@@ -1821,11 +1947,13 @@ def crear_oportunidad():
 @cs_bp.route("/oportunidades/<uuid:opp_id>/etapa", methods=["POST"])
 def cambiar_etapa(opp_id):
     opp = db.session.get(CSOpportunity, opp_id)
-    if opp:
-        nueva = request.form.get("etapa", "")
-        if nueva in [e[0] for e in ETAPAS_PIPELINE]:
-            opp.etapa = nueva
-            db.session.commit()
+    err = _require_opportunity_access(opp)
+    if err:
+        return err
+    nueva = request.form.get("etapa", "")
+    if nueva in [e[0] for e in ETAPAS_PIPELINE]:
+        opp.etapa = nueva
+        db.session.commit()
     return redirect(url_for("cs.oportunidades"))
 
 
@@ -1833,10 +1961,16 @@ def cambiar_etapa(opp_id):
 def editar_oportunidad(opp_id):
     """Edita todos los campos del detalle de una oportunidad."""
     opp = db.session.get(CSOpportunity, opp_id)
-    if not opp:
-        return redirect(url_for("cs.oportunidades"))
+    err = _require_opportunity_access(opp)
+    if err:
+        return err
     f = request.form
     acc_id = (f.get("account_id") or "").strip()
+    if acc_id:
+        account = _get_cs_account(acc_id)
+        err = _require_account_access(account)
+        if err:
+            return err
     opp.account_id = acc_id if acc_id else None
     opp.prospecto_nombre = (f.get("prospecto_nombre") or "").strip()
     opp.contacto = (f.get("contacto") or "").strip()
@@ -1860,9 +1994,11 @@ def editar_oportunidad(opp_id):
 @cs_bp.route("/oportunidades/<uuid:opp_id>/delete", methods=["POST"])
 def eliminar_oportunidad(opp_id):
     opp = db.session.get(CSOpportunity, opp_id)
-    if opp:
-        db.session.delete(opp)
-        db.session.commit()
+    err = _require_opportunity_access(opp)
+    if err:
+        return err
+    db.session.delete(opp)
+    db.session.commit()
     return redirect(url_for("cs.oportunidades"))
 
 
@@ -1890,6 +2026,7 @@ def onboarding():
 
 
 @cs_bp.route("/onboarding/<uuid:ob_id>/asignar", methods=["POST"])
+@require_cs_admin
 def asignar_kam_onboarding(ob_id):
     ob = db.session.get(CSOnboardingAccount, ob_id)
     if ob:
@@ -2171,6 +2308,7 @@ def cuentas_sin_sub_savio():
 
 
 @cs_bp.route("/api/zoho/diagnose", methods=["POST"])
+@require_cs_admin
 def zoho_diagnose():
     """FEAT-2026-07-07: Diagnóstico del error 'invalid_code' — prueba las 4
     regiones de Zoho con las credenciales configuradas en Render.
@@ -2178,8 +2316,6 @@ def zoho_diagnose():
     Retorna qué región (si alguna) acepta el refresh_token actual, y para
     las que fallan muestra el mensaje exacto de Zoho para debug.
     """
-    if session.get("user_rol", "").lower().replace(" ", "_") != "super_admin":
-        return jsonify({"error": "Solo Super Admin"}), 403
     import os as _os
     import requests as _rq
 
@@ -2275,6 +2411,7 @@ def zoho_diagnose():
 
 
 @cs_bp.route("/api/zoho/sync-appointments", methods=["POST"])
+@require_cs_admin
 def zoho_sync_appointments():
     """Trigger manual del ETL Zoho Analytics → cs_appointments (super_admin).
 
@@ -2286,8 +2423,6 @@ def zoho_sync_appointments():
       ZOHO_USER_EMAIL, ZOHO_WORKSPACE, ZOHO_TABLE,
       SUPABASE_URL, SUPABASE_SERVICE_KEY
     """
-    if session.get("user_rol", "").lower().replace(" ", "_") != "super_admin":
-        return jsonify({"error": "Solo Super Admin"}), 403
     import os as _os
     faltan = [k for k in ("ZOHO_CLIENT_ID","ZOHO_CLIENT_SECRET","ZOHO_REFRESH_TOKEN",
                           "ZOHO_USER_EMAIL","ZOHO_WORKSPACE","ZOHO_TABLE",
@@ -2312,10 +2447,9 @@ def zoho_sync_appointments():
 
 
 @cs_bp.route("/api/email-response-times/resync", methods=["POST"])
+@require_cs_admin
 def resync_kam_responses():
     """Trigger manual del polling KAM (solo super_admin). FEAT-2026-07-03."""
-    if session.get("user_rol", "").lower().replace(" ", "_") != "super_admin":
-        return jsonify({"error": "Solo Super Admin"}), 403
     try:
         import gmail_monitor
         days = int(request.args.get("days", 30))
@@ -2364,6 +2498,34 @@ def _parse_date_cobros(val):
             except ValueError:
                 pass
     return None
+
+
+def _norm_invoice_key_part(value):
+    value = "" if value is None else str(value)
+    return value.strip().lower()
+
+
+def _invoice_import_key(account_id, serie, folio, concepto, fecha_cobro, total):
+    """Llave natural para hacer idempotente la carga CSV de cobros.
+
+    Prioriza folio/serie cuando existen. Si el CSV no trae folio, usa una
+    identidad derivada de cuenta + concepto + fecha + total.
+    """
+    folio_norm = _norm_invoice_key_part(folio)
+    serie_norm = _norm_invoice_key_part(serie)
+    if folio_norm:
+        raw = "|".join(("folio", str(account_id), serie_norm, folio_norm))
+    else:
+        fecha_norm = fecha_cobro.isoformat() if fecha_cobro else ""
+        total_norm = f"{float(total or 0):.2f}"
+        raw = "|".join((
+            "fallback",
+            str(account_id),
+            _norm_invoice_key_part(concepto),
+            fecha_norm,
+            total_norm,
+        ))
+    return "csv:" + hashlib.md5(raw.encode("utf-8")).hexdigest()
 
 
 # Cache de presencia de la columna zoho_appointment_id en cs_appointments.
@@ -2457,8 +2619,11 @@ def plantilla_citas():
 
 
 @cs_bp.route("/cargar-datos/cobros", methods=["POST"])
+@require_cs_admin
 def cargar_cobros():
     """Procesa CSV de cobros/facturas."""
+    from sqlalchemy import text as _text
+
     file = request.files.get("archivo")
     if not file or not (file.filename or "").lower().endswith(".csv"):
         flash("Subí un archivo .csv válido (cualquier mayúscula/minúscula).", "error")
@@ -2481,6 +2646,58 @@ def cargar_cobros():
     errores = 0
     batch = []
     debug_no_match = []
+    debug_errors = []
+
+    sql_upsert = _text("""
+        INSERT INTO cs_invoices
+            (account_id, cs_import_key, folio, serie, concepto, uen,
+             subtotal, impuestos, total, pendiente, pagado,
+             fecha_cobro, fecha_vencimiento, fecha_pago, estatus)
+        VALUES
+            (:account_id, :cs_import_key, :folio, :serie, :concepto, :uen,
+             :subtotal, :impuestos, :total, :pendiente, :pagado,
+             :fecha_cobro, :fecha_vencimiento, :fecha_pago, :estatus)
+        ON CONFLICT (cs_import_key) WHERE cs_import_key IS NOT NULL
+        DO UPDATE SET
+            account_id = EXCLUDED.account_id,
+            folio = EXCLUDED.folio,
+            serie = EXCLUDED.serie,
+            concepto = EXCLUDED.concepto,
+            uen = EXCLUDED.uen,
+            subtotal = EXCLUDED.subtotal,
+            impuestos = EXCLUDED.impuestos,
+            total = EXCLUDED.total,
+            pendiente = EXCLUDED.pendiente,
+            pagado = EXCLUDED.pagado,
+            fecha_cobro = EXCLUDED.fecha_cobro,
+            fecha_vencimiento = EXCLUDED.fecha_vencimiento,
+            fecha_pago = EXCLUDED.fecha_pago,
+            estatus = EXCLUDED.estatus
+    """)
+
+    def _flush_cobros(buf):
+        if not buf:
+            return 0, 0
+        try:
+            db.session.execute(sql_upsert, buf)
+            db.session.commit()
+            return len(buf), 0
+        except Exception as e:
+            db.session.rollback()
+            if len(debug_errors) < 3:
+                debug_errors.append(str(e)[:160])
+            ok = fail = 0
+            for item in buf:
+                try:
+                    db.session.execute(sql_upsert, item)
+                    db.session.commit()
+                    ok += 1
+                except Exception as e2:
+                    db.session.rollback()
+                    fail += 1
+                    if len(debug_errors) < 3:
+                        debug_errors.append(str(e2)[:160])
+            return ok, fail
 
     for row in reader:
         # Intentar por columna ID, luego Contrato, luego Cliente
@@ -2498,33 +2715,44 @@ def cargar_cobros():
             continue
 
         try:
+            serie = row.get("Serie de Folio", "")
+            folio = row.get("Folio", "")
+            concepto = row.get("Concepto", "")
+            total = _parse_money(row.get("Total"))
+            fecha_cobro = _parse_date_cobros(row.get("Fecha de Cobro"))
             batch.append({
                 "account_id": acc_id,
-                "folio": row.get("Folio", ""),
-                "serie": row.get("Serie de Folio", ""),
-                "concepto": row.get("Concepto", ""),
+                "cs_import_key": _invoice_import_key(
+                    acc_id, serie, folio, concepto, fecha_cobro, total
+                ),
+                "folio": folio,
+                "serie": serie,
+                "concepto": concepto,
                 "uen": row.get("UEN", "") or row.get("UN", ""),
                 "subtotal": _parse_money(row.get("Monto Subtotal")),
                 "impuestos": _parse_money(row.get("Impuestos")),
-                "total": _parse_money(row.get("Total")),
+                "total": total,
                 "pendiente": _parse_money(row.get("Pendiente")),
                 "pagado": _parse_money(row.get("Pagado")),
-                "fecha_cobro": _parse_date_cobros(row.get("Fecha de Cobro")),
+                "fecha_cobro": fecha_cobro,
                 "fecha_vencimiento": _parse_date_cobros(row.get("Fecha de Vencimiento")),
                 "fecha_pago": _parse_date_cobros(row.get("Fecha de Pago")),
                 "estatus": row.get("Estatus", ""),
             })
-            insertados += 1
             if len(batch) >= 500:
-                db.session.execute(CSInvoice.__table__.insert(), batch)
-                db.session.commit()
+                ok, fail = _flush_cobros(batch)
+                insertados += ok
+                errores += fail
                 batch = []
-        except Exception:
+        except Exception as e:
             errores += 1
+            if len(debug_errors) < 3:
+                debug_errors.append(str(e)[:160])
 
     if batch:
-        db.session.execute(CSInvoice.__table__.insert(), batch)
-    db.session.commit()
+        ok, fail = _flush_cobros(batch)
+        insertados += ok
+        errores += fail
 
     _recalcular_facturacion(accounts)
 
@@ -2535,12 +2763,17 @@ def cargar_cobros():
         "cs_cargar_resultado.html",
         tipo="Cobros", insertados=insertados, no_match=no_match,
         errores=errores, total=insertados + no_match + errores,
-        debug_info=f"client_id_map keys: {list(client_id_map.keys())[:20]} | no_match samples: {debug_no_match}",
+        debug_info=(
+            f"upsert por cs_import_key | client_id_map keys: {list(client_id_map.keys())[:20]} "
+            f"| no_match samples: {debug_no_match}"
+            + (f" | errores: {debug_errors}" if debug_errors else "")
+        ),
         **_ctx(),
     )
 
 
 @cs_bp.route("/cargar-datos/citas", methods=["POST"])
+@require_cs_admin
 def cargar_citas():
     """Procesa CSV de citas/operación.
 
@@ -2750,6 +2983,7 @@ def cargar_citas():
 # ──────────────────────────────────────────────
 
 @cs_bp.route("/cargar-datos/zoho-sync", methods=["POST"])
+@require_cs_admin
 def zoho_sync_citas():
     """Jala citas directamente desde Zoho Analytics API y las upsertea."""
     import logging as _logging
@@ -2929,14 +3163,6 @@ def zoho_analytics_views(workspace_id):
 # sin depender de la carga masiva (que arrastra cancelaciones).
 # ──────────────────────────────────────────────
 
-
-def _can_edit_account(account):
-    """KAM solo puede editar sus propias cuentas. Admin/director: todas."""
-    if not _is_kam():
-        return True
-    return str(account.kam_id) == str(_current_kam_id())
-
-
 def _parse_dt_iso(s):
     if not s:
         return None
@@ -2954,14 +3180,11 @@ def _parse_dt_iso(s):
 
 
 @cs_bp.route("/api/cuentas/<uuid:account_id>/citas", methods=["GET"])
+@require_cs_account_access
 def listar_citas_cuenta(account_id):
     """GET /cs/api/cuentas/<id>/citas?solo_activas=1 — citas filtradas.
     Default: solo_activas=1 (oculta Cancelada / No Realizada / Archivada)."""
-    account = db.session.get(CSAccount, account_id)
-    if not account:
-        return jsonify({"error": "Cuenta no encontrada"}), 404
-    if not _can_edit_account(account):
-        return jsonify({"error": "Sin permisos"}), 403
+    account = _get_cs_account(account_id)
 
     solo_activas = request.args.get("solo_activas", "1") in ("1", "true", "yes")
     q = CSAppointment.query.filter(CSAppointment.account_id == account.id)
@@ -2979,13 +3202,10 @@ def listar_citas_cuenta(account_id):
 
 
 @cs_bp.route("/api/cuentas/<uuid:account_id>/citas", methods=["POST"])
+@require_cs_account_access
 def crear_cita(account_id):
     """KAM agrega una cita a la plantilla activa. Default estatus 'Agendada'."""
-    account = db.session.get(CSAccount, account_id)
-    if not account:
-        return jsonify({"error": "Cuenta no encontrada"}), 404
-    if not _can_edit_account(account):
-        return jsonify({"error": "Sin permisos"}), 403
+    account = _get_cs_account(account_id)
 
     data = request.get_json() or {}
     cita = CSAppointment(
@@ -3011,9 +3231,10 @@ def actualizar_cita(cita_id):
     cita = db.session.get(CSAppointment, cita_id)
     if not cita:
         return jsonify({"error": "Cita no encontrada"}), 404
-    account = db.session.get(CSAccount, cita.account_id)
-    if not _can_edit_account(account):
-        return jsonify({"error": "Sin permisos"}), 403
+    account = _get_cs_account(cita.account_id)
+    err = _require_account_access(account, json_response=True)
+    if err:
+        return err
 
     data = request.get_json() or {}
     for fld in ("propiedad", "direccion", "zona", "tecnico", "estatus", "titulo_servicio"):
@@ -3039,19 +3260,19 @@ def cancelar_cita(cita_id):
     cita = db.session.get(CSAppointment, cita_id)
     if not cita:
         return jsonify({"error": "Cita no encontrada"}), 404
-    account = db.session.get(CSAccount, cita.account_id)
-    if not _can_edit_account(account):
-        return jsonify({"error": "Sin permisos"}), 403
+    account = _get_cs_account(cita.account_id)
+    err = _require_account_access(account, json_response=True)
+    if err:
+        return err
     cita.estatus = "Cancelada"
     db.session.commit()
     return jsonify({"ok": True})
 
 
 @cs_bp.route("/api/citas/<uuid:cita_id>", methods=["DELETE"])
+@require_cs_admin
 def eliminar_cita(cita_id):
     """Hard delete: solo super_admin / director. KAMs usan /cancelar."""
-    if _is_kam():
-        return jsonify({"error": "KAMs usan /cancelar (soft delete)"}), 403
     cita = db.session.get(CSAppointment, cita_id)
     if not cita:
         return jsonify({"error": "Cita no encontrada"}), 404
@@ -3061,6 +3282,7 @@ def eliminar_cita(cita_id):
 
 
 @cs_bp.route("/cargar-datos/limpiar/<tipo>", methods=["POST"])
+@require_cs_full_access
 def limpiar_datos(tipo):
     """Elimina todos los registros de un tipo para recargar."""
     if tipo == "cobros":
@@ -3118,6 +3340,10 @@ def crear_contacto():
     account_id = request.form.get("account_id", "").strip()
     if not account_id:
         return redirect(url_for("cs.contactos_directory"))
+    account = _get_cs_account(account_id)
+    err = _require_account_access(account)
+    if err:
+        return err
     contacto = CSContacto(
         account_id=account_id,
         nombre=request.form.get("nombre", "").strip(),
@@ -3141,6 +3367,10 @@ def editar_contacto(contacto_id):
     c = db.session.get(CSContacto, contacto_id)
     if not c:
         return "No encontrado", 404
+    account = _get_cs_account(c.account_id)
+    err = _require_account_access(account)
+    if err:
+        return err
     c.nombre = request.form.get("nombre", c.nombre).strip()
     c.puesto = request.form.get("puesto", c.puesto).strip()
     c.telefono = request.form.get("telefono", c.telefono).strip()
@@ -3158,6 +3388,10 @@ def editar_contacto(contacto_id):
 def eliminar_contacto(contacto_id):
     c = db.session.get(CSContacto, contacto_id)
     if c:
+        account = _get_cs_account(c.account_id)
+        err = _require_account_access(account)
+        if err:
+            return err
         db.session.delete(c)
         db.session.commit()
     referer = request.form.get("redirect", "")
@@ -3170,6 +3404,7 @@ def eliminar_contacto(contacto_id):
 # INCIDENCIAS — Registro de incidencias por cuenta
 # ══════════════════════════════════════════════
 @cs_bp.route("/account/<uuid:account_id>/incidencias", methods=["POST"])
+@require_cs_account_access
 def crear_incidencia(account_id):
     tipo = request.form.get("tipo", "").strip()
     if not tipo:
@@ -3179,6 +3414,8 @@ def crear_incidencia(account_id):
     propiedad_nombre = ""
     if propiedad_id:
         prop = db.session.get(CSPropiedad, propiedad_id)
+        if prop and str(prop.account_id) != str(account_id):
+            return _permission_denied()
         propiedad_nombre = prop.nombre if prop else ""
 
     fecha_str = request.form.get("fecha_incidencia", "").strip()
@@ -3219,9 +3456,16 @@ def crear_incidencia(account_id):
 
 
 @cs_bp.route("/account/<uuid:account_id>/incidencias/<uuid:inc_id>/status", methods=["POST"])
+@require_cs_account_access
 def cambiar_status_incidencia(account_id, inc_id):
     inc = db.session.get(CSIncidencia, inc_id)
     if inc:
+        if str(inc.account_id) != str(account_id):
+            return _permission_denied()
+        account = _get_cs_account(inc.account_id)
+        err = _require_account_access(account)
+        if err:
+            return err
         nuevo = request.form.get("status", "")
         if nuevo in ("Abierta", "En proceso", "Resuelta"):
             inc.status = nuevo
@@ -3237,6 +3481,7 @@ def cambiar_status_incidencia(account_id, inc_id):
 
 
 @cs_bp.route("/api/propiedades/<uuid:account_id>")
+@require_cs_account_access
 def api_propiedades(account_id):
     """API JSON de propiedades por cuenta (para search dinámico)."""
     q = request.args.get("q", "").strip()
@@ -3255,9 +3500,10 @@ def api_propiedades(account_id):
 # Cross-reference con CSAppointment.propiedad por nombre (case-insensitive)
 # ──────────────────────────────────────────────
 @cs_bp.route("/cuentas/<uuid:account_id>/propiedades/template-csv")
+@require_cs_account_access
 def descargar_template_propiedades(account_id):
     """Plantilla CSV con headers + 2 filas de ejemplo."""
-    acc = db.session.get(CSAccount, account_id)
+    acc = _get_cs_account(account_id)
     out = io.StringIO()
     w = csv.writer(out)
     w.writerow(["nombre", "direccion", "zona", "unidad_negocio"])
@@ -3274,17 +3520,11 @@ def descargar_template_propiedades(account_id):
 
 
 @cs_bp.route("/cuentas/<uuid:account_id>/propiedades/upload-csv", methods=["POST"])
+@require_cs_account_access
 def upload_propiedades_csv(account_id):
     """Procesa CSV de sucursales y upserta en cs_propiedades.
     Después calcula cross-ref con citas existentes (match por nombre, ci)."""
-    acc = db.session.get(CSAccount, account_id)
-    if not acc:
-        flash("Cuenta no encontrada", "error")
-        return redirect(url_for("cs.clientes"))
-
-    if _is_kam() and str(acc.kam_id) != str(_current_kam_id()):
-        flash("Solo podés cargar sucursales de tus propias cuentas", "error")
-        return redirect(url_for("cs.clientes"))
+    acc = _get_cs_account(account_id)
 
     file = request.files.get("archivo")
     if not file or not (file.filename or "").lower().endswith(".csv"):
@@ -3373,6 +3613,7 @@ def upload_propiedades_csv(account_id):
 # ENTREGABLES — Flujo de servicio por cuenta
 # ══════════════════════════════════════════════
 @cs_bp.route("/account/<uuid:account_id>/entregables", methods=["POST"])
+@require_cs_account_access
 def crear_entregable(account_id):
     descripcion = request.form.get("descripcion", "").strip()
     if descripcion:
@@ -3395,9 +3636,16 @@ def crear_entregable(account_id):
 
 
 @cs_bp.route("/account/<uuid:account_id>/entregables/<uuid:ent_id>/delete", methods=["POST"])
+@require_cs_account_access
 def eliminar_entregable(account_id, ent_id):
     e = db.session.get(CSEntregable, ent_id)
     if e:
+        if str(e.account_id) != str(account_id):
+            return _permission_denied()
+        account = _get_cs_account(e.account_id)
+        err = _require_account_access(account)
+        if err:
+            return err
         db.session.delete(e)
         db.session.commit()
     return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=entregables#entregables")
@@ -3407,12 +3655,9 @@ def eliminar_entregable(account_id, ent_id):
 # ENCUESTA OPERATIVA KAM — Respuestas cerradas por cuenta
 # ══════════════════════════════════════════════
 @cs_bp.route("/account/<uuid:account_id>/workload-survey", methods=["POST"])
+@require_cs_account_access
 def guardar_workload_survey(account_id):
-    account = db.session.get(CSAccount, account_id)
-    if not account:
-        return "Cuenta no encontrada", 404
-    if not _can_edit_account(account):
-        return "Sin permisos", 403
+    account = _get_cs_account(account_id)
 
     periodo = request.form.get("periodo", "").strip() or date.today().strftime("%Y-%m")
     survey = CSWorkloadSurvey.query.filter_by(account_id=account.id, periodo=periodo).first()
@@ -3468,11 +3713,12 @@ def guardar_workload_survey(account_id):
 # QBR
 # ══════════════════════════════════════════════
 @cs_bp.route("/account/<uuid:account_id>/qbr")
+@require_cs_account_access
 def download_qbr(account_id):
     """Descarga el QBR del trimestre actual por defecto.
     Override con ?q=Q1+2026 (o Q2/Q3/Q4) para trimestres pasados.
     FIX-2026-06-26: antes el trimestre estaba hardcoded en 'Q1 2026'."""
-    account = db.session.get(CSAccount, account_id)
+    account = _get_cs_account(account_id)
     if not account:
         return "Cuenta no encontrada", 404
     from cs_qbr_generator import generar_qbr, _parse_trim
@@ -3496,10 +3742,9 @@ def download_qbr(account_id):
 # CRUD — KPIs, Notas, Tareas
 # ══════════════════════════════════════════════
 @cs_bp.route("/account/<uuid:account_id>/kpis", methods=["POST"])
+@require_cs_account_access
 def update_kpis(account_id):
-    account = db.session.get(CSAccount, account_id)
-    if not account:
-        return "No encontrado", 404
+    account = _get_cs_account(account_id)
     data = request.form
     nps_val = data.get("nps", "").strip()
     account.nps = float(nps_val) if nps_val else None
@@ -3512,6 +3757,7 @@ def update_kpis(account_id):
 
 
 @cs_bp.route("/account/<uuid:account_id>/notes", methods=["POST"])
+@require_cs_account_access
 def create_note(account_id):
     contenido = request.form.get("contenido", "").strip()
     autor = request.form.get("autor", "").strip()
@@ -3523,15 +3769,23 @@ def create_note(account_id):
 
 
 @cs_bp.route("/account/<uuid:account_id>/notes/<uuid:note_id>/delete", methods=["POST"])
+@require_cs_account_access
 def delete_note(account_id, note_id):
     note = db.session.get(CSNote, note_id)
     if note:
+        if str(note.account_id) != str(account_id):
+            return _permission_denied()
+        account = _get_cs_account(note.account_id)
+        err = _require_account_access(account)
+        if err:
+            return err
         db.session.delete(note)
         db.session.commit()
     return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=notas")
 
 
 @cs_bp.route("/account/<uuid:account_id>/tasks", methods=["POST"])
+@require_cs_account_access
 def create_task(account_id):
     descripcion = request.form.get("descripcion", "").strip()
     if descripcion:
@@ -3553,18 +3807,32 @@ def create_task(account_id):
 
 
 @cs_bp.route("/account/<uuid:account_id>/tasks/<uuid:task_id>/toggle", methods=["POST"])
+@require_cs_account_access
 def toggle_task(account_id, task_id):
     task = db.session.get(CSTask, task_id)
     if task:
+        if str(task.account_id) != str(account_id):
+            return _permission_denied()
+        account = _get_cs_account(task.account_id)
+        err = _require_account_access(account)
+        if err:
+            return err
         task.completada = not task.completada
         db.session.commit()
     return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=tareas")
 
 
 @cs_bp.route("/account/<uuid:account_id>/tasks/<uuid:task_id>/delete", methods=["POST"])
+@require_cs_account_access
 def delete_task(account_id, task_id):
     task = db.session.get(CSTask, task_id)
     if task:
+        if str(task.account_id) != str(account_id):
+            return _permission_denied()
+        account = _get_cs_account(task.account_id)
+        err = _require_account_access(account)
+        if err:
+            return err
         db.session.delete(task)
         db.session.commit()
     return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=tareas")

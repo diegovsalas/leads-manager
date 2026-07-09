@@ -374,6 +374,50 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] cs_invoices unique savio_invoice_id failed: %s", e)
 
+        # ─── cs_invoices.cs_import_key UNIQUE (CSV cobros idempotente) ───
+        # La carga manual de cobros no trae savio_invoice_id. Esta llave evita
+        # duplicar facturas al re-subir el mismo CSV y permite upsert.
+        try:
+            with db.engine.begin() as conn:
+                conn.execute(text(
+                    "ALTER TABLE cs_invoices ADD COLUMN IF NOT EXISTS cs_import_key VARCHAR(80)"
+                ))
+                conn.execute(text("""
+                    UPDATE cs_invoices
+                    SET cs_import_key = CASE
+                        WHEN NULLIF(BTRIM(folio), '') IS NOT NULL THEN
+                            'csv:' || md5(concat_ws('|',
+                                'folio',
+                                account_id::text,
+                                lower(BTRIM(coalesce(serie, ''))),
+                                lower(BTRIM(folio))
+                            ))
+                        ELSE
+                            'csv:' || md5(concat_ws('|',
+                                'fallback',
+                                account_id::text,
+                                lower(BTRIM(coalesce(concepto, ''))),
+                                coalesce(fecha_cobro::text, ''),
+                                trim(to_char(coalesce(total, 0), '999999999999990.00'))
+                            ))
+                    END
+                    WHERE cs_import_key IS NULL
+                      AND savio_invoice_id IS NULL
+                """))
+                conn.execute(text("""
+                    DELETE FROM cs_invoices a
+                    USING cs_invoices b
+                    WHERE a.cs_import_key IS NOT NULL
+                      AND a.cs_import_key = b.cs_import_key
+                      AND a.id > b.id
+                """))
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ux_cs_invoices_import_key "
+                    "ON cs_invoices (cs_import_key) WHERE cs_import_key IS NOT NULL"
+                ))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] cs_invoices import key failed: %s", e)
+
         # ─── kam_email_responses (2026-07-03) ───
         try:
             with db.engine.begin() as conn:

@@ -33,6 +33,10 @@ def rol_norm(value=None):
     return (raw or "").lower().replace(" ", "_")
 
 
+def is_developer_role(role=None):
+    return rol_norm(role) == "developer"
+
+
 def is_full_access_role(role=None):
     return rol_norm(role) in FULL_ACCESS_ROLES
 
