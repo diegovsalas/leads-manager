@@ -1,7 +1,7 @@
 # blueprints/vendedores.py
 import secrets
 import string
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 from extensions import db
 from models import Usuario, RolComercial, UserCRM, RolCRM
 from blueprints.auth import require_role, is_full_access_role, is_developer_role
@@ -338,9 +338,77 @@ def actualizar(vendedor_id):
 @vendedores_bp.route("/<uuid:vendedor_id>", methods=["DELETE"])
 @require_role(["super_admin"])
 def eliminar(vendedor_id):
+    """Baja segura de usuario/vendedor.
+
+    Por defecto NO borra físicamente porque usuarios.id está referenciado por
+    leads, metas, correos, oportunidades, etc. En su lugar:
+      - usuarios.en_turno = False
+      - users_crm.activo = False
+
+    Si se manda ?hard=1 intenta borrado físico solo cuando no hay dependencias.
+    """
     vendedor = db.session.get(Usuario, vendedor_id)
     if not vendedor:
         return jsonify({"error": "No encontrado"}), 404
-    db.session.delete(vendedor)
+
+    login = UserCRM.query.filter_by(usuario_id=vendedor.id).first()
+    if login and str(login.id) == str(session.get("user_id")):
+        return jsonify({"error": "No puedes eliminar/desactivar tu propio usuario"}), 400
+    hard = str(request.args.get("hard", "")).lower() in ("1", "true", "yes")
+
+    if hard:
+        if not is_developer_role():
+            return jsonify({"error": "Solo Developer puede hacer borrado físico"}), 403
+        deps = _dependencias_vendedor(vendedor.id, login.id if login else None)
+        total_deps = sum(deps.values())
+        if total_deps:
+            return jsonify({
+                "error": "No se puede borrar físicamente: tiene registros relacionados. Usa baja segura.",
+                "dependencias": deps,
+            }), 409
+        try:
+            if login:
+                db.session.delete(login)
+            db.session.delete(vendedor)
+            db.session.commit()
+            return jsonify({"ok": True, "modo": "hard_delete"})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": f"No se pudo borrar: {e}"}), 500
+
+    vendedor.en_turno = False
+    if login:
+        login.activo = False
     db.session.commit()
-    return jsonify({"ok": True})
+    return jsonify({
+        "ok": True,
+        "modo": "baja_segura",
+        "vendedor_id": str(vendedor.id),
+        "login_id": str(login.id) if login else None,
+        "en_turno": vendedor.en_turno,
+        "login_activo": login.activo if login else None,
+    })
+
+
+def _dependencias_vendedor(usuario_id, user_crm_id=None):
+    """Conteo defensivo para decidir si un vendedor puede borrarse físicamente."""
+    from models import (
+        Lead, MetaVendedor, SalesEmail, EstadoBotInterno, Oportunidad,
+        Account, CSAccount, CSOpportunity, KAMEmailResponse,
+    )
+
+    deps = {
+        "leads": Lead.query.filter_by(usuario_asignado_id=usuario_id).count(),
+        "metas": MetaVendedor.query.filter_by(usuario_id=usuario_id).count(),
+        "sales_emails": SalesEmail.query.filter_by(vendedor_id=usuario_id).count(),
+        "estado_bot": EstadoBotInterno.query.filter_by(usuario_id=usuario_id).count(),
+        "oportunidades": Oportunidad.query.filter_by(propietario_id=usuario_id).count(),
+        "accounts_owner": Account.query.filter_by(owner_id=usuario_id).count(),
+    }
+    if user_crm_id:
+        deps.update({
+            "cs_accounts_kam": CSAccount.query.filter_by(kam_id=user_crm_id).count(),
+            "cs_opportunities_kam": CSOpportunity.query.filter_by(kam_id=user_crm_id).count(),
+            "kam_email_responses": KAMEmailResponse.query.filter_by(kam_id=user_crm_id).count(),
+        })
+    return deps

@@ -5627,8 +5627,10 @@ function renderVendedoresTabla(){
       : `<div style="font-size:10px;color:var(--orange);">⚠ sin cuenta de login</div>`;
     const accionesCell = v.login
       ? `<button class="btn" onclick="editVendedor('${v.id}')" style="font-size:11px;padding:3px 8px;">Editar</button>
-         <button class="btn" onclick="resetPasswordVendedor('${v.id}','${_esc(v.nombre)}')" style="font-size:11px;padding:3px 8px;color:var(--orange);">Reset pwd</button>`
-      : `<button class="btn" onclick="editVendedor('${v.id}')" style="font-size:11px;padding:3px 8px;">Editar</button>`;
+         <button class="btn" onclick="resetPasswordVendedor('${v.id}','${_esc(v.nombre)}')" style="font-size:11px;padding:3px 8px;color:var(--orange);">Reset pwd</button>
+         <button class="btn" onclick="eliminarVendedor('${v.id}','${_esc(v.nombre)}')" style="font-size:11px;padding:3px 8px;color:var(--red);">Eliminar</button>`
+      : `<button class="btn" onclick="editVendedor('${v.id}')" style="font-size:11px;padding:3px 8px;">Editar</button>
+         <button class="btn" onclick="eliminarVendedor('${v.id}','${_esc(v.nombre)}')" style="font-size:11px;padding:3px 8px;color:var(--red);">Eliminar</button>`;
 
     tb.innerHTML+=`<tr>
       <td class="td-name"><strong>${_esc(v.nombre)}</strong>${loginBadge}</td>
@@ -5815,6 +5817,22 @@ async function resetPasswordVendedor(id, nombre){
     if(!r.ok){showToast('Error',d.error||'Falló');return;}
     alert(`Nuevo password temporal para ${nombre}\n\nCorreo: ${d.correo}\nPassword: ${d.password_temporal}\n\nCopia y compártelo.`);
   }catch(e){showToast('Error',e.message);}
+}
+
+async function eliminarVendedor(id, nombre){
+  const ok = confirm(
+    '¿Eliminar usuario/vendedor '+nombre+'?\n\n' +
+    'Se hará una baja segura: dejará de estar en turno y su login quedará inactivo. ' +
+    'No se borran leads, metas, correos ni historial.'
+  );
+  if(!ok)return;
+  try{
+    const r=await fetch('/api/vendedores/'+id,{method:'DELETE'});
+    const d=await r.json();
+    if(!r.ok){showToast('Error',d.error||'No se pudo eliminar');return;}
+    showToast('Usuario eliminado', 'Baja segura aplicada a '+nombre);
+    await loadVendedores();
+  }catch(e){showToast('Error',e.message||'No se pudo eliminar');}
 }
 
 // Gastos modal
