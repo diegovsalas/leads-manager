@@ -30,6 +30,7 @@ from flask import (
 
 from extensions import db
 from models import CSAccount, CSDDSurvey, CSPropiedad, UserCRM, RolCRM
+from blueprints.auth import is_full_access_role
 
 
 dd_bp = Blueprint("due_diligence", __name__)
@@ -40,7 +41,7 @@ TOKEN_TTL_DAYS = 45
 
 
 def _es_super_admin() -> bool:
-    return session.get("user_rol", "").lower().replace(" ", "_") == "super_admin"
+    return is_full_access_role()
 
 
 def _genera_token() -> str:
