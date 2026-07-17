@@ -1,11 +1,24 @@
 # blueprints/webhooks.py
+import hashlib
+import hmac
 import logging
+import os
 from flask import Blueprint, request, jsonify, current_app
 from extensions import db, socketio
 from models import Lead, MensajeWhatsapp, DireccionMensaje, EtapaPipeline, OrigenLead
 
 logger = logging.getLogger(__name__)
 webhooks_bp = Blueprint("webhooks", __name__)
+
+
+def _verify_meta_signature(app_secret: str, raw_body: bytes, signature_header: str) -> bool:
+    """SECURITY-2026-07-14: valida X-Hub-Signature-256 para confirmar que el
+    POST viene de Meta y no de un tercero que descubrió la URL."""
+    if not signature_header or not signature_header.startswith("sha256="):
+        return False
+    expected = hmac.new(app_secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    provided = signature_header.split("=", 1)[1]
+    return hmac.compare_digest(expected, provided)
 
 
 # ══════════════════════════════════════════════
@@ -39,6 +52,15 @@ def recibir_lead_meta():
     Recibe el payload JSON cuando un usuario llena un formulario
     de Lead Ads en Facebook o Instagram.
     """
+    app_secret = current_app.config.get("META_APP_SECRET")
+    if not app_secret:
+        logger.error("META_APP_SECRET no configurada — rechazando webhook de Meta.")
+        return jsonify({"error": "Webhook no configurado"}), 503
+    signature = request.headers.get("X-Hub-Signature-256", "")
+    if not _verify_meta_signature(app_secret, request.get_data(), signature):
+        logger.warning("Webhook de Meta con firma inválida o ausente — rechazado.")
+        return jsonify({"error": "Firma inválida"}), 401
+
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Payload inválido"}), 400
@@ -384,13 +406,13 @@ def _save_bot_msg(lead, text):
 @webhooks_bp.route("/baileys", methods=["POST"])
 def recibir_mensaje_baileys():
     """Recibe mensajes desde el microservicio Baileys."""
-    import os
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Payload inválido"}), 400
 
+    bot_secret = os.getenv("BOT_SECRET")
     secret = data.get("secret", "")
-    if secret != os.getenv("BOT_SECRET", "avantex-bot-2026"):
+    if not bot_secret or not hmac.compare_digest(str(secret), bot_secret):
         return jsonify({"error": "No autorizado"}), 403
 
     telefono = data.get("telefono", "")

@@ -2354,7 +2354,7 @@ fbq('track','PageView');
         <span class="lp-field-label">Vendedor</span>
         <span class="lp-field-value" id="lp-vendedor"></span>
         {% if vendedores_list %}
-        <span class="admin-only" style="margin-left:auto;">
+        <span class="reasignar-wrap" style="margin-left:auto;">
           <select id="lp-vendedor-select" onchange="lpReasignarVendedor(this.value)"
                   style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);max-width:160px;">
             <option value="">— Reasignar a... —</option>
@@ -2784,6 +2784,8 @@ window.MI_ESPECIALIDAD = {{ mi_especialidad|tojson|safe }};
 const ADMIN_ROLES=new Set(['developer','super_admin','super_admin_aromatex','super_admin_pestex','super_admin_comercial','super_admin_nexo']);
 const IS_ADMIN=ADMIN_ROLES.has(ROL_USUARIO);
 const IS_DEVELOPER=ROL_USUARIO==='developer';
+// Gerente Comercial Aromatex no es admin pleno, pero sí puede reasignar leads a vendedores.
+const CAN_REASIGNAR_VENDEDOR=IS_ADMIN||ROL_USUARIO==='gerente_comercial_aromatex';
 const EMAIL_SEND_ENABLED=false;
 const EMAIL_INBOX_ENABLED=false;
 let leadActivo=null,draggingId=null,filtroMarca='';
@@ -6047,6 +6049,9 @@ async function crearGasto(){
 
 // Role-based UI
 function applyRoleVisibility(){
+  if(!CAN_REASIGNAR_VENDEDOR){
+    document.querySelectorAll('.reasignar-wrap').forEach(el=>el.style.display='none');
+  }
   if(IS_ADMIN)return;
   // Hide elements for vendedor role
   document.querySelectorAll('.admin-only').forEach(el=>el.style.display='none');

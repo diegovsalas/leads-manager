@@ -30,7 +30,14 @@ const PORT = process.env.PORT || 3001;
 const CRM_WEBHOOK_URL =
   process.env.CRM_WEBHOOK_URL ||
   "https://leads-manager-avantex.onrender.com/webhook/baileys";
-const BOT_SECRET = process.env.BOT_SECRET || "avantex-bot-2026";
+const BOT_SECRET = process.env.BOT_SECRET;
+if (!BOT_SECRET) {
+  // SECURITY-2026-07-14: sin esta variable, el fallback hardcodeado quedaba
+  // visible en el código fuente y permitía a cualquiera enviar/leer mensajes
+  // de WhatsApp del negocio vía la API de este servicio.
+  console.error("BOT_SECRET no está configurada. Define la variable de entorno antes de arrancar.");
+  process.exit(1);
+}
 
 const logger = pino({ level: "info" });
 

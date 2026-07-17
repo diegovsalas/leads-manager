@@ -8,7 +8,7 @@ import hashlib
 import io
 from datetime import datetime, date, timedelta
 from functools import wraps
-from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, send_file, flash
+from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, send_file, flash, current_app
 from sqlalchemy import func
 from extensions import db
 from blueprints.auth import is_admin_role, is_full_access_role
@@ -1466,7 +1466,10 @@ def editar_cliente(account_id):
         acc.logo_url = request.form.get("logo_url", "").strip()
     if "giro" in request.form:
         giros = request.form.getlist("giro")
-        acc.giro = ",".join(g.strip() for g in giros if g.strip())
+        giro_val = ",".join(g.strip() for g in giros if g.strip())
+        if len(giro_val) > 100:
+            return "Selecciona menos giros: el conjunto no puede pasar de 100 caracteres", 400
+        acc.giro = giro_val
     if "tier" in request.form:
         acc.tier = request.form.get("tier", "").strip()
     if "mrr" in request.form:
@@ -1481,8 +1484,16 @@ def editar_cliente(account_id):
             pass
     if "unidades_contratadas" in request.form:
         unidades = request.form.getlist("unidades_contratadas")
-        acc.unidades_contratadas = ",".join(u.strip() for u in unidades if u.strip())
-    db.session.commit()
+        unidades_val = ",".join(u.strip() for u in unidades if u.strip())
+        if len(unidades_val) > 100:
+            return "Demasiadas unidades contratadas seleccionadas", 400
+        acc.unidades_contratadas = unidades_val
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception("Error al editar cliente CS")
+        return f"No se pudo guardar: {e}", 400
     return redirect(url_for("cs.clientes"))
 
 
@@ -1516,19 +1527,30 @@ def crear_cliente():
 
     giros = request.form.getlist("giro")
     unidades = request.form.getlist("unidades_contratadas")
+    giro_val = ",".join(g.strip() for g in giros if g.strip())
+    unidades_val = ",".join(u.strip() for u in unidades if u.strip())
+    if len(giro_val) > 100:
+        return "Selecciona menos giros: el conjunto no puede pasar de 100 caracteres", 400
+    if len(unidades_val) > 100:
+        return "Demasiadas unidades contratadas seleccionadas", 400
 
     acc = CSAccount(
         nombre=nombre, kam_id=kam_id,
         client_id=client_id,  # None → auto AX-XXXX por listener
         logo_url=request.form.get("logo_url", "").strip(),
         tier=request.form.get("tier", "").strip(),
-        giro=",".join(g.strip() for g in giros if g.strip()),
-        unidades_contratadas=",".join(u.strip() for u in unidades if u.strip()),
+        giro=giro_val,
+        unidades_contratadas=unidades_val,
         mrr=mrr, sucursales=sucursales,
         es_cuenta_nueva=True,  # marca onboarding
     )
     db.session.add(acc)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception("Error al crear cliente CS")
+        return f"No se pudo crear la cuenta: {e}", 400
     return redirect(url_for("cs.clientes"))
 
 

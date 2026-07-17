@@ -475,7 +475,15 @@ def create_app():
     app = Flask(__name__)
 
     # ── Configuración ──────────────────────────
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key")
+    secret_key = os.getenv("SECRET_KEY")
+    if not secret_key:
+        raise RuntimeError(
+            "SECRET_KEY no está configurada. Sin ella, Flask firmaría las "
+            "cookies de sesión con un valor público conocido (visible en el "
+            "código fuente), permitiendo forjar sesiones de cualquier rol. "
+            "Define SECRET_KEY en las variables de entorno antes de arrancar."
+        )
+    app.config["SECRET_KEY"] = secret_key
 
     # Supabase/Render usan postgres:// pero SQLAlchemy requiere postgresql://
     db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/avantex_crm")
@@ -501,7 +509,19 @@ def create_app():
     # Variables de Meta/WhatsApp accesibles en toda la app
     app.config["WHATSAPP_TOKEN"]    = os.getenv("WHATSAPP_TOKEN", "")
     app.config["WHATSAPP_PHONE_ID"] = os.getenv("WHATSAPP_PHONE_ID", "")
-    app.config["META_VERIFY_TOKEN"] = os.getenv("META_VERIFY_TOKEN", "avantex-verify-2026")
+    meta_verify_token = os.getenv("META_VERIFY_TOKEN")
+    if not meta_verify_token:
+        raise RuntimeError(
+            "META_VERIFY_TOKEN no está configurada. Sin ella, la verificación "
+            "del webhook de Meta usaría un valor público conocido (visible en "
+            "el código fuente). Define META_VERIFY_TOKEN en las variables de "
+            "entorno antes de arrancar."
+        )
+    app.config["META_VERIFY_TOKEN"] = meta_verify_token
+    # SECURITY-2026-07-14: firma HMAC del payload del webhook de Meta.
+    # Sin esto, cualquiera que descubra la URL /webhook/meta puede inyectar
+    # leads falsos con un simple POST. Ver blueprints/webhooks.py.
+    app.config["META_APP_SECRET"] = os.getenv("META_APP_SECRET", "")
 
     # ── Extensiones ────────────────────────────
     db.init_app(app)
