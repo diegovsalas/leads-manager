@@ -617,7 +617,7 @@ def create_app():
     @app.before_request
     def require_login():
         allowed = ("/login", "/auth/google", "/webhook/", "/static/", "/api/v1/",
-                   "/encuesta/", "/dd-encuesta/")  # dd-encuesta: público sin login
+                   "/encuesta/", "/dd-encuesta/", "/soporte/")  # público sin login
         if any(request.path.startswith(p) for p in allowed):
             return
         if not session.get("user_id"):
