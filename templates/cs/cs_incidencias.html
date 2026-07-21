@@ -56,6 +56,13 @@
                         <span class="pill info" style="margin-right:4px">{{ inc.servicio }}</span>
                         <span style="font-size:12.5px">{{ inc.tipo }}</span>
                         {% if inc.propiedad_nombre %}<div class="muted" style="font-size:11px">{{ inc.propiedad_nombre }}</div>{% endif %}
+                        {% if inc.evidencia_urls %}
+                        <div style="display:flex;gap:4px;margin-top:4px">
+                            {% for url in inc.evidencia_urls %}
+                            <a href="{{ url }}" target="_blank" rel="noopener"><img src="{{ url }}" style="width:28px;height:28px;border-radius:4px;object-fit:cover;border:1px solid var(--border)"></a>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
                     </td>
                     <td class="muted" style="font-size:12.5px">{{ inc.responsable or '—' }}</td>
                     <td class="muted" style="font-size:12.5px">{{ inc.fecha_incidencia.strftime('%d/%m/%Y') if inc.fecha_incidencia else '—' }}</td>

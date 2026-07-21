@@ -26,6 +26,17 @@ body{font-family:'Inter',system-ui,sans-serif;background:#f5f5f9;min-height:100v
 .submit-btn:hover{background:#6d28d9}
 .footer{text-align:center;padding:16px;font-size:11px;color:#bbb;border-top:1px solid #f0f0f0}
 .req{color:#ef4444}
+.autocomplete{position:relative}
+.autocomplete-results{position:absolute;z-index:20;width:100%;border:1px solid #e5e5e5;border-radius:8px;max-height:180px;overflow-y:auto;margin-top:4px;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,.1);display:none}
+.autocomplete-results.open{display:block}
+.autocomplete-item{padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f5f5f5}
+.autocomplete-item:hover{background:#f9f7fe}
+.autocomplete-item small{display:block;color:#aaa;font-size:11px}
+.file-hint{font-size:11px;color:#999;margin-top:4px}
+.file-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.file-thumb{width:56px;height:56px;border-radius:8px;object-fit:cover;border:1px solid #e5e5e5}
+.resumen-box{background:#f5f3ff;border-bottom:1px solid #ede9fe;padding:14px 32px;display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:#5b21b6}
+.resumen-box b{font-size:15px;display:block;color:#4c1d95}
 </style>
 </head>
 <body>
@@ -37,7 +48,15 @@ body{font-family:'Inter',system-ui,sans-serif;background:#f5f5f9;min-height:100v
         <p>{{ account.nombre }}</p>
     </div>
 
-    <form action="/soporte/{{ token }}" method="POST">
+    {% if resumen and resumen.total > 0 %}
+    <div class="resumen-box">
+        <div><b>{{ resumen.total }}</b>tickets este mes</div>
+        <div><b>{{ resumen.abiertas + resumen.en_proceso }}</b>en seguimiento</div>
+        <div><b>{{ resumen.resueltas }}</b>resueltos</div>
+    </div>
+    {% endif %}
+
+    <form action="/soporte/{{ token }}" method="POST" enctype="multipart/form-data">
         <div class="body">
             {% if error %}
             <div class="error-box">{{ error }}</div>
@@ -57,9 +76,11 @@ body{font-family:'Inter',system-ui,sans-serif;background:#f5f5f9;min-height:100v
                 </div>
             </div>
 
-            <div class="field">
+            <div class="field autocomplete">
                 <label>Sucursal / ubicación</label>
-                <input type="text" name="ubicacion" placeholder="ej: Sucursal Centro">
+                <input type="hidden" name="propiedad_id" id="propiedad_id">
+                <input type="text" name="ubicacion" id="ubicacion" placeholder="Escribe para buscar tu sucursal..." autocomplete="off">
+                <div class="autocomplete-results" id="propiedad-results"></div>
             </div>
 
             <div class="field">
@@ -76,6 +97,13 @@ body{font-family:'Inter',system-ui,sans-serif;background:#f5f5f9;min-height:100v
                     <label>Teléfono o correo <span class="req">*</span></label>
                     <input type="text" name="contacto_cliente" placeholder="Para darle seguimiento" required>
                 </div>
+            </div>
+
+            <div class="field">
+                <label>Fotos (opcional)</label>
+                <input type="file" name="fotos" id="fotos" accept="image/*" capture="environment" multiple>
+                <div class="file-hint">Hasta 5 fotos, 8MB cada una.</div>
+                <div class="file-list" id="file-list"></div>
             </div>
 
             <button type="submit" class="submit-btn">Enviar reporte</button>
@@ -102,6 +130,56 @@ function renderTipos(){
 }
 document.getElementById('servicio').addEventListener('change', renderTipos);
 renderTipos();
+
+// Buscador de sucursales (propiedades ya registradas de esta cuenta)
+const ubicacionInput = document.getElementById('ubicacion');
+const propiedadIdInput = document.getElementById('propiedad_id');
+const resultsEl = document.getElementById('propiedad-results');
+let debounceTimer = null;
+
+ubicacionInput.addEventListener('input', () => {
+    propiedadIdInput.value = ''; // si el usuario edita el texto, ya no hay match exacto
+    clearTimeout(debounceTimer);
+    const q = ubicacionInput.value.trim();
+    debounceTimer = setTimeout(() => buscarPropiedades(q), 200);
+});
+ubicacionInput.addEventListener('focus', () => buscarPropiedades(ubicacionInput.value.trim()));
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.autocomplete')) resultsEl.classList.remove('open');
+});
+
+async function buscarPropiedades(q){
+    try{
+        const r = await fetch('/soporte/{{ token }}/propiedades?q=' + encodeURIComponent(q));
+        const items = await r.json();
+        resultsEl.innerHTML = '';
+        if (!items.length){ resultsEl.classList.remove('open'); return; }
+        items.forEach(p => {
+            const div = document.createElement('div');
+            div.className = 'autocomplete-item';
+            div.innerHTML = p.nombre + (p.zona ? `<small>${p.zona}</small>` : '');
+            div.onclick = () => {
+                ubicacionInput.value = p.nombre;
+                propiedadIdInput.value = p.id;
+                resultsEl.classList.remove('open');
+            };
+            resultsEl.appendChild(div);
+        });
+        resultsEl.classList.add('open');
+    }catch(e){ resultsEl.classList.remove('open'); }
+}
+
+// Vista previa de fotos seleccionadas
+document.getElementById('fotos').addEventListener('change', function(){
+    const listEl = document.getElementById('file-list');
+    listEl.innerHTML = '';
+    Array.from(this.files).slice(0, 5).forEach(file => {
+        const img = document.createElement('img');
+        img.className = 'file-thumb';
+        img.src = URL.createObjectURL(file);
+        listEl.appendChild(img);
+    });
+});
 </script>
 
 </body>

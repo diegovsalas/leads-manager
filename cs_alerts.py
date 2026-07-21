@@ -200,3 +200,30 @@ def alertas_por_cuenta(account_id: str) -> list[dict]:
     if not acc:
         return []
     return generar_alertas(accounts=[acc])
+
+
+def resumen_tickets_mes(account_id, referencia: date = None) -> dict:
+    """Conteo de incidencias (tickets) creadas en el mes de `referencia`
+    (hoy por defecto) para una cuenta. Usado en el portal público del
+    cliente, en la ficha de cuenta interna y como insumo del seguimiento
+    mensual del KAM."""
+    ref = referencia or date.today()
+    inicio = ref.replace(day=1)
+    fin = date(ref.year + 1, 1, 1) if ref.month == 12 else date(ref.year, ref.month + 1, 1)
+
+    rows = (
+        CSIncidencia.query
+        .filter(
+            CSIncidencia.account_id == account_id,
+            CSIncidencia.fecha_incidencia >= inicio,
+            CSIncidencia.fecha_incidencia < fin,
+        )
+        .all()
+    )
+    return {
+        "total": len(rows),
+        "abiertas": sum(1 for i in rows if i.status == "Abierta"),
+        "en_proceso": sum(1 for i in rows if i.status == "En proceso"),
+        "resueltas": sum(1 for i in rows if i.status == "Resuelta"),
+        "mes_label": ref.strftime("%B %Y"),
+    }

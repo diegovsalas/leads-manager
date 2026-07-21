@@ -18,7 +18,7 @@ from openpyxl.styles import (Font, PatternFill, Alignment, Border, Side,
                               numbers)
 from openpyxl.utils import get_column_letter
 
-from models import CSAccount as Account, CSAppointment as Appointment
+from models import CSAccount as Account, CSAppointment as Appointment, CSIncidencia
 
 # ---------------------------------------------------------------------------
 # Clasificación de servicios
@@ -200,6 +200,23 @@ def _get_appointments_data(account: Account, year: int, meses: tuple):
     return records
 
 
+def _get_incidencias_trimestre(account: Account, year: int, meses: tuple) -> dict:
+    """Conteo de incidencias (tickets) del trimestre — el QBR no incluía
+    incidencias hasta ahora. Mismo criterio de filtrado que
+    _get_appointments_data (por fecha_incidencia, no created_at)."""
+    incs = CSIncidencia.query.filter_by(account_id=account.id).all()
+    del_trim = [
+        i for i in incs
+        if i.fecha_incidencia and i.fecha_incidencia.year == year and i.fecha_incidencia.month in meses
+    ]
+    return {
+        "total": len(del_trim),
+        "resueltas": sum(1 for i in del_trim if i.status == "Resuelta"),
+        "vencidas": sum(1 for i in del_trim if i.status != "Resuelta"
+                        and i.fecha_compromiso and i.fecha_compromiso < datetime.now().date()),
+    }
+
+
 def _deduplicar(records):
     """
     Deduplicación: por cada (propiedad, mes, servicio), conservar:
@@ -274,6 +291,7 @@ def generar_qbr(account: Account, trimestre: str = None) -> BytesIO:
     # Obtener datos
     all_records = _get_appointments_data(account, year, meses_trim)
     limpios, descartados = _deduplicar(all_records)
+    incidencias_trim = _get_incidencias_trimestre(account, year, meses_trim)
 
     # Separar recurrentes y eventos
     recurrentes = [r for r in limpios if r['tipo_servicio'] == 'recurrente']
@@ -297,14 +315,14 @@ def generar_qbr(account: Account, trimestre: str = None) -> BytesIO:
     ws1.sheet_properties.tabColor = '1E3A5F'
 
     # Banner
-    ws1.merge_cells('A1:I1')
+    ws1.merge_cells('A1:K1')
     ws1.cell(row=1, column=1, value=f'QBR — {account.nombre}')
     ws1['A1'].font = FONT_TITLE
     ws1['A1'].fill = AZUL_OSCURO
     ws1['A1'].alignment = ALIGN_CENTER
     ws1.row_dimensions[1].height = 40
 
-    ws1.merge_cells('A2:I2')
+    ws1.merge_cells('A2:K2')
     ws1.cell(row=2, column=1, value=f'{trimestre} · {account.unidades_contratadas} · KAM: {account.kam.nombre}')
     ws1['A2'].font = Font(name='Arial', size=11, color='FFFFFF')
     ws1['A2'].fill = AZUL_MEDIO
@@ -333,6 +351,8 @@ def generar_qbr(account: Account, trimestre: str = None) -> BytesIO:
 
     kpis.append(('% Cobertura', pct_cobertura))
     kpis.append(('% Cumplimiento\n(vs portafolio)', pct_cumplimiento))
+    kpis.append(('Tickets\ndel trimestre', incidencias_trim['total']))
+    kpis.append(('Tickets\nresueltos', incidencias_trim['resueltas']))
 
     for i, (label, value) in enumerate(kpis):
         col = i + 1

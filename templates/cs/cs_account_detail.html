@@ -1251,6 +1251,12 @@
                         {% set en_proceso = incidencias|selectattr('status','equalto','En proceso')|list|length %}
                         {{ abiertas }} abiertas · {{ en_proceso }} en proceso · {{ incidencias|length }} total
                     </p>
+                    {% if tickets_mes %}
+                    <p class="text-xs text-gray-400 mt-0.5">
+                        Este mes ({{ tickets_mes.mes_label }}): <strong class="text-gray-600">{{ tickets_mes.total }}</strong> reportados ·
+                        <strong class="text-gray-600">{{ tickets_mes.resueltas }}</strong> resueltos — para el seguimiento del cliente
+                    </p>
+                    {% endif %}
                 </div>
                 <button onclick="document.getElementById('modal-add-incidencia').style.display='grid'"
                         class="px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700">
@@ -1346,6 +1352,15 @@
                         </tr>
                         {% if inc.detalle %}
                         <tr class="border-b bg-gray-50"><td colspan="7" class="px-3 py-1.5 text-xs text-gray-500 italic">{{ inc.detalle[:150] }}</td></tr>
+                        {% endif %}
+                        {% if inc.evidencia_urls %}
+                        <tr class="border-b bg-gray-50"><td colspan="7" class="px-3 py-1.5">
+                            <div style="display:flex;gap:6px;flex-wrap:wrap">
+                                {% for url in inc.evidencia_urls %}
+                                <a href="{{ url }}" target="_blank" rel="noopener"><img src="{{ url }}" style="width:48px;height:48px;border-radius:6px;object-fit:cover;border:1px solid #e3e2e0"></a>
+                                {% endfor %}
+                            </div>
+                        </td></tr>
                         {% endif %}
                         {% endfor %}
                     </tbody>

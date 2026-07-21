@@ -6,6 +6,7 @@ Rutas bajo /cs/
 import csv
 import hashlib
 import io
+import json
 import secrets
 from datetime import datetime, date, timedelta
 from functools import wraps
@@ -20,7 +21,7 @@ from models import (
     UserCRM, RolCRM,
 )
 from cs_health_score import calcular_health_score, calcular_health_scores_batch
-from cs_alerts import generar_alertas, alertas_por_cuenta
+from cs_alerts import generar_alertas, alertas_por_cuenta, resumen_tickets_mes
 
 cs_bp = Blueprint("cs", __name__, template_folder="../templates/cs")
 
@@ -236,6 +237,17 @@ def _incidencia_vencida(inc) -> bool:
         and inc.fecha_compromiso is not None
         and inc.fecha_compromiso < date.today()
     )
+
+
+def _con_evidencia_urls(incidencias):
+    """Adjunta .evidencia_urls (lista) a cada incidencia — evidencia se
+    guarda como JSON de URLs (ver blueprints/tickets.py::enviar_ticket)."""
+    for inc in incidencias:
+        try:
+            inc.evidencia_urls = json.loads(inc.evidencia) if inc.evidencia else []
+        except (ValueError, TypeError):
+            inc.evidencia_urls = []
+    return incidencias
 
 
 def _can_edit_account(account):
@@ -1754,7 +1766,9 @@ def account_detail(account_id):
         workload_bloqueo_otro = workload_survey.tipo_bloqueo.replace("Otro:", "", 1).strip()
 
     # Incidencias
-    incidencias = CSIncidencia.query.filter_by(account_id=account.id).order_by(CSIncidencia.created_at.desc()).limit(100).all()
+    incidencias = _con_evidencia_urls(
+        CSIncidencia.query.filter_by(account_id=account.id).order_by(CSIncidencia.created_at.desc()).limit(100).all()
+    )
     propiedades = CSPropiedad.query.filter_by(account_id=account.id).order_by(CSPropiedad.nombre).all()
 
     # Encuestas NPS/CSAT
@@ -1807,6 +1821,7 @@ def account_detail(account_id):
         workload_activities=WORKLOAD_ACTIVITIES,
         workload_options=WORKLOAD_SURVEY_OPTIONS,
         incidencias=incidencias, propiedades=propiedades,
+        tickets_mes=resumen_tickets_mes(account.id),
         encuestas=encuestas, survey_link=survey_link, ticket_link=ticket_link,
         avg_nps=avg_nps, avg_csat=avg_csat, kpi_satisfaccion=kpi_satisfaccion,
         csat_dims=csat_dims,
@@ -3536,7 +3551,7 @@ def incidencias_view():
     """Todas las incidencias abiertas/en proceso de TODAS las cuentas,
     para gestión proactiva (a diferencia de /cs/mis-pendientes, que solo
     muestra las de las cuentas del KAM logueado)."""
-    abiertas = (
+    abiertas = _con_evidencia_urls(
         CSIncidencia.query
         .join(CSAccount, CSIncidencia.account_id == CSAccount.id)
         .filter(CSIncidencia.status != "Resuelta")
