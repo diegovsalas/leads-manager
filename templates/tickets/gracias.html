@@ -13,19 +13,19 @@ body{font-family:'Inter',system-ui,sans-serif;background:#f5f5f9;min-height:100v
 h1{font-size:22px;font-weight:700;color:#1e1b3a;margin-bottom:8px}
 p{font-size:14px;color:#888;line-height:1.6}
 .brand{margin-top:32px;font-size:12px;color:#ccc}
-.resumen{margin-top:20px;padding-top:20px;border-top:1px solid #f0f0f0;display:flex;justify-content:center;gap:20px;font-size:12px;color:#5b21b6}
-.resumen b{font-size:16px;display:block;color:#4c1d95}
 .folio-box{margin:20px 0;padding:14px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px}
 .folio-box .label{font-size:11px;color:#7c3aed;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px}
 .folio-box .valor{font-size:22px;font-weight:800;color:#4c1d95;letter-spacing:1px}
 .folio-box .hint{font-size:11px;color:#9ca3af;margin-top:4px}
+.email-note{font-size:12px;color:#888;margin-top:8px}
+.btn-tickets{display:inline-block;margin-top:20px;padding:10px 20px;background:#7c3aed;color:#fff;border-radius:10px;text-decoration:none;font-size:13px;font-weight:600}
 </style>
 </head>
 <body>
 <div class="card">
     <div class="icon">✅</div>
     <h1>Ticket recibido</h1>
-    <p>Tu reporte para <strong>{{ account.nombre }}</strong> ya está registrado. Tu asesor se pondrá en contacto contigo pronto.</p>
+    <p>Tu reporte para <strong>{{ account.nombre }}</strong> ya está registrado. Te daremos seguimiento en menos de 24 horas.</p>
     {% if folio %}
     <div class="folio-box">
         <div class="label">Tu folio</div>
@@ -33,11 +33,11 @@ p{font-size:14px;color:#888;line-height:1.6}
         <div class="hint">Guárdalo para dar seguimiento a este reporte</div>
     </div>
     {% endif %}
-    {% if resumen %}
-    <div class="resumen">
-        <div><b>{{ resumen.total }}</b>tickets este mes</div>
-        <div><b>{{ resumen.resueltas }}</b>resueltos</div>
-    </div>
+    {% if email_enviado %}
+    <p class="email-note">Te enviamos los detalles y este folio a tu correo.</p>
+    {% endif %}
+    {% if token %}
+    <a href="/soporte/{{ token }}" class="btn-tickets">Ver mis tickets</a>
     {% endif %}
     <div class="brand">Grupo Avantex &copy; 2026</div>
 </div>

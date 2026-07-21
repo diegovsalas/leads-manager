@@ -3599,7 +3599,7 @@ def generar_ticket_token(account_id):
     return jsonify({
         "ok": True,
         "token": acc.ticket_token,
-        "url": url_for("tickets.ticket_publico", token=acc.ticket_token, _external=True),
+        "url": url_for("tickets.centro_tickets", token=acc.ticket_token, _external=True),
     })
 
 

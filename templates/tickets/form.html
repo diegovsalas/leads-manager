@@ -35,8 +35,8 @@ body{font-family:'Inter',system-ui,sans-serif;background:#f5f5f9;min-height:100v
 .file-hint{font-size:11px;color:#999;margin-top:4px}
 .file-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .file-thumb{width:56px;height:56px;border-radius:8px;object-fit:cover;border:1px solid #e5e5e5}
-.resumen-box{background:#f5f3ff;border-bottom:1px solid #ede9fe;padding:14px 32px;display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:#5b21b6}
-.resumen-box b{font-size:15px;display:block;color:#4c1d95}
+.back-link{padding:14px 32px 0;font-size:12.5px}
+.back-link a{color:#7c3aed;text-decoration:none;font-weight:500}
 </style>
 </head>
 <body>
@@ -48,15 +48,9 @@ body{font-family:'Inter',system-ui,sans-serif;background:#f5f5f9;min-height:100v
         <p>{{ account.nombre }}</p>
     </div>
 
-    {% if resumen and resumen.total > 0 %}
-    <div class="resumen-box">
-        <div><b>{{ resumen.total }}</b>tickets este mes</div>
-        <div><b>{{ resumen.abiertas + resumen.en_proceso }}</b>en seguimiento</div>
-        <div><b>{{ resumen.resueltas }}</b>resueltos</div>
-    </div>
-    {% endif %}
+    <div class="back-link"><a href="/soporte/{{ token }}">&larr; Volver a mis tickets</a></div>
 
-    <form action="/soporte/{{ token }}" method="POST" enctype="multipart/form-data">
+    <form action="/soporte/{{ token }}/nuevo" method="POST" enctype="multipart/form-data">
         <div class="body">
             {% if error %}
             <div class="error-box">{{ error }}</div>
@@ -94,8 +88,8 @@ body{font-family:'Inter',system-ui,sans-serif;background:#f5f5f9;min-height:100v
                     <input type="text" name="quien_reporta" placeholder="Nombre completo" required>
                 </div>
                 <div class="field">
-                    <label>Teléfono o correo <span class="req">*</span></label>
-                    <input type="text" name="contacto_cliente" placeholder="Para darle seguimiento" required>
+                    <label>Correo electrónico <span class="req">*</span></label>
+                    <input type="email" name="contacto_cliente" placeholder="Te enviaremos tu folio aquí" required>
                 </div>
             </div>
 
