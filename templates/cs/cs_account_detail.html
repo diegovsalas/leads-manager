@@ -1308,6 +1308,7 @@
                 <table class="w-full text-sm">
                     <thead>
                         <tr class="border-b text-left text-gray-500 text-xs uppercase tracking-wide bg-gray-50">
+                            <th class="px-3 py-2">Folio</th>
                             <th class="px-3 py-2">Fecha</th>
                             <th class="px-3 py-2">Servicio</th>
                             <th class="px-3 py-2">Tipo</th>
@@ -1320,6 +1321,7 @@
                     <tbody>
                         {% for inc in incidencias %}
                         <tr class="border-b last:border-0 hover:bg-gray-50">
+                            <td class="px-3 py-2 text-xs font-mono text-gray-600">{{ inc.folio or '-' }}</td>
                             <td class="px-3 py-2 text-xs text-gray-500">{{ inc.fecha_incidencia.strftime('%d/%m/%Y') if inc.fecha_incidencia else '-' }}</td>
                             <td class="px-3 py-2">
                                 <span class="px-1.5 py-0.5 rounded text-xs font-medium {% if inc.servicio == 'Aroma' %}bg-purple-100 text-purple-700{% else %}bg-green-100 text-green-700{% endif %}">{{ inc.servicio }}</span>
@@ -1351,10 +1353,10 @@
                             </td>
                         </tr>
                         {% if inc.detalle %}
-                        <tr class="border-b bg-gray-50"><td colspan="7" class="px-3 py-1.5 text-xs text-gray-500 italic">{{ inc.detalle[:150] }}</td></tr>
+                        <tr class="border-b bg-gray-50"><td colspan="8" class="px-3 py-1.5 text-xs text-gray-500 italic">{{ inc.detalle[:150] }}</td></tr>
                         {% endif %}
                         {% if inc.evidencia_urls %}
-                        <tr class="border-b bg-gray-50"><td colspan="7" class="px-3 py-1.5">
+                        <tr class="border-b bg-gray-50"><td colspan="8" class="px-3 py-1.5">
                             <div style="display:flex;gap:6px;flex-wrap:wrap">
                                 {% for url in inc.evidencia_urls %}
                                 <a href="{{ url }}" target="_blank" rel="noopener"><img src="{{ url }}" style="width:48px;height:48px;border-radius:6px;object-fit:cover;border:1px solid #e3e2e0"></a>

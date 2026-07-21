@@ -175,4 +175,7 @@ def enviar_ticket(token):
         db.session.rollback()
         return _rerender("No se pudo registrar el ticket. Intenta de nuevo o contacta a tu KAM.")
 
-    return render_template("tickets/gracias.html", account=account, resumen=resumen_tickets_mes(account.id))
+    return render_template(
+        "tickets/gracias.html", account=account, folio=inc.folio,
+        resumen=resumen_tickets_mes(account.id),
+    )

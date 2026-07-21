@@ -1010,6 +1010,10 @@ class CSIncidencia(db.Model):
     """Incidencia de servicio reportada por KAM."""
     __tablename__ = "cs_incidencias"
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    # FEAT-2026-07-21: folio consecutivo visible para el cliente (portal de
+    # tickets) y para CS — sin esto no había forma de referenciar un ticket
+    # por teléfono/email. Auto-asignado por el listener before_insert.
+    folio = db.Column(db.String(20), unique=True, nullable=True, index=True)
     account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=False)
     propiedad_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_propiedades.id"), nullable=True)
     propiedad_nombre = db.Column(db.String(300), default="")
@@ -1032,6 +1036,22 @@ class CSIncidencia(db.Model):
 
     account = db.relationship("CSAccount", backref="incidencias")
     propiedad = db.relationship("CSPropiedad")
+
+
+@db.event.listens_for(CSIncidencia, "before_insert")
+def _auto_folio_incidencia(mapper, connection, target):
+    """Auto-asigna folio secuencial TK-XXXX si no se proporcionó."""
+    if not target.folio:
+        rows = connection.execute(
+            db.text("SELECT folio FROM cs_incidencias WHERE folio IS NOT NULL")
+        ).fetchall()
+        max_num = 0
+        for (folio,) in rows:
+            if folio and "-" in folio:
+                parts = folio.split("-")
+                if len(parts) >= 2 and parts[-1].isdigit():
+                    max_num = max(max_num, int(parts[-1]))
+        target.folio = f"TK-{max_num + 1:04d}"
 
 
 class CSEntregable(db.Model):

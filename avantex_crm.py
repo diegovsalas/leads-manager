@@ -826,6 +826,30 @@ def create_app():
             db.session.commit()
         except Exception:
             db.session.rollback()
+        # FEAT-2026-07-21: folio consecutivo en cs_incidencias (portal de tickets)
+        try:
+            db.session.execute(db.text(
+                "ALTER TABLE cs_incidencias ADD COLUMN IF NOT EXISTS folio VARCHAR(20)"
+            ))
+            db.session.execute(db.text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_cs_incidencias_folio "
+                "ON cs_incidencias (folio) WHERE folio IS NOT NULL"
+            ))
+            # Backfill TK-XXXX en orden de creación para las incidencias que
+            # ya existían antes de este feature.
+            rows = db.session.execute(db.text(
+                "SELECT id FROM cs_incidencias WHERE folio IS NULL ORDER BY created_at ASC"
+            )).fetchall()
+            for i, row in enumerate(rows, start=1):
+                db.session.execute(
+                    db.text("UPDATE cs_incidencias SET folio = :f WHERE id = :id"),
+                    {"f": f"TK-{i:04d}", "id": row[0]},
+                )
+            if rows:
+                app.logger.info("[auto-migrate] backfilled %d incidencias with TK-XXXX", len(rows))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
     # ── Cadencia automatica (cada 15 minutos) ──
     _start_scheduler(app)

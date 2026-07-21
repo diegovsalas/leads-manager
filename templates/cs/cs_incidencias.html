@@ -9,6 +9,10 @@
         <h1>Incidencias</h1>
         <p class="sub">{{ stats.abiertas }} abiertas · {{ stats.vencidas }} con SLA vencido</p>
     </div>
+    <div class="actions">
+        <input type="text" id="search-incidencias" placeholder="Buscar por folio o cuenta..." oninput="filterIncidencias(this.value)"
+               style="font-size:13px;padding:7px 12px;border:1px solid var(--border);border-radius:var(--r);min-width:220px">
+    </div>
 </div>
 
 <div class="grid g-4 mb-4">
@@ -32,9 +36,10 @@
 
 <div class="card" style="overflow:hidden">
     <div style="overflow-x:auto">
-        <table class="tbl">
+        <table class="tbl" id="tbl-incidencias">
             <thead>
                 <tr>
+                    <th>Folio</th>
                     <th>Cuenta</th>
                     <th>Servicio / Tipo</th>
                     <th>Responsable</th>
@@ -48,7 +53,8 @@
                 {% for inc in incidencias %}
                 {% set acc = accounts_by_id.get(inc.account_id|string) %}
                 {% set vencida = inc.status != 'Resuelta' and inc.fecha_compromiso and inc.fecha_compromiso < hoy %}
-                <tr>
+                <tr data-search="{{ (inc.folio or '')|lower }} {{ (acc.nombre if acc else '')|lower }}">
+                    <td class="primary" style="font-family:var(--mono);font-size:12px">{{ inc.folio or '—' }}</td>
                     <td class="primary">
                         {% if acc %}<a href="/cs/account/{{ acc.id }}">{% if acc.client_id %}<span style="font-size:10px;font-weight:700;color:var(--copper);margin-right:4px">{{ acc.client_id }}</span>{% endif %}{{ acc.nombre }}</a>{% else %}<span class="muted">—</span>{% endif %}
                     </td>
@@ -102,4 +108,15 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+function filterIncidencias(query) {
+    var rows = document.querySelectorAll('#tbl-incidencias tbody tr');
+    var q = query.toLowerCase();
+    rows.forEach(function(row) {
+        var s = row.getAttribute('data-search') || '';
+        row.style.display = s.indexOf(q) !== -1 ? '' : 'none';
+    });
+}
+</script>
 {% endblock %}
