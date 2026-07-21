@@ -340,12 +340,12 @@ async function _csSyncSavio(btn){
                 {% for item in top_riesgo %}
                 {% set acc = item.account %}
                 {% set hs = item.health %}
-                {% set st = 'ok' if hs.score >= 70 else 'warn' if hs.score >= 40 else 'danger' %}
+                {% set st = ('ok' if hs.score >= 70 else 'warn' if hs.score >= 40 else 'danger') if hs.score is not none else 'neutral' %}
                 <tr>
                     <td class="primary"><a href="/cs/account/{{ acc.id }}">{% if acc.client_id %}<span style="font-size:10px;font-weight:700;color:var(--copper);margin-right:4px">{{ acc.client_id }}</span>{% endif %}{{ acc.nombre }}</a></td>
                     <td><div class="hstack"><span class="ava">{{ acc.kam.nombre[:2]|upper if acc.kam else '?' }}</span><span class="muted">{{ acc.kam.nombre.split(' ')[0] if acc.kam else '-' }}</span></div></td>
                     <td class="r">${{ "{:,.0f}".format(acc.mrr|float) }}</td>
-                    <td class="c"><span class="score {{ st }}">{{ hs.score }}</span></td>
+                    <td class="c"><span class="score {{ st }}">{{ hs.score if hs.score is not none else '—' }}</span></td>
                     <td class="c"><span class="pill {{ st }}"><span class="dot"></span>{{ hs.categoria }}</span></td>
                 </tr>
                 {% endfor %}
@@ -367,7 +367,7 @@ async function _csSyncSavio(btn){
                 {% for item in top_cuentas_mrr %}
                 {% set acc = item.account %}
                 {% set hs = item.health %}
-                {% set st = 'ok' if hs.score >= 70 else 'warn' if hs.score >= 40 else 'danger' %}
+                {% set st = ('ok' if hs.score >= 70 else 'warn' if hs.score >= 40 else 'danger') if hs.score is not none else 'neutral' %}
                 {% set ratio = (item.mrr_observado / item.mrr) if item.mrr > 0 else 0 %}
                 {% set gap_warn = ratio >= 2 %}
                 <tr>
@@ -376,7 +376,7 @@ async function _csSyncSavio(btn){
                     <td class="r"><strong>${{ "{:,.0f}".format(item.mrr_observado) }}</strong></td>
                     <td class="r" {% if gap_warn %}style="color:var(--warn-ink);" title="Savio desactualizado: real es {{ '%.1f'|format(ratio) }}× el contratado"{% endif %}>${{ "{:,.0f}".format(item.mrr) }}{% if gap_warn %} ⚠{% endif %}</td>
                     <td class="r">{{ "{:.1f}".format(item.pct_total) }}%</td>
-                    <td class="c"><span class="score {{ st }}">{{ hs.score }}</span></td>
+                    <td class="c"><span class="score {{ st }}">{{ hs.score if hs.score is not none else '—' }}</span></td>
                 </tr>
                 {% endfor %}
             </tbody>

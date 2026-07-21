@@ -104,7 +104,11 @@
 
                     <!-- Score -->
                     <td class="c">
+                        {% if hs.score is none %}
+                        <span class="score" style="color:var(--ink-3)" title="Sin datos suficientes">—</span>
+                        {% else %}
                         <span class="score {% if hs.score >= 70 %}ok{% elif hs.score >= 40 %}warn{% else %}danger{% endif %}">{{ hs.score }}</span>
+                        {% endif %}
                     </td>
 
                     <!-- MRR -->
