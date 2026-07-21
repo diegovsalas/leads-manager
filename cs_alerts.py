@@ -3,7 +3,7 @@
 from datetime import datetime, date, timedelta
 from sqlalchemy import func, case
 from extensions import db
-from models import CSAccount, CSTask, CSAppointment, CSInvoice
+from models import CSAccount, CSTask, CSAppointment, CSInvoice, CSIncidencia
 from cs_health_score import calcular_health_scores_batch
 
 
@@ -85,6 +85,23 @@ def generar_alertas(accounts=None, scores_map=None) -> list[dict]:
     )
     vencido_by_acc = {str(r[0]): float(r[1]) for r in vencido_rows}
 
+    # Batch 5: incidencias vencidas (fecha_compromiso pasada, aún no resueltas)
+    incidencias_vencidas_rows = (
+        db.session.query(
+            CSIncidencia.account_id,
+            func.count(CSIncidencia.id),
+        )
+        .filter(
+            CSIncidencia.account_id.in_(account_ids),
+            CSIncidencia.status != "Resuelta",
+            CSIncidencia.fecha_compromiso.isnot(None),
+            CSIncidencia.fecha_compromiso < hoy,
+        )
+        .group_by(CSIncidencia.account_id)
+        .all()
+    )
+    incidencias_vencidas_by_acc = {str(r[0]): r[1] for r in incidencias_vencidas_rows}
+
     alertas = []
 
     for acc in accounts:
@@ -161,6 +178,17 @@ def generar_alertas(accounts=None, scores_map=None) -> list[dict]:
                     "detalle": f"{pct_vencido:.0%} vencido (excluye facturas en plazo).",
                     "severidad": "alta", "accion": "Intervención preventiva",
                 })
+
+        # Regla 6: Incidencias con fecha de compromiso vencida
+        n_vencidas = incidencias_vencidas_by_acc.get(key, 0)
+        if n_vencidas > 0:
+            alertas.append({
+                "cuenta": acc.nombre, "account_id": key, "kam": kam_nombre,
+                "tipo": "incidencia_vencida",
+                "titulo": f"{n_vencidas} incidencia(s) con SLA vencido",
+                "detalle": f"{n_vencidas} incidencia(s) pasaron su fecha de compromiso sin resolverse.",
+                "severidad": "critica", "accion": "Resolver o reprogramar",
+            })
 
     sev_order = {"critica": 0, "alta": 1, "media": 2}
     alertas.sort(key=lambda a: (sev_order.get(a["severidad"], 9), a["cuenta"]))

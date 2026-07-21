@@ -1258,6 +1258,45 @@
                 </button>
             </div>
 
+            <!-- Link público de tickets -->
+            <div class="bg-brand-50 border border-brand-200 rounded-xl p-4 mb-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-semibold text-brand-700">Portal público de tickets</p>
+                        <p class="text-xs text-brand-500 mt-0.5">El cliente reporta incidencias sin login desde este link</p>
+                    </div>
+                    {% if ticket_link %}
+                    <button onclick="navigator.clipboard.writeText(window.location.origin+'{{ ticket_link }}');this.textContent='Copiado!';setTimeout(()=>this.textContent='Copiar link',2000)"
+                            class="px-3 py-1.5 bg-brand-600 text-white text-xs font-medium rounded-lg hover:bg-brand-700">
+                        Copiar link
+                    </button>
+                    {% else %}
+                    <button onclick="generarTicketLink(this)"
+                            class="px-3 py-1.5 bg-brand-600 text-white text-xs font-medium rounded-lg hover:bg-brand-700">
+                        Generar link
+                    </button>
+                    {% endif %}
+                </div>
+                {% if ticket_link %}
+                <div class="mt-2 p-2 bg-white rounded-lg border">
+                    <code class="text-xs text-gray-600 break-all">{{ request.host_url.rstrip('/') }}{{ ticket_link }}</code>
+                </div>
+                {% endif %}
+            </div>
+            <script>
+            async function generarTicketLink(btn){
+                btn.disabled = true;
+                try{
+                    const r = await fetch('/cs/clientes/{{ account.id }}/ticket-token/generar', {method:'POST'});
+                    if(!r.ok) throw new Error('No se pudo generar el link');
+                    location.reload();
+                }catch(e){
+                    alert(e.message);
+                    btn.disabled = false;
+                }
+            }
+            </script>
+
             {% if incidencias %}
             <div class="overflow-x-auto">
                 <table class="w-full text-sm">

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reportar incidencia — {{ account.nombre }}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;background:#f5f5f9;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.08);max-width:520px;width:100%;overflow:hidden}
+.header{background:#1e1b3a;color:#fff;padding:28px 32px;text-align:center}
+.header h1{font-size:18px;font-weight:700;margin-bottom:4px}
+.header p{font-size:13px;color:rgba(255,255,255,.6)}
+.brand{font-size:22px;font-weight:800;margin-bottom:12px;letter-spacing:-.5px}
+.brand span{color:#9171f5}
+.body{padding:28px 32px}
+.error-box{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:8px;padding:10px 12px;font-size:12.5px;margin-bottom:18px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;font-weight:500;color:#666;margin-bottom:4px}
+.field input,.field select,.field textarea{width:100%;padding:10px 12px;border:1px solid #e5e5e5;border-radius:8px;font-size:13px;font-family:inherit;outline:none;transition:border .15s}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:#7c3aed}
+.field textarea{resize:none;height:90px}
+.row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.submit-btn{width:100%;padding:12px;background:#7c3aed;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s;margin-top:8px}
+.submit-btn:hover{background:#6d28d9}
+.footer{text-align:center;padding:16px;font-size:11px;color:#bbb;border-top:1px solid #f0f0f0}
+.req{color:#ef4444}
+</style>
+</head>
+<body>
+
+<div class="card">
+    <div class="header">
+        <div class="brand"><span>GRUPO</span>AVANTEX</div>
+        <h1>Reportar una incidencia</h1>
+        <p>{{ account.nombre }}</p>
+    </div>
+
+    <form action="/soporte/{{ token }}" method="POST">
+        <div class="body">
+            {% if error %}
+            <div class="error-box">{{ error }}</div>
+            {% endif %}
+
+            <div class="row-2">
+                <div class="field">
+                    <label>Servicio <span class="req">*</span></label>
+                    <select name="servicio" id="servicio" required>
+                        <option value="Aroma">Aroma</option>
+                        <option value="Fumigacion">Fumigación</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Tipo de incidencia <span class="req">*</span></label>
+                    <select name="tipo" id="tipo" required></select>
+                </div>
+            </div>
+
+            <div class="field">
+                <label>Sucursal / ubicación</label>
+                <input type="text" name="ubicacion" placeholder="ej: Sucursal Centro">
+            </div>
+
+            <div class="field">
+                <label>Detalle <span class="req">*</span></label>
+                <textarea name="detalle" placeholder="Describe lo que está pasando..." required></textarea>
+            </div>
+
+            <div class="row-2">
+                <div class="field">
+                    <label>Tu nombre <span class="req">*</span></label>
+                    <input type="text" name="quien_reporta" placeholder="Nombre completo" required>
+                </div>
+                <div class="field">
+                    <label>Teléfono o correo <span class="req">*</span></label>
+                    <input type="text" name="contacto_cliente" placeholder="Para darle seguimiento" required>
+                </div>
+            </div>
+
+            <button type="submit" class="submit-btn">Enviar reporte</button>
+        </div>
+    </form>
+
+    <div class="footer">Grupo Avantex &copy; 2026</div>
+</div>
+
+<script>
+const TIPOS = {
+    Aroma: ['Equipo no huele','Equipo apagado','Derrame de aroma','Ruidos en equipo','Equipo desprendido','Robo/Extravio equipo','Reubicacion equipo','Incumplimiento visita','Mantenimiento equipo'],
+    Fumigacion: ['Roedores','Cucarachas','Moscas/Mosquitos','Alacranes','Termitas','Chinches','Aves','Otro insecto','Garantia fumigacion'],
+};
+function renderTipos(){
+    const servicio = document.getElementById('servicio').value;
+    const sel = document.getElementById('tipo');
+    sel.innerHTML = '';
+    (TIPOS[servicio] || []).forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t; opt.textContent = t;
+        sel.appendChild(opt);
+    });
+}
+document.getElementById('servicio').addEventListener('change', renderTipos);
+renderTipos();
+</script>
+
+</body>
+</html>

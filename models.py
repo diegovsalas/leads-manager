@@ -790,6 +790,9 @@ class CSAccount(db.Model):
     num_facturas_q1 = db.Column(db.Integer, default=0)
     logo_url = db.Column(db.Text, default="")
     survey_token = db.Column(db.String(32))
+    # FEAT-2026-07-21: token separado de survey_token — un link de encuesta
+    # filtrado no debería poder levantar tickets, y viceversa.
+    ticket_token = db.Column(db.String(32), unique=True, nullable=True, index=True)
     giro = db.Column(db.String(100), default="")
     tier = db.Column(db.String(20), default="")  # Gold, Silver, Bronze
     adjuntos = db.Column(db.JSON, default=list)  # [{nombre, url, tipo}]

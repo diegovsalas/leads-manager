@@ -6,6 +6,7 @@ Rutas bajo /cs/
 import csv
 import hashlib
 import io
+import secrets
 from datetime import datetime, date, timedelta
 from functools import wraps
 from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, send_file, flash, current_app
@@ -222,6 +223,19 @@ def _get_cs_account(account_id):
         return db.session.get(CSAccount, account_id)
     except (TypeError, ValueError):
         return None
+
+
+def _genera_ticket_token() -> str:
+    return secrets.token_urlsafe(24)
+
+
+def _incidencia_vencida(inc) -> bool:
+    """True si la incidencia sigue abierta y ya pasó su fecha de compromiso."""
+    return (
+        inc.status != "Resuelta"
+        and inc.fecha_compromiso is not None
+        and inc.fecha_compromiso < date.today()
+    )
 
 
 def _can_edit_account(account):
@@ -1210,6 +1224,15 @@ def dashboard():
     alertas = generar_alertas(accounts=accounts, scores_map=scores_map)
     alertas_criticas = [a for a in alertas if a["severidad"] == "critica"]
 
+    # Resumen de incidencias (tablero completo vive en /cs/incidencias)
+    incidencias_abiertas_q = CSIncidencia.query.filter(
+        CSIncidencia.account_id.in_(account_ids), CSIncidencia.status != "Resuelta"
+    ).all()
+    incidencias_stats = {
+        "abiertas": len(incidencias_abiertas_q),
+        "vencidas": sum(1 for i in incidencias_abiertas_q if _incidencia_vencida(i)),
+    }
+
     # Sucursales por UN (propiedades únicas por tipo de servicio)
     from sqlalchemy import case, distinct
     suc_un_rows = (
@@ -1251,6 +1274,7 @@ def dashboard():
         cuentas_con_mrr_n=len(cuentas_con_mrr),
         kam_data=kam_data, cuentas_onboarding=cuentas_onboarding,
         alertas=alertas, alertas_criticas=alertas_criticas,
+        incidencias_stats=incidencias_stats,
         pipeline=pipeline, account_scores=account_scores,
         periodo_label=periodo_label, periodo_param=periodo_param,
         periodos=_periodos_disponibles(),
@@ -1736,6 +1760,7 @@ def account_detail(account_id):
     # Encuestas NPS/CSAT
     encuestas = CSEncuesta.query.filter_by(account_id=account.id).order_by(CSEncuesta.created_at.desc()).all()
     survey_link = f"/encuesta/{account.survey_token}" if account.survey_token else None
+    ticket_link = f"/soporte/{account.ticket_token}" if account.ticket_token else None
 
     # Calcular promedios NPS + CSAT (6 dimensiones)
     def _avg(field):
@@ -1782,7 +1807,7 @@ def account_detail(account_id):
         workload_activities=WORKLOAD_ACTIVITIES,
         workload_options=WORKLOAD_SURVEY_OPTIONS,
         incidencias=incidencias, propiedades=propiedades,
-        encuestas=encuestas, survey_link=survey_link,
+        encuestas=encuestas, survey_link=survey_link, ticket_link=ticket_link,
         avg_nps=avg_nps, avg_csat=avg_csat, kpi_satisfaccion=kpi_satisfaccion,
         csat_dims=csat_dims,
         today=date.today(), account_alerts=alertas_por_cuenta(str(account_id)),
@@ -3500,6 +3525,67 @@ def cambiar_status_incidencia(account_id, inc_id):
             inc.comentarios_operaciones = comentario
         db.session.commit()
     return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=incidencias")
+
+
+# ══════════════════════════════════════════════
+# INCIDENCIAS — Tablero cross-cuenta (gestión proactiva)
+# ══════════════════════════════════════════════
+@cs_bp.route("/incidencias")
+@require_cs_admin
+def incidencias_view():
+    """Todas las incidencias abiertas/en proceso de TODAS las cuentas,
+    para gestión proactiva (a diferencia de /cs/mis-pendientes, que solo
+    muestra las de las cuentas del KAM logueado)."""
+    abiertas = (
+        CSIncidencia.query
+        .join(CSAccount, CSIncidencia.account_id == CSAccount.id)
+        .filter(CSIncidencia.status != "Resuelta")
+        .order_by(CSIncidencia.fecha_compromiso.asc().nullslast(), CSIncidencia.created_at.desc())
+        .all()
+    )
+    accounts_by_id = {str(a.id): a for a in CSAccount.query.filter(
+        CSAccount.id.in_([i.account_id for i in abiertas])
+    ).all()}
+
+    hoy = date.today()
+    vencidas = [i for i in abiertas if _incidencia_vencida(i)]
+    en_proceso = [i for i in abiertas if i.status == "En proceso"]
+    resueltas_30d = (
+        CSIncidencia.query
+        .filter(CSIncidencia.status == "Resuelta", CSIncidencia.fecha_solucion >= hoy - timedelta(days=30))
+        .count()
+    )
+
+    stats = {
+        "abiertas": len(abiertas),
+        "en_proceso": len(en_proceso),
+        "vencidas": len(vencidas),
+        "resueltas_30d": resueltas_30d,
+    }
+
+    return render_template(
+        "cs_incidencias.html",
+        incidencias=abiertas, accounts_by_id=accounts_by_id,
+        stats=stats, hoy=hoy,
+        **_ctx(),
+    )
+
+
+@cs_bp.route("/clientes/<uuid:account_id>/ticket-token/generar", methods=["POST"])
+@require_cs_admin
+def generar_ticket_token(account_id):
+    """Genera (o recupera) el token del portal público de tickets de una cuenta."""
+    acc = _get_cs_account(account_id)
+    if not acc:
+        return jsonify({"error": "Cuenta no encontrada"}), 404
+    if not acc.ticket_token:
+        acc.ticket_token = _genera_ticket_token()
+        db.session.commit()
+    return jsonify({
+        "ok": True,
+        "token": acc.ticket_token,
+        "url": url_for("tickets.ticket_publico", token=acc.ticket_token, _external=True),
+    })
 
 
 @cs_bp.route("/api/propiedades/<uuid:account_id>")

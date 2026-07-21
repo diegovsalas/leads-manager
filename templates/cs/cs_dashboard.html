@@ -354,6 +354,18 @@ async function _csSyncSavio(btn){
     </div>
 </div>
 
+<!-- Incidencias -->
+<div class="card mb-4">
+    <div class="card-head">
+        <h3>Incidencias</h3>
+        <a href="/cs/incidencias" class="btn ghost" style="height:26px;padding:0 8px;font-size:11px">Ver todas {{ icon('arrow-right', 12) }}</a>
+    </div>
+    <div class="card-body" style="display:flex;gap:24px;align-items:center">
+        <div><span style="font-size:22px;font-weight:700;color:var(--danger-ink)">{{ incidencias_stats.abiertas }}</span> <span class="muted" style="font-size:12.5px">abiertas</span></div>
+        <div><span style="font-size:22px;font-weight:700;color:var(--danger-ink)">{{ incidencias_stats.vencidas }}</span> <span class="muted" style="font-size:12.5px">con SLA vencido</span></div>
+    </div>
+</div>
+
 <!-- Top cuentas por MRR + concentración -->
 <div class="grid g-2 mb-4">
     <div class="card">

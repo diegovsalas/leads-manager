@@ -15,7 +15,7 @@ load_dotenv()
 
 from datetime import timedelta
 from flask import Flask, session, redirect, url_for, request
-from extensions import db, socketio
+from extensions import db, socketio, limiter
 
 
 # ──────────────────────────────────────────────
@@ -526,6 +526,7 @@ def create_app():
     # ── Extensiones ────────────────────────────
     db.init_app(app)
     socketio.init_app(app, cors_allowed_origins="*", async_mode="gevent")
+    limiter.init_app(app)
 
     # ── Auto-migrations (idempotente, corre en cada boot) ──
     _run_pending_migrations(app)
@@ -545,6 +546,7 @@ def create_app():
     from blueprints.api_v2        import api_v2_bp
     from blueprints.cs            import cs_bp
     from blueprints.encuesta      import encuesta_bp
+    from blueprints.tickets       import tickets_bp
     from blueprints.savio         import savio_bp
     from blueprints.sdr           import sdr_bp
     from blueprints.sdr_directivo import sdr_directivo_bp, lemlist_webhook_bp
@@ -576,6 +578,7 @@ def create_app():
     app.register_blueprint(api_v2_bp,       url_prefix="/api/v2")
     app.register_blueprint(cs_bp,            url_prefix="/cs")
     app.register_blueprint(encuesta_bp,      url_prefix="/encuesta")
+    app.register_blueprint(tickets_bp,       url_prefix="/soporte")
     # FEAT-2026-07-06 (Fugaci Due Diligence): sin url_prefix porque expone
     # tanto rutas admin bajo /cs/due-diligence como públicas /dd-encuesta/
     app.register_blueprint(dd_bp)
@@ -807,6 +810,18 @@ def create_app():
         try:
             db.session.execute(db.text(
                 "ALTER TABLE cs_appointments ADD COLUMN IF NOT EXISTS precio_unitario NUMERIC(12,2)"
+            ))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        # FEAT-2026-07-21: ticket_token en cs_accounts (portal público de tickets)
+        try:
+            db.session.execute(db.text(
+                "ALTER TABLE cs_accounts ADD COLUMN IF NOT EXISTS ticket_token VARCHAR(32)"
+            ))
+            db.session.execute(db.text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_cs_accounts_ticket_token "
+                "ON cs_accounts (ticket_token) WHERE ticket_token IS NOT NULL"
             ))
             db.session.commit()
         except Exception:

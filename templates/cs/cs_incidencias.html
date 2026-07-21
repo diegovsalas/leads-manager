@@ -1,0 +1,98 @@
+{% extends "cs/cs_base.html" %}
+{% block title %}Incidencias — CS Avantex{% endblock %}
+{% block breadcrumb %}Incidencias{% endblock %}
+
+{% block content %}
+
+<div class="page-head">
+    <div>
+        <h1>Incidencias</h1>
+        <p class="sub">{{ stats.abiertas }} abiertas · {{ stats.vencidas }} con SLA vencido</p>
+    </div>
+</div>
+
+<div class="grid g-4 mb-4">
+    <div class="kpi" style="border-left:3px solid var(--danger)">
+        <div class="label">Abiertas</div>
+        <div class="value" style="font-size:28px;color:var(--danger-ink)">{{ stats.abiertas }}</div>
+    </div>
+    <div class="kpi" style="border-left:3px solid var(--warn)">
+        <div class="label">En proceso</div>
+        <div class="value" style="font-size:28px;color:var(--warn-ink)">{{ stats.en_proceso }}</div>
+    </div>
+    <div class="kpi" style="border-left:3px solid var(--danger)">
+        <div class="label">SLA vencido</div>
+        <div class="value" style="font-size:28px;color:var(--danger-ink)">{{ stats.vencidas }}</div>
+    </div>
+    <div class="kpi" style="border-left:3px solid var(--ok)">
+        <div class="label">Resueltas (30d)</div>
+        <div class="value" style="font-size:28px;color:var(--ok-ink)">{{ stats.resueltas_30d }}</div>
+    </div>
+</div>
+
+<div class="card" style="overflow:hidden">
+    <div style="overflow-x:auto">
+        <table class="tbl">
+            <thead>
+                <tr>
+                    <th>Cuenta</th>
+                    <th>Servicio / Tipo</th>
+                    <th>Responsable</th>
+                    <th>Reportada</th>
+                    <th>Compromiso</th>
+                    <th class="c">Status</th>
+                    <th class="c"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inc in incidencias %}
+                {% set acc = accounts_by_id.get(inc.account_id|string) %}
+                {% set vencida = inc.status != 'Resuelta' and inc.fecha_compromiso and inc.fecha_compromiso < hoy %}
+                <tr>
+                    <td class="primary">
+                        {% if acc %}<a href="/cs/account/{{ acc.id }}">{% if acc.client_id %}<span style="font-size:10px;font-weight:700;color:var(--copper);margin-right:4px">{{ acc.client_id }}</span>{% endif %}{{ acc.nombre }}</a>{% else %}<span class="muted">—</span>{% endif %}
+                    </td>
+                    <td>
+                        <span class="pill info" style="margin-right:4px">{{ inc.servicio }}</span>
+                        <span style="font-size:12.5px">{{ inc.tipo }}</span>
+                        {% if inc.propiedad_nombre %}<div class="muted" style="font-size:11px">{{ inc.propiedad_nombre }}</div>{% endif %}
+                    </td>
+                    <td class="muted" style="font-size:12.5px">{{ inc.responsable or '—' }}</td>
+                    <td class="muted" style="font-size:12.5px">{{ inc.fecha_incidencia.strftime('%d/%m/%Y') if inc.fecha_incidencia else '—' }}</td>
+                    <td style="font-size:12.5px;{% if vencida %}color:var(--danger-ink);font-weight:600{% endif %}">
+                        {{ inc.fecha_compromiso.strftime('%d/%m/%Y') if inc.fecha_compromiso else '—' }}
+                        {% if vencida %}⚠{% endif %}
+                    </td>
+                    <td class="c">
+                        <span class="pill {% if inc.status == 'Abierta' %}danger{% elif inc.status == 'En proceso' %}warn{% else %}ok{% endif %}">
+                            <span class="dot"></span>{{ inc.status }}
+                        </span>
+                    </td>
+                    <td class="c" style="white-space:nowrap">
+                        {% if acc %}
+                        {% if inc.status == 'Abierta' %}
+                        <form action="/cs/account/{{ acc.id }}/incidencias/{{ inc.id }}/status" method="POST" style="display:inline">
+                            <input type="hidden" name="status" value="En proceso">
+                            <button type="submit" class="btn ghost" style="height:24px;padding:0 6px;font-size:11px">En proceso</button>
+                        </form>
+                        {% endif %}
+                        <form action="/cs/account/{{ acc.id }}/incidencias/{{ inc.id }}/status" method="POST" style="display:inline;margin-left:4px">
+                            <input type="hidden" name="status" value="Resuelta">
+                            <button type="submit" class="btn ghost" style="height:24px;padding:0 6px;font-size:11px">Resolver</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if not incidencias %}
+    <div style="padding:40px;text-align:center">
+        <div style="color:var(--ok-ink);margin-bottom:8px">{{ icon('check', 32) }}</div>
+        <div style="font-size:15px;font-weight:600;color:var(--ok-ink)">Sin incidencias abiertas</div>
+        <div class="muted" style="font-size:13px;margin-top:4px">Todas las cuentas están al día.</div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
