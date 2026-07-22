@@ -1716,13 +1716,21 @@ def account_detail(account_id):
     suc_pestex = suc_un[1] if suc_un else 0
 
     # Citas agrupadas por UN (query aggregate, sin limit)
+    # FIX-2026-07-22: "Cumplimiento" comparaba terminadas contra TODAS las
+    # citas del periodo, incluyendo las programadas para días que aún no
+    # llegan (mes en curso) — eso hundía el % con citas que ni siquiera
+    # debían haber pasado todavía. Ahora solo cuentan citas ya vencidas
+    # (fecha_inicio <= hoy); las futuras se ven en "Por estatus" (Agendada)
+    # pero no penalizan el cumplimiento hasta que les toque su fecha.
+    hoy_dt = datetime.utcnow()
     _is_aro = db.or_(CSAppointment.titulo_servicio.ilike("%aroma%"), CSAppointment.titulo_servicio.ilike("%instalacion%"))
     _is_pest = db.or_(CSAppointment.titulo_servicio.ilike("%fumig%"), CSAppointment.titulo_servicio.ilike("%plaga%"), CSAppointment.titulo_servicio.ilike("%pestex%"))
+    _ya_vencida = CSAppointment.fecha_inicio <= hoy_dt
     citas_un_row = db.session.query(
-        func.sum(sa_case((_is_aro, 1), else_=0)),
-        func.sum(sa_case((db.and_(_is_aro, CSAppointment.estatus == "Terminada"), 1), else_=0)),
-        func.sum(sa_case((_is_pest, 1), else_=0)),
-        func.sum(sa_case((db.and_(_is_pest, CSAppointment.estatus == "Terminada"), 1), else_=0)),
+        func.sum(sa_case((db.and_(_is_aro, _ya_vencida), 1), else_=0)),
+        func.sum(sa_case((db.and_(_is_aro, _ya_vencida, CSAppointment.estatus == "Terminada"), 1), else_=0)),
+        func.sum(sa_case((db.and_(_is_pest, _ya_vencida), 1), else_=0)),
+        func.sum(sa_case((db.and_(_is_pest, _ya_vencida, CSAppointment.estatus == "Terminada"), 1), else_=0)),
     ).filter(
         CSAppointment.account_id == account.id,
         CSAppointment.fecha_inicio >= inicio,
@@ -2165,13 +2173,24 @@ def api_mrr_trend_un():
 
 @cs_bp.route("/api/operacion-trend")
 def api_operacion_trend():
-    """Citas por estatus por mes. Filtrable por ?account_id= o ?kam_id="""
+    """Citas por estatus por mes. Filtrable por ?account_id= o ?kam_id=
+
+    FIX-2026-07-22: % Cumpl. comparaba terminadas contra TODAS las citas
+    del mes (incluyendo las de días que aún no llegan, en el mes en
+    curso), hundiendo el % con citas que ni siquiera debían haber
+    pasado todavía. Ahora el % usa "vencidas" (fecha_inicio <= hoy)
+    como denominador — mismo criterio que citas_por_un en account_detail.
+    """
     from sqlalchemy import case
+    hoy_dt = datetime.utcnow()
+    _vencida = case((CSAppointment.fecha_inicio <= hoy_dt, 1), else_=0)
     q = (
         db.session.query(
             func.date_trunc("month", CSAppointment.fecha_inicio).label("mes"),
             func.count(CSAppointment.id).label("total"),
+            func.sum(_vencida).label("vencidas"),
             func.sum(case((CSAppointment.estatus == "Terminada", 1), else_=0)).label("terminadas"),
+            func.sum(case((db.and_(CSAppointment.estatus == "Terminada", CSAppointment.fecha_inicio <= hoy_dt), 1), else_=0)).label("terminadas_vencidas"),
             func.sum(case((CSAppointment.estatus == "Cancelada", 1), else_=0)).label("canceladas"),
             func.sum(case((CSAppointment.estatus == "No Realizada", 1), else_=0)).label("no_realizadas"),
         )
@@ -2199,7 +2218,7 @@ def api_operacion_trend():
         "terminadas": int(r.terminadas or 0),
         "canceladas": int(r.canceladas or 0),
         "no_realizadas": int(r.no_realizadas or 0),
-        "pct_cumplimiento": round(int(r.terminadas or 0) / int(r.total) * 100, 1) if r.total > 0 else 0,
+        "pct_cumplimiento": round(int(r.terminadas_vencidas or 0) / int(r.vencidas) * 100, 1) if r.vencidas else 0,
     } for r in rows])
 
 
