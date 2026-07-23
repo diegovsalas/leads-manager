@@ -915,6 +915,22 @@ def _start_scheduler(app):
                 except Exception as e:
                     app.logger.warning(f"savio boot sync: {e}")
 
+        def _run_savio_reconciliation():
+            """FEAT-2026-07-22: reconciliación semanal — barrido completo del
+            año (bypassa el watermark incremental) para detectar cualquier
+            registro que el sync incremental haya podido saltarse. El sync
+            horario normal (_run_savio_invoices_payments) ya es incremental;
+            este es solo el respaldo de reconciliación, no el mecanismo
+            principal. Pedido explícito de Savio por volumen de llamadas."""
+            with app.app_context():
+                import savio_sync
+                try:
+                    savio_sync.sync_invoices(days=savio_sync.DEFAULT_SYNC_WINDOW_DAYS)
+                    savio_sync.sync_payments(days=savio_sync.DEFAULT_SYNC_WINDOW_DAYS)
+                    app.logger.info("Savio reconciliación semanal completa")
+                except Exception as e:
+                    app.logger.warning(f"savio reconciliacion semanal: {e}")
+
         def _run_sdr_engine_for_unit(unit: str):
             with app.app_context():
                 import sdr_directivo_engine as engine
@@ -949,7 +965,12 @@ def _start_scheduler(app):
             )
             scheduler.add_job(_run_savio_invoices_payments, "interval", hours=1, id="savio_hourly")
             scheduler.add_job(_run_savio_customers_subs, "interval", hours=6, id="savio_6h")
-            app.logger.info("Savio scheduler activo (boot+30s, hourly inv+pay, 6h cust+subs)")
+            # Reconciliación semanal (domingo 3:30am CST = 09:30 UTC, fuera de horario laboral)
+            scheduler.add_job(
+                _run_savio_reconciliation, "cron",
+                day_of_week="sun", hour=9, minute=30, id="savio_weekly_reconciliation",
+            )
+            app.logger.info("Savio scheduler activo (boot+30s, hourly inv+pay incremental, 6h cust+subs, reconciliación semanal domingo)")
         else:
             app.logger.info("SAVIO_API_KEY no configurada — scheduler Savio desactivado")
 

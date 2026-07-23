@@ -1309,6 +1309,19 @@ class SavioPayment(db.Model):
         }
 
 
+class SavioSyncState(db.Model):
+    """Watermark de última sincronización exitosa por recurso Savio
+    (invoices/payments). FEAT-2026-07-22: permite sync incremental
+    (start_date = último watermark) en vez de re-descargar el año
+    completo en cada corrida — pedido de Savio (Nacho) por volumen de
+    llamadas a su API."""
+    __tablename__ = "savio_sync_state"
+
+    resource = db.Column(db.String(40), primary_key=True)  # "invoices" / "payments"
+    last_synced_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+
 # ──────────────────────────────────────────────
 # CUSTOMER MASTER — agrupa múltiples RFCs/customers (Savio + Zoho) bajo una
 # misma entidad comercial. Foundation para el bridge Savio→CSAccount.

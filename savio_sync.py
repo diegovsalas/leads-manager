@@ -31,7 +31,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from extensions import db
 from models import (
     SavioCustomer, SavioSubscription, SavioInvoice, SavioPayment,
-    CustomerMaster, CustomerRfc, CSAccount, CSInvoice,
+    CustomerMaster, CustomerRfc, CSAccount, CSInvoice, SavioSyncState,
 )
 import savio_client
 from savio_classifier import classify_subscription
@@ -40,10 +40,16 @@ log = logging.getLogger("savio_sync")
 
 UEN_CUSTOM_FIELD_ID = 235
 
-# Ventana por defecto para sync incremental (invoices/payments). Antes 90d;
-# se amplió a 365d para que facturas viejas con pagos tardíos se refresquen.
-# Override via env: SAVIO_SYNC_WINDOW_DAYS.
+# Ventana por defecto para el barrido completo (solo aplica a la primera
+# corrida — sin watermark previo — o a una reconciliación manual con
+# days=/month= explícito). Ya NO es la ventana normal de cada corrida:
+# ver _sync_window() y SavioSyncState. Override via env: SAVIO_SYNC_WINDOW_DAYS.
 DEFAULT_SYNC_WINDOW_DAYS = int(os.getenv("SAVIO_SYNC_WINDOW_DAYS", "365"))
+
+# Traslape de seguridad al reanudar desde el watermark — evita perder
+# registros por diferencias de reloj o escrituras concurrentes al corte
+# (sugerido por Savio).
+SYNC_OVERLAP_MINUTES = 10
 
 
 def _extract_uen(record: dict) -> Optional[str]:
@@ -83,6 +89,50 @@ def _date_range_from(month: Optional[str], fallback_days: int = DEFAULT_SYNC_WIN
             pass
     today = datetime.now(timezone.utc).date()
     return (today - timedelta(days=fallback_days)).isoformat(), today.isoformat()
+
+
+def _get_watermark(resource: str) -> Optional[datetime]:
+    row = db.session.get(SavioSyncState, resource)
+    return row.last_synced_at if row and row.last_synced_at else None
+
+
+def _set_watermark(resource: str, when: datetime) -> None:
+    row = db.session.get(SavioSyncState, resource)
+    if row:
+        row.last_synced_at = when
+    else:
+        db.session.add(SavioSyncState(resource=resource, last_synced_at=when))
+    db.session.commit()
+
+
+def _sync_window(resource: str, month: Optional[str], days: Optional[int]) -> tuple[str, str, Optional[datetime]]:
+    """Ventana de fechas para una corrida de sync_invoices/sync_payments.
+
+    - Con month= o days= explícito (backfill/reconciliación manual): usa
+      ese rango fijo, ignora el watermark y NO lo actualiza al terminar
+      (para no pisar el cursor incremental con un rango ad-hoc).
+    - Sin overrides (llamada normal de cron/webhook): incremental desde
+      el último watermark guardado, con traslape de seguridad de
+      SYNC_OVERLAP_MINUTES. Si no hay watermark (primera corrida o se
+      perdió), cae al barrido completo de DEFAULT_SYNC_WINDOW_DAYS y deja
+      el watermark listo para que la siguiente corrida ya sea incremental.
+
+    Devuelve (start_date, end_date, run_start) — run_start es None cuando
+    no debe actualizarse el watermark (rama de override manual).
+    """
+    if month or days:
+        start_date, end_date = _date_range_from(month, fallback_days=days or DEFAULT_SYNC_WINDOW_DAYS)
+        return start_date, end_date, None
+
+    run_start = datetime.now(timezone.utc)
+    watermark = _get_watermark(resource)
+    if watermark:
+        start = watermark - timedelta(minutes=SYNC_OVERLAP_MINUTES)
+        return start.isoformat(), run_start.isoformat(), run_start
+
+    today = run_start.date()
+    start_date = (today - timedelta(days=DEFAULT_SYNC_WINDOW_DAYS)).isoformat()
+    return start_date, today.isoformat(), run_start
 
 
 # ── Sync jobs ──────────────────────────────────────────────────────
@@ -256,8 +306,10 @@ def sync_subscriptions() -> dict:
 
 
 def sync_invoices(month: Optional[str] = None, days: Optional[int] = None) -> dict:
-    """Cursor-paginated. Filtro por mes (YYYY-MM) o por `days` días (default DEFAULT_SYNC_WINDOW_DAYS)."""
-    start_date, end_date = _date_range_from(month, fallback_days=days or DEFAULT_SYNC_WINDOW_DAYS)
+    """Cursor-paginated. Sin argumentos: incremental desde el último watermark
+    (ver _sync_window). Con month=(YYYY-MM) o days=: barrido fijo manual,
+    para backfill o reconciliación — no toca el watermark."""
+    start_date, end_date, run_start = _sync_window("invoices", month, days)
     count = 0
     for i in savio_client.list_invoices(start_date=start_date, end_date=end_date):
         iid = str(i.get("invoice_id"))
@@ -307,13 +359,17 @@ def sync_invoices(month: Optional[str] = None, days: Optional[int] = None) -> di
         if count % 100 == 0:
             db.session.commit()
     db.session.commit()
+    if run_start:
+        _set_watermark("invoices", run_start)
     return {"count": count, "start_date": start_date, "end_date": end_date}
 
 
 def sync_payments(month: Optional[str] = None, days: Optional[int] = None) -> dict:
     """Cursor-paginated. Un payment puede aplicar a varias invoices; guardamos
-    la primera invoice_id (el monto total queda en la fila del payment)."""
-    start_date, end_date = _date_range_from(month, fallback_days=days or DEFAULT_SYNC_WINDOW_DAYS)
+    la primera invoice_id (el monto total queda en la fila del payment).
+    Sin argumentos: incremental desde el último watermark (ver _sync_window).
+    Con month=(YYYY-MM) o days=: barrido fijo manual — no toca el watermark."""
+    start_date, end_date, run_start = _sync_window("payments", month, days)
     count = 0
     for p in savio_client.list_payments(start_date=start_date, end_date=end_date):
         pid = str(p.get("payment_id"))
@@ -344,6 +400,8 @@ def sync_payments(month: Optional[str] = None, days: Optional[int] = None) -> di
         if count % 100 == 0:
             db.session.commit()
     db.session.commit()
+    if run_start:
+        _set_watermark("payments", run_start)
     return {"count": count, "start_date": start_date, "end_date": end_date}
 
 
