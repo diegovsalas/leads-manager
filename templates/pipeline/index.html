@@ -2913,6 +2913,7 @@ function showView(name,el){
   // tras un location.reload() (ej. después de crear/borrar lead) el usuario
   // se quede en la misma vista, no lo aviente al Dashboard default.
   try{ sessionStorage.setItem('avantex_view', name); }catch{}
+  if(name==='dashboard')loadDashboard();
   if(name==='integraciones')loadIntegraciones();
   if(name==='savio')loadSavio();
   if(name==='sdrprospect')document.getElementById('sdrp-tbody').innerHTML='<tr><td colspan="7" style="color:var(--text2);text-align:center;padding:20px;">Llena los filtros y dale a Buscar</td></tr>';
