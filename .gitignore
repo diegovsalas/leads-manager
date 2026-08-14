@@ -45,3 +45,9 @@ _rsync_legacy.sh
 # Migration scripts one-shot (con queries directas a DB, no commitear)
 _migrate_legacy_leads.py
 _migrate_zoho_leads.py
+
+# Exports generados (NPS, encuestas, DD) — contienen datos de clientes
+exports/
+
+# Claude Code — configuración local de la herramienta
+.claude/
