@@ -1,20 +1,26 @@
 {% extends "cs/cs_base.html" %}
-{% from "cs/_adjuntos.html" import render_adjuntos, input_adjuntos %}
+{% from "cs/_highlight_banner.html" import highlight_banner %}
+{% from "cs/_ui.html" import skeleton %}
 {% block title %}{{ account.nombre }} — Avantex CS{% endblock %}
+{% block breadcrumb %}{{ account.nombre }}{% endblock %}
 
 {% block content %}
+{# ═══════════════════════════════════════════════════════════════
+   FEAT-2026-08-14: Client View.
 
-<!-- Breadcrumb + Periodo -->
-<div class="flex items-center justify-between mb-4">
-    <div>
-        <a href="/cs/" class="text-sm text-brand-600 hover:underline">Dashboard</a>
-        <span class="text-gray-400 mx-1">/</span>
-        <span class="text-sm text-gray-500">{{ account.nombre }}</span>
-    </div>
+   Estructura: Highlight Banner fijo + 4 pestañas.
+   Overview se renderiza inline (primera pintura sin round-trip);
+   Proyectos, Historial y Documentación se cargan por AJAX al primer
+   clic y se cachean en memoria. Antes la ruta agregaba 115k citas y
+   19.8k facturas en cada visita aunque el KAM solo mirara el resumen.
+   ═══════════════════════════════════════════════════════════════ #}
+
+<div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
+    <a href="/cs/clientes" class="text-xs text-brand-600 hover:underline">← Todas las cuentas</a>
     <div class="flex items-center gap-2">
-        <label class="text-xs text-gray-500">Periodo:</label>
-        <select onchange="window.location='/cs/account/{{ account.id }}?periodo='+this.value"
-                class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white">
+        <label for="cv-periodo" class="text-xs text-gray-500">Periodo</label>
+        <select id="cv-periodo" onchange="window.location='/cs/account/{{ account.id }}?periodo='+this.value+'&tab='+cvTabActiva()"
+                class="text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white">
             {% for p in periodos %}
             <option value="{{ p.value }}" {% if p.value == periodo_param %}selected{% endif %}>{{ p.label }}</option>
             {% endfor %}
@@ -22,1844 +28,389 @@
     </div>
 </div>
 
-<!-- Header de la cuenta -->
-<div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-    <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-        <!-- Info principal -->
-        <div>
-            <div class="flex items-center gap-3 mb-2">
-                <h1 class="text-2xl font-bold text-gray-800">
-                    {% if account.client_id %}<span class="text-sm font-semibold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-md mr-2">{{ account.client_id }}</span>{% endif %}
-                    {{ account.nombre }}
-                </h1>
-                {% if account.es_cuenta_nueva %}
-                <span class="px-2 py-0.5 bg-brand-100 text-brand-700 text-xs font-medium rounded-full">NUEVA</span>
-                {% endif %}
-                <span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold
-                    {% if health.color == 'green' %}bg-green-100 text-green-700
-                    {% elif health.color == 'yellow' %}bg-yellow-100 text-yellow-700
-                    {% elif health.color == 'red' %}bg-red-100 text-red-700
-                    {% else %}bg-gray-100 text-gray-600{% endif %}">
-                    {{ health.categoria }}{% if health.score is not none %} · {{ health.score }}{% endif %}
-                </span>
-            </div>
-            <p class="text-sm text-gray-500">
-                KAM: <span class="font-medium text-gray-700">{{ account.kam.nombre }}</span>
-                · UNs: <span class="font-medium text-gray-700">{{ account.unidades_contratadas }}</span>
-            </p>
-        </div>
+{{ highlight_banner(b_account, b_health, b_ultimo_contacto, b_proxima_junta) }}
 
-        <!-- KPIs de la cuenta + botón QBR -->
-        <div class="flex items-start gap-6">
-            <div class="flex gap-6 text-center">
-                <div>
-                    <p class="text-xs text-gray-500 uppercase">MRR</p>
-                    <p class="text-lg font-bold text-gray-800">${{ "{:,.0f}".format(account.mrr) }}</p>
-                    {# FEAT-2026-07-03: badge cuando mrr contratado=0 pero observado>0 #}
-                    {% if (not account.mrr or account.mrr == 0) and account.mrr_observado and account.mrr_observado > 0 %}
-                    <div class="mt-1 inline-block px-2 py-0.5 bg-yellow-100 border border-yellow-300 rounded text-xs text-yellow-800" title="MRR contratado = $0 pero MRR real observado (facturación recurrente 5m) = ${{ '{:,.0f}'.format(account.mrr_observado) }}. Falta crear/reactivar la subscription en Savio.">
-                        ⚠ Sin sub en Savio · MRR real ${{ "{:,.0f}".format(account.mrr_observado) }}/mes
-                    </div>
-                    {% endif %}
-                </div>
-                <div>
-                    <p class="text-xs text-gray-500 uppercase">ARR</p>
-                    <p class="text-lg font-bold text-gray-800">${{ "{:,.0f}".format(account.arr_proyectado) }}</p>
-                </div>
-                <div>
-                    <p class="text-xs text-gray-500 uppercase">Sucursales</p>
-                    <p class="text-lg font-bold text-gray-800">{{ "{:,}".format(account.sucursales) }}</p>
-                    <div class="flex gap-2 mt-0.5">
-                        {% if suc_aromatex > 0 %}<span class="text-xs text-purple-600">🌿 {{ suc_aromatex }}</span>{% endif %}
-                        {% if suc_pestex > 0 %}<span class="text-xs text-green-600">🛡️ {{ suc_pestex }}</span>{% endif %}
-                    </div>
-                </div>
-            </div>
-            <a href="/cs/account/{{ account.id }}/qbr"
-               class="ml-4 inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 transition-colors shadow-sm">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                </svg>
-                Descargar QBR
-            </a>
-        </div>
-    </div>
-</div>
-
-<!-- Alertas de esta cuenta -->
+{# ── Alertas del motor de alertas ────────────────────────────── #}
 {% if account_alerts %}
-<div class="mb-6 space-y-2">
-    {% for alerta in account_alerts %}
-    <div class="rounded-lg p-3 border-l-4 flex items-start justify-between
-                {% if alerta.severidad == 'critica' %}bg-red-50 border-red-500
-                {% elif alerta.severidad == 'alta' %}bg-orange-50 border-orange-500
-                {% else %}bg-yellow-50 border-yellow-400{% endif %}">
-        <div>
-            <div class="flex items-center gap-2 mb-0.5">
-                <span class="px-1.5 py-0.5 rounded text-xs font-bold
-                    {% if alerta.severidad == 'critica' %}bg-red-200 text-red-800
-                    {% elif alerta.severidad == 'alta' %}bg-orange-200 text-orange-800
-                    {% else %}bg-yellow-200 text-yellow-800{% endif %}">
-                    {{ alerta.severidad|upper }}
-                </span>
-                <span class="text-sm font-medium text-gray-800">{{ alerta.titulo }}</span>
+<div class="space-y-2 mb-4">
+    {% for a in account_alerts %}
+    <div class="rounded-xl p-3 border-l-4 flex items-start justify-between gap-3 flex-wrap
+        {% if a.severidad == 'critica' %}bg-red-50 border-red-500
+        {% elif a.severidad == 'alta' %}bg-orange-50 border-orange-500
+        {% else %}bg-amber-50 border-amber-400{% endif %}">
+        <div class="min-w-0">
+            <div class="flex items-center gap-2 mb-0.5 flex-wrap">
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase
+                    {% if a.severidad == 'critica' %}bg-red-200 text-red-800
+                    {% elif a.severidad == 'alta' %}bg-orange-200 text-orange-800
+                    {% else %}bg-amber-200 text-amber-800{% endif %}">{{ a.severidad }}</span>
+                <span class="text-sm font-medium text-gray-800">{{ a.titulo }}</span>
             </div>
-            <p class="text-xs text-gray-500">{{ alerta.detalle }}</p>
+            <p class="text-xs text-gray-500">{{ a.detalle }}</p>
         </div>
-        <span class="text-xs text-blue-600 font-medium shrink-0 ml-4">{{ alerta.accion }}</span>
+        <span class="text-xs text-brand-600 font-medium shrink-0">{{ a.accion }}</span>
     </div>
     {% endfor %}
 </div>
 {% endif %}
 
-<!-- Tabs (vanilla JS — no Alpine) -->
-<div id="tabs-root">
-
-    <!-- Tab buttons -->
-    <div class="flex border-b mb-6 overflow-x-auto" id="tab-bar">
-        <button onclick="switchTab('resumen')" data-tab-btn="resumen" data-tab-active
-                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
-            Resumen
-        </button>
-        <button onclick="switchTab('facturacion')" data-tab-btn="facturacion"
-                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
-            Facturación <span class="ml-1 text-xs text-gray-400">({{ invoices|length }})</span>
-        </button>
-        <button onclick="switchTab('operacion')" data-tab-btn="operacion"
-                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
-            Operación <span class="ml-1 text-xs text-gray-400">({{ appointments|length }})</span>
-        </button>
-        <button onclick="switchTab('notas')" data-tab-btn="notas"
-                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
-            Notas <span class="ml-1 text-xs text-gray-400">({{ notes|length }})</span>
-        </button>
-        <button onclick="switchTab('tareas')" data-tab-btn="tareas"
-                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
-            Tareas <span class="ml-1 text-xs text-gray-400">({{ tareas_pendientes }} pend.)</span>
-        </button>
-        <button onclick="switchTab('contactos')" data-tab-btn="contactos"
-                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
-            Contactos <span class="ml-1 text-xs text-gray-400">({{ contactos|length }})</span>
-        </button>
-        <button onclick="switchTab('entregables')" data-tab-btn="entregables"
-                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
-            Entregables <span class="ml-1 text-xs text-gray-400">({{ entregables|length }})</span>
-        </button>
-        <button onclick="switchTab('workload-survey')" data-tab-btn="workload-survey"
-                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
-            Encuesta Operativa
-        </button>
-        <button onclick="switchTab('incidencias')" data-tab-btn="incidencias"
-                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
-            Incidencias <span class="ml-1 text-xs text-gray-400">({{ incidencias|length }})</span>
-        </button>
-        <button onclick="switchTab('nps')" data-tab-btn="nps"
-                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
-            NPS / CSAT <span class="ml-1 text-xs text-gray-400">({{ encuestas|length }})</span>
-        </button>
-    </div>
-
-    <!-- ============================================================ -->
-    <!-- TAB: RESUMEN (gráficas fijas aquí) -->
-    <!-- ============================================================ -->
-    <div data-tab-panel data-tab-active id="panel-resumen">
-        <!-- Gráficas en Resumen -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                <h2 class="text-sm font-semibold text-gray-800 mb-4">Facturación por Mes</h2>
-                <div style="max-height:200px"><canvas id="accountMrrChart"></canvas></div>
-            </div>
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                <h2 class="text-sm font-semibold text-gray-800 mb-4">Operación por Mes</h2>
-                <div style="max-height:200px"><canvas id="accountOpChart"></canvas></div>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-            <!-- Health Score auditable -->
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                <h2 class="text-sm font-semibold text-gray-700 mb-4">Health Score — Desglose</h2>
-
-                <!-- Score grande -->
-                <div class="text-center mb-6">
-                    <div class="inline-flex items-center justify-center w-24 h-24 rounded-full border-4
-                        {% if health.color == 'green' %}border-green-400
-                        {% elif health.color == 'yellow' %}border-yellow-400
-                        {% elif health.color == 'red' %}border-red-400
-                        {% else %}border-gray-300{% endif %}">
-                        <span class="text-3xl font-bold
-                            {% if health.color == 'green' %}text-green-600
-                            {% elif health.color == 'yellow' %}text-yellow-500
-                            {% elif health.color == 'red' %}text-red-600
-                            {% else %}text-gray-400{% endif %}">
-                            {% if health.score is none %}—{% else %}{{ health.score }}{% endif %}
-                        </span>
-                    </div>
-                    <p class="text-sm text-gray-500 mt-2">de 100 puntos{% if health.cobertura_peso is defined and health.cobertura_peso < 100 %} · cobertura {{ health.cobertura_peso }}%{% endif %}</p>
-                </div>
-
-                <!-- Barras de cada componente. FIX-2026-07-03: comp.score puede
-                     ser None (componente sin datos, excluido del score total). -->
-                {% for key, comp in health.desglose.items() %}
-                <div class="mb-4">
-                    <div class="flex justify-between text-sm mb-1">
-                        <span class="text-gray-600 capitalize">
-                            {% if key == 'cobranza' %}Cobranza ({{ comp.peso }}%)
-                            {% elif key == 'uns' %}UNs contratadas ({{ comp.peso }}%)
-                            {% elif key == 'operacion' %}Operación ({{ comp.peso }}%)
-                            {% elif key == 'recencia' %}Recencia de pago ({{ comp.peso }}%)
-                            {% elif key == 'evaluaciones' %}Evaluaciones ({{ comp.peso }}%)
-                            {% elif key == 'nps' %}NPS ({{ comp.peso }}%)
-                            {% elif key == 'csat' %}CSAT ({{ comp.peso }}%)
-                            {% elif key == 'vencido' %}Cartera Vencida ({{ comp.peso }}%)
-                            {% elif key == 'email_response' %}Resp. Email KAM ({{ comp.peso }}%)
-                            {% else %}{{ key|replace('_',' ')|title }} ({{ comp.peso }}%)
-                            {% endif %}
-                        </span>
-                        {% if comp.score is none %}
-                        <span class="text-xs text-gray-400 italic">Sin datos</span>
-                        {% else %}
-                        <span class="font-semibold
-                            {% if comp.score >= 70 %}text-green-600
-                            {% elif comp.score >= 40 %}text-yellow-500
-                            {% else %}text-red-600{% endif %}">
-                            {{ comp.score }}
-                        </span>
-                        {% endif %}
-                    </div>
-                    <!-- Barra de progreso -->
-                    <div class="w-full bg-gray-200 rounded-full h-2">
-                        {% if comp.score is none %}
-                        <div class="h-2 rounded-full bg-gray-300" style="width: 100%; opacity:.3;"></div>
-                        {% else %}
-                        <div class="h-2 rounded-full
-                            {% if comp.score >= 70 %}bg-green-500
-                            {% elif comp.score >= 40 %}bg-yellow-400
-                            {% else %}bg-red-500{% endif %}"
-                            style="width: {{ comp.score }}%"></div>
-                        {% endif %}
-                    </div>
-                    <p class="text-xs text-gray-400 mt-0.5">{{ comp.detalle }}</p>
-                </div>
-                {% endfor %}
-            </div>
-
-            <!-- KPIs manuales + facturación + operación -->
-            <div class="space-y-6">
-
-                <!-- Pulso mensual del KAM -->
-                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                    <h2 class="text-sm font-semibold text-gray-700 mb-4">Pulso del KAM</h2>
-                    <form action="/cs/account/{{ account.id }}/kpis" method="POST">
-                        <div class="mb-4">
-                            <label class="text-xs text-gray-400 block mb-1">Como evaluas la salud de esta cuenta?</label>
-                            <select name="pulso"
-                                    class="w-full text-sm border border-gray-300 rounded-xl px-3 py-2 text-center font-semibold focus:ring-2 focus:ring-brand-500">
-                                <option value="">Sin evaluar</option>
-                                <option value="Sana" {% if account.pulso == 'Sana' %}selected{% endif %}>Sana — Todo en orden</option>
-                                <option value="Atención" {% if account.pulso == 'Atención' %}selected{% endif %}>Atencion — Requiere seguimiento</option>
-                                <option value="Riesgo" {% if account.pulso == 'Riesgo' %}selected{% endif %}>Riesgo — Accion inmediata</option>
-                            </select>
-                            {% if account.pulso %}
-                            <p class="text-xs mt-2 text-center">
-                                <span class="inline-block w-2.5 h-2.5 rounded-full
-                                    {% if account.pulso == 'Sana' %}bg-green-500
-                                    {% elif account.pulso == 'Atención' %}bg-yellow-400
-                                    {% else %}bg-red-500{% endif %}"></span>
-                                <span class="text-gray-500 ml-1">{{ account.pulso }}</span>
-                            </p>
-                            {% endif %}
-                        </div>
-                        </div>
-                        <button type="submit"
-                                class="w-full px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 transition-colors">
-                            Guardar KPIs
-                        </button>
-                    </form>
-                </div>
-
-                <!-- Facturación por UN -->
-                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                    <h2 class="text-sm font-semibold text-gray-700 mb-4">Facturación — {{ periodo_label }}</h2>
-
-                    {% for un_name, un_data in fact_por_un.items() %}
-                    {% if un_data.facturado > 0 or un_data.count > 0 %}
-                    <div class="{% if not loop.first %}mt-4 pt-4 border-t{% endif %}">
-                        <div class="flex items-center gap-2 mb-2">
-                            <span class="px-2 py-0.5 rounded-full text-xs font-semibold
-                                {% if un_name == 'AROMATEX' %}bg-purple-100 text-purple-700{% else %}bg-green-100 text-green-700{% endif %}">
-                                {% if un_name == 'AROMATEX' %}🌿{% else %}🛡️{% endif %} {{ un_name }}
-                            </span>
-                            <span class="text-xs text-gray-400">{{ un_data.count }} facturas</span>
-                        </div>
-                        <div class="grid grid-cols-3 gap-3 text-center">
-                            <div>
-                                <p class="text-sm font-bold text-gray-800">${{ "{:,.0f}".format(un_data.facturado) }}</p>
-                                <p class="text-xs text-gray-400">Facturado</p>
-                            </div>
-                            <div>
-                                <p class="text-sm font-bold text-green-600">${{ "{:,.0f}".format(un_data.pagado) }}</p>
-                                <p class="text-xs text-gray-400">Pagado</p>
-                            </div>
-                            <div>
-                                <p class="text-sm font-bold {% if un_data.pendiente > 0 %}text-red-500{% else %}text-gray-400{% endif %}">${{ "{:,.0f}".format(un_data.pendiente) }}</p>
-                                <p class="text-xs text-gray-400">Pendiente</p>
-                            </div>
-                        </div>
-                        {% set pct_un = (un_data.pagado / un_data.facturado * 100) if un_data.facturado > 0 else 0 %}
-                        <div class="mt-2">
-                            <div class="flex justify-between text-xs text-gray-400 mb-0.5">
-                                <span>Cobranza</span><span>{{ "{:.0f}".format(pct_un) }}%</span>
-                            </div>
-                            <div class="w-full bg-gray-200 rounded-full h-1.5">
-                                <div class="h-1.5 rounded-full {% if pct_un >= 70 %}bg-green-500{% elif pct_un >= 40 %}bg-yellow-400{% else %}bg-red-500{% endif %}"
-                                     style="width: {{ pct_un }}%"></div>
-                            </div>
-                        </div>
-                    </div>
-                    {% endif %}
-                    {% endfor %}
-
-                    <!-- Total -->
-                    <div class="mt-4 pt-3 border-t">
-                        <div class="flex justify-between text-xs text-gray-500">
-                            <span class="font-semibold">Total</span>
-                            <span>Facturado: <strong>${{ "{:,.0f}".format(total_facturado) }}</strong> · Pagado: <span class="text-green-600">${{ "{:,.0f}".format(total_pagado) }}</span> · Pendiente: <span class="text-red-500">${{ "{:,.0f}".format(total_pendiente) }}</span></span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Operación por UN -->
-                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                    <h2 class="text-sm font-semibold text-gray-700 mb-4">Operación — {{ periodo_label }}</h2>
-
-                    {% for un_name, un_citas in citas_por_un.items() %}
-                    {% if un_citas.total > 0 %}
-                    <div class="{% if not loop.first %}mt-4 pt-4 border-t{% endif %}">
-                        <div class="flex items-center gap-2 mb-2">
-                            <span class="px-2 py-0.5 rounded-full text-xs font-semibold
-                                {% if un_name == 'AROMATEX' %}bg-purple-100 text-purple-700{% else %}bg-green-100 text-green-700{% endif %}">
-                                {% if un_name == 'AROMATEX' %}🌿{% else %}🛡️{% endif %} {{ un_name }}
-                            </span>
-                        </div>
-                        <div class="grid grid-cols-2 gap-3 text-center">
-                            <div>
-                                <p class="text-sm font-bold text-gray-800">{{ un_citas.total }}</p>
-                                <p class="text-xs text-gray-400">Citas totales</p>
-                            </div>
-                            <div>
-                                <p class="text-sm font-bold text-green-600">{{ un_citas.terminadas }}</p>
-                                <p class="text-xs text-gray-400">Terminadas</p>
-                            </div>
-                        </div>
-                        {% set pct_op = (un_citas.terminadas / un_citas.total * 100) if un_citas.total > 0 else 0 %}
-                        <div class="mt-2">
-                            <div class="flex justify-between text-xs text-gray-400 mb-0.5">
-                                <span>Cumplimiento</span><span>{{ "{:.0f}".format(pct_op) }}%</span>
-                            </div>
-                            <div class="w-full bg-gray-200 rounded-full h-1.5">
-                                <div class="h-1.5 rounded-full {% if pct_op >= 80 %}bg-green-500{% elif pct_op >= 50 %}bg-yellow-400{% else %}bg-red-500{% endif %}"
-                                     style="width: {{ pct_op }}%"></div>
-                            </div>
-                        </div>
-                    </div>
-                    {% endif %}
-                    {% endfor %}
-
-                    <!-- Resumen por estatus -->
-                    <div class="mt-4 pt-3 border-t">
-                        <p class="text-xs text-gray-500 font-semibold mb-2">Por estatus</p>
-                        <div class="space-y-1">
-                            {% for estatus, count in citas_por_estatus|dictsort %}
-                            <div class="flex justify-between items-center">
-                                <span class="text-xs text-gray-600">{{ estatus }}</span>
-                                <span class="text-xs font-semibold
-                                    {% if estatus == 'Terminada' %}text-green-600
-                                    {% elif estatus == 'Cancelada' %}text-red-500
-                                    {% elif estatus == 'Agendada' or estatus == 'Técnico Asignado' %}text-blue-600
-                                    {% else %}text-gray-600{% endif %}">
-                                    {{ count }}
-                                </span>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ============================================================ -->
-    <!-- TAB: FACTURACIÓN -->
-    <!-- ============================================================ -->
-    <div data-tab-panel id="panel-facturacion">
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
-            <h2 class="text-sm font-semibold text-gray-800 mb-4">Facturación por Mes — AROMATEX vs PESTEX</h2>
-            <div style="max-height:220px"><canvas id="factTabChartUN"></canvas></div>
-        </div>
-
-        {% set un_tabs = {'AROMATEX': {'icon': '🌿', 'color': 'purple'}, 'PESTEX': {'icon': '🛡️', 'color': 'green'}} %}
-        <div x-data="{ unTab: 'all' }" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <!-- UN filter tabs -->
-            <div class="flex items-center gap-2 mb-4">
-                <button @click="unTab='all'" :class="unTab==='all' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600'"
-                        class="px-3 py-1 rounded-full text-xs font-medium transition-colors">Todas ({{ invoices|length }})</button>
-                {% for un_key, un_info in un_tabs.items() %}
-                {% set un_invs = invoices_por_un.get(un_key, []) %}
-                {% if un_invs %}
-                <button @click="unTab='{{ un_key }}'" :class="unTab==='{{ un_key }}' ? 'bg-{{ un_info.color }}-600 text-white' : 'bg-{{ un_info.color }}-50 text-{{ un_info.color }}-700'"
-                        class="px-3 py-1 rounded-full text-xs font-medium transition-colors">{{ un_info.icon }} {{ un_key }} ({{ un_invs|length }})</button>
-                {% endif %}
-                {% endfor %}
-            </div>
-
-            <div class="overflow-x-auto max-h-96 overflow-y-auto">
-                <table class="w-full text-sm">
-                    <thead class="sticky top-0 bg-white">
-                        <tr class="border-b text-left text-gray-500 text-xs uppercase tracking-wide">
-                            <th class="pb-2">Folio</th>
-                            <th class="pb-2">Concepto</th>
-                            <th class="pb-2">UEN</th>
-                            <th class="pb-2 text-right">Total</th>
-                            <th class="pb-2 text-right">Pagado</th>
-                            <th class="pb-2 text-right">Pendiente</th>
-                            <th class="pb-2">F. Cobro</th>
-                            <th class="pb-2 text-center">Estatus</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for inv in invoices %}
-                        {% set inv_un = 'AROMATEX' if 'AROMATEX' in (inv.uen or '')|upper else ('PESTEX' if 'PESTEX' in (inv.uen or '')|upper else 'OTRO') %}
-                        <tr class="border-b last:border-0 hover:bg-gray-50 text-xs"
-                            x-show="unTab === 'all' || unTab === '{{ inv_un }}'">
-                            <td class="py-2 font-mono">{{ inv.folio }}</td>
-                            <td class="py-2 max-w-xs truncate" title="{{ inv.concepto }}">{{ inv.concepto[:50] }}</td>
-                            <td class="py-2">
-                                <span class="px-1.5 py-0.5 rounded text-xs font-medium
-                                    {% if 'AROMATEX' in (inv.uen or '')|upper %}bg-purple-100 text-purple-700
-                                    {% elif 'PESTEX' in (inv.uen or '')|upper %}bg-green-100 text-green-700
-                                    {% else %}bg-gray-100 text-gray-500{% endif %}">{{ (inv.uen or '-')[:18] }}</span>
-                            </td>
-                            <td class="py-2 text-right">${{ "{:,.2f}".format(inv.total) }}</td>
-                            <td class="py-2 text-right text-green-600">${{ "{:,.2f}".format(inv.pagado) }}</td>
-                            <td class="py-2 text-right {% if inv.pendiente > 0 %}text-red-500{% else %}text-gray-400{% endif %}">${{ "{:,.2f}".format(inv.pendiente) }}</td>
-                            <td class="py-2 text-gray-500">{{ inv.fecha_cobro.strftime('%d/%m/%Y') if inv.fecha_cobro else '-' }}</td>
-                            <td class="py-2 text-center">
-                                <span class="px-1.5 py-0.5 rounded text-xs font-medium
-                                    {% if inv.estatus == 'Pagada' %}bg-green-100 text-green-700{% else %}bg-red-100 text-red-700{% endif %}">{{ inv.estatus }}</span>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <!-- ============================================================ -->
-    <!-- TAB: OPERACIÓN -->
-    <!-- ============================================================ -->
-    <div data-tab-panel id="panel-operacion">
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
-            <h2 class="text-sm font-semibold text-gray-800 mb-4">Operación por Mes</h2>
-            <div style="max-height:200px"><canvas id="opTabChart"></canvas></div>
-        </div>
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-sm font-semibold text-gray-700">Citas de Servicio · Plantilla activa</h2>
-                <div class="flex items-center gap-3">
-                    <span class="text-xs text-gray-500">{{ appointments|length }} registros</span>
-                    <button onclick="abrirAgregarCita()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs rounded-lg font-medium">+ Agregar cita</button>
-                </div>
-            </div>
-
-            <!-- Filtro rápido por estatus — default 'activas' (oculta Canceladas/No Realizadas) -->
-            <div x-data="{ filtro: 'activas' }" class="mb-4">
-                <div class="flex flex-wrap gap-2 mb-4">
-                    <button @click="filtro = 'activas'"
-                            :class="filtro === 'activas' ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-600'"
-                            class="px-3 py-1 rounded-full text-xs font-medium">★ Activas</button>
-                    <button @click="filtro = 'todos'"
-                            :class="filtro === 'todos' ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-600'"
-                            class="px-3 py-1 rounded-full text-xs font-medium">Todos</button>
-                    {% for estatus in citas_por_estatus.keys()|sort %}
-                    <button @click="filtro = '{{ estatus }}'"
-                            :class="filtro === '{{ estatus }}' ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-600'"
-                            class="px-3 py-1 rounded-full text-xs font-medium">{{ estatus }} ({{ citas_por_estatus[estatus] }})</button>
-                    {% endfor %}
-                </div>
-
-                <div class="overflow-x-auto max-h-96 overflow-y-auto">
-                    <table class="w-full text-sm">
-                        <thead class="sticky top-0 bg-white">
-                            <tr class="border-b text-left text-gray-500 text-xs uppercase tracking-wide">
-                                <th class="pb-2">Propiedad</th>
-                                <th class="pb-2">Zona</th>
-                                <th class="pb-2">Técnico</th>
-                                <th class="pb-2">Servicio</th>
-                                <th class="pb-2">F. Inicio</th>
-                                <th class="pb-2 text-center">Estatus</th>
-                                <th class="pb-2 text-right">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for apt in appointments %}
-                            {% set is_inactiva = apt.estatus in ('Cancelada','No Realizada','Archivada') %}
-                            <tr class="border-b last:border-0 hover:bg-gray-50 text-xs"
-                                x-show="filtro === 'todos' || filtro === '{{ apt.estatus }}' || (filtro === 'activas' && {{ 'false' if is_inactiva else 'true' }})">
-                                <td class="py-2 max-w-xs truncate" title="{{ apt.propiedad }}">{{ apt.propiedad[:50] }}</td>
-                                <td class="py-2 text-gray-500">{{ apt.zona[:20] if apt.zona else '-' }}</td>
-                                <td class="py-2 text-gray-600">{{ apt.tecnico[:20] if apt.tecnico and apt.tecnico != 'nan' else '-' }}</td>
-                                <td class="py-2 text-gray-600">{{ apt.titulo_servicio[:30] }}</td>
-                                <td class="py-2 text-gray-500">{{ apt.fecha_inicio.strftime('%d/%m/%Y') if apt.fecha_inicio else '-' }}</td>
-                                <td class="py-2 text-center">
-                                    <span class="px-1.5 py-0.5 rounded text-xs font-medium
-                                        {% if apt.estatus == 'Terminada' %}bg-green-100 text-green-700
-                                        {% elif apt.estatus == 'Cancelada' %}bg-red-100 text-red-700
-                                        {% elif apt.estatus == 'Agendada' or apt.estatus == 'Técnico Asignado' %}bg-brand-100 text-brand-700
-                                        {% elif apt.estatus == 'No Realizada' %}bg-orange-100 text-orange-700
-                                        {% else %}bg-gray-100 text-gray-600{% endif %}">
-                                        {{ apt.estatus }}
-                                    </span>
-                                </td>
-                                <td class="py-2 text-right whitespace-nowrap">
-                                    {% if not is_inactiva %}
-                                    <button onclick="editarCita('{{ apt.id }}',{{ {'propiedad': apt.propiedad or '','direccion': apt.direccion or '','zona': apt.zona or '','tecnico': apt.tecnico or '','estatus': apt.estatus or '','titulo_servicio': apt.titulo_servicio or '','cantidad': apt.cantidad or 1,'fecha_inicio': apt.fecha_inicio.strftime('%Y-%m-%dT%H:%M') if apt.fecha_inicio else '','fecha_terminacion': apt.fecha_terminacion.strftime('%Y-%m-%dT%H:%M') if apt.fecha_terminacion else ''}|tojson|forceescape }})"
-                                            class="text-brand-600 hover:underline">Editar</button>
-                                    <button onclick="cancelarCita('{{ apt.id }}')"
-                                            class="text-red-600 hover:underline ml-2">Cancelar</button>
-                                    {% else %}
-                                    <span class="text-gray-300 text-xs">—</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ============================================================ -->
-    <!-- TAB: NOTAS -->
-    <!-- ============================================================ -->
-    <div data-tab-panel id="panel-notas">
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <h2 class="text-sm font-semibold text-gray-700 mb-4">Bitácora</h2>
-
-            <!-- Formulario para agregar nota -->
-            <form action="/cs/account/{{ account.id }}/notes" method="POST" class="mb-6">
-                <div class="flex gap-3 mb-2">
-                    <select name="autor"
-                            class="w-48 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
-                        <option value="">Seleccionar autor</option>
-                        <option value="{{ account.kam.nombre }}">{{ account.kam.nombre }}</option>
-                        <option value="Francisco Rodriguez">Francisco Rodriguez</option>
-                        <option value="Katia Gutierrez">Katia Gutierrez</option>
-                        <option value="Heidi Tovar">Heidi Tovar</option>
-                        <option value="Nallely Quiroz">Nallely Quiroz</option>
-                    </select>
-                </div>
-                <div class="flex gap-2 mb-2">
-                    <textarea name="contenido" rows="2" required placeholder="Escribe una nota..."
-                              class="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none"></textarea>
-                    <button type="submit"
-                            class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 transition-colors self-end">
-                        Agregar
-                    </button>
-                </div>
-                {{ input_adjuntos('adj') }}
-            </form>
-
-            <!-- Lista de notas -->
-            {% if notes %}
-            <div class="space-y-4">
-                {% for note in notes %}
-                <div class="border-l-4 border-blue-300 pl-4 py-2 group">
-                    <div class="flex justify-between items-center mb-1">
-                        <span class="text-sm font-medium text-gray-700">{{ note.autor or 'Sin autor' }}</span>
-                        <div class="flex items-center gap-3">
-                            <span class="text-xs text-gray-400">{{ note.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
-                            <form action="/cs/account/{{ account.id }}/notes/{{ note.id }}/delete" method="POST"
-                                  class="opacity-0 group-hover:opacity-100 transition-opacity"
-                                  onsubmit="return confirm('¿Eliminar esta nota?')">
-                                <button type="submit" class="text-xs text-red-400 hover:text-red-600">Eliminar</button>
-                            </form>
-                        </div>
-                    </div>
-                    <p class="text-sm text-gray-600 whitespace-pre-line">{{ note.contenido }}</p>
-                    {{ render_adjuntos(note.adjuntos or []) }}
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <div class="text-center py-6">
-                <p class="text-gray-400 text-sm">Sin notas registradas. Agrega la primera arriba.</p>
-            </div>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- ============================================================ -->
-    <!-- TAB: TAREAS -->
-    <!-- ============================================================ -->
-    <div data-tab-panel id="panel-tareas">
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <h2 class="text-sm font-semibold text-gray-700 mb-4">Tareas / Playbooks</h2>
-
-            <!-- Formulario para agregar tarea -->
-            <form action="/cs/account/{{ account.id }}/tasks" method="POST" class="mb-6 p-4 bg-gray-50 rounded-lg border">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                    <div>
-                        <label class="text-xs text-gray-500 block mb-1">Tipo</label>
-                        <select name="tipo"
-                                class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500">
-                            <option value="check-in">Check-in</option>
-                            <option value="QBR">QBR</option>
-                            <option value="upsell">Upsell</option>
-                            <option value="renovación">Renovación</option>
-                            <option value="onboarding">Onboarding</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="text-xs text-gray-500 block mb-1">Responsable</label>
-                        <select name="responsable"
-                                class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500">
-                            <option value="{{ account.kam.nombre }}">{{ account.kam.nombre }}</option>
-                            <option value="Francisco Rodriguez">Francisco Rodriguez</option>
-                            <option value="Katia Gutierrez">Katia Gutierrez</option>
-                            <option value="Heidi Tovar">Heidi Tovar</option>
-                            <option value="Nallely Quiroz">Nallely Quiroz</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <div class="md:col-span-3">
-                        <label class="text-xs text-gray-500 block mb-1">Descripción</label>
-                        <input type="text" name="descripcion" required placeholder="¿Qué hay que hacer?"
-                               class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500">
-                    </div>
-                    <div>
-                        <label class="text-xs text-gray-500 block mb-1">Fecha límite</label>
-                        <input type="date" name="fecha_limite"
-                               class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500">
-                    </div>
-                </div>
-                <div class="mt-3">
-                    {{ input_adjuntos('adj') }}
-                </div>
-                <div class="mt-3 text-right">
-                    <button type="submit"
-                            class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 transition-colors">
-                        Agregar Tarea
-                    </button>
-                </div>
-            </form>
-
-            <!-- Lista de tareas -->
-            {% if tasks %}
-            <div class="space-y-3">
-                {% for task in tasks %}
-                <div class="flex items-start gap-3 p-3 rounded-lg border group
-                            {{ 'bg-green-50 border-green-200' if task.completada else 'bg-white' }}">
-                    <!-- Botón toggle completar -->
-                    <form action="/cs/account/{{ account.id }}/tasks/{{ task.id }}/toggle" method="POST">
-                        <button type="submit" class="mt-0.5 text-lg hover:scale-110 transition-transform cursor-pointer"
-                                title="{{ 'Marcar como pendiente' if task.completada else 'Marcar como completada' }}">
-                            {% if task.completada %}✅{% else %}⬜{% endif %}
-                        </button>
-                    </form>
-                    <div class="flex-1">
-                        <p class="text-sm font-medium text-gray-800 {{ 'line-through text-gray-400' if task.completada }}">
-                            {{ task.descripcion }}
-                        </p>
-                        <div class="flex gap-3 text-xs text-gray-500 mt-1">
-                            <span class="px-1.5 py-0.5 bg-gray-100 rounded">{{ task.tipo }}</span>
-                            <span>{{ task.responsable }}</span>
-                            {% if task.fecha_limite %}
-                            <span class="{% if not task.completada and task.fecha_limite < today %}text-red-500 font-medium{% endif %}">
-                                Vence: {{ task.fecha_limite.strftime('%d/%m/%Y') }}
-                            </span>
-                            {% endif %}
-                        </div>
-                        {{ render_adjuntos(task.adjuntos or []) }}
-                    </div>
-                    <!-- Botón eliminar -->
-                    <form action="/cs/account/{{ account.id }}/tasks/{{ task.id }}/delete" method="POST"
-                          class="opacity-0 group-hover:opacity-100 transition-opacity"
-                          onsubmit="return confirm('¿Eliminar esta tarea?')">
-                        <button type="submit" class="text-xs text-red-400 hover:text-red-600 mt-1">Eliminar</button>
-                    </form>
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <div class="text-center py-6">
-                <p class="text-gray-400 text-sm">Sin tareas registradas. Agrega la primera arriba.</p>
-            </div>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- ============================================================ -->
-    <!-- TAB: CONTACTOS -->
-    <!-- ============================================================ -->
-    <div data-tab-panel id="panel-contactos">
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-sm font-semibold text-gray-700">Contactos del Cliente</h2>
-                <button onclick="document.getElementById('modal-add-contacto').classList.remove('hidden')"
-                        class="px-3 py-1.5 bg-brand-600 text-white text-xs font-medium rounded-lg hover:bg-brand-700">
-                    + Agregar Contacto
-                </button>
-            </div>
-
-            {% if contactos %}
-            <div class="space-y-3">
-                {% for c in contactos %}
-                <div class="flex items-start gap-3 p-3 rounded-lg border group hover:bg-gray-50">
-                    <div class="w-10 h-10 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-sm font-bold flex-shrink-0">
-                        {{ c.nombre[:2]|upper }}
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-2">
-                            <span class="text-sm font-semibold text-gray-800">{{ c.nombre }}</span>
-                            {% if c.is_owner %}
-                            <span class="px-2 py-0.5 bg-brand-100 text-brand-700 text-xs font-semibold rounded-full">Owner</span>
-                            {% endif %}
-                        </div>
-                        <p class="text-xs text-gray-500">{{ c.puesto }}</p>
-                        <div class="flex gap-4 mt-1 text-xs">
-                            {% if c.telefono %}<span class="text-gray-500 font-mono">{{ c.telefono }}</span>{% endif %}
-                            {% if c.correo %}<a href="mailto:{{ c.correo }}" class="text-brand-600 hover:underline">{{ c.correo }}</a>{% endif %}
-                        </div>
-                        {% if c.notas %}<p class="text-xs text-gray-400 mt-1">{{ c.notas }}</p>{% endif %}
-                    </div>
-                    <form action="/cs/contactos/{{ c.id }}/delete" method="POST"
-                          class="opacity-0 group-hover:opacity-100 transition-opacity"
-                          onsubmit="return confirm('Eliminar contacto?')">
-                        <input type="hidden" name="redirect" value="/cs/account/{{ account.id }}?periodo={{ periodo_param }}&tab=contactos">
-                        <button type="submit" class="text-xs text-red-400 hover:text-red-600">Eliminar</button>
-                    </form>
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <div class="text-center py-6">
-                <p class="text-gray-400 text-sm">Sin contactos registrados. Agrega el primero.</p>
-            </div>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- ============================================================ -->
-    <!-- TAB: ENTREGABLES -->
-    <!-- ============================================================ -->
-    <div data-tab-panel id="panel-entregables">
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
-            <div class="flex justify-between items-center mb-5">
-                <div>
-                    <h2 class="text-sm font-semibold text-gray-700">Mapa de Procesos — {{ account.nombre }}</h2>
-                    <p class="text-xs text-gray-400 mt-0.5">Flujo de servicio y entregables recurrentes por unidad de negocio</p>
-                </div>
-                <button onclick="document.getElementById('modal-add-entregable').classList.remove('hidden')"
-                        class="px-3 py-1.5 bg-brand-600 text-white text-xs font-medium rounded-lg hover:bg-brand-700">
-                    + Agregar Paso
-                </button>
-            </div>
-
-            {% if entregables_por_un %}
-                {% for un, items in entregables_por_un.items() %}
-                <div class="mb-8 last:mb-0">
-                    <div class="flex items-center gap-3 mb-4">
-                        <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold
-                            {% if un == 'PESTEX' %}bg-green-100 text-green-700
-                            {% elif un == 'AROMATEX' %}bg-purple-100 text-purple-700
-                            {% else %}bg-gray-100 text-gray-600{% endif %}">
-                            {% if un == 'PESTEX' %}🛡️{% elif un == 'AROMATEX' %}🌿{% else %}📋{% endif %}
-                        </div>
-                        <div>
-                            <span class="text-sm font-semibold text-gray-800">{{ un }}</span>
-                            <span class="text-xs text-gray-400 ml-2">{{ items|length }} paso{{ 's' if items|length > 1 }}</span>
-                        </div>
-                    </div>
-
-                    <!-- Process Timeline -->
-                    <div class="relative ml-4">
-                        {% for ent in items %}
-                        <div class="flex gap-4 group mb-1 last:mb-0">
-                            <div class="flex flex-col items-center">
-                                <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 flex-shrink-0
-                                    {% if un == 'PESTEX' %}border-green-400 bg-green-50 text-green-700
-                                    {% elif un == 'AROMATEX' %}border-purple-400 bg-purple-50 text-purple-700
-                                    {% else %}border-gray-300 bg-gray-50 text-gray-600{% endif %}">
-                                    {{ loop.index }}
-                                </div>
-                                {% if not loop.last %}
-                                <div class="w-0.5 flex-1 min-h-[20px]
-                                    {% if un == 'PESTEX' %}bg-green-200
-                                    {% elif un == 'AROMATEX' %}bg-purple-200
-                                    {% else %}bg-gray-200{% endif %}"></div>
-                                {% endif %}
-                            </div>
-
-                            <div class="flex-1 pb-4 -mt-0.5">
-                                <div class="p-3 rounded-lg border bg-white hover:shadow-sm transition-shadow">
-                                    <div class="flex justify-between items-start">
-                                        <p class="text-sm font-medium text-gray-800 flex-1">{{ ent.descripcion }}</p>
-                                        <form action="/cs/account/{{ account.id }}/entregables/{{ ent.id }}/delete" method="POST"
-                                              class="opacity-0 group-hover:opacity-100 transition-opacity ml-2"
-                                              onsubmit="return confirm('Eliminar paso?')">
-                                            <button type="submit" class="text-xs text-red-400 hover:text-red-600">✕</button>
-                                        </form>
-                                    </div>
-                                    <div class="flex flex-wrap gap-2 mt-2">
-                                        {% if ent.fecha_entrega %}
-                                        <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs font-medium">
-                                            🗓️ {{ ent.fecha_entrega }}
-                                        </span>
-                                        {% endif %}
-                                        {% if ent.responsable %}
-                                        <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-100 text-gray-600 text-xs font-medium">
-                                            👤 {{ ent.responsable }}
-                                        </span>
-                                        {% endif %}
-                                    </div>
-                                    {{ render_adjuntos(ent.adjuntos or []) }}
-                                </div>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endfor %}
-            {% else %}
-            <div class="text-center py-10">
-                <p class="text-4xl mb-3">🗺️</p>
-                <p class="text-gray-500 text-sm font-medium">Sin procesos definidos</p>
-                <p class="text-gray-400 text-xs mt-1 max-w-sm mx-auto">Define el flujo de servicio paso a paso: que se entrega, cuando y quien es responsable.</p>
-            </div>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- ============================================================ -->
-    <!-- TAB: ENCUESTA OPERATIVA -->
-    <!-- ============================================================ -->
-    <div data-tab-panel id="panel-workload-survey">
-        <div id="workload-survey" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
-            <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-5">
-                <div>
-                    <h2 class="text-sm font-semibold text-gray-700">Encuesta operativa — {{ account.nombre }}</h2>
-                    <p class="text-xs text-gray-400 mt-0.5">Captura cerrada de horas, frecuencia y bloqueos. La decisión de automatizar o delegar la toma dirección.</p>
-                </div>
-                <div class="rounded-xl border border-gray-100 bg-gray-50 p-3 min-w-[220px]">
-                    <p class="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Periodo</p>
-                    <p class="text-lg font-bold text-gray-800">{{ periodo_label }}</p>
-                    <p class="text-xs text-gray-400">{{ 'Guardada' if workload_survey else 'Sin capturar' }}</p>
-                </div>
-            </div>
-
-            <form action="/cs/account/{{ account.id }}/workload-survey" method="POST">
-                <input type="hidden" name="periodo" value="{{ periodo_param }}">
-
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <div>
-                        <label class="text-xs text-gray-500 block mb-1">Horas dedicadas a este cliente</label>
-                        <select name="horas_cliente" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                            {% for opt in workload_options.hours %}
-                            <option value="{{ opt }}" {% if workload_survey and workload_survey.horas_cliente == opt %}selected{% endif %}>{{ opt }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="text-xs text-gray-500 block mb-1">¿La carga fue mayor a lo esperado?</label>
-                        <select name="carga_esperada" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                            {% for opt in workload_options.carga_esperada %}
-                            <option value="{{ opt }}" {% if workload_survey and workload_survey.carga_esperada == opt %}selected{% endif %}>{{ opt }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="text-xs text-gray-500 block mb-1">Motivo principal de carga</label>
-                        <select name="motivo_carga" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                            {% for opt in workload_options.motivo_carga %}
-                            <option value="{{ opt }}" {% if workload_survey and workload_survey.motivo_carga == opt %}selected{% endif %}>{{ opt }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-
-                <div class="mb-6">
-                    <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Horas por actividad</h3>
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
-                        {% for actividad in workload_activities %}
-                        {% set selected_hours = workload_activity_values.get(actividad, 'No aplica') %}
-                        <div class="grid grid-cols-[minmax(0,1fr)_140px] gap-3 items-center rounded-xl border border-gray-100 p-3">
-                            <input type="hidden" name="actividad" value="{{ actividad }}">
-                            <span class="text-sm font-medium text-gray-700">{{ actividad }}</span>
-                            <select name="actividad_horas" class="text-sm border border-gray-300 rounded-lg px-3 py-2">
-                                {% for opt in workload_options.activity_hours %}
-                                <option value="{{ opt }}" {% if selected_hours == opt %}selected{% endif %}>{{ opt }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    <div class="mt-4 rounded-2xl border border-dashed border-gray-200 p-4">
-                        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
-                            <div>
-                                <h4 class="text-sm font-semibold text-gray-700">Actividades manuales</h4>
-                                <p class="text-xs text-gray-400">Agrega actividades que no estén en la lista base.</p>
-                            </div>
-                            <button type="button" onclick="addWorkloadActivityRow()"
-                                    class="px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">
-                                + Agregar actividad
-                            </button>
-                        </div>
-                        <div id="custom-workload-activities" class="space-y-2">
-                            {% for item in workload_custom_activities %}
-                            <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_140px_34px] gap-3 items-center rounded-xl border border-gray-100 p-3 bg-gray-50">
-                                <input type="text" name="actividad" value="{{ item.actividad }}" required
-                                       class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                                <select name="actividad_horas" class="text-sm border border-gray-300 rounded-lg px-3 py-2">
-                                    {% for opt in workload_options.activity_hours %}
-                                    <option value="{{ opt }}" {% if item.horas == opt %}selected{% endif %}>{{ opt }}</option>
-                                    {% endfor %}
-                                </select>
-                                <button type="button" onclick="this.closest('.grid').remove()"
-                                        class="text-xs text-red-400 hover:text-red-600 justify-self-start lg:justify-self-center"
-                                        title="Quitar actividad">✕</button>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
-                    <div class="rounded-2xl border border-gray-100 p-4">
-                        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Entregables recurrentes</h3>
-                        <div class="space-y-3">
-                            <div>
-                                <label class="text-xs text-gray-500 block mb-1">Cantidad de entregables</label>
-                                <select name="entregables_count" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                                    {% for opt in workload_options.entregables_count %}
-                                    <option value="{{ opt }}" {% if workload_survey and workload_survey.entregables_count == opt %}selected{% endif %}>{{ opt }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div>
-                                <label class="text-xs text-gray-500 block mb-1">Tipo de entregable recurrente</label>
-                                {% set selected_tipos = workload_survey.entregables_tipos if workload_survey and workload_survey.entregables_tipos else [] %}
-                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-xl border border-gray-100 p-3">
-                                    {% for opt in workload_options.entregables_tipos %}
-                                    <label class="flex items-start gap-2 text-sm text-gray-700">
-                                        <input type="checkbox" name="entregables_tipos" value="{{ opt }}"
-                                               class="mt-0.5 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-                                               {% if opt in selected_tipos or (opt == 'Otro operativo' and workload_entregable_otro) %}checked{% endif %}>
-                                        <span>{{ opt }}</span>
-                                    </label>
-                                    {% endfor %}
-                                </div>
-                                <input type="text" name="entregable_otro"
-                                       value="{{ workload_entregable_otro }}"
-                                       placeholder="Si seleccionaste Otro operativo, escribe cuál"
-                                       class="mt-2 w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                            </div>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div>
-                                    <label class="text-xs text-gray-500 block mb-1">Frecuencia principal</label>
-                                    <select name="frecuencia_entregable" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                                        {% for opt in workload_options.frecuencia %}
-                                        <option value="{{ opt }}" {% if workload_survey and workload_survey.frecuencia_entregable == opt %}selected{% endif %}>{{ opt }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="text-xs text-gray-500 block mb-1">Horas en entregables</label>
-                                    <select name="horas_entregables" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                                        {% for opt in workload_options.hours %}
-                                        <option value="{{ opt }}" {% if workload_survey and workload_survey.horas_entregables == opt %}selected{% endif %}>{{ opt }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                            </div>
-                            <div>
-                                <label class="text-xs text-gray-500 block mb-1">Dependencia externa</label>
-                                <select name="dependencia_externa" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                                    {% for opt in workload_options.dependencia %}
-                                    <option value="{{ opt }}" {% if workload_survey and workload_survey.dependencia_externa == opt %}selected{% endif %}>{{ opt }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="rounded-2xl border border-gray-100 p-4">
-                        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Bloqueos e incidencias</h3>
-                        <div class="space-y-3">
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div>
-                                    <label class="text-xs text-gray-500 block mb-1">Nivel de bloqueos</label>
-                                    <select name="bloqueos_nivel" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                                        {% for opt in workload_options.bloqueos_nivel %}
-                                        <option value="{{ opt }}" {% if workload_survey and workload_survey.bloqueos_nivel == opt %}selected{% endif %}>{{ opt }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="text-xs text-gray-500 block mb-1">Horas perdidas por bloqueos</label>
-                                    <select name="horas_bloqueos" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                                        {% for opt in workload_options.hours %}
-                                        <option value="{{ opt }}" {% if workload_survey and workload_survey.horas_bloqueos == opt %}selected{% endif %}>{{ opt }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                            </div>
-                            <div>
-                                <label class="text-xs text-gray-500 block mb-1">Tipo principal de bloqueo</label>
-                                <select name="tipo_bloqueo" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                                    {% for opt in workload_options.tipo_bloqueo %}
-                                    <option value="{{ opt }}" {% if workload_survey and (workload_survey.tipo_bloqueo == opt or (opt == 'Otro operativo' and workload_bloqueo_otro)) %}selected{% endif %}>{{ opt }}</option>
-                                    {% endfor %}
-                                </select>
-                                <input type="text" name="bloqueo_otro"
-                                       value="{{ workload_bloqueo_otro }}"
-                                       placeholder="Si seleccionaste Otro operativo, escribe cuál"
-                                       class="mt-2 w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                            </div>
-                            <div>
-                                <label class="text-xs text-gray-500 block mb-1">¿El bloqueo se repite?</label>
-                                <select name="recurrencia_bloqueo" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                                    {% for opt in workload_options.recurrencia %}
-                                    <option value="{{ opt }}" {% if workload_survey and workload_survey.recurrencia_bloqueo == opt %}selected{% endif %}>{{ opt }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div>
-                                    <label class="text-xs text-gray-500 block mb-1">Reprogramaciones</label>
-                                    <select name="reprogramaciones_count" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                                        {% for opt in workload_options.counts %}
-                                        <option value="{{ opt }}" {% if workload_survey and workload_survey.reprogramaciones_count == opt %}selected{% endif %}>{{ opt }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="text-xs text-gray-500 block mb-1">Incidencias</label>
-                                    <select name="incidencias_count" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                                        {% for opt in workload_options.counts %}
-                                        <option value="{{ opt }}" {% if workload_survey and workload_survey.incidencias_count == opt %}selected{% endif %}>{{ opt }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="text-xs text-gray-500 block mb-1">Horas incidencias</label>
-                                    <select name="horas_incidencias" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                                        {% for opt in workload_options.hours %}
-                                        <option value="{{ opt }}" {% if workload_survey and workload_survey.horas_incidencias == opt %}selected{% endif %}>{{ opt }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                            </div>
-                            <div>
-                                <label class="text-xs text-gray-500 block mb-1">Principal causa de incidencias</label>
-                                <select name="causa_incidencias" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                                    {% for opt in workload_options.causa_incidencias %}
-                                    <option value="{{ opt }}" {% if workload_survey and workload_survey.causa_incidencias == opt %}selected{% endif %}>{{ opt }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="flex justify-end">
-                    <button type="submit" class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700">
-                        Guardar encuesta
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- ============================================================ -->
-    <!-- TAB: NPS / CSAT -->
-    <!-- ============================================================ -->
-    <div data-tab-panel id="panel-nps">
-
-        <!-- KPIs + Link -->
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 text-center">
-                <p class="text-xs text-gray-400 uppercase font-semibold mb-1">NPS Promedio</p>
-                <p class="text-3xl font-bold {% if avg_nps and avg_nps >= 9 %}text-green-600{% elif avg_nps and avg_nps >= 7 %}text-yellow-500{% elif avg_nps %}text-red-500{% else %}text-gray-300{% endif %}">
-                    {{ "%.1f"|format(avg_nps) if avg_nps else '—' }}
-                </p>
-                <p class="text-xs text-gray-400 mt-1">
-                    {% if avg_nps and avg_nps >= 9 %}Promotor{% elif avg_nps and avg_nps >= 7 %}Pasivo{% elif avg_nps %}Detractor{% endif %}
-                </p>
-            </div>
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 text-center">
-                <p class="text-xs text-gray-400 uppercase font-semibold mb-1">CSAT Promedio</p>
-                <p class="text-3xl font-bold {% if avg_csat and avg_csat >= 4 %}text-green-600{% elif avg_csat and avg_csat >= 3 %}text-yellow-500{% elif avg_csat %}text-red-500{% else %}text-gray-300{% endif %}">
-                    {{ "%.1f"|format(avg_csat) if avg_csat else '—' }}<span class="text-lg text-gray-400">/5</span>
-                </p>
-                <p class="text-xs text-gray-400 mt-1">{{ "⭐" * (avg_csat|int if avg_csat else 0) }}</p>
-            </div>
-            <div class="bg-white rounded-2xl shadow-sm border border-brand-100 p-5 text-center">
-                <p class="text-xs text-gray-400 uppercase font-semibold mb-1">KPI Satisfaccion</p>
-                <p class="text-3xl font-bold {% if kpi_satisfaccion and kpi_satisfaccion >= 8 %}text-green-600{% elif kpi_satisfaccion and kpi_satisfaccion >= 6 %}text-yellow-500{% elif kpi_satisfaccion %}text-red-500{% else %}text-gray-300{% endif %}">
-                    {{ kpi_satisfaccion if kpi_satisfaccion else '—' }}<span class="text-lg text-gray-400">/10</span>
-                </p>
-                <p class="text-xs text-gray-400 mt-1">Promedio NPS + CSAT</p>
-            </div>
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 text-center">
-                <p class="text-xs text-gray-400 uppercase font-semibold mb-1">Respuestas</p>
-                <p class="text-3xl font-bold text-gray-800">{{ encuestas|length }}</p>
-                <p class="text-xs text-gray-400 mt-1">encuestas recibidas</p>
-            </div>
-        </div>
-
-        <!-- Desglose CSAT por dimensión -->
-        {% if csat_dims %}
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
-            <h2 class="text-sm font-semibold text-gray-700 mb-4">Desglose CSAT por Dimension</h2>
-            {% set dim_labels = {'csat': 'Satisfaccion General', 'csat_calidad': 'Calidad del Servicio', 'csat_respuesta': 'Tiempo de Respuesta', 'csat_comunicacion': 'Comunicacion con Asesor', 'csat_precio': 'Relacion Calidad-Precio', 'csat_tecnico': 'Equipo Tecnico'} %}
-            {% set dim_icons = {'csat': '📊', 'csat_calidad': '✅', 'csat_respuesta': '⚡', 'csat_comunicacion': '💬', 'csat_precio': '💰', 'csat_tecnico': '🔧'} %}
-            <div class="space-y-3">
-                {% for dim_key, dim_label in dim_labels.items() %}
-                {% set val = csat_dims.get(dim_key) %}
-                <div class="flex items-center gap-3">
-                    <span class="text-sm w-5">{{ dim_icons.get(dim_key, '') }}</span>
-                    <span class="text-xs text-gray-600 w-44">{{ dim_label }}</span>
-                    <div class="flex-1 bg-gray-200 rounded-full h-2">
-                        <div class="h-2 rounded-full {% if val and val >= 4 %}bg-green-500{% elif val and val >= 3 %}bg-yellow-400{% elif val %}bg-red-500{% else %}bg-gray-300{% endif %}"
-                             style="width: {{ (val / 5 * 100) if val else 0 }}%"></div>
-                    </div>
-                    <span class="text-xs font-bold w-10 text-right {% if val and val >= 4 %}text-green-600{% elif val and val >= 3 %}text-yellow-500{% elif val %}text-red-500{% else %}text-gray-300{% endif %}">
-                        {{ "%.1f"|format(val) if val else '—' }}
-                    </span>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- Link público -->
-        {% if survey_link %}
-        <div class="bg-brand-50 border border-brand-200 rounded-xl p-4 mb-6">
-            <div class="flex items-center justify-between">
-                <div>
-                    <p class="text-sm font-semibold text-brand-700">Link publico de encuesta</p>
-                    <p class="text-xs text-brand-500 mt-0.5">Comparte este link con los contactos del cliente</p>
-                </div>
-                <button onclick="navigator.clipboard.writeText(window.location.origin+'{{ survey_link }}');this.textContent='Copiado!';setTimeout(()=>this.textContent='Copiar link',2000)"
-                        class="px-3 py-1.5 bg-brand-600 text-white text-xs font-medium rounded-lg hover:bg-brand-700">
-                    Copiar link
-                </button>
-            </div>
-            <div class="mt-2 p-2 bg-white rounded-lg border">
-                <code class="text-xs text-gray-600 break-all">{{ request.host_url.rstrip('/') }}{{ survey_link }}</code>
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- Respuestas individuales -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <h2 class="text-sm font-semibold text-gray-700 mb-4">Respuestas recibidas</h2>
-
-            {% if encuestas %}
-            <div class="space-y-3">
-                {% for enc in encuestas %}
-                <div class="p-4 rounded-lg border hover:bg-gray-50">
-                    <div class="flex items-center gap-3 mb-2">
-                        <div class="w-8 h-8 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center text-xs font-bold">
-                            {{ enc.nombre_respondente[:2]|upper if enc.nombre_respondente else '?' }}
-                        </div>
-                        <div>
-                            <span class="text-sm font-medium text-gray-800">{{ enc.nombre_respondente }}</span>
-                            {% if enc.puesto_respondente %}
-                            <span class="text-xs text-gray-400 ml-1">· {{ enc.puesto_respondente }}</span>
-                            {% endif %}
-                        </div>
-                        <span class="text-xs text-gray-300 ml-auto">{{ enc.created_at.strftime('%d/%m/%Y') }}</span>
-                    </div>
-
-                    <div class="grid grid-cols-3 md:grid-cols-7 gap-1.5 mb-3">
-                        <div class="text-center p-1.5 rounded bg-gray-50">
-                            <p class="text-[10px] text-gray-400">NPS</p>
-                            <p class="text-sm font-bold {% if enc.nps >= 9 %}text-green-600{% elif enc.nps >= 7 %}text-yellow-500{% else %}text-red-500{% endif %}">{{ enc.nps }}</p>
-                        </div>
-                        <div class="text-center p-1.5 rounded bg-gray-50">
-                            <p class="text-[10px] text-gray-400">General</p>
-                            <p class="text-sm font-bold">{{ enc.csat or '—' }}</p>
-                        </div>
-                        <div class="text-center p-1.5 rounded bg-gray-50">
-                            <p class="text-[10px] text-gray-400">Calidad</p>
-                            <p class="text-sm font-bold">{{ enc.csat_calidad or '—' }}</p>
-                        </div>
-                        <div class="text-center p-1.5 rounded bg-gray-50">
-                            <p class="text-[10px] text-gray-400">Respuesta</p>
-                            <p class="text-sm font-bold">{{ enc.csat_respuesta or '—' }}</p>
-                        </div>
-                        <div class="text-center p-1.5 rounded bg-gray-50">
-                            <p class="text-[10px] text-gray-400">Asesor</p>
-                            <p class="text-sm font-bold">{{ enc.csat_comunicacion or '—' }}</p>
-                        </div>
-                        <div class="text-center p-1.5 rounded bg-gray-50">
-                            <p class="text-[10px] text-gray-400">Precio</p>
-                            <p class="text-sm font-bold">{{ enc.csat_precio or '—' }}</p>
-                        </div>
-                        <div class="text-center p-1.5 rounded bg-gray-50">
-                            <p class="text-[10px] text-gray-400">Tecnico</p>
-                            <p class="text-sm font-bold">{{ enc.csat_tecnico or '—' }}</p>
-                        </div>
-                    </div>
-
-                    <div class="pl-2 border-l-2 {% if enc.comentario %}border-brand-300{% else %}border-gray-200{% endif %}">
-                        {% if enc.comentario %}
-                        <p class="text-xs text-gray-600 italic">"{{ enc.comentario }}"</p>
-                        {% else %}
-                        <p class="text-xs text-gray-300 italic">Sin comentarios</p>
-                        {% endif %}
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <div class="text-center py-8">
-                <p class="text-3xl mb-2">📊</p>
-                <p class="text-gray-400 text-sm">Sin respuestas aun. Comparte el link de la encuesta.</p>
-            </div>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- ============================================================ -->
-    <!-- TAB: INCIDENCIAS -->
-    <!-- ============================================================ -->
-    <div data-tab-panel id="panel-incidencias">
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
-            <div class="flex justify-between items-center mb-4">
-                <div>
-                    <h2 class="text-sm font-semibold text-gray-700">Incidencias — {{ account.nombre }}</h2>
-                    <p class="text-xs text-gray-400 mt-0.5">
-                        {% set abiertas = incidencias|selectattr('status','equalto','Abierta')|list|length %}
-                        {% set en_proceso = incidencias|selectattr('status','equalto','En proceso')|list|length %}
-                        {{ abiertas }} abiertas · {{ en_proceso }} en proceso · {{ incidencias|length }} total
-                    </p>
-                    {% if tickets_mes %}
-                    <p class="text-xs text-gray-400 mt-0.5">
-                        Este mes ({{ tickets_mes.mes_label }}): <strong class="text-gray-600">{{ tickets_mes.total }}</strong> reportados ·
-                        <strong class="text-gray-600">{{ tickets_mes.resueltas }}</strong> resueltos — para el seguimiento del cliente
-                    </p>
-                    {% endif %}
-                </div>
-                <button onclick="document.getElementById('modal-add-incidencia').style.display='grid'"
-                        class="px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700">
-                    + Nueva Incidencia
-                </button>
-            </div>
-
-            <!-- Link público de tickets -->
-            <div class="bg-brand-50 border border-brand-200 rounded-xl p-4 mb-4">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-semibold text-brand-700">Portal público de tickets</p>
-                        <p class="text-xs text-brand-500 mt-0.5">El cliente reporta incidencias sin login desde este link</p>
-                    </div>
-                    {% if ticket_link %}
-                    <button onclick="navigator.clipboard.writeText(window.location.origin+'{{ ticket_link }}');this.textContent='Copiado!';setTimeout(()=>this.textContent='Copiar link',2000)"
-                            class="px-3 py-1.5 bg-brand-600 text-white text-xs font-medium rounded-lg hover:bg-brand-700">
-                        Copiar link
-                    </button>
-                    {% else %}
-                    <button onclick="generarTicketLink(this)"
-                            class="px-3 py-1.5 bg-brand-600 text-white text-xs font-medium rounded-lg hover:bg-brand-700">
-                        Generar link
-                    </button>
-                    {% endif %}
-                </div>
-                {% if ticket_link %}
-                <div class="mt-2 p-2 bg-white rounded-lg border">
-                    <code class="text-xs text-gray-600 break-all">{{ request.host_url.rstrip('/') }}{{ ticket_link }}</code>
-                </div>
-                {% endif %}
-            </div>
-            <script>
-            async function generarTicketLink(btn){
-                btn.disabled = true;
-                try{
-                    const r = await fetch('/cs/clientes/{{ account.id }}/ticket-token/generar', {method:'POST'});
-                    if(!r.ok) throw new Error('No se pudo generar el link');
-                    location.reload();
-                }catch(e){
-                    alert(e.message);
-                    btn.disabled = false;
-                }
-            }
-            </script>
-
-            {% if incidencias %}
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="border-b text-left text-gray-500 text-xs uppercase tracking-wide bg-gray-50">
-                            <th class="px-3 py-2">Folio</th>
-                            <th class="px-3 py-2">Fecha</th>
-                            <th class="px-3 py-2">Servicio</th>
-                            <th class="px-3 py-2">Tipo</th>
-                            <th class="px-3 py-2">Propiedad</th>
-                            <th class="px-3 py-2 text-center">Status</th>
-                            <th class="px-3 py-2">Responsable</th>
-                            <th class="px-3 py-2">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for inc in incidencias %}
-                        <tr class="border-b last:border-0 hover:bg-gray-50">
-                            <td class="px-3 py-2 text-xs font-mono text-gray-600">{{ inc.folio or '-' }}</td>
-                            <td class="px-3 py-2 text-xs text-gray-500">{{ inc.fecha_incidencia.strftime('%d/%m/%Y') if inc.fecha_incidencia else '-' }}</td>
-                            <td class="px-3 py-2">
-                                <span class="px-1.5 py-0.5 rounded text-xs font-medium {% if inc.servicio == 'Aroma' %}bg-purple-100 text-purple-700{% else %}bg-green-100 text-green-700{% endif %}">{{ inc.servicio }}</span>
-                            </td>
-                            <td class="px-3 py-2 text-xs text-gray-700">{{ inc.tipo }}</td>
-                            <td class="px-3 py-2 text-xs text-gray-500">{{ inc.propiedad_nombre[:30] if inc.propiedad_nombre else '-' }}</td>
-                            <td class="px-3 py-2 text-center">
-                                <span class="px-2 py-0.5 rounded-full text-xs font-semibold
-                                    {% if inc.status == 'Abierta' %}bg-red-100 text-red-700
-                                    {% elif inc.status == 'En proceso' %}bg-yellow-100 text-yellow-700
-                                    {% else %}bg-green-100 text-green-700{% endif %}">{{ inc.status }}</span>
-                            </td>
-                            <td class="px-3 py-2 text-xs text-gray-500">{{ inc.responsable or '-' }}</td>
-                            <td class="px-3 py-2">
-                                {% if inc.status != 'Resuelta' %}
-                                <form action="/cs/account/{{ account.id }}/incidencias/{{ inc.id }}/status" method="POST" class="inline">
-                                    {% if inc.status == 'Abierta' %}
-                                    <input type="hidden" name="status" value="En proceso">
-                                    <button type="submit" class="text-xs text-yellow-600 hover:underline">En proceso</button>
-                                    {% endif %}
-                                </form>
-                                <form action="/cs/account/{{ account.id }}/incidencias/{{ inc.id }}/status" method="POST" class="inline ml-2">
-                                    <input type="hidden" name="status" value="Resuelta">
-                                    <button type="submit" class="text-xs text-green-600 hover:underline">Resolver</button>
-                                </form>
-                                {% else %}
-                                <span class="text-xs text-gray-400">{{ inc.tiempo_respuesta }}d</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% if inc.detalle %}
-                        <tr class="border-b bg-gray-50"><td colspan="8" class="px-3 py-1.5 text-xs text-gray-500 italic">{{ inc.detalle[:150] }}</td></tr>
-                        {% endif %}
-                        {% if inc.evidencia_urls %}
-                        <tr class="border-b bg-gray-50"><td colspan="8" class="px-3 py-1.5">
-                            <div style="display:flex;gap:6px;flex-wrap:wrap">
-                                {% for url in inc.evidencia_urls %}
-                                <a href="{{ url }}" target="_blank" rel="noopener"><img src="{{ url }}" style="width:48px;height:48px;border-radius:6px;object-fit:cover;border:1px solid #e3e2e0"></a>
-                                {% endfor %}
-                            </div>
-                        </td></tr>
-                        {% endif %}
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <div class="text-center py-10">
-                <p class="text-3xl mb-2">📋</p>
-                <p class="text-gray-400 text-sm">Sin incidencias registradas</p>
-            </div>
-            {% endif %}
-        </div>
-    </div>
-
+{# ── Barra de pestañas ───────────────────────────────────────── #}
+<div class="cv-tabbar" role="tablist" aria-label="Secciones del cliente">
+    {% set tabs = [
+        ('overview',      'Overview',      'Resumen, objetivos y riesgo'),
+        ('proyectos',     'Proyectos',     'Tareas, entregables e incidencias'),
+        ('historial',     'Historial',     'Correos, notas y minutas'),
+        ('documentacion', 'Documentación', 'Contratos, links y accesos')
+    ] %}
+    {% for key, label, desc in tabs %}
+    <button type="button" role="tab" id="cv-tabbtn-{{ key }}"
+            aria-controls="cv-panel-{{ key }}"
+            aria-selected="{{ 'true' if key == tab_inicial else 'false' }}"
+            data-cv-tab="{{ key }}" title="{{ desc }}"
+            onclick="cvSwitchTab('{{ key }}')"
+            class="cv-tab {% if key == tab_inicial %}cv-tab--on{% endif %}">{{ label }}</button>
+    {% endfor %}
 </div>
 
-<!-- Modal: Nueva Incidencia -->
-<div id="modal-add-incidencia" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;place-items:center">
-    <div class="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 mx-4 max-h-[90vh] overflow-y-auto">
-        <div class="flex justify-between items-center mb-4">
-            <h2 class="text-lg font-semibold text-gray-800">Nueva Incidencia — {{ account.nombre }}</h2>
-            <button onclick="document.getElementById('modal-add-incidencia').style.display='none'" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-        </div>
-        <form action="/cs/account/{{ account.id }}/incidencias" method="POST">
-            <div style="display:flex;flex-direction:column;gap:10px">
-                <!-- Servicio + Tipo -->
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                    <div>
-                        <label style="font-size:11px;color:#787774;display:block;margin-bottom:3px">Servicio *</label>
-                        <select name="servicio" required style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
-                            <option value="Aroma">Aroma</option>
-                            <option value="Fumigacion">Fumigacion</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label style="font-size:11px;color:#787774;display:block;margin-bottom:3px">Tipo de incidencia *</label>
-                        <select name="tipo" required style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
-                            <optgroup label="Aroma">
-                                <option value="Equipo no huele">Equipo no huele</option>
-                                <option value="Equipo apagado">Equipo apagado</option>
-                                <option value="Derrame de aroma">Derrame de aroma</option>
-                                <option value="Ruidos en equipo">Ruidos en equipo</option>
-                                <option value="Equipo desprendido">Equipo desprendido</option>
-                                <option value="Robo/Extravio equipo">Robo/Extravio equipo</option>
-                                <option value="Reubicacion equipo">Reubicacion equipo</option>
-                                <option value="Incumplimiento visita">Incumplimiento visita</option>
-                                <option value="Mantenimiento equipo">Mantenimiento equipo</option>
-                            </optgroup>
-                            <optgroup label="Fumigacion">
-                                <option value="Roedores">Roedores</option>
-                                <option value="Cucarachas">Cucarachas</option>
-                                <option value="Moscas/Mosquitos">Moscas/Mosquitos</option>
-                                <option value="Alacranes">Alacranes</option>
-                                <option value="Termitas">Termitas</option>
-                                <option value="Chinches">Chinches</option>
-                                <option value="Aves">Aves</option>
-                                <option value="Otro insecto">Otro insecto</option>
-                                <option value="Garantia fumigacion">Garantia fumigacion</option>
-                            </optgroup>
-                        </select>
-                    </div>
-                </div>
+{# ── Paneles ─────────────────────────────────────────────────── #}
+<div id="cv-panel-overview" role="tabpanel" aria-labelledby="cv-tabbtn-overview"
+     class="cv-panel {% if tab_inicial != 'overview' %}cv-panel--off{% endif %}">
+    {% include "cs/tabs/_overview.html" %}
+</div>
 
-                <!-- Propiedad (search + dropdown) -->
-                <div x-data="{ query: '', results: [], selected: null, selectedName: '', open: false }"
-                     @click.outside="open=false">
-                    <label style="font-size:11px;color:#787774;display:block;margin-bottom:3px">Propiedad / Sucursal</label>
-                    <input type="hidden" name="propiedad_id" :value="selected">
-                    <div style="position:relative">
-                        <input type="text" x-model="query"
-                               :placeholder="selectedName || 'Seleccionar o buscar propiedad...'"
-                               @focus="open=true;if(!query){fetch('/cs/api/propiedades/{{ account.id }}').then(r=>r.json()).then(d=>results=d)}"
-                               @input.debounce.200ms="open=true;fetch('/cs/api/propiedades/{{ account.id }}?q='+query).then(r=>r.json()).then(d=>results=d)"
-                               style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
-                        <div x-show="open && results.length>0" x-transition
-                             style="position:absolute;z-index:20;width:100%;border:1px solid #e3e2e0;border-radius:7px;max-height:200px;overflow-y:auto;margin-top:4px;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,.1)">
-                            <template x-for="p in results" :key="p.id">
-                                <div @click="selected=p.id;selectedName=p.nombre;query='';open=false"
-                                     style="padding:8px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid #f5f5f5"
-                                     class="hover:bg-gray-50">
-                                    <span x-text="p.nombre" style="font-weight:500"></span>
-                                    <span x-show="p.zona" x-text="' · '+p.zona" style="color:#999;font-size:11px"></span>
-                                    <span x-show="p.unidad_negocio" x-text="' · '+p.unidad_negocio" style="color:#999;font-size:10px;padding:1px 4px;border-radius:3px;background:#f0f0f0"></span>
-                                </div>
-                            </template>
-                        </div>
-                        <template x-if="selectedName">
-                            <div style="margin-top:4px;display:flex;align-items:center;gap:6px">
-                                <span style="font-size:12px;color:#333;font-weight:500" x-text="selectedName"></span>
-                                <button type="button" @click="selected=null;selectedName='';query=''" style="font-size:11px;color:#999;cursor:pointer;background:none;border:none">✕ cambiar</button>
-                            </div>
-                        </template>
-                    </div>
-                </div>
+{% for key in ['proyectos', 'historial', 'documentacion'] %}
+<div id="cv-panel-{{ key }}" role="tabpanel" aria-labelledby="cv-tabbtn-{{ key }}"
+     data-cv-lazy="{{ key }}"
+     class="cv-panel {% if tab_inicial != key %}cv-panel--off{% endif %}">
+    {{ skeleton(3) }}
+</div>
+{% endfor %}
 
-                <!-- Detalle -->
+{# ── Modal: renovación de contrato ───────────────────────────── #}
+<div id="modal-renovacion" class="cv-modal" role="dialog" aria-modal="true" aria-labelledby="modal-renov-title">
+    <div class="cv-modal-box">
+        <form method="POST" action="/cs/account/{{ account.id }}/renovacion">
+            <div class="flex items-center justify-between mb-4">
+                <h2 id="modal-renov-title" class="text-base font-semibold text-gray-800">Renovación de contrato</h2>
+                <button type="button" onclick="cvCloseModal('modal-renovacion')"
+                        class="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Cerrar">×</button>
+            </div>
+            <p class="text-xs text-gray-500 mb-4 leading-relaxed">
+                Este dato se captura a mano: Savio solo guarda la fecha en que <em>terminó</em>
+                un contrato, no la de su próxima renovación.
+            </p>
+            <div class="space-y-3">
                 <div>
-                    <label style="font-size:11px;color:#787774;display:block;margin-bottom:3px">Detalle de la incidencia</label>
-                    <textarea name="detalle" rows="3" placeholder="Describe la incidencia..." style="width:100%;border:1px solid #e3e2e0;border-radius:7px;padding:8px 10px;font-size:13px;resize:none;font-family:inherit"></textarea>
+                    <label for="renov-fecha" class="cv-label">Próxima renovación</label>
+                    <input id="renov-fecha" name="fecha_renovacion" type="date" class="cv-input"
+                           value="{{ account.fecha_renovacion.isoformat() if account.fecha_renovacion else '' }}">
                 </div>
-
-                <!-- Fechas -->
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                    <div>
-                        <label style="font-size:11px;color:#787774;display:block;margin-bottom:3px">Fecha incidencia</label>
-                        <input type="date" name="fecha_incidencia" style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
-                    </div>
-                    <div>
-                        <label style="font-size:11px;color:#787774;display:block;margin-bottom:3px">Fecha compromiso</label>
-                        <input type="date" name="fecha_compromiso" style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
-                    </div>
-                </div>
-
-                <!-- Quien reporta + Responsable -->
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                    <div>
-                        <label style="font-size:11px;color:#787774;display:block;margin-bottom:3px">Quien reporta</label>
-                        <input type="text" name="quien_reporta" placeholder="Nombre" style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
-                    </div>
-                    <div>
-                        <label style="font-size:11px;color:#787774;display:block;margin-bottom:3px">Responsable</label>
-                        <input type="text" name="responsable" placeholder="Quien atiende" style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
-                    </div>
-                </div>
-
                 <div>
-                    <label style="font-size:11px;color:#787774;display:block;margin-bottom:3px">Zona</label>
-                    <select name="zona" style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
-                        <option value="">Seleccionar</option>
-                        <option value="Matriz">Matriz</option>
-                        <option value="Centro">Centro</option>
-                        <option value="Bajio">Bajio</option>
-                        <option value="Sur">Sur</option>
-                        <option value="Noreste / Noroeste">Noreste / Noroeste</option>
-                        <option value="Pacifico">Pacifico</option>
-                    </select>
+                    <label for="renov-valor" class="cv-label">Valor del contrato (MXN)</label>
+                    <input id="renov-valor" name="valor_contrato" type="number" step="any" class="cv-input"
+                           value="{{ account.valor_contrato or '' }}">
                 </div>
             </div>
-
-            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
-                <button type="button" onclick="document.getElementById('modal-add-incidencia').style.display='none'" class="px-4 py-2 text-sm text-gray-600">Cancelar</button>
-                <button type="submit" class="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700">Registrar</button>
+            <div class="flex justify-end gap-2 mt-5">
+                <button type="button" onclick="cvCloseModal('modal-renovacion')"
+                        class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancelar</button>
+                <button type="submit"
+                        class="px-4 py-2 bg-brand-600 text-white text-sm font-semibold rounded-xl hover:bg-brand-700">Guardar</button>
             </div>
         </form>
     </div>
 </div>
 
-<!-- Modal: Agregar paso al proceso -->
-<div id="modal-add-entregable" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-    <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 mx-4">
-        <div class="flex justify-between items-center mb-4">
-            <h2 class="text-lg font-semibold text-gray-800">Nuevo Paso — {{ account.nombre }}</h2>
-            <button onclick="document.getElementById('modal-add-entregable').classList.add('hidden')"
-                    class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-        </div>
-        <form action="/cs/account/{{ account.id }}/entregables" method="POST">
-            <div class="space-y-3">
-                <div>
-                    <label class="text-xs text-gray-500 block mb-1">Unidad de Negocio</label>
-                    <select name="unidad_negocio" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                        <option value="PESTEX">🛡️ PESTEX</option>
-                        <option value="AROMATEX">🌿 AROMATEX</option>
-                        <option value="General">📋 General</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="text-xs text-gray-500 block mb-1">Que se debe hacer / entregar *</label>
-                    <textarea name="descripcion" required rows="2" placeholder="Ej: Crear carpetas por sucursal con Hoja de servicio y Certificado"
-                              class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 resize-none"></textarea>
-                </div>
-                <div>
-                    <label class="text-xs text-gray-500 block mb-1">Cuando se entrega (frecuencia o fecha limite)</label>
-                    <input type="text" name="fecha_entrega" placeholder="Ej: 1 al 5 de cada mes / Cada lunes / 30 de abril"
-                           class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                    <p class="text-xs text-gray-400 mt-1">Escribe la frecuencia o la fecha especifica del entregable</p>
-                </div>
-                <div>
-                    <label class="text-xs text-gray-500 block mb-1">Quien es responsable</label>
-                    <input type="text" name="responsable" placeholder="Ej: KAM / Coordinador de campo / Equipo de S&H"
-                           class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                </div>
-                <div>
-                    {{ input_adjuntos('adj') }}
-                </div>
-            </div>
-            <div class="flex justify-end gap-3 mt-5">
-                <button type="button" onclick="document.getElementById('modal-add-entregable').classList.add('hidden')"
-                        class="px-4 py-2 text-sm text-gray-600">Cancelar</button>
-                <button type="submit" class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700">Agregar Paso</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Modal: Agregar contacto desde account detail -->
-<div id="modal-add-contacto" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-    <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 mx-4">
-        <div class="flex justify-between items-center mb-4">
-            <h2 class="text-lg font-semibold text-gray-800">Nuevo Contacto — {{ account.nombre }}</h2>
-            <button onclick="document.getElementById('modal-add-contacto').classList.add('hidden')"
-                    class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-        </div>
-        <form action="/cs/contactos/crear" method="POST">
-            <input type="hidden" name="account_id" value="{{ account.id }}">
-            <input type="hidden" name="redirect" value="/cs/account/{{ account.id }}?periodo={{ periodo_param }}&tab=contactos">
-            <div class="space-y-3">
-                <div>
-                    <label class="text-xs text-gray-500 block mb-1">Nombre *</label>
-                    <input type="text" name="nombre" required placeholder="Ej: Rocio Vigueras"
-                           class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                </div>
-                <div>
-                    <label class="text-xs text-gray-500 block mb-1">Puesto</label>
-                    <input type="text" name="puesto" placeholder="Ej: Coordinadora de Marketing"
-                           class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="text-xs text-gray-500 block mb-1">Telefono</label>
-                        <input type="text" name="telefono" placeholder="811999199111"
-                               class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                    </div>
-                    <div>
-                        <label class="text-xs text-gray-500 block mb-1">Correo</label>
-                        <input type="email" name="correo" placeholder="correo@empresa.com"
-                               class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-                    </div>
-                </div>
-                <div class="flex items-center gap-2">
-                    <input type="checkbox" name="is_owner" id="owner_chk" class="rounded">
-                    <label for="owner_chk" class="text-sm text-gray-600">Contacto principal (Owner)</label>
-                </div>
-                <div>
-                    <label class="text-xs text-gray-500 block mb-1">Notas</label>
-                    <textarea name="notas" rows="2" placeholder="Notas..."
-                              class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 resize-none"></textarea>
-                </div>
-            </div>
-            <div class="flex justify-end gap-3 mt-5">
-                <button type="button" onclick="document.getElementById('modal-add-contacto').classList.add('hidden')"
-                        class="px-4 py-2 text-sm text-gray-600">Cancelar</button>
-                <button type="submit" class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700">Guardar</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Modal: Agregar / editar cita (plantilla activa) -->
-<div id="modal-cita" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6">
-        <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-semibold text-gray-800" id="modal-cita-title">Agregar cita</h3>
-            <button onclick="cerrarCitaModal()" class="text-gray-400 hover:text-gray-600">✕</button>
-        </div>
-        <input type="hidden" id="cita-id"/>
-        <div class="space-y-3">
-            <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Propiedad / Sucursal</label>
-                <input id="cita-propiedad" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="ej: Walmart Mitras"/>
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Servicio</label>
-                <input id="cita-servicio" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="ej: Fumigación trimestral"/>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-                <div>
-                    <label class="block text-xs font-medium text-gray-600 mb-1">Fecha inicio</label>
-                    <input id="cita-fecha-inicio" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"/>
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-gray-600 mb-1">Fecha terminación</label>
-                    <input id="cita-fecha-fin" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"/>
-                </div>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-                <div>
-                    <label class="block text-xs font-medium text-gray-600 mb-1">Zona</label>
-                    <input id="cita-zona" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"/>
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-gray-600 mb-1">Técnico</label>
-                    <input id="cita-tecnico" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"/>
-                </div>
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Dirección</label>
-                <input id="cita-direccion" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"/>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-                <div>
-                    <label class="block text-xs font-medium text-gray-600 mb-1">Estatus</label>
-                    <select id="cita-estatus" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                        <option value="Agendada">Agendada</option>
-                        <option value="Técnico Asignado">Técnico Asignado</option>
-                        <option value="Terminada">Terminada</option>
-                        <option value="Cancelada">Cancelada</option>
-                        <option value="No Realizada">No Realizada</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-gray-600 mb-1">Cantidad</label>
-                    <input id="cita-cantidad" type="number" min="1" value="1" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"/>
-                </div>
-            </div>
-        </div>
-        <div class="flex justify-end gap-2 mt-5">
-            <button onclick="cerrarCitaModal()" class="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Cancelar</button>
-            <button onclick="guardarCita()" class="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700" id="cita-save-btn">Guardar</button>
-        </div>
-    </div>
-</div>
-
-<script>
-const _ACCOUNT_ID = "{{ account.id }}";
-
-function abrirAgregarCita(){
-    document.getElementById('modal-cita-title').textContent='Agregar cita';
-    document.getElementById('cita-id').value='';
-    document.getElementById('cita-propiedad').value='';
-    document.getElementById('cita-servicio').value='';
-    document.getElementById('cita-fecha-inicio').value='';
-    document.getElementById('cita-fecha-fin').value='';
-    document.getElementById('cita-zona').value='';
-    document.getElementById('cita-tecnico').value='';
-    document.getElementById('cita-direccion').value='';
-    document.getElementById('cita-estatus').value='Agendada';
-    document.getElementById('cita-cantidad').value='1';
-    const m=document.getElementById('modal-cita');
-    m.classList.remove('hidden');m.classList.add('flex');
-    setTimeout(()=>document.getElementById('cita-propiedad').focus(),50);
-}
-
-function editarCita(citaId, data){
-    document.getElementById('modal-cita-title').textContent='Editar cita';
-    document.getElementById('cita-id').value=citaId;
-    document.getElementById('cita-propiedad').value=data.propiedad||'';
-    document.getElementById('cita-servicio').value=data.titulo_servicio||'';
-    document.getElementById('cita-fecha-inicio').value=data.fecha_inicio||'';
-    document.getElementById('cita-fecha-fin').value=data.fecha_terminacion||'';
-    document.getElementById('cita-zona').value=data.zona||'';
-    document.getElementById('cita-tecnico').value=data.tecnico||'';
-    document.getElementById('cita-direccion').value=data.direccion||'';
-    document.getElementById('cita-estatus').value=data.estatus||'Agendada';
-    document.getElementById('cita-cantidad').value=data.cantidad||1;
-    const m=document.getElementById('modal-cita');
-    m.classList.remove('hidden');m.classList.add('flex');
-}
-
-function cerrarCitaModal(){
-    const m=document.getElementById('modal-cita');
-    m.classList.add('hidden');m.classList.remove('flex');
-}
-
-async function guardarCita(){
-    const id=document.getElementById('cita-id').value;
-    const body={
-        propiedad:document.getElementById('cita-propiedad').value.trim(),
-        titulo_servicio:document.getElementById('cita-servicio').value.trim(),
-        fecha_inicio:document.getElementById('cita-fecha-inicio').value||null,
-        fecha_terminacion:document.getElementById('cita-fecha-fin').value||null,
-        zona:document.getElementById('cita-zona').value.trim(),
-        tecnico:document.getElementById('cita-tecnico').value.trim(),
-        direccion:document.getElementById('cita-direccion').value.trim(),
-        estatus:document.getElementById('cita-estatus').value,
-        cantidad:parseInt(document.getElementById('cita-cantidad').value)||1,
-    };
-    if(!body.propiedad){alert('Propiedad es requerida');return;}
-    const btn=document.getElementById('cita-save-btn');btn.disabled=true;btn.textContent='Guardando...';
-    try{
-        const url=id?`/cs/api/citas/${id}`:`/cs/api/cuentas/${_ACCOUNT_ID}/citas`;
-        const method=id?'PATCH':'POST';
-        const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-        if(!r.ok){const e=await r.json();throw new Error(e.error||'Error');}
-        cerrarCitaModal();location.reload();
-    }catch(e){alert('Error: '+e.message);}
-    finally{btn.disabled=false;btn.textContent='Guardar';}
-}
-
-async function cancelarCita(citaId){
-    if(!confirm('¿Marcar esta cita como Cancelada? Se queda en historial pero sale de la plantilla activa.'))return;
-    try{
-        const r=await fetch(`/cs/api/citas/${citaId}/cancelar`,{method:'POST'});
-        if(!r.ok){const e=await r.json();throw new Error(e.error||'Error');}
-        location.reload();
-    }catch(e){alert('Error: '+e.message);}
-}
-
-function addWorkloadActivityRow(){
-    const host=document.getElementById('custom-workload-activities');
-    if(!host)return;
-    const row=document.createElement('div');
-    row.className='grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_140px_34px] gap-3 items-center rounded-xl border border-indigo-100 p-3 bg-indigo-50/30';
-    row.innerHTML=`
-        <input type="text" name="actividad" required placeholder="Nombre de actividad"
-               class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
-        <select name="actividad_horas" class="text-sm border border-gray-300 rounded-lg px-3 py-2">
-            <option value="No aplica">No aplica</option>
-            <option value="1-2 h">1-2 h</option>
-            <option value="3-5 h">3-5 h</option>
-            <option value="6-10 h">6-10 h</option>
-            <option value="11-15 h">11-15 h</option>
-            <option value="Más de 15 h">Más de 15 h</option>
-        </select>
-        <button type="button" class="text-xs text-red-400 hover:text-red-600 justify-self-start lg:justify-self-center" title="Quitar actividad">✕</button>
-    `;
-    row.querySelector('button').addEventListener('click',()=>row.remove());
-    host.appendChild(row);
-    row.querySelector('input').focus();
-}
-</script>
-
+{% include "cs/_modals_account.html" %}
 {% endblock %}
 
+
 {% block scripts %}
+<style>
+/* ── Client View ──────────────────────────────────────────── */
+.cv-banner { margin-bottom: 16px; }
+.cv-banner--sticky { position: sticky; top: 52px; z-index: 20; padding-top: 4px;
+                     background: var(--bg-app, #eff3f8); }
+
+/* minmax(0,...) y no minmax(126px,...): con un mínimo fijo las columnas no
+   pueden encoger y el grid desborda el contenedor en pantallas angostas. */
+.cv-highlights { display: grid; gap: 14px;
+                 grid-template-columns: repeat(auto-fit, minmax(min(126px, 100%), 1fr)); }
+.cv-hl { min-width: 0; }
+
+/* Contenedor de gráfica: Chart.js fija el ancho del canvas al inicializar y
+   no lo reduce después. Sin un contenedor acotado el canvas desborda en móvil. */
+.cv-chart { position: relative; width: 100%; height: 200px; min-width: 0; }
+.cv-chart > canvas { max-width: 100% !important; }
+/* Los hijos de grid/flex no encogen por debajo de su contenido sin esto. */
+.cv-panel .grid > *, .cv-panel .flex > * { min-width: 0; }
+.cv-hl-lbl { font-size: 10px; font-weight: 600; letter-spacing: .07em;
+             text-transform: uppercase; color: #9ca3af; margin: 0 0 2px; }
+.cv-hl-val { font-size: 16px; font-weight: 700; color: #1f2937; margin: 0;
+             font-variant-numeric: tabular-nums; line-height: 1.2;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cv-hl-val--sm { font-size: 13.5px; }
+.cv-hl-sub { font-size: 11px; color: #6b7280; margin: 2px 0 0;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cv-hl-empty { font-size: 12px; font-weight: 600; color: #6d28d9; background: none;
+               border: none; padding: 0; cursor: pointer; text-align: left; }
+.cv-hl-empty:hover { text-decoration: underline; }
+
+.cv-tabbar { display: flex; gap: 2px; border-bottom: 1px solid #e5e7eb;
+             margin-bottom: 18px; overflow-x: auto; scrollbar-width: none; }
+.cv-tabbar::-webkit-scrollbar { display: none; }
+.cv-tab { padding: 9px 15px; font-size: 13.5px; font-weight: 500; color: #6b7280;
+          background: none; border: none; border-bottom: 2px solid transparent;
+          cursor: pointer; white-space: nowrap; transition: color 120ms, border-color 120ms; }
+.cv-tab:hover { color: #4b5563; }
+.cv-tab--on { color: #6d28d9; border-bottom-color: #7c3aed; font-weight: 600; }
+.cv-tab:focus-visible { outline: 2px solid #7c3aed; outline-offset: -2px; border-radius: 4px; }
+
+.cv-panel--off { display: none; }
+
+/* Skeletons */
+.cv-skel-bar { background: linear-gradient(90deg, #eef1f4 25%, #e2e7ec 37%, #eef1f4 63%);
+               background-size: 400% 100%; border-radius: 4px;
+               animation: cv-shimmer 1.3s ease-in-out infinite; }
+@keyframes cv-shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+@media (prefers-reduced-motion: reduce) {
+    .cv-skel-bar { animation: none; background: #eef1f4; }
+}
+
+/* Formularios */
+.cv-label { display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px; }
+.cv-input { width: 100%; font-size: 13px; border: 1px solid #d1d5db; border-radius: 9px;
+            padding: 8px 11px; background: #fff; color: #1f2937; }
+.cv-input:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,.12); }
+
+/* Modales del Client View */
+.cv-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45);
+            z-index: 60; padding: 20px; overflow-y: auto; }
+.cv-modal--open { display: grid; place-items: center; }
+.cv-modal-box { background: #fff; border-radius: 16px; box-shadow: 0 20px 50px rgba(0,0,0,.25);
+                width: 100%; max-width: 520px; padding: 22px; }
+
+/* Timeline */
+.cv-timeline { list-style: none; margin: 0; padding: 0; position: relative; }
+.cv-timeline::before { content: ''; position: absolute; left: 13px; top: 6px; bottom: 6px;
+                       width: 1px; background: #e5e7eb; }
+.cv-tl-item { display: flex; gap: 13px; padding-bottom: 18px; position: relative; }
+.cv-tl-item:last-child { padding-bottom: 0; }
+.cv-tl-dot { width: 27px; height: 27px; border-radius: 50%; background: #fff;
+             border: 1px solid #e5e7eb; display: grid; place-items: center;
+             font-size: 12px; flex: none; z-index: 1; }
+.cv-tl-dot--incidencia { border-color: #fca5a5; background: #fef2f2; }
+.cv-tl-dot--correo { border-color: #bfdbfe; background: #eff6ff; }
+.cv-tl-dot--encuesta { border-color: #ddd6fe; background: #f5f3ff; }
+.cv-tl-body { min-width: 0; flex: 1; padding-top: 3px; }
+
+.cv-filtro { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+             border: 1px solid #e5e7eb; background: #fff; color: #6b7280; cursor: pointer; }
+.cv-filtro--on { background: #6d28d9; border-color: #6d28d9; color: #fff; }
+
+.cv-copy-btn { font-size: 11px; font-weight: 600; color: #6d28d9; background: #f5f3ff;
+               border: 1px solid #ddd6fe; border-radius: 8px; padding: 6px 10px;
+               cursor: pointer; white-space: nowrap; }
+.cv-copy-btn:hover { background: #ede9fe; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+           overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+@media (max-width: 768px) {
+    .cv-banner--sticky { position: static; }
+    .cv-highlights { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+
 <script>
-/* Init tab from URL param */
-(function(){
-    var initial = new URLSearchParams(window.location.search).get('tab') || 'resumen';
-    switchTab(initial);
-})();
+// ── Client View: pestañas con carga diferida ──────────────────
+const CV_ACCOUNT_ID = '{{ account.id }}';
+const cvCache = {};           // tab -> true cuando ya se cargó
+let cvTabActual = '{{ tab_inicial }}';
 
-const accId = '{{ account.id }}';
+function cvTabActiva() { return cvTabActual; }
 
-function buildChart(ctx, data, type) {
-    if (!ctx || !data.length) return;
-    if (type === 'mrr') {
-        new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: data.map(d => d.mes_label),
-                datasets: [
-                    {label:'Pagado', data:data.map(d=>d.pagado), backgroundColor:'#22c55e', borderRadius:4, order:2},
-                    {label:'Pendiente', data:data.map(d=>d.pendiente), backgroundColor:'#ef4444', borderRadius:4, order:2},
-                    {label:'Facturado', data:data.map(d=>d.facturado), type:'line', borderColor:'#7c3aed', backgroundColor:'transparent', borderWidth:2, pointRadius:4, pointBackgroundColor:'#7c3aed', tension:.3, order:1},
-                ]
-            },
-            options: {
-                responsive:true,
-                plugins:{legend:{position:'bottom',labels:{boxWidth:12,padding:10,font:{family:'Inter',size:10}}},tooltip:{callbacks:{label:c=>c.dataset.label+': $'+c.parsed.y.toLocaleString('en-US')},backgroundColor:'#1e1b3a',cornerRadius:8}},
-                scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:10}}},y:{stacked:true,ticks:{callback:v=>'$'+(v/1000).toFixed(0)+'K',font:{size:10}},grid:{color:'#f3f4f6'}}}
-            }
+function cvSwitchTab(name) {
+    document.querySelectorAll('[data-cv-tab]').forEach(b => {
+        const on = b.dataset.cvTab === name;
+        b.classList.toggle('cv-tab--on', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    document.querySelectorAll('.cv-panel').forEach(p => {
+        p.classList.toggle('cv-panel--off', p.id !== 'cv-panel-' + name);
+    });
+    cvTabActual = name;
+
+    const url = new URL(window.location);
+    url.searchParams.set('tab', name);
+    history.replaceState(null, '', url);
+
+    cvCargarTab(name);
+}
+
+async function cvCargarTab(name) {
+    const panel = document.getElementById('cv-panel-' + name);
+    if (!panel || !panel.dataset.cvLazy || cvCache[name]) return;
+    cvCache[name] = true;    // marca antes de pedir, evita doble fetch
+    try {
+        const r = await fetch(`/cs/account/${CV_ACCOUNT_ID}/tab/${name}`, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
-    } else {
-        new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: data.map(d => d.mes_label),
-                datasets: [
-                    {label:'Terminadas', data:data.map(d=>d.terminadas), backgroundColor:'#22c55e', borderRadius:4},
-                    {label:'Canceladas', data:data.map(d=>d.canceladas), backgroundColor:'#ef4444', borderRadius:4},
-                    {label:'No Realizadas', data:data.map(d=>d.no_realizadas), backgroundColor:'#f59e0b', borderRadius:4},
-                    {label:'% Cumpl.', data:data.map(d=>d.pct_cumplimiento), type:'line', borderColor:'#7c3aed', backgroundColor:'transparent', borderWidth:2, pointRadius:4, pointBackgroundColor:'#7c3aed', tension:.3, yAxisID:'y1'},
-                ]
-            },
-            options: {
-                responsive:true,
-                plugins:{legend:{position:'bottom',labels:{boxWidth:12,padding:10,font:{family:'Inter',size:10}}},tooltip:{backgroundColor:'#1e1b3a',cornerRadius:8}},
-                scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:10}}},y:{stacked:true,ticks:{font:{size:10}},grid:{color:'#f3f4f6'}},y1:{position:'right',min:0,max:100,ticks:{callback:v=>v+'%',font:{size:10}},grid:{display:false}}}
-            }
-        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        panel.innerHTML = await r.text();
+    } catch (e) {
+        cvCache[name] = false;   // permite reintentar
+        panel.innerHTML = `
+            <div class="bg-white rounded-2xl border border-red-200 p-6 text-center">
+                <p class="text-sm font-semibold text-gray-800">No se pudo cargar esta sección</p>
+                <p class="text-xs text-gray-500 mt-1">${e.message}</p>
+                <button type="button" onclick="cvCargarTab('${name}')"
+                        class="mt-3 px-3.5 py-2 bg-brand-600 text-white text-xs font-semibold rounded-lg">
+                    Reintentar
+                </button>
+            </div>`;
     }
 }
 
-fetch('/cs/api/mrr-trend?account_id='+accId).then(r=>r.json()).then(d=>{
-    buildChart(document.getElementById('accountMrrChart'),d,'mrr');
+// ── Fragmentos pesados dentro de una pestaña ──────────────────
+// Se piden al abrir su <details>, una sola vez.
+async function cvCargarFragmento(det) {
+    if (!det.open || det.dataset.cvLoaded) return;
+    det.dataset.cvLoaded = '1';
+    const body = det.querySelector('[data-cv-frag-body]');
+    const frag = det.dataset.cvFrag;
+    const periodo = document.getElementById('cv-periodo');
+    const qs = periodo ? ('?periodo=' + encodeURIComponent(periodo.value)) : '';
+    try {
+        const r = await fetch(`/cs/account/${CV_ACCOUNT_ID}/fragment/${frag}${qs}`);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        body.innerHTML = await r.text();
+    } catch (e) {
+        det.dataset.cvLoaded = '';
+        body.innerHTML = `<p class="text-xs text-red-600">No se pudo cargar: ${e.message}.
+            <button type="button" class="underline font-semibold"
+                    onclick="this.closest('details').dataset.cvLoaded='';cvCargarFragmento(this.closest('details'))">
+            Reintentar</button></p>`;
+    }
+}
+
+// ── Modales ───────────────────────────────────────────────────
+// Tolera las 3 convenciones que conviven en el módulo CS:
+// .cv-modal (nueva), .hidden de Tailwind y style.display inline.
+function cvOpenModal(id) {
+    const m = document.getElementById(id);
+    if (!m) return;
+    if (m.classList.contains('cv-modal')) m.classList.add('cv-modal--open');
+    else if (m.classList.contains('hidden')) m.classList.remove('hidden');
+    else m.style.display = 'grid';
+    const f = m.querySelector('input:not([type=hidden]), textarea, select');
+    if (f) setTimeout(() => f.focus(), 40);
+}
+
+function cvCloseModal(id) {
+    const m = document.getElementById(id);
+    if (!m) return;
+    if (m.classList.contains('cv-modal')) m.classList.remove('cv-modal--open');
+    else { m.classList.add('hidden'); m.style.display = 'none'; }
+}
+
+function cvOpenRenovacion() { cvOpenModal('modal-renovacion'); }
+
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    document.querySelectorAll('.cv-modal--open').forEach(m => m.classList.remove('cv-modal--open'));
 });
-fetch('/cs/api/operacion-trend?account_id='+accId).then(r=>r.json()).then(d=>{
-    buildChart(document.getElementById('accountOpChart'),d,'op');
-    buildChart(document.getElementById('opTabChart'),d,'op');
+document.addEventListener('click', e => {
+    if (e.target.classList && e.target.classList.contains('cv-modal')) {
+        e.target.classList.remove('cv-modal--open');
+    }
 });
 
-// Chart split by UN
-fetch('/cs/api/mrr-trend-un?account_id='+accId).then(r=>r.json()).then(data=>{
-    const ctx=document.getElementById('factTabChartUN');
-    if(!ctx||!data.length) return;
-    new Chart(ctx,{
-        type:'bar',
-        data:{
-            labels:data.map(d=>d.mes_label),
-            datasets:[
-                {label:'🌿 AROMATEX',data:data.map(d=>d.aromatex),backgroundColor:'#a855f7',borderRadius:4},
-                {label:'🛡️ PESTEX',data:data.map(d=>d.pestex),backgroundColor:'#22c55e',borderRadius:4},
-            ]
-        },
-        options:{
-            responsive:true,
-            plugins:{
-                legend:{position:'bottom',labels:{boxWidth:12,padding:10,font:{family:'Inter',size:11}}},
-                tooltip:{callbacks:{label:c=>c.dataset.label+': $'+c.parsed.y.toLocaleString('en-US')},backgroundColor:'#1e1b3a',cornerRadius:8}
-            },
-            scales:{
-                x:{stacked:true,grid:{display:false},ticks:{font:{size:10}}},
-                y:{stacked:true,ticks:{callback:v=>'$'+(v/1000).toFixed(0)+'K',font:{size:10}},grid:{color:'#f3f4f6'}}
-            }
-        }
+// ── Filtro del timeline ───────────────────────────────────────
+function cvFiltrarTimeline(tipo, btn) {
+    document.querySelectorAll('.cv-filtro').forEach(b => b.classList.remove('cv-filtro--on'));
+    if (btn) btn.classList.add('cv-filtro--on');
+    let visibles = 0;
+    document.querySelectorAll('.cv-tl-item').forEach(el => {
+        const ok = (tipo === 'todos' || el.dataset.tipo === tipo);
+        el.style.display = ok ? '' : 'none';
+        if (ok) visibles++;
     });
-});
+    const vacio = document.getElementById('cv-tl-vacio');
+    if (vacio) vacio.classList.toggle('hidden', visibles > 0);
+}
 
+// ── Copiar al portapapeles ────────────────────────────────────
+async function cvCopiar(texto, btn) {
+    try {
+        await navigator.clipboard.writeText(texto);
+        const original = btn.textContent;
+        btn.textContent = 'Copiado';
+        setTimeout(() => { btn.textContent = original; }, 1600);
+    } catch (e) {
+        window.prompt('Copia la liga:', texto);
+    }
+}
+
+// ── Carga inicial ─────────────────────────────────────────────
+if (cvTabActual !== 'overview') cvCargarTab(cvTabActual);
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+// Gráficas de Overview. Se alimentan de endpoints propios, así que no
+// dependen del payload de la vista.
+(function () {
+    const accId = '{{ account.id }}';
+    const fmt = v => '$' + Number(v || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 });
+
+    function buildChart(canvas, d, tipo) {
+        if (!canvas || !d || !d.labels) return;
+        new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: d.labels,
+                datasets: [{
+                    label: tipo === 'mrr' ? 'Facturación' : 'Citas',
+                    data: d.values,
+                    borderColor: tipo === 'mrr' ? '#7c3aed' : '#0389cb',
+                    backgroundColor: tipo === 'mrr' ? 'rgba(124,58,237,.10)' : 'rgba(3,137,203,.10)',
+                    fill: true, tension: .3, borderWidth: 2,
+                    pointRadius: 2, pointHoverRadius: 4
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: c => tipo === 'mrr' ? fmt(c.parsed.y)
+                                                       : c.parsed.y.toLocaleString('es-MX') + ' citas'
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { font: { size: 10 }, callback: v => tipo === 'mrr' ? fmt(v) : v },
+                        grid: { color: 'rgba(0,0,0,.05)' }
+                    },
+                    x: { ticks: { font: { size: 10 } }, grid: { display: false } }
+                }
+            }
+        });
+    }
+
+    fetch('/cs/api/mrr-trend?account_id=' + accId)
+        .then(r => r.json())
+        .then(d => buildChart(document.getElementById('accountMrrChart'), d, 'mrr'))
+        .catch(() => {});
+
+    fetch('/cs/api/operacion-trend?account_id=' + accId)
+        .then(r => r.json())
+        .then(d => buildChart(document.getElementById('accountOpChart'), d, 'op'))
+        .catch(() => {});
+})();
 </script>
 {% endblock %}

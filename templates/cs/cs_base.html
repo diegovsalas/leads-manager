@@ -195,6 +195,7 @@ function switchTab(name){
                 ('/cs/oportunidades', 'cs.oportunidades', 'target', 'Oportunidades'),
                 ('/cs/onboarding', 'cs.onboarding', 'rocket', 'Onboarding'),
                 ('/cs/alertas', 'cs.alertas_view', 'bell', 'Alertas'),
+                ('/cs/catch-up', 'cs.catch_up', 'target', 'Catch-Up'),
             ] %}
             {% for href, endpoint, ico, label in nav %}
             <a href="{{ href }}" class="side-link {% if request.endpoint == endpoint %}active{% endif %}">

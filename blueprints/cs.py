@@ -18,6 +18,7 @@ from models import (
     CSAccount, CSInvoice, CSAppointment, CSNote, CSTask,
     CSOnboardingAccount, CSOpportunity, CSContacto, CSEntregable,
     CSEncuesta, CSIncidencia, CSPropiedad, CSWorkloadSurvey,
+    CSObjetivo, CSDocumento, KAMEmailResponse,
     UserCRM, RolCRM,
 )
 from cs_health_score import calcular_health_score, calcular_health_scores_batch
@@ -1622,11 +1623,525 @@ def eliminar_cliente(account_id):
 
 
 # ══════════════════════════════════════════════
+# CLIENT VIEW — banner de highlights + 4 pestañas
+# FEAT-2026-08-14
+# ══════════════════════════════════════════════
+
+# Tipos de CSTask que cuentan como "junta agendada" para el banner.
+TIPOS_JUNTA = ("QBR", "Junta", "Catch-up", "Reunión")
+
+CLIENT_VIEW_TABS = ("overview", "proyectos", "historial", "documentacion")
+# Overview se renderiza inline en el shell; solo estas se piden por AJAX.
+CLIENT_VIEW_LAZY_TABS = ("proyectos", "historial", "documentacion")
+# Fragmentos pesados dentro de una pestaña: se piden al desplegar su <details>.
+CLIENT_VIEW_FRAGMENTS = ("facturacion", "operacion")
+
+
+def _ultimo_contacto(account):
+    """Fecha e identidad del último contacto real con el cliente.
+
+    NO se basa solo en cs_notes: en la práctica esa tabla está casi vacía
+    (4 notas en todo el histórico). Toma el más reciente entre nota, correo
+    de KAM (kam_email_responses, 314 registros) e incidencia levantada.
+    Devuelve {"fecha", "fuente", "detalle"} o None.
+    """
+    candidatos = []
+
+    nota = (CSNote.query.filter_by(account_id=account.id)
+            .order_by(CSNote.created_at.desc()).first())
+    if nota and nota.created_at:
+        candidatos.append({
+            "fecha": nota.created_at,
+            "fuente": "Nota",
+            "detalle": (nota.contenido or "")[:90],
+        })
+
+    correo = (KAMEmailResponse.query.filter_by(account_id=account.id)
+              .order_by(KAMEmailResponse.received_at.desc()).first())
+    if correo and correo.received_at:
+        candidatos.append({
+            "fecha": correo.received_at,
+            "fuente": "Correo",
+            "detalle": (correo.subject or "")[:90],
+        })
+
+    inc = (CSIncidencia.query.filter_by(account_id=account.id)
+           .order_by(CSIncidencia.created_at.desc()).first())
+    if inc and inc.created_at:
+        candidatos.append({
+            "fecha": inc.created_at,
+            "fuente": "Incidencia",
+            "detalle": f"{inc.folio or ''} · {inc.tipo or ''}".strip(" ·")[:90],
+        })
+
+    if not candidatos:
+        return None
+    mejor = max(candidatos, key=lambda c: c["fecha"])
+    fecha = mejor["fecha"]
+    ref = fecha.date() if hasattr(fecha, "date") else fecha
+    mejor["dias"] = (date.today() - ref).days
+    return mejor
+
+
+def _proxima_junta(account):
+    """Siguiente junta/QBR/catch-up agendado. Se deriva de CSTask para no
+    duplicar estructura: una tarea no completada, con fecha límite futura
+    y tipo de reunión."""
+    t = (CSTask.query
+         .filter(CSTask.account_id == account.id,
+                 CSTask.completada.is_(False),
+                 CSTask.fecha_limite.isnot(None),
+                 CSTask.fecha_limite >= date.today(),
+                 CSTask.tipo.in_(TIPOS_JUNTA))
+         .order_by(CSTask.fecha_limite.asc())
+         .first())
+    if not t:
+        return None
+    return {
+        "fecha": t.fecha_limite,
+        "tipo": t.tipo,
+        "descripcion": t.descripcion,
+        "responsable": t.responsable,
+        "dias": (t.fecha_limite - date.today()).days,
+    }
+
+
+def _banner_ctx(account, health):
+    """Contexto del Highlight Banner. Reutilizable desde cualquier vista:
+    solo necesita la cuenta y su health score."""
+    return {
+        "b_account": account,
+        "b_health": health,
+        "b_ultimo_contacto": _ultimo_contacto(account),
+        "b_proxima_junta": _proxima_junta(account),
+    }
+
+
+def _timeline_actividad(account, limite=80):
+    """Historial unificado de contacto: notas, correos, incidencias,
+    encuestas y tareas completadas, mezclados y ordenados por fecha.
+
+    Deliberadamente NO incluye cs_appointments: son 115k registros de
+    servicio operativo y ahogarían el timeline de relación. Las citas
+    tienen su propia sección en Overview.
+    """
+    eventos = []
+
+    for n in CSNote.query.filter_by(account_id=account.id).all():
+        eventos.append({
+            "fecha": n.created_at, "tipo": "nota", "icono": "📝",
+            "titulo": "Nota de bitácora", "detalle": n.contenido or "",
+            "autor": n.autor or "", "adjuntos": n.adjuntos or [],
+        })
+
+    for e in KAMEmailResponse.query.filter_by(account_id=account.id).all():
+        if not e.received_at:
+            continue
+        resp = ""
+        if e.response_hours is not None:
+            resp = f"Respondido en {round(e.response_hours, 1)} h"
+        elif e.replied_at is None:
+            resp = "Sin respuesta registrada"
+        eventos.append({
+            "fecha": e.received_at, "tipo": "correo", "icono": "✉️",
+            "titulo": e.subject or "(sin asunto)", "detalle": resp,
+            "autor": e.client_email or "", "adjuntos": [],
+        })
+
+    for i in CSIncidencia.query.filter_by(account_id=account.id).all():
+        eventos.append({
+            "fecha": i.created_at, "tipo": "incidencia", "icono": "⚠️",
+            "titulo": f"{i.folio or 'Incidencia'} · {i.tipo or ''}".strip(" ·"),
+            "detalle": (i.detalle or "")[:220],
+            "autor": i.quien_reporta or i.created_by or "",
+            "estatus": i.status, "adjuntos": [],
+        })
+
+    for s in CSEncuesta.query.filter_by(account_id=account.id).all():
+        partes = []
+        if s.nps is not None:
+            partes.append(f"NPS {s.nps}")
+        if s.csat_promedio is not None:
+            partes.append(f"CSAT {s.csat_promedio}")
+        if s.comentario:
+            partes.append(f"«{s.comentario[:150]}»")
+        eventos.append({
+            "fecha": s.created_at, "tipo": "encuesta", "icono": "📊",
+            "titulo": "Encuesta respondida", "detalle": " · ".join(partes),
+            "autor": s.nombre_respondente or "", "adjuntos": [],
+        })
+
+    for t in CSTask.query.filter_by(account_id=account.id, completada=True).all():
+        eventos.append({
+            "fecha": t.created_at, "tipo": "tarea", "icono": "✅",
+            "titulo": f"{t.tipo or 'Tarea'} completada", "detalle": t.descripcion or "",
+            "autor": t.responsable or "", "adjuntos": t.adjuntos or [],
+        })
+
+    eventos = [e for e in eventos if e.get("fecha")]
+    eventos.sort(key=lambda e: e["fecha"], reverse=True)
+    return eventos[:limite]
+
+
+def _churn_signals(account, health):
+    """Señales de riesgo de churn detectables con los datos que SÍ existen.
+
+    Cada señal: {nivel, titulo, detalle}. nivel ∈ alto|medio|bajo.
+    """
+    señales = []
+    hoy = date.today()
+
+    # 1. Cobranza vencida
+    vencido = (db.session.query(
+        func.coalesce(func.sum(CSInvoice.pendiente), 0),
+        func.count(CSInvoice.id),
+        func.min(CSInvoice.fecha_vencimiento))
+        .filter(CSInvoice.account_id == account.id,
+                CSInvoice.pendiente > 0,
+                CSInvoice.fecha_vencimiento < hoy)
+        .first())
+    if vencido and float(vencido[0] or 0) > 0:
+        monto, n_fact, mas_vieja = float(vencido[0]), vencido[1], vencido[2]
+        dias = (hoy - mas_vieja).days if mas_vieja else 0
+        señales.append({
+            "nivel": "alto" if dias > 90 else "medio",
+            "titulo": "Cobranza vencida",
+            "detalle": f"${monto:,.0f} en {n_fact} factura(s). La más antigua vence hace {dias} días.",
+        })
+
+    # 2. Cumplimiento operativo (citas falladas últimos 6 meses)
+    hace_6m = hoy - timedelta(days=182)
+    citas = (db.session.query(
+        func.count(CSAppointment.id),
+        func.count(CSAppointment.id).filter(
+            CSAppointment.estatus.in_(["Cancelada", "No Realizada"])))
+        .filter(CSAppointment.account_id == account.id,
+                CSAppointment.fecha_inicio >= hace_6m,
+                CSAppointment.fecha_inicio < datetime.utcnow())
+        .first())
+    if citas and (citas[0] or 0) >= 20:
+        total, fallidas = citas[0], citas[1] or 0
+        pct = round(100.0 * fallidas / total, 1)
+        if pct >= 15:
+            señales.append({
+                "nivel": "alto" if pct >= 25 else "medio",
+                "titulo": "Citas falladas por encima del umbral",
+                "detalle": f"{pct}% cancelada/no realizada en 6 meses ({fallidas} de {total}).",
+            })
+
+    # 3. Caída de facturación (3m vs 3m previos)
+    hace_3m = hoy - timedelta(days=91)
+    hace_6m_f = hoy - timedelta(days=182)
+    fact = (db.session.query(
+        func.coalesce(func.sum(CSInvoice.total).filter(CSInvoice.fecha_cobro >= hace_3m), 0),
+        func.coalesce(func.sum(CSInvoice.total).filter(
+            db.and_(CSInvoice.fecha_cobro >= hace_6m_f, CSInvoice.fecha_cobro < hace_3m)), 0))
+        .filter(CSInvoice.account_id == account.id,
+                CSInvoice.fecha_cobro >= hace_6m_f)
+        .first())
+    if fact and float(fact[1] or 0) > 0:
+        reciente, previo = float(fact[0] or 0), float(fact[1])
+        delta = round(100.0 * (reciente - previo) / previo, 1)
+        if delta <= -15:
+            señales.append({
+                "nivel": "alto" if delta <= -30 else "medio",
+                "titulo": "Caída de facturación",
+                "detalle": f"{delta}% contra el trimestre previo (${previo:,.0f} → ${reciente:,.0f}).",
+            })
+
+    # 4. Incidencias estancadas
+    inc_abiertas = (CSIncidencia.query
+                    .filter(CSIncidencia.account_id == account.id,
+                            CSIncidencia.status != "Resuelta")
+                    .order_by(CSIncidencia.fecha_incidencia.asc().nullslast()).all())
+    if inc_abiertas:
+        mas_vieja = next((i for i in inc_abiertas if i.fecha_incidencia), None)
+        dias = (hoy - mas_vieja.fecha_incidencia).days if mas_vieja else 0
+        if dias > 30:
+            señales.append({
+                "nivel": "alto" if dias > 90 else "medio",
+                "titulo": "Incidencias sin resolver",
+                "detalle": f"{len(inc_abiertas)} abierta(s). La más antigua lleva {dias} días.",
+            })
+
+    # 5. Health score en rojo
+    if health and health.get("color") == "red":
+        señales.append({
+            "nivel": "alto", "titulo": "Health score en riesgo",
+            "detalle": f"Score {health.get('score')} — categoría {health.get('categoria')}.",
+        })
+
+    # 6. Sin encuesta / detractor
+    ult_enc = (CSEncuesta.query.filter_by(account_id=account.id)
+               .order_by(CSEncuesta.created_at.desc()).first())
+    if not ult_enc:
+        señales.append({
+            "nivel": "bajo", "titulo": "Sin voz del cliente",
+            "detalle": "La cuenta nunca ha respondido una encuesta NPS/CSAT.",
+        })
+    elif ult_enc.nps is not None and ult_enc.nps <= 8:
+        señales.append({
+            "nivel": "alto" if ult_enc.nps <= 6 else "medio",
+            "titulo": "Última evaluación no promotora",
+            "detalle": f"NPS {ult_enc.nps} de {ult_enc.nombre_respondente or 'contacto'}.",
+        })
+
+    orden = {"alto": 0, "medio": 1, "bajo": 2}
+    señales.sort(key=lambda s: orden.get(s["nivel"], 3))
+    return señales
+
+
+# ══════════════════════════════════════════════
+# CATCH-UP — cola de trabajo cross-cuenta
+# FEAT-2026-08-14
+# ══════════════════════════════════════════════
+
+PUNTOS_NIVEL = {"alto": 3, "medio": 2, "bajo": 1}
+
+
+def _churn_signals_batch(accounts, scores_map):
+    """Versión en lote de _churn_signals.
+
+    _churn_signals hace ~6 consultas por cuenta; sobre 26 cuentas eso son
+    ~156 round-trips. Aquí se calcula todo con 5 consultas agrupadas por
+    account_id. Devuelve {account_id: [señales]} con el mismo formato.
+    """
+    if not accounts:
+        return {}
+    ids = [a.id for a in accounts]
+    hoy = date.today()
+    hace_3m, hace_6m = hoy - timedelta(days=91), hoy - timedelta(days=182)
+    out = {str(a.id): [] for a in accounts}
+
+    # 1 · Cobranza vencida
+    for acc_id, monto, n, mas_vieja in db.session.query(
+            CSInvoice.account_id,
+            func.coalesce(func.sum(CSInvoice.pendiente), 0),
+            func.count(CSInvoice.id),
+            func.min(CSInvoice.fecha_vencimiento)) \
+            .filter(CSInvoice.account_id.in_(ids), CSInvoice.pendiente > 0,
+                    CSInvoice.fecha_vencimiento < hoy) \
+            .group_by(CSInvoice.account_id).all():
+        if float(monto or 0) <= 0:
+            continue
+        dias = (hoy - mas_vieja).days if mas_vieja else 0
+        out[str(acc_id)].append({
+            "nivel": "alto" if dias > 90 else "medio", "tipo": "cobranza",
+            "titulo": "Cobranza vencida",
+            "detalle": f"${float(monto):,.0f} en {n} factura(s). La más antigua vence hace {dias} días.",
+            "monto": float(monto),
+        })
+
+    # 2 · Cumplimiento operativo (6 meses)
+    for acc_id, total, fallidas in db.session.query(
+            CSAppointment.account_id,
+            func.count(CSAppointment.id),
+            func.count(CSAppointment.id).filter(
+                CSAppointment.estatus.in_(["Cancelada", "No Realizada"]))) \
+            .filter(CSAppointment.account_id.in_(ids),
+                    CSAppointment.fecha_inicio >= hace_6m,
+                    CSAppointment.fecha_inicio < datetime.utcnow()) \
+            .group_by(CSAppointment.account_id).all():
+        if (total or 0) < 20:
+            continue
+        pct = round(100.0 * (fallidas or 0) / total, 1)
+        if pct >= 15:
+            out[str(acc_id)].append({
+                "nivel": "alto" if pct >= 25 else "medio", "tipo": "operacion",
+                "titulo": "Citas falladas por encima del umbral",
+                "detalle": f"{pct}% cancelada/no realizada en 6 meses ({fallidas} de {total}).",
+            })
+
+    # 3 · Caída de facturación
+    for acc_id, reciente, previo in db.session.query(
+            CSInvoice.account_id,
+            func.coalesce(func.sum(CSInvoice.total).filter(CSInvoice.fecha_cobro >= hace_3m), 0),
+            func.coalesce(func.sum(CSInvoice.total).filter(
+                db.and_(CSInvoice.fecha_cobro >= hace_6m,
+                        CSInvoice.fecha_cobro < hace_3m)), 0)) \
+            .filter(CSInvoice.account_id.in_(ids), CSInvoice.fecha_cobro >= hace_6m) \
+            .group_by(CSInvoice.account_id).all():
+        prev = float(previo or 0)
+        if prev <= 0:
+            continue
+        rec = float(reciente or 0)
+        delta = round(100.0 * (rec - prev) / prev, 1)
+        if delta <= -15:
+            out[str(acc_id)].append({
+                "nivel": "alto" if delta <= -30 else "medio", "tipo": "facturacion",
+                "titulo": "Caída de facturación",
+                "detalle": f"{delta}% contra el trimestre previo (${prev:,.0f} → ${rec:,.0f}).",
+            })
+
+    # 4 · Incidencias estancadas
+    for acc_id, n, mas_vieja in db.session.query(
+            CSIncidencia.account_id,
+            func.count(CSIncidencia.id),
+            func.min(CSIncidencia.fecha_incidencia)) \
+            .filter(CSIncidencia.account_id.in_(ids), CSIncidencia.status != "Resuelta") \
+            .group_by(CSIncidencia.account_id).all():
+        dias = (hoy - mas_vieja).days if mas_vieja else 0
+        if dias > 30:
+            out[str(acc_id)].append({
+                "nivel": "alto" if dias > 90 else "medio", "tipo": "incidencias",
+                "titulo": "Incidencias sin resolver",
+                "detalle": f"{n} abierta(s). La más antigua lleva {dias} días.",
+            })
+
+    # 5 · Voz del cliente (última encuesta por cuenta)
+    ultima = {}
+    for e in CSEncuesta.query.filter(CSEncuesta.account_id.in_(ids)) \
+                             .order_by(CSEncuesta.created_at.desc()).all():
+        ultima.setdefault(str(e.account_id), e)
+    for a in accounts:
+        k = str(a.id)
+        e = ultima.get(k)
+        if not e:
+            out[k].append({"nivel": "bajo", "tipo": "encuesta", "titulo": "Sin voz del cliente",
+                           "detalle": "La cuenta nunca ha respondido una encuesta NPS/CSAT."})
+        elif e.nps is not None and e.nps <= 8:
+            out[k].append({
+                "nivel": "alto" if e.nps <= 6 else "medio", "tipo": "encuesta",
+                "titulo": "Última evaluación no promotora",
+                "detalle": f"NPS {e.nps} de {e.nombre_respondente or 'contacto'}."})
+
+    # 6 · Health en rojo
+    for a in accounts:
+        h = scores_map.get(str(a.id)) or {}
+        if h.get("color") == "red":
+            out[str(a.id)].append({
+                "nivel": "alto", "tipo": "health", "titulo": "Health score en riesgo",
+                "detalle": f"Score {h.get('score')} — categoría {h.get('categoria')}."})
+
+    orden = {"alto": 0, "medio": 1, "bajo": 2}
+    for k in out:
+        out[k].sort(key=lambda s: orden.get(s["nivel"], 3))
+    return out
+
+
+def _ultimo_contacto_batch(accounts):
+    """Último contacto de varias cuentas en 3 consultas en vez de 3 por cuenta."""
+    ids = [a.id for a in accounts]
+    hoy = date.today()
+    mejor = {}
+
+    def _considerar(acc_id, fecha, fuente):
+        if not fecha:
+            return
+        k = str(acc_id)
+        if k not in mejor or fecha > mejor[k]["fecha"]:
+            mejor[k] = {"fecha": fecha, "fuente": fuente}
+
+    for acc_id, f in db.session.query(
+            CSNote.account_id, func.max(CSNote.created_at)) \
+            .filter(CSNote.account_id.in_(ids)).group_by(CSNote.account_id).all():
+        _considerar(acc_id, f, "Nota")
+    for acc_id, f in db.session.query(
+            KAMEmailResponse.account_id, func.max(KAMEmailResponse.received_at)) \
+            .filter(KAMEmailResponse.account_id.in_(ids)).group_by(KAMEmailResponse.account_id).all():
+        _considerar(acc_id, f, "Correo")
+    for acc_id, f in db.session.query(
+            CSIncidencia.account_id, func.max(CSIncidencia.created_at)) \
+            .filter(CSIncidencia.account_id.in_(ids)).group_by(CSIncidencia.account_id).all():
+        _considerar(acc_id, f, "Incidencia")
+
+    for k, v in mejor.items():
+        ref = v["fecha"].date() if hasattr(v["fecha"], "date") else v["fecha"]
+        v["dias"] = (hoy - ref).days
+    return mejor
+
+
+@cs_bp.route("/catch-up")
+def catch_up():
+    """Cola de trabajo priorizada: qué cuentas atender y por qué.
+
+    Existe porque el health score no lo muestra: al construirla, 15 de 26
+    cuentas estaban en verde con una señal ALTA activa (cartera vencida de
+    hasta 1,256 días). 'Cartera vencida' pesa apenas 10% del score y
+    'Cobranza' mide solo el periodo, así que la deuda vieja no penaliza.
+    """
+    from un_filter import filtrar_cs_accounts_por_un
+
+    q = CSAccount.query.filter_by(en_due_diligence=False)
+    q = filtrar_cs_accounts_por_un(q, CSAccount, request.args.get("un"))
+    if _is_kam():
+        q = q.filter(CSAccount.kam_id == _current_kam_id())
+    kam_filtro = request.args.get("kam")
+    if kam_filtro and not _is_kam():
+        q = q.filter(CSAccount.kam_id == kam_filtro)
+    accounts = q.all()
+
+    scores = calcular_health_scores_batch(accounts)
+    señales = _churn_signals_batch(accounts, scores)
+    contactos = _ultimo_contacto_batch(accounts)
+
+    tipo_filtro = request.args.get("tipo") or ""
+    orden = request.args.get("orden") or "impacto"
+
+    filas = []
+    for a in accounts:
+        k = str(a.id)
+        s = señales.get(k, [])
+        if tipo_filtro:
+            s = [x for x in s if x["tipo"] == tipo_filtro]
+        if not s:
+            continue
+        puntos = sum(PUNTOS_NIVEL.get(x["nivel"], 0) for x in s)
+        mrr = float(a.mrr or 0) or float(a.mrr_observado or 0)
+        filas.append({
+            "account": a, "señales": s, "puntos": puntos, "mrr": mrr,
+            "altas": sum(1 for x in s if x["nivel"] == "alto"),
+            "medias": sum(1 for x in s if x["nivel"] == "medio"),
+            "health": scores.get(k, {}),
+            "contacto": contactos.get(k),
+            "monto_vencido": sum(x.get("monto", 0) for x in s),
+            "impacto": puntos * mrr,
+        })
+
+    if orden == "severidad":
+        filas.sort(key=lambda f: (-f["puntos"], -f["mrr"]))
+    elif orden == "mrr":
+        filas.sort(key=lambda f: -f["mrr"])
+    elif orden == "frio":
+        filas.sort(key=lambda f: -(f["contacto"]["dias"] if f["contacto"] else 10**6))
+    else:
+        filas.sort(key=lambda f: (-f["impacto"], -f["puntos"]))
+
+    # Falsos verdes: el hallazgo que justifica esta vista.
+    falsos_verdes = [f for f in filas
+                     if f["health"].get("color") == "green" and f["altas"] > 0]
+
+    return render_template(
+        "cs_catchup.html",
+        filas=filas,
+        total_cuentas=len(accounts),
+        con_alta=sum(1 for f in filas if f["altas"] > 0),
+        mrr_en_riesgo=sum(f["mrr"] for f in filas if f["altas"] > 0),
+        monto_vencido_total=sum(f["monto_vencido"] for f in filas),
+        falsos_verdes=falsos_verdes,
+        kams=_get_kams(), kam_filtro=kam_filtro,
+        tipo_filtro=tipo_filtro, orden=orden,
+        tipos=[("cobranza", "Cobranza vencida"), ("operacion", "Citas falladas"),
+               ("facturacion", "Caída de facturación"), ("incidencias", "Incidencias"),
+               ("encuesta", "Voz del cliente"), ("health", "Health en rojo")],
+        today=date.today(),
+        **_ctx(),
+    )
+
+
+# ══════════════════════════════════════════════
 # ACCOUNT DETAIL
 # ══════════════════════════════════════════════
 @cs_bp.route("/account/<uuid:account_id>")
 @require_cs_account_access
 def account_detail(account_id):
+    """Shell del Client View: banner de highlights + pestaña Overview.
+
+    PERF-2026-08-14: esta ruta solo consulta lo que necesitan el banner y
+    Overview. Lo pesado (lista de facturas, 200 citas, entregables, workload
+    survey, incidencias con evidencias) se movió a /tab/<nombre>, que se pide
+    por AJAX solo si el KAM abre esa pestaña.
+    """
     inicio, fin, periodo_label, periodo_param = _get_periodo()
 
     account = _get_cs_account(account_id)
@@ -1634,211 +2149,336 @@ def account_detail(account_id):
         return "Cuenta no encontrada", 404
     health = calcular_health_score(account)
 
-    # Facturas del periodo seleccionado
-    invoices = (
-        CSInvoice.query.filter_by(account_id=account.id)
-        .filter(CSInvoice.fecha_cobro >= inicio, CSInvoice.fecha_cobro < fin)
-        .order_by(CSInvoice.fecha_cobro.desc()).all()
-    )
-    total_facturado = sum(float(i.total or 0) for i in invoices)
-    total_pagado = sum(float(i.pagado or 0) for i in invoices)
-    total_pendiente = sum(float(i.pendiente or 0) for i in invoices)
-    facturas_pagadas = sum(1 for i in invoices if i.estatus == "Pagada")
-    facturas_pendientes = sum(1 for i in invoices if i.estatus != "Pagada")
+    # Facturación del periodo: agregados, no la lista completa.
+    fact = (db.session.query(
+        func.coalesce(func.sum(CSInvoice.total), 0),
+        func.coalesce(func.sum(CSInvoice.pagado), 0),
+        func.coalesce(func.sum(CSInvoice.pendiente), 0),
+        func.count(CSInvoice.id).filter(CSInvoice.estatus == "Pagada"),
+        func.count(CSInvoice.id).filter(CSInvoice.estatus != "Pagada"))
+        .filter(CSInvoice.account_id == account.id,
+                CSInvoice.fecha_cobro >= inicio,
+                CSInvoice.fecha_cobro < fin)
+        .first())
+    total_facturado, total_pagado, total_pendiente = (float(fact[0]), float(fact[1]), float(fact[2]))
+    facturas_pagadas, facturas_pendientes = int(fact[3] or 0), int(fact[4] or 0)
 
-    # Facturación por UN
-    def _classify_uen(uen):
-        uen = (uen or "").upper().strip()
-        if "AROMATEX" in uen:
-            return "AROMATEX"
-        elif "PESTEX" in uen:
-            return "PESTEX"
-        return "OTRO"
-
-    fact_por_un = {"AROMATEX": {"facturado": 0, "pagado": 0, "pendiente": 0, "count": 0},
-                   "PESTEX": {"facturado": 0, "pagado": 0, "pendiente": 0, "count": 0}}
-    invoices_por_un = {"AROMATEX": [], "PESTEX": [], "OTRO": []}
-    for inv in invoices:
-        un = _classify_uen(inv.uen)
-        invoices_por_un.setdefault(un, []).append(inv)
-        if un in fact_por_un:
-            fact_por_un[un]["facturado"] += float(inv.total or 0)
-            fact_por_un[un]["pagado"] += float(inv.pagado or 0)
-            fact_por_un[un]["pendiente"] += float(inv.pendiente or 0)
-            fact_por_un[un]["count"] += 1
-
-    # Citas por UN (Fumigación/Póliza = PESTEX, Aroma* = AROMATEX)
-    def _classify_servicio(titulo):
-        t = (titulo or "").lower()
-        if "fumig" in t or "plaga" in t or "incidencia" not in t and "pestex" in t:
-            return "PESTEX"
-        elif "aroma" in t or "instalacion" in t:
-            return "AROMATEX"
-        elif "fumig" in t or "plaga" in t:
-            return "PESTEX"
-        return "OTRO"
-
-    # Citas del periodo
-    citas_estatus_rows = (
-        db.session.query(CSAppointment.estatus, func.count(CSAppointment.id))
-        .filter(
-            CSAppointment.account_id == account.id,
-            CSAppointment.fecha_inicio >= inicio,
-            CSAppointment.fecha_inicio < fin,
-        )
-        .group_by(CSAppointment.estatus)
-        .all()
-    )
-    citas_por_estatus = {estatus: cnt for estatus, cnt in citas_estatus_rows}
-
-    appointments = (
-        CSAppointment.query.filter(
-            CSAppointment.account_id == account.id,
-            CSAppointment.fecha_inicio >= inicio,
-            CSAppointment.fecha_inicio < fin,
-        )
-        .order_by(CSAppointment.fecha_inicio.desc()).limit(200).all()
-    )
-
-    # Sucursales por UN para esta cuenta
-    from sqlalchemy import case as sa_case, distinct
-    suc_un = db.session.query(
-        func.count(distinct(sa_case(
-            (CSAppointment.titulo_servicio.ilike("%aroma%"), CSAppointment.propiedad),
-            (CSAppointment.titulo_servicio.ilike("%instalacion%"), CSAppointment.propiedad),
-        ))),
-        func.count(distinct(sa_case(
-            (CSAppointment.titulo_servicio.ilike("%fumig%"), CSAppointment.propiedad),
-            (CSAppointment.titulo_servicio.ilike("%plaga%"), CSAppointment.propiedad),
-        ))),
-    ).filter(CSAppointment.account_id == account.id).first()
-    suc_aromatex = suc_un[0] if suc_un else 0
-    suc_pestex = suc_un[1] if suc_un else 0
-
-    # Citas agrupadas por UN (query aggregate, sin limit)
-    # FIX-2026-07-22: "Cumplimiento" comparaba terminadas contra TODAS las
-    # citas del periodo, incluyendo las programadas para días que aún no
-    # llegan (mes en curso) — eso hundía el % con citas que ni siquiera
-    # debían haber pasado todavía. Ahora solo cuentan citas ya vencidas
-    # (fecha_inicio <= hoy); las futuras se ven en "Por estatus" (Agendada)
-    # pero no penalizan el cumplimiento hasta que les toque su fecha.
-    hoy_dt = datetime.utcnow()
-    _is_aro = db.or_(CSAppointment.titulo_servicio.ilike("%aroma%"), CSAppointment.titulo_servicio.ilike("%instalacion%"))
-    _is_pest = db.or_(CSAppointment.titulo_servicio.ilike("%fumig%"), CSAppointment.titulo_servicio.ilike("%plaga%"), CSAppointment.titulo_servicio.ilike("%pestex%"))
-    _ya_vencida = CSAppointment.fecha_inicio <= hoy_dt
-    citas_un_row = db.session.query(
-        func.sum(sa_case((db.and_(_is_aro, _ya_vencida), 1), else_=0)),
-        func.sum(sa_case((db.and_(_is_aro, _ya_vencida, CSAppointment.estatus == "Terminada"), 1), else_=0)),
-        func.sum(sa_case((db.and_(_is_pest, _ya_vencida), 1), else_=0)),
-        func.sum(sa_case((db.and_(_is_pest, _ya_vencida, CSAppointment.estatus == "Terminada"), 1), else_=0)),
-    ).filter(
-        CSAppointment.account_id == account.id,
-        CSAppointment.fecha_inicio >= inicio,
-        CSAppointment.fecha_inicio < fin,
-    ).first()
-    citas_por_un = {
-        "AROMATEX": {"total": int(citas_un_row[0] or 0), "terminadas": int(citas_un_row[1] or 0)},
-        "PESTEX": {"total": int(citas_un_row[2] or 0), "terminadas": int(citas_un_row[3] or 0)},
+    # Citas del periodo: solo el conteo por estatus.
+    citas_por_estatus = {
+        est: cnt for est, cnt in db.session.query(
+            CSAppointment.estatus, func.count(CSAppointment.id))
+        .filter(CSAppointment.account_id == account.id,
+                CSAppointment.fecha_inicio >= inicio,
+                CSAppointment.fecha_inicio < fin)
+        .group_by(CSAppointment.estatus).all()
     }
 
-    notes = CSNote.query.filter_by(account_id=account.id).order_by(CSNote.created_at.desc()).all()
-    tasks = CSTask.query.filter_by(account_id=account.id).order_by(CSTask.completada, CSTask.fecha_limite).all()
-    tareas_pendientes = sum(1 for t in tasks if not t.completada)
-    contactos = CSContacto.query.filter_by(account_id=account.id).order_by(CSContacto.is_owner.desc(), CSContacto.nombre).all()
-    entregables = CSEntregable.query.filter_by(account_id=account.id).order_by(CSEntregable.unidad_negocio, CSEntregable.orden).all()
-    entregables_por_un = {}
-    for e in entregables:
-        un = e.unidad_negocio or "General"
-        entregables_por_un.setdefault(un, []).append(e)
-    workload_survey = CSWorkloadSurvey.query.filter_by(
-        account_id=account.id,
-        periodo=periodo_param,
-    ).first()
-    workload_activity_values = {
-        item.get("actividad"): item.get("horas", "No aplica")
-        for item in (workload_survey.actividades_horas if workload_survey else [])
-        if isinstance(item, dict)
-    }
-    workload_custom_activities = [
-        item for item in (workload_survey.actividades_horas if workload_survey else [])
-        if isinstance(item, dict) and item.get("actividad") not in WORKLOAD_ACTIVITIES
-    ]
-    workload_entregable_otro = ""
-    if workload_survey and workload_survey.entregables_tipos:
-        for item in workload_survey.entregables_tipos:
-            if isinstance(item, str) and item.startswith("Otro:"):
-                workload_entregable_otro = item.replace("Otro:", "", 1).strip()
-                break
-    workload_bloqueo_otro = ""
-    if workload_survey and (workload_survey.tipo_bloqueo or "").startswith("Otro:"):
-        workload_bloqueo_otro = workload_survey.tipo_bloqueo.replace("Otro:", "", 1).strip()
+    notes = (CSNote.query.filter_by(account_id=account.id)
+             .order_by(CSNote.created_at.desc()).limit(6).all())
+    contactos = (CSContacto.query.filter_by(account_id=account.id)
+                 .order_by(CSContacto.is_owner.desc(), CSContacto.nombre).all())
+    encuestas = (CSEncuesta.query.filter_by(account_id=account.id)
+                 .order_by(CSEncuesta.created_at.desc()).all())
 
-    # Incidencias
-    incidencias = _con_evidencia_urls(
-        CSIncidencia.query.filter_by(account_id=account.id).order_by(CSIncidencia.created_at.desc()).limit(100).all()
-    )
-    propiedades = CSPropiedad.query.filter_by(account_id=account.id).order_by(CSPropiedad.nombre).all()
-
-    # Encuestas NPS/CSAT
-    encuestas = CSEncuesta.query.filter_by(account_id=account.id).order_by(CSEncuesta.created_at.desc()).all()
-    survey_link = f"/encuesta/{account.survey_token}" if account.survey_token else None
-    ticket_link = f"/soporte/{account.ticket_token}" if account.ticket_token else None
-
-    # Calcular promedios NPS + CSAT (6 dimensiones)
     def _avg(field):
         vals = [getattr(e, field) for e in encuestas if getattr(e, field) is not None]
         return round(sum(vals) / len(vals), 1) if vals else None
 
     if encuestas:
         avg_nps = _avg("nps")
-        # CSAT promedio de las 6 dimensiones
-        csat_dims = {}
-        for dim in ["csat", "csat_calidad", "csat_respuesta", "csat_comunicacion", "csat_precio", "csat_tecnico"]:
-            csat_dims[dim] = _avg(dim)
-        csat_vals = [v for v in csat_dims.values() if v is not None]
+        csat_vals = [v for v in (_avg(d) for d in
+                     ["csat", "csat_calidad", "csat_respuesta",
+                      "csat_comunicacion", "csat_precio", "csat_tecnico"]) if v is not None]
         avg_csat = round(sum(csat_vals) / len(csat_vals), 1) if csat_vals else None
-
-        # KPI combinado: NPS (0-10) + CSAT normalizado (1-5 → 0-10) → promedio
         if avg_nps is not None and avg_csat is not None:
-            csat_normalized = (avg_csat - 1) / 4 * 10
-            kpi_satisfaccion = round((avg_nps + csat_normalized) / 2, 1)
+            kpi_satisfaccion = round((avg_nps + (avg_csat - 1) / 4 * 10) / 2, 1)
         else:
             kpi_satisfaccion = round(avg_nps, 1) if avg_nps else None
     else:
         avg_nps = avg_csat = kpi_satisfaccion = None
-        csat_dims = {}
 
     return render_template(
         "cs_account_detail.html",
-        account=account, health=health, invoices=invoices,
+        account=account, health=health,
         total_facturado=total_facturado, total_pagado=total_pagado,
-        total_pendiente=total_pendiente, facturas_pagadas=facturas_pagadas,
-        facturas_pendientes=facturas_pendientes,
-        fact_por_un=fact_por_un, invoices_por_un=invoices_por_un,
-        citas_por_un=citas_por_un,
-        suc_aromatex=suc_aromatex, suc_pestex=suc_pestex,
-        appointments=appointments, citas_por_estatus=citas_por_estatus,
-        notes=notes, tasks=tasks, tareas_pendientes=tareas_pendientes,
-        contactos=contactos,
-        entregables=entregables, entregables_por_un=entregables_por_un,
-        workload_survey=workload_survey,
-        workload_activity_values=workload_activity_values,
-        workload_custom_activities=workload_custom_activities,
-        workload_entregable_otro=workload_entregable_otro,
-        workload_bloqueo_otro=workload_bloqueo_otro,
-        workload_activities=WORKLOAD_ACTIVITIES,
-        workload_options=WORKLOAD_SURVEY_OPTIONS,
-        incidencias=incidencias, propiedades=propiedades,
-        tickets_mes=resumen_tickets_mes(account.id),
-        encuestas=encuestas, survey_link=survey_link, ticket_link=ticket_link,
-        avg_nps=avg_nps, avg_csat=avg_csat, kpi_satisfaccion=kpi_satisfaccion,
-        csat_dims=csat_dims,
+        total_pendiente=total_pendiente,
+        facturas_pagadas=facturas_pagadas, facturas_pendientes=facturas_pendientes,
+        citas_por_estatus=citas_por_estatus,
+        notes=notes, contactos=contactos,
+        encuestas=encuestas, avg_nps=avg_nps, avg_csat=avg_csat,
+        kpi_satisfaccion=kpi_satisfaccion,
         today=date.today(), account_alerts=alertas_por_cuenta(str(account_id)),
-        kams=_get_kams(),
         periodo_label=periodo_label, periodo_param=periodo_param,
         periodos=_periodos_disponibles(),
+        objetivos=CSObjetivo.query.filter_by(account_id=account.id)
+                  .order_by(CSObjetivo.orden, CSObjetivo.created_at).all(),
+        churn_signals=_churn_signals(account, health),
+        tab_inicial=(request.args.get("tab") if request.args.get("tab") in CLIENT_VIEW_TABS else "overview"),
+        **_banner_ctx(account, health),
         **_ctx(),
     )
+
+
+
+# ── Client View: pestañas diferidas ───────────
+@cs_bp.route("/account/<uuid:account_id>/tab/<tab_name>")
+@require_cs_account_access
+def account_tab(account_id, tab_name):
+    """Devuelve el HTML parcial de una pestaña. Se carga por AJAX al hacer
+    clic, para que la vista inicial no pague el costo de agregar 115k citas
+    y 19.8k facturas de golpe."""
+    if tab_name not in CLIENT_VIEW_LAZY_TABS:
+        return "Pestaña desconocida", 404
+
+    account = _get_cs_account(account_id)
+    if not account:
+        return "Cuenta no encontrada", 404
+
+    ctx = {"account": account, "today": date.today(), **_ctx()}
+
+    if tab_name == "proyectos":
+        entregables = (CSEntregable.query.filter_by(account_id=account.id)
+                       .order_by(CSEntregable.unidad_negocio, CSEntregable.orden).all())
+        entregables_por_un = {}
+        for e in entregables:
+            entregables_por_un.setdefault(e.unidad_negocio or "General", []).append(e)
+        tasks = (CSTask.query.filter_by(account_id=account.id)
+                 .order_by(CSTask.completada, CSTask.fecha_limite.asc().nullslast()).all())
+        ctx.update(
+            tasks=tasks,
+            tareas_pendientes=sum(1 for t in tasks if not t.completada),
+            entregables=entregables, entregables_por_un=entregables_por_un,
+            incidencias=_con_evidencia_urls(
+                CSIncidencia.query.filter_by(account_id=account.id)
+                .order_by(CSIncidencia.created_at.desc()).limit(100).all()),
+            propiedades=CSPropiedad.query.filter_by(account_id=account.id)
+                        .order_by(CSPropiedad.nombre).all(),
+            tickets_mes=resumen_tickets_mes(account.id),
+        )
+
+        # Encuesta de carga operativa del KAM (6 respuestas activas).
+        ws = CSWorkloadSurvey.query.filter_by(
+            account_id=account.id, periodo=request.args.get("periodo") or _get_periodo()[3]).first()
+        ctx.update(
+            workload_survey=ws,
+            workload_activity_values={
+                i.get("actividad"): i.get("horas", "No aplica")
+                for i in (ws.actividades_horas if ws else []) if isinstance(i, dict)},
+            workload_custom_activities=[
+                i for i in (ws.actividades_horas if ws else [])
+                if isinstance(i, dict) and i.get("actividad") not in WORKLOAD_ACTIVITIES],
+            workload_entregable_otro=next(
+                (i.replace("Otro:", "", 1).strip()
+                 for i in ((ws.entregables_tipos if ws else []) or [])
+                 if isinstance(i, str) and i.startswith("Otro:")), ""),
+            workload_bloqueo_otro=(
+                ws.tipo_bloqueo.replace("Otro:", "", 1).strip()
+                if ws and (ws.tipo_bloqueo or "").startswith("Otro:") else ""),
+            workload_activities=WORKLOAD_ACTIVITIES,
+            workload_options=WORKLOAD_SURVEY_OPTIONS,
+            periodo_param=request.args.get("periodo") or _get_periodo()[3],
+        )
+
+    elif tab_name == "historial":
+        ctx.update(
+            timeline=_timeline_actividad(account),
+            contactos=CSContacto.query.filter_by(account_id=account.id)
+                      .order_by(CSContacto.is_owner.desc(), CSContacto.nombre).all(),
+        )
+
+    elif tab_name == "documentacion":
+        ctx.update(
+            documentos=CSDocumento.query.filter_by(account_id=account.id)
+                       .order_by(CSDocumento.orden, CSDocumento.created_at).all(),
+            tipos_documento=CSDocumento.TIPOS,
+            survey_link=f"/encuesta/{account.survey_token}" if account.survey_token else None,
+            ticket_link=f"/soporte/{account.ticket_token}" if account.ticket_token else None,
+        )
+
+    return render_template(f"cs/tabs/_{tab_name}.html", **ctx)
+
+
+@cs_bp.route("/account/<uuid:account_id>/fragment/<frag_name>")
+@require_cs_account_access
+def account_fragment(account_id, frag_name):
+    """Fragmentos pesados dentro de Overview (detalle de facturación y de
+    operación). Viven detrás de un <details> y solo se piden al desplegarlo:
+    sus agregados recorren 19.8k facturas y 115k citas."""
+    if frag_name not in CLIENT_VIEW_FRAGMENTS:
+        return "Fragmento desconocido", 404
+
+    account = _get_cs_account(account_id)
+    if not account:
+        return "Cuenta no encontrada", 404
+
+    inicio, fin, periodo_label, periodo_param = _get_periodo()
+    ctx = {"account": account, "today": date.today(),
+           "periodo_label": periodo_label, "periodo_param": periodo_param, **_ctx()}
+
+    def _classify_uen(uen):
+        u = (uen or "").upper().strip()
+        return "AROMATEX" if "AROMATEX" in u else ("PESTEX" if "PESTEX" in u else "OTRO")
+
+    if frag_name == "facturacion":
+        invoices = (CSInvoice.query.filter_by(account_id=account.id)
+                    .filter(CSInvoice.fecha_cobro >= inicio, CSInvoice.fecha_cobro < fin)
+                    .order_by(CSInvoice.fecha_cobro.desc()).all())
+        fact_por_un = {u: {"facturado": 0, "pagado": 0, "pendiente": 0, "count": 0}
+                       for u in ("AROMATEX", "PESTEX")}
+        invoices_por_un = {"AROMATEX": [], "PESTEX": [], "OTRO": []}
+        for inv in invoices:
+            un = _classify_uen(inv.uen)
+            invoices_por_un.setdefault(un, []).append(inv)
+            if un in fact_por_un:
+                fact_por_un[un]["facturado"] += float(inv.total or 0)
+                fact_por_un[un]["pagado"] += float(inv.pagado or 0)
+                fact_por_un[un]["pendiente"] += float(inv.pendiente or 0)
+                fact_por_un[un]["count"] += 1
+        ctx.update(invoices=invoices, invoices_por_un=invoices_por_un, fact_por_un=fact_por_un)
+
+    else:  # operacion
+        from sqlalchemy import case as sa_case, distinct
+        suc = db.session.query(
+            func.count(distinct(sa_case(
+                (CSAppointment.titulo_servicio.ilike("%aroma%"), CSAppointment.propiedad),
+                (CSAppointment.titulo_servicio.ilike("%instalacion%"), CSAppointment.propiedad)))),
+            func.count(distinct(sa_case(
+                (CSAppointment.titulo_servicio.ilike("%fumig%"), CSAppointment.propiedad),
+                (CSAppointment.titulo_servicio.ilike("%plaga%"), CSAppointment.propiedad)))),
+        ).filter(CSAppointment.account_id == account.id).first()
+
+        _aro = db.or_(CSAppointment.titulo_servicio.ilike("%aroma%"),
+                      CSAppointment.titulo_servicio.ilike("%instalacion%"))
+        _pest = db.or_(CSAppointment.titulo_servicio.ilike("%fumig%"),
+                       CSAppointment.titulo_servicio.ilike("%plaga%"),
+                       CSAppointment.titulo_servicio.ilike("%pestex%"))
+        # Solo citas ya vencidas cuentan para cumplimiento (FIX-2026-07-22).
+        _vencida = CSAppointment.fecha_inicio <= datetime.utcnow()
+        row = db.session.query(
+            func.sum(sa_case((db.and_(_aro, _vencida), 1), else_=0)),
+            func.sum(sa_case((db.and_(_aro, _vencida, CSAppointment.estatus == "Terminada"), 1), else_=0)),
+            func.sum(sa_case((db.and_(_pest, _vencida), 1), else_=0)),
+            func.sum(sa_case((db.and_(_pest, _vencida, CSAppointment.estatus == "Terminada"), 1), else_=0)),
+        ).filter(CSAppointment.account_id == account.id,
+                 CSAppointment.fecha_inicio >= inicio,
+                 CSAppointment.fecha_inicio < fin).first()
+
+        ctx.update(
+            citas_por_estatus={
+                est: cnt for est, cnt in db.session.query(
+                    CSAppointment.estatus, func.count(CSAppointment.id))
+                .filter(CSAppointment.account_id == account.id,
+                        CSAppointment.fecha_inicio >= inicio,
+                        CSAppointment.fecha_inicio < fin)
+                .group_by(CSAppointment.estatus).all()},
+            suc_aromatex=suc[0] if suc else 0, suc_pestex=suc[1] if suc else 0,
+            citas_por_un={"AROMATEX": {"total": int(row[0] or 0), "terminadas": int(row[1] or 0)},
+                          "PESTEX": {"total": int(row[2] or 0), "terminadas": int(row[3] or 0)}},
+            appointments=(CSAppointment.query
+                          .filter(CSAppointment.account_id == account.id,
+                                  CSAppointment.fecha_inicio >= inicio,
+                                  CSAppointment.fecha_inicio < fin)
+                          .order_by(CSAppointment.fecha_inicio.desc()).limit(200).all()),
+        )
+
+    return render_template(f"cs/tabs/_frag_{frag_name}.html", **ctx)
+
+
+# ── Client View: OKRs del cliente ─────────────
+@cs_bp.route("/account/<uuid:account_id>/objetivos/crear", methods=["POST"])
+@require_cs_account_access
+def objetivo_crear(account_id):
+    d = request.form
+    titulo = (d.get("titulo") or "").strip()
+    if not titulo:
+        flash("El objetivo necesita un título.", "error")
+        return redirect(f"/cs/account/{account_id}?tab=overview")
+
+    def _num(v):
+        try:
+            return float(v) if (v or "").strip() else None
+        except ValueError:
+            return None
+
+    db.session.add(CSObjetivo(
+        account_id=account_id, titulo=titulo,
+        descripcion=(d.get("descripcion") or "").strip(),
+        metrica=(d.get("metrica") or "").strip(),
+        valor_objetivo=_num(d.get("valor_objetivo")),
+        valor_actual=_num(d.get("valor_actual")),
+        # En metas de reducción el punto de partida es el valor actual al
+        # crear el objetivo; sin él no hay contra qué medir el avance.
+        valor_inicial=_num(d.get("valor_inicial")) or _num(d.get("valor_actual")),
+        direccion="bajar" if d.get("direccion") == "bajar" else "subir",
+        unidad=(d.get("unidad") or "").strip(),
+        fecha_objetivo=(datetime.strptime(d["fecha_objetivo"], "%Y-%m-%d").date()
+                        if d.get("fecha_objetivo") else None),
+        estatus=d.get("estatus") or "En progreso",
+        created_by=session.get("user_nombre", ""),
+    ))
+    db.session.commit()
+    return redirect(f"/cs/account/{account_id}?tab=overview")
+
+
+@cs_bp.route("/account/<uuid:account_id>/objetivos/<uuid:objetivo_id>/eliminar", methods=["POST"])
+@require_cs_account_access
+def objetivo_eliminar(account_id, objetivo_id):
+    obj = db.session.get(CSObjetivo, objetivo_id)
+    if obj and str(obj.account_id) == str(account_id):
+        db.session.delete(obj)
+        db.session.commit()
+    return redirect(f"/cs/account/{account_id}?tab=overview")
+
+
+# ── Client View: documentación y links ────────
+@cs_bp.route("/account/<uuid:account_id>/documentos/crear", methods=["POST"])
+@require_cs_account_access
+def documento_crear(account_id):
+    d = request.form
+    titulo = (d.get("titulo") or "").strip()
+    url_doc = (d.get("url") or "").strip()
+    if not titulo or not url_doc:
+        flash("Título y URL son obligatorios.", "error")
+        return redirect(f"/cs/account/{account_id}?tab=documentacion")
+    if not url_doc.startswith(("http://", "https://")):
+        url_doc = "https://" + url_doc
+
+    db.session.add(CSDocumento(
+        account_id=account_id, titulo=titulo, url=url_doc,
+        tipo=d.get("tipo") if d.get("tipo") in CSDocumento.TIPOS else "Otro",
+        descripcion=(d.get("descripcion") or "").strip(),
+        created_by=session.get("user_nombre", ""),
+    ))
+    db.session.commit()
+    return redirect(f"/cs/account/{account_id}?tab=documentacion")
+
+
+@cs_bp.route("/account/<uuid:account_id>/documentos/<uuid:doc_id>/eliminar", methods=["POST"])
+@require_cs_account_access
+def documento_eliminar(account_id, doc_id):
+    doc = db.session.get(CSDocumento, doc_id)
+    if doc and str(doc.account_id) == str(account_id):
+        db.session.delete(doc)
+        db.session.commit()
+    return redirect(f"/cs/account/{account_id}?tab=documentacion")
+
+
+# ── Client View: renovación de contrato ───────
+@cs_bp.route("/account/<uuid:account_id>/renovacion", methods=["POST"])
+@require_cs_account_access
+def actualizar_renovacion(account_id):
+    account = _get_cs_account(account_id)
+    if not account:
+        return "Cuenta no encontrada", 404
+    fecha = (request.form.get("fecha_renovacion") or "").strip()
+    valor = (request.form.get("valor_contrato") or "").strip()
+    account.fecha_renovacion = datetime.strptime(fecha, "%Y-%m-%d").date() if fecha else None
+    try:
+        account.valor_contrato = float(valor) if valor else None
+    except ValueError:
+        account.valor_contrato = None
+    db.session.commit()
+    return redirect(f"/cs/account/{account_id}")
 
 
 # ══════════════════════════════════════════════
@@ -3489,7 +4129,7 @@ def eliminar_contacto(contacto_id):
 def crear_incidencia(account_id):
     tipo = request.form.get("tipo", "").strip()
     if not tipo:
-        return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=incidencias")
+        return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=proyectos")
 
     propiedad_id = request.form.get("propiedad_id", "").strip() or None
     propiedad_nombre = ""
@@ -3533,7 +4173,7 @@ def crear_incidencia(account_id):
     )
     db.session.add(inc)
     db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=incidencias")
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=proyectos")
 
 
 @cs_bp.route("/account/<uuid:account_id>/incidencias/<uuid:inc_id>/status", methods=["POST"])
@@ -3558,7 +4198,7 @@ def cambiar_status_incidencia(account_id, inc_id):
         if comentario:
             inc.comentarios_operaciones = comentario
         db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=incidencias")
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=proyectos")
 
 
 # ══════════════════════════════════════════════
@@ -3774,7 +4414,7 @@ def crear_entregable(account_id):
             orden=max_orden + 1, adjuntos=adj,
         ))
         db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=entregables#entregables")
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=proyectos#entregables")
 
 
 @cs_bp.route("/account/<uuid:account_id>/entregables/<uuid:ent_id>/delete", methods=["POST"])
@@ -3790,7 +4430,7 @@ def eliminar_entregable(account_id, ent_id):
             return err
         db.session.delete(e)
         db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=entregables#entregables")
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=proyectos#entregables")
 
 
 # ══════════════════════════════════════════════
@@ -3907,7 +4547,7 @@ def create_note(account_id):
         adj = _parse_adjuntos(request.form)
         db.session.add(CSNote(account_id=account_id, autor=autor, contenido=contenido, adjuntos=adj))
         db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=notas")
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=historial")
 
 
 @cs_bp.route("/account/<uuid:account_id>/notes/<uuid:note_id>/delete", methods=["POST"])
@@ -3923,7 +4563,7 @@ def delete_note(account_id, note_id):
             return err
         db.session.delete(note)
         db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=notas")
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=historial")
 
 
 @cs_bp.route("/account/<uuid:account_id>/tasks", methods=["POST"])
@@ -3945,7 +4585,7 @@ def create_task(account_id):
             fecha_limite=fecha_limite, adjuntos=adj,
         ))
         db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=tareas")
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=proyectos")
 
 
 @cs_bp.route("/account/<uuid:account_id>/tasks/<uuid:task_id>/toggle", methods=["POST"])
@@ -3961,7 +4601,7 @@ def toggle_task(account_id, task_id):
             return err
         task.completada = not task.completada
         db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=tareas")
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=proyectos")
 
 
 @cs_bp.route("/account/<uuid:account_id>/tasks/<uuid:task_id>/delete", methods=["POST"])
@@ -3977,4 +4617,4 @@ def delete_task(account_id, task_id):
             return err
         db.session.delete(task)
         db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=tareas")
+    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=proyectos")

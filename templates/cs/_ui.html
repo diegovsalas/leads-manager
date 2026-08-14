@@ -1,0 +1,85 @@
+{# ═══════════════════════════════════════════════════════════════
+   FEAT-2026-08-14: macros de UI compartidos del Client View.
+   Empty states, skeletons y piezas chicas reutilizables.
+   ═══════════════════════════════════════════════════════════════ #}
+
+{# ── Empty state accionable ──────────────────────────────────────
+   En este CRM el vacío es el estado NORMAL, no un caso borde:
+   88% de las cuentas no tiene notas, 77% no tiene entregables,
+   58% no tiene contactos. Por eso todo empty state ofrece la
+   acción que lo llena, en vez de solo decir "sin datos".        #}
+{% macro empty_state(icono, titulo, mensaje, cta_texto=None, cta_onclick=None, cta_href=None) %}
+<div class="flex flex-col items-center justify-center text-center py-10 px-6">
+    <div class="w-11 h-11 rounded-full bg-gray-50 border border-gray-200 grid place-items-center text-lg mb-3"
+         aria-hidden="true">{{ icono }}</div>
+    <p class="text-sm font-semibold text-gray-700">{{ titulo }}</p>
+    <p class="text-xs text-gray-500 mt-1 max-w-sm leading-relaxed">{{ mensaje }}</p>
+    {% if cta_texto %}
+    {% if cta_href %}
+    <a href="{{ cta_href }}"
+       class="mt-4 inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-600 text-white text-xs font-semibold rounded-lg hover:bg-brand-700 transition-colors">
+        {{ cta_texto }}
+    </a>
+    {% else %}
+    <button type="button" onclick="{{ cta_onclick }}"
+            class="mt-4 inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-600 text-white text-xs font-semibold rounded-lg hover:bg-brand-700 transition-colors">
+        {{ cta_texto }}
+    </button>
+    {% endif %}
+    {% endif %}
+</div>
+{% endmacro %}
+
+
+{# ── Skeleton loader ─────────────────────────────────────────────
+   Real, no decorativo: las pestañas Proyectos / Historial /
+   Documentación se cargan por AJAX y esto ocupa su lugar.       #}
+{% macro skeleton(filas=4, con_titulo=True) %}
+<div class="cv-skel" aria-busy="true" aria-live="polite">
+    <span class="sr-only">Cargando…</span>
+    {% if con_titulo %}
+    <div class="cv-skel-bar" style="width:32%;height:14px;margin-bottom:18px"></div>
+    {% endif %}
+    {% for i in range(filas) %}
+    <div class="bg-white rounded-2xl border border-gray-100 p-5 mb-3">
+        <div class="cv-skel-bar" style="width:{{ [46, 62, 38, 54][i % 4] }}%;height:12px"></div>
+        <div class="cv-skel-bar" style="width:{{ [88, 74, 92, 80][i % 4] }}%;height:9px;margin-top:12px"></div>
+        <div class="cv-skel-bar" style="width:{{ [64, 82, 58, 70][i % 4] }}%;height:9px;margin-top:8px"></div>
+    </div>
+    {% endfor %}
+</div>
+{% endmacro %}
+
+
+{# ── Chip de estado ──────────────────────────────────────────── #}
+{% macro chip(texto, tono='neutral') %}
+<span class="inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap
+    {% if tono == 'ok' %}bg-green-100 text-green-700
+    {% elif tono == 'warn' %}bg-amber-100 text-amber-800
+    {% elif tono == 'danger' %}bg-red-100 text-red-700
+    {% elif tono == 'info' %}bg-brand-100 text-brand-700
+    {% else %}bg-gray-100 text-gray-600{% endif %}">{{ texto }}</span>
+{% endmacro %}
+
+
+{# ── Tile de métrica ─────────────────────────────────────────── #}
+{% macro stat(label, valor, sub=None, tono='neutral') %}
+<div class="min-w-0">
+    <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{{ label }}</p>
+    <p class="text-lg font-bold tabular-nums truncate
+        {% if tono == 'ok' %}text-green-700
+        {% elif tono == 'warn' %}text-amber-700
+        {% elif tono == 'danger' %}text-red-700
+        {% else %}text-gray-800{% endif %}">{{ valor }}</p>
+    {% if sub %}<p class="text-[11px] text-gray-500 truncate mt-0.5">{{ sub }}</p>{% endif %}
+</div>
+{% endmacro %}
+
+
+{# ── Encabezado de sección dentro de una pestaña ─────────────── #}
+{% macro section_head(titulo, sub=None) %}
+<div class="mb-4">
+    <h2 class="text-sm font-semibold text-gray-800">{{ titulo }}</h2>
+    {% if sub %}<p class="text-xs text-gray-500 mt-0.5">{{ sub }}</p>{% endif %}
+</div>
+{% endmacro %}

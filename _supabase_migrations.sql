@@ -176,3 +176,56 @@ SET correos_visibles_para_user_id = (
 )
 WHERE u.nombre ILIKE '%andres%garza%martinez%'
   AND correos_visibles_para_user_id IS NULL;
+
+-- ══════════════════════════════════════════════════════════════
+-- FEAT-2026-08-14: Client View — vista individual de cliente con
+-- banner de highlights fijo y 4 pestañas (Overview / Proyectos /
+-- Historial / Documentación).
+-- ══════════════════════════════════════════════════════════════
+
+-- Renovación de contrato. No existe fuente automática: savio_subscriptions
+-- .contract_end_date solo está poblado en subs 'ended' (1322/1322) y en 6
+-- de 1736 activas, o sea registra cuándo TERMINÓ un contrato, no cuándo
+-- renueva. Se captura manualmente por el KAM.
+ALTER TABLE cs_accounts ADD COLUMN IF NOT EXISTS fecha_renovacion DATE;
+ALTER TABLE cs_accounts ADD COLUMN IF NOT EXISTS valor_contrato NUMERIC(14,2);
+CREATE INDEX IF NOT EXISTS ix_cs_accounts_fecha_renovacion
+    ON cs_accounts (fecha_renovacion) WHERE fecha_renovacion IS NOT NULL;
+
+-- OKRs / objetivos del cliente (tab Overview)
+CREATE TABLE IF NOT EXISTS cs_objetivos (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id      UUID NOT NULL REFERENCES cs_accounts(id) ON DELETE CASCADE,
+    titulo          VARCHAR(300) NOT NULL,
+    descripcion     TEXT DEFAULT '',
+    metrica         VARCHAR(120) DEFAULT '',
+    valor_objetivo  NUMERIC(14,2),
+    valor_actual    NUMERIC(14,2),
+    unidad          VARCHAR(30) DEFAULT '',
+    fecha_objetivo  DATE,
+    estatus         VARCHAR(30) DEFAULT 'En progreso',
+    orden           INTEGER DEFAULT 0,
+    created_by      VARCHAR(200) DEFAULT '',
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_cs_objetivos_account ON cs_objetivos (account_id);
+
+-- Documentación y accesos (tab Documentación)
+CREATE TABLE IF NOT EXISTS cs_documentos (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id   UUID NOT NULL REFERENCES cs_accounts(id) ON DELETE CASCADE,
+    titulo       VARCHAR(300) NOT NULL,
+    tipo         VARCHAR(40) DEFAULT 'Otro',
+    url          TEXT NOT NULL,
+    descripcion  TEXT DEFAULT '',
+    orden        INTEGER DEFAULT 0,
+    created_by   VARCHAR(200) DEFAULT '',
+    created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_cs_documentos_account ON cs_documentos (account_id);
+
+-- FIX-2026-08-14: los OKR de reducción (ej. "bajar incidencias de 8 a 4")
+-- calculaban el avance al revés porque progreso_pct asumía que más es mejor.
+ALTER TABLE cs_objetivos ADD COLUMN IF NOT EXISTS direccion VARCHAR(10) DEFAULT 'subir';
+ALTER TABLE cs_objetivos ADD COLUMN IF NOT EXISTS valor_inicial NUMERIC(14,2);

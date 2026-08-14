@@ -1,0 +1,194 @@
+{% extends "cs/cs_base.html" %}
+{% from "cs/_ui.html" import empty_state, chip %}
+{% block title %}Catch-Up — Avantex CS{% endblock %}
+{% block breadcrumb %}Catch-Up{% endblock %}
+
+{% block content %}
+{# FEAT-2026-08-14: cola de trabajo cross-cuenta. Complementa /cs/alertas:
+   alertas detecta eventos puntuales; esto prioriza a quién atender y por qué,
+   ponderando severidad por MRR. #}
+
+<div class="mb-5">
+    <h1 class="text-xl font-bold text-gray-800">Catch-Up de cuentas</h1>
+    <p class="text-sm text-gray-500 mt-1">
+        Cuentas que necesitan atención, ordenadas por impacto. Las señales salen de cobranza,
+        cumplimiento operativo, incidencias y voz del cliente.
+    </p>
+</div>
+
+{# ── Resumen ─────────────────────────────────────────────────── #}
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 min-w-0">
+        <p class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Cuentas con señal</p>
+        <p class="text-2xl font-bold text-gray-800 tabular-nums mt-1">{{ filas|length }}<span class="text-sm text-gray-400 font-medium"> / {{ total_cuentas }}</span></p>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 min-w-0">
+        <p class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Con señal alta</p>
+        <p class="text-2xl font-bold text-red-700 tabular-nums mt-1">{{ con_alta }}</p>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 min-w-0">
+        <p class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">MRR en riesgo</p>
+        <p class="text-2xl font-bold text-gray-800 tabular-nums mt-1">${{ "{:,.0f}".format(mrr_en_riesgo) }}</p>
+        <p class="text-[11px] text-gray-400">al mes</p>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 min-w-0">
+        <p class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Cartera vencida</p>
+        <p class="text-2xl font-bold text-amber-700 tabular-nums mt-1">${{ "{:,.0f}".format(monto_vencido_total) }}</p>
+    </div>
+</div>
+
+{# ── Falsos verdes ───────────────────────────────────────────── #}
+{% if falsos_verdes %}
+<div class="bg-white rounded-2xl shadow-sm border-l-4 border-l-amber-500 border border-gray-100 p-5 mb-5">
+    <div class="flex items-start gap-3">
+        <span class="text-lg shrink-0" aria-hidden="true">⚠️</span>
+        <div class="min-w-0">
+            <h2 class="text-sm font-semibold text-gray-800">
+                {{ falsos_verdes|length }} cuenta(s) en verde con riesgo alto activo
+            </h2>
+            <p class="text-xs text-gray-600 mt-1 leading-relaxed">
+                Su health score las marca como sanas, pero tienen una señal alta sin atender.
+                Ocurre porque «cartera vencida» pesa solo 10% del score y «cobranza» mide
+                el periodo actual, así que la deuda antigua no penaliza.
+            </p>
+            <div class="flex flex-wrap gap-1.5 mt-2.5">
+                {% for f in falsos_verdes[:12] %}
+                <a href="/cs/account/{{ f.account.id }}"
+                   class="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border border-gray-200 hover:border-brand-300 text-[11px]">
+                    <span class="w-1.5 h-1.5 rounded-full bg-green-500" aria-hidden="true"></span>
+                    <span class="font-medium text-gray-700">{{ f.account.nombre }}</span>
+                    <span class="text-gray-400 tabular-nums">{{ f.health.score }}</span>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ── Filtros ─────────────────────────────────────────────────── #}
+<form method="GET" class="flex flex-wrap items-end gap-3 mb-4">
+    <div>
+        <label for="f-orden" class="cv-label">Ordenar por</label>
+        <select id="f-orden" name="orden" onchange="this.form.submit()" class="cv-input" style="width:auto">
+            <option value="impacto" {% if orden=='impacto' %}selected{% endif %}>Impacto (severidad × MRR)</option>
+            <option value="severidad" {% if orden=='severidad' %}selected{% endif %}>Severidad</option>
+            <option value="mrr" {% if orden=='mrr' %}selected{% endif %}>MRR</option>
+            <option value="frio" {% if orden=='frio' %}selected{% endif %}>Tiempo sin contacto</option>
+        </select>
+    </div>
+    <div>
+        <label for="f-tipo" class="cv-label">Tipo de señal</label>
+        <select id="f-tipo" name="tipo" onchange="this.form.submit()" class="cv-input" style="width:auto">
+            <option value="">Todas</option>
+            {% for val, lbl in tipos %}
+            <option value="{{ val }}" {% if tipo_filtro==val %}selected{% endif %}>{{ lbl }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% if not is_kam %}
+    <div>
+        <label for="f-kam" class="cv-label">KAM</label>
+        <select id="f-kam" name="kam" onchange="this.form.submit()" class="cv-input" style="width:auto">
+            <option value="">Todos</option>
+            {% for k in kams %}
+            <option value="{{ k.id }}" {% if kam_filtro==k.id|string %}selected{% endif %}>{{ k.nombre }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
+    {% if tipo_filtro or kam_filtro or orden != 'impacto' %}
+    <a href="/cs/catch-up" class="text-xs text-brand-600 hover:underline pb-2.5">Limpiar filtros</a>
+    {% endif %}
+</form>
+
+{# ── Cola ────────────────────────────────────────────────────── #}
+{% if filas %}
+<div class="space-y-3">
+    {% for f in filas %}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 min-w-0
+                {% if f.altas %}border-l-4 border-l-red-400{% elif f.medias %}border-l-4 border-l-amber-400{% endif %}">
+        <div class="flex items-start justify-between gap-4 flex-wrap mb-3">
+            <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-[11px] font-bold grid place-items-center shrink-0 tabular-nums">{{ loop.index }}</span>
+                    <a href="/cs/account/{{ f.account.id }}"
+                       class="text-base font-semibold text-gray-800 hover:text-brand-700">{{ f.account.nombre }}</a>
+                    {% if f.account.tier %}{{ chip(f.account.tier, 'info') }}{% endif %}
+                    {% if f.health.color == 'green' and f.altas %}
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-[10px] font-semibold text-amber-800"
+                          title="El health score la marca sana pese a tener riesgo alto">
+                        <span class="w-1.5 h-1.5 rounded-full bg-green-500" aria-hidden="true"></span>
+                        Verde engañoso
+                    </span>
+                    {% endif %}
+                </div>
+                <p class="text-xs text-gray-500 mt-1 ml-8">
+                    {{ f.account.kam.nombre if f.account.kam else 'Sin KAM' }}
+                    {% if f.contacto %}
+                    · último contacto
+                    <span class="{% if f.contacto.dias > 60 %}text-red-600 font-semibold{% elif f.contacto.dias > 30 %}text-amber-600 font-medium{% endif %}">
+                        {% if f.contacto.dias == 0 %}hoy{% elif f.contacto.dias == 1 %}ayer{% else %}hace {{ f.contacto.dias }} días{% endif %}
+                    </span>
+                    ({{ f.contacto.fuente|lower }})
+                    {% else %}
+                    · <span class="text-red-600 font-semibold">sin contacto registrado</span>
+                    {% endif %}
+                </p>
+            </div>
+            <div class="flex items-center gap-5 shrink-0">
+                <div class="text-right">
+                    <p class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">MRR</p>
+                    <p class="text-sm font-bold text-gray-800 tabular-nums">${{ "{:,.0f}".format(f.mrr) }}</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Salud</p>
+                    <p class="text-sm font-bold tabular-nums
+                        {% if f.health.color == 'green' %}text-green-700
+                        {% elif f.health.color == 'yellow' %}text-amber-700
+                        {% elif f.health.color == 'red' %}text-red-700
+                        {% else %}text-gray-400{% endif %}">{{ f.health.score if f.health.score is not none else 's/d' }}</p>
+                </div>
+                <a href="/cs/account/{{ f.account.id }}"
+                   class="px-3.5 py-2 bg-brand-600 text-white text-xs font-semibold rounded-xl hover:bg-brand-700 transition-colors">
+                    Abrir
+                </a>
+            </div>
+        </div>
+
+        <div class="grid gap-2 grid-cols-1 md:grid-cols-2 ml-8">
+            {% for s in f.señales %}
+            <div class="flex items-start gap-2.5 rounded-xl border p-2.5
+                {% if s.nivel == 'alto' %}bg-red-50 border-red-200
+                {% elif s.nivel == 'medio' %}bg-amber-50 border-amber-200
+                {% else %}bg-gray-50 border-gray-200{% endif %}">
+                <span class="mt-1 w-1.5 h-1.5 rounded-full shrink-0
+                    {% if s.nivel == 'alto' %}bg-red-500
+                    {% elif s.nivel == 'medio' %}bg-amber-500
+                    {% else %}bg-gray-400{% endif %}" aria-hidden="true"></span>
+                <div class="min-w-0">
+                    <p class="text-xs font-semibold text-gray-800">{{ s.titulo }}</p>
+                    <p class="text-[11px] text-gray-600 mt-0.5 leading-relaxed">{{ s.detalle }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100">
+    {{ empty_state('✅', 'Nada que atender',
+                   'Ninguna cuenta tiene señales con los filtros actuales.') }}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<style>
+.cv-label { display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px; }
+.cv-input { font-size: 13px; border: 1px solid #d1d5db; border-radius: 9px;
+            padding: 8px 11px; background: #fff; color: #1f2937; }
+.cv-input:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,.12); }
+</style>
+{% endblock %}

@@ -1,0 +1,169 @@
+{# ═══════════════════════════════════════════════════════════════
+   FEAT-2026-08-14: Highlight Banner del Client View.
+
+   Componente reutilizable. Para usarlo en otra vista basta con:
+       {% from "cs/_highlight_banner.html" import highlight_banner %}
+       {{ highlight_banner(b_account, b_health, b_ultimo_contacto,
+                           b_proxima_junta, sticky=True) }}
+   El contexto lo arma _banner_ctx(account, health) en blueprints/cs.py.
+   ═══════════════════════════════════════════════════════════════ #}
+{% from "cs/_ui.html" import chip %}
+
+{% macro highlight_banner(account, health, ultimo_contacto, proxima_junta, sticky=True, con_acciones=True) %}
+{% set dias_renov = account.dias_para_renovacion %}
+<div class="cv-banner {% if sticky %}cv-banner--sticky{% endif %}">
+    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm px-5 py-4">
+
+        {# ── Identidad ─────────────────────────────────── #}
+        <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div class="flex items-center gap-3 min-w-0">
+                {% if account.logo_url %}
+                <img src="{{ account.logo_url }}" alt="Logo de {{ account.nombre }}"
+                     class="w-11 h-11 rounded-xl object-contain bg-white border border-gray-200 shrink-0"
+                     onerror="this.style.display='none'">
+                {% else %}
+                <div class="w-11 h-11 rounded-xl bg-brand-50 border border-brand-100 grid place-items-center
+                            text-brand-700 font-bold text-sm shrink-0" aria-hidden="true">
+                    {{ account.nombre[:2]|upper }}
+                </div>
+                {% endif %}
+
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        {% if account.client_id %}
+                        <span class="text-[11px] font-semibold text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded">{{ account.client_id }}</span>
+                        {% endif %}
+                        <h1 class="text-xl font-bold text-gray-800 truncate">{{ account.nombre }}</h1>
+                        {% if account.tier %}{{ chip(account.tier, 'info') }}{% endif %}
+                        {% if account.es_cuenta_nueva %}{{ chip('Nueva', 'info') }}{% endif %}
+                    </div>
+                    <p class="text-xs text-gray-500 mt-0.5 truncate">
+                        {{ account.giro or 'Sin giro definido' }}
+                        {% if account.unidades_contratadas %} · {{ account.unidades_contratadas }}{% endif %}
+                        {% if account.sucursales %} · {{ "{:,}".format(account.sucursales) }} sucursales{% endif %}
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2.5 shrink-0">
+                {# Semáforo de salud #}
+                <div class="flex items-center gap-2 pl-3 pr-3.5 py-1.5 rounded-xl border
+                    {% if health.color == 'green' %}bg-green-50 border-green-200
+                    {% elif health.color == 'yellow' %}bg-amber-50 border-amber-200
+                    {% elif health.color == 'red' %}bg-red-50 border-red-200
+                    {% else %}bg-gray-50 border-gray-200{% endif %}">
+                    <span class="w-2.5 h-2.5 rounded-full shrink-0
+                        {% if health.color == 'green' %}bg-green-500
+                        {% elif health.color == 'yellow' %}bg-amber-500
+                        {% elif health.color == 'red' %}bg-red-500
+                        {% else %}bg-gray-400{% endif %}"
+                        aria-hidden="true"></span>
+                    <div class="leading-tight">
+                        <p class="text-[9px] font-semibold uppercase tracking-wider
+                            {% if health.color == 'green' %}text-green-700
+                            {% elif health.color == 'yellow' %}text-amber-700
+                            {% elif health.color == 'red' %}text-red-700
+                            {% else %}text-gray-500{% endif %}">Salud</p>
+                        <p class="text-sm font-bold tabular-nums
+                            {% if health.color == 'green' %}text-green-800
+                            {% elif health.color == 'yellow' %}text-amber-800
+                            {% elif health.color == 'red' %}text-red-800
+                            {% else %}text-gray-600{% endif %}">
+                            {% if health.score is not none %}{{ health.score }}{% else %}s/d{% endif %}
+                            <span class="text-[10px] font-medium">{{ health.categoria }}</span>
+                        </p>
+                    </div>
+                </div>
+
+                {% if con_acciones %}
+                <a href="/cs/account/{{ account.id }}/qbr"
+                   class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-600 text-white text-xs font-semibold rounded-xl hover:bg-brand-700 transition-colors shadow-sm">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    QBR
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+        {# ── Highlights ────────────────────────────────── #}
+        <div class="cv-highlights mt-3.5 pt-3.5 border-t border-gray-100">
+
+            <div class="cv-hl">
+                <p class="cv-hl-lbl">MRR</p>
+                <p class="cv-hl-val">${{ "{:,.0f}".format(account.mrr or 0) }}</p>
+                {% if (not account.mrr or account.mrr == 0) and account.mrr_observado and account.mrr_observado > 0 %}
+                <p class="cv-hl-sub text-amber-700" title="MRR contratado en $0 pero hay facturación recurrente. Falta la subscription en Savio.">
+                    ⚠ Real ${{ "{:,.0f}".format(account.mrr_observado) }}
+                </p>
+                {% endif %}
+            </div>
+
+            <div class="cv-hl">
+                <p class="cv-hl-lbl">ARR</p>
+                <p class="cv-hl-val">${{ "{:,.0f}".format(account.arr_proyectado or 0) }}</p>
+                {% if account.valor_contrato %}
+                <p class="cv-hl-sub">Contrato ${{ "{:,.0f}".format(account.valor_contrato) }}</p>
+                {% endif %}
+            </div>
+
+            <div class="cv-hl">
+                <p class="cv-hl-lbl">Renovación</p>
+                {% if account.fecha_renovacion %}
+                <p class="cv-hl-val {% if dias_renov is not none and dias_renov < 0 %}text-red-700
+                                    {% elif dias_renov is not none and dias_renov <= 60 %}text-amber-700{% endif %}">
+                    {{ account.fecha_renovacion.strftime('%d %b %Y') }}
+                </p>
+                <p class="cv-hl-sub {% if dias_renov is not none and dias_renov < 0 %}text-red-600
+                                    {% elif dias_renov is not none and dias_renov <= 60 %}text-amber-600{% endif %}">
+                    {% if dias_renov < 0 %}Vencida hace {{ -dias_renov }} d
+                    {% elif dias_renov == 0 %}Es hoy
+                    {% else %}En {{ dias_renov }} días{% endif %}
+                </p>
+                {% else %}
+                <button type="button" onclick="cvOpenRenovacion()"
+                        class="cv-hl-empty">Definir fecha</button>
+                {% endif %}
+            </div>
+
+            <div class="cv-hl">
+                <p class="cv-hl-lbl">Account Owner</p>
+                <p class="cv-hl-val cv-hl-val--sm">{{ account.kam.nombre if account.kam else '—' }}</p>
+                <p class="cv-hl-sub">{{ 'KAM asignado' if account.kam else 'Sin KAM' }}</p>
+            </div>
+
+            <div class="cv-hl">
+                <p class="cv-hl-lbl">Último contacto</p>
+                {% if ultimo_contacto %}
+                <p class="cv-hl-val cv-hl-val--sm
+                    {% if ultimo_contacto.dias > 60 %}text-red-700
+                    {% elif ultimo_contacto.dias > 30 %}text-amber-700{% endif %}">
+                    {% if ultimo_contacto.dias == 0 %}Hoy
+                    {% elif ultimo_contacto.dias == 1 %}Ayer
+                    {% else %}Hace {{ ultimo_contacto.dias }} días{% endif %}
+                </p>
+                <p class="cv-hl-sub" title="{{ ultimo_contacto.detalle }}">{{ ultimo_contacto.fuente }} · {{ ultimo_contacto.detalle[:28] }}</p>
+                {% else %}
+                <p class="cv-hl-val cv-hl-val--sm text-gray-400">Sin registro</p>
+                <p class="cv-hl-sub">Nunca se ha bitacorado</p>
+                {% endif %}
+            </div>
+
+            <div class="cv-hl">
+                <p class="cv-hl-lbl">Próxima junta</p>
+                {% if proxima_junta %}
+                <p class="cv-hl-val cv-hl-val--sm">{{ proxima_junta.fecha.strftime('%d %b') }}</p>
+                <p class="cv-hl-sub" title="{{ proxima_junta.descripcion }}">
+                    {{ proxima_junta.tipo }} · {% if proxima_junta.dias == 0 %}hoy{% else %}en {{ proxima_junta.dias }} d{% endif %}
+                </p>
+                {% else %}
+                <button type="button" onclick="cvSwitchTab('proyectos')" class="cv-hl-empty">Agendar</button>
+                {% endif %}
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endmacro %}

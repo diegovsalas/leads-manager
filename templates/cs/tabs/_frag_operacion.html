@@ -1,0 +1,82 @@
+{# FEAT-2026-08-14: fragmento recuperado del cs_account_detail.html
+   original, sin cambios funcionales. Se carga por AJAX al desplegar
+   su <details>, para no pagar sus agregados en la primera pintura. #}
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+            <h2 class="text-sm font-semibold text-gray-800 mb-4">Operación por Mes</h2>
+            <div style="max-height:200px"><canvas id="opTabChart"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-sm font-semibold text-gray-700">Citas de Servicio · Plantilla activa</h2>
+                <div class="flex items-center gap-3">
+                    <span class="text-xs text-gray-500">{{ appointments|length }} registros</span>
+                    <button onclick="abrirAgregarCita()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs rounded-lg font-medium">+ Agregar cita</button>
+                </div>
+            </div>
+
+            <!-- Filtro rápido por estatus — default 'activas' (oculta Canceladas/No Realizadas) -->
+            <div x-data="{ filtro: 'activas' }" class="mb-4">
+                <div class="flex flex-wrap gap-2 mb-4">
+                    <button @click="filtro = 'activas'"
+                            :class="filtro === 'activas' ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-600'"
+                            class="px-3 py-1 rounded-full text-xs font-medium">★ Activas</button>
+                    <button @click="filtro = 'todos'"
+                            :class="filtro === 'todos' ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-600'"
+                            class="px-3 py-1 rounded-full text-xs font-medium">Todos</button>
+                    {% for estatus in citas_por_estatus.keys()|sort %}
+                    <button @click="filtro = '{{ estatus }}'"
+                            :class="filtro === '{{ estatus }}' ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-600'"
+                            class="px-3 py-1 rounded-full text-xs font-medium">{{ estatus }} ({{ citas_por_estatus[estatus] }})</button>
+                    {% endfor %}
+                </div>
+
+                <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                    <table class="w-full text-sm">
+                        <thead class="sticky top-0 bg-white">
+                            <tr class="border-b text-left text-gray-500 text-xs uppercase tracking-wide">
+                                <th class="pb-2">Propiedad</th>
+                                <th class="pb-2">Zona</th>
+                                <th class="pb-2">Técnico</th>
+                                <th class="pb-2">Servicio</th>
+                                <th class="pb-2">F. Inicio</th>
+                                <th class="pb-2 text-center">Estatus</th>
+                                <th class="pb-2 text-right">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for apt in appointments %}
+                            {% set is_inactiva = apt.estatus in ('Cancelada','No Realizada','Archivada') %}
+                            <tr class="border-b last:border-0 hover:bg-gray-50 text-xs"
+                                x-show="filtro === 'todos' || filtro === '{{ apt.estatus }}' || (filtro === 'activas' && {{ 'false' if is_inactiva else 'true' }})">
+                                <td class="py-2 max-w-xs truncate" title="{{ apt.propiedad }}">{{ apt.propiedad[:50] }}</td>
+                                <td class="py-2 text-gray-500">{{ apt.zona[:20] if apt.zona else '-' }}</td>
+                                <td class="py-2 text-gray-600">{{ apt.tecnico[:20] if apt.tecnico and apt.tecnico != 'nan' else '-' }}</td>
+                                <td class="py-2 text-gray-600">{{ apt.titulo_servicio[:30] }}</td>
+                                <td class="py-2 text-gray-500">{{ apt.fecha_inicio.strftime('%d/%m/%Y') if apt.fecha_inicio else '-' }}</td>
+                                <td class="py-2 text-center">
+                                    <span class="px-1.5 py-0.5 rounded text-xs font-medium
+                                        {% if apt.estatus == 'Terminada' %}bg-green-100 text-green-700
+                                        {% elif apt.estatus == 'Cancelada' %}bg-red-100 text-red-700
+                                        {% elif apt.estatus == 'Agendada' or apt.estatus == 'Técnico Asignado' %}bg-brand-100 text-brand-700
+                                        {% elif apt.estatus == 'No Realizada' %}bg-orange-100 text-orange-700
+                                        {% else %}bg-gray-100 text-gray-600{% endif %}">
+                                        {{ apt.estatus }}
+                                    </span>
+                                </td>
+                                <td class="py-2 text-right whitespace-nowrap">
+                                    {% if not is_inactiva %}
+                                    <button onclick="editarCita('{{ apt.id }}',{{ {'propiedad': apt.propiedad or '','direccion': apt.direccion or '','zona': apt.zona or '','tecnico': apt.tecnico or '','estatus': apt.estatus or '','titulo_servicio': apt.titulo_servicio or '','cantidad': apt.cantidad or 1,'fecha_inicio': apt.fecha_inicio.strftime('%Y-%m-%dT%H:%M') if apt.fecha_inicio else '','fecha_terminacion': apt.fecha_terminacion.strftime('%Y-%m-%dT%H:%M') if apt.fecha_terminacion else ''}|tojson|forceescape }})"
+                                            class="text-brand-600 hover:underline">Editar</button>
+                                    <button onclick="cancelarCita('{{ apt.id }}')"
+                                            class="text-red-600 hover:underline ml-2">Cancelar</button>
+                                    {% else %}
+                                    <span class="text-gray-300 text-xs">—</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>

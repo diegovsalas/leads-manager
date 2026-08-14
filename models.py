@@ -1,7 +1,7 @@
 # models.py
 import enum
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -799,6 +799,18 @@ class CSAccount(db.Model):
     nps = db.Column(db.Float, nullable=True)
     pulso = db.Column(db.String(20), nullable=True)
     eficiencia_operativa = db.Column(db.Float, nullable=True)
+    # FEAT-2026-08-14: renovación de contrato para el banner de Client View.
+    # Captura manual: savio_subscriptions.contract_end_date solo está poblado
+    # en subs 'ended' (registra cuándo terminó, no cuándo renueva).
+    fecha_renovacion = db.Column(db.Date, nullable=True, index=True)
+    valor_contrato = db.Column(db.Numeric(14, 2), nullable=True)
+
+    @property
+    def dias_para_renovacion(self):
+        """Días hasta la renovación. Negativo si ya venció. None si no hay fecha."""
+        if not self.fecha_renovacion:
+            return None
+        return (self.fecha_renovacion - date.today()).days
 
     kam = db.relationship("UserCRM", backref="cs_accounts")
     invoices = db.relationship("CSInvoice", backref="account", lazy=True)
@@ -1141,6 +1153,86 @@ class CSOpportunity(db.Model):
         if self.account:
             return self.account.nombre
         return self.prospecto_nombre or "Sin nombre"
+
+
+class CSObjetivo(db.Model):
+    """FEAT-2026-08-14: OKR / objetivo del cliente. Se muestra en el tab
+    Overview del Client View.
+
+    Es el objetivo que el CLIENTE quiere lograr (ej. "reducir incidencias
+    de plaga a menos de 5 por trimestre"), no una meta comercial nuestra.
+    """
+    __tablename__ = "cs_objetivos"
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=False, index=True)
+    titulo = db.Column(db.String(300), nullable=False)
+    descripcion = db.Column(db.Text, default="")
+    metrica = db.Column(db.String(120), default="")       # "Incidencias por trimestre"
+    valor_objetivo = db.Column(db.Numeric(14, 2), nullable=True)
+    valor_actual = db.Column(db.Numeric(14, 2), nullable=True)
+    unidad = db.Column(db.String(30), default="")          # "%", "hrs", "incidencias"
+    fecha_objetivo = db.Column(db.Date, nullable=True)
+    estatus = db.Column(db.String(30), default="En progreso")  # En progreso / Logrado / En riesgo
+    # FIX-2026-08-14: 'bajar' para metas de reducción (bajar incidencias,
+    # bajar tiempo de respuesta). Sin esto el avance salía invertido.
+    direccion = db.Column(db.String(10), default="subir")      # subir / bajar
+    orden = db.Column(db.Integer, default=0)
+    created_by = db.Column(db.String(200), default="")
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    account = db.relationship("CSAccount", backref="objetivos")
+    # Punto de partida para medir avance en metas de reducción.
+    valor_inicial = db.Column(db.Numeric(14, 2), nullable=True)
+
+    @property
+    def progreso_pct(self):
+        """% de avance hacia el objetivo, 0-100.
+
+        'subir'  → avanzar es acercarse a un valor mayor (ventas, cobertura).
+        'bajar'  → avanzar es reducir (incidencias, horas de respuesta). Se
+                   mide contra valor_inicial; si no hay, se usa el actual como
+                   punto de partida, lo que da 0% hasta que el valor baje.
+        """
+        if self.valor_objetivo is None or self.valor_actual is None:
+            return None
+        meta = float(self.valor_objetivo)
+        actual = float(self.valor_actual)
+
+        if (self.direccion or "subir") == "bajar":
+            inicio = float(self.valor_inicial) if self.valor_inicial is not None else actual
+            if inicio <= meta:                      # ya se partía en la meta o mejor
+                return 100 if actual <= meta else 0
+            avance = (inicio - actual) / (inicio - meta)
+            return max(0, min(100, round(avance * 100)))
+
+        if meta == 0:
+            return None
+        return max(0, min(100, round(actual / meta * 100)))
+
+
+class CSDocumento(db.Model):
+    """FEAT-2026-08-14: enlace a contrato, carpeta de Drive, Figma o acceso.
+
+    Complementa CSAccount.adjuntos (archivos subidos): esto son LINKS a
+    recursos que viven fuera del CRM.
+    """
+    __tablename__ = "cs_documentos"
+
+    TIPOS = ["Contrato", "Drive", "Figma", "Acceso", "Propuesta", "Reporte", "Otro"]
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id"), nullable=False, index=True)
+    titulo = db.Column(db.String(300), nullable=False)
+    tipo = db.Column(db.String(40), default="Otro")
+    url = db.Column(db.Text, nullable=False)
+    descripcion = db.Column(db.Text, default="")
+    orden = db.Column(db.Integer, default=0)
+    created_by = db.Column(db.String(200), default="")
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+
+    account = db.relationship("CSAccount", backref="documentos")
 
 
 # ──────────────────────────────────────────────
