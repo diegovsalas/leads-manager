@@ -1,3 +1,4 @@
+{% from "cs/_icons.html" import icon %}
 {# Macro para mostrar adjuntos (links) #}
 {% macro render_adjuntos(adjuntos) %}
 {% if adjuntos %}
@@ -5,14 +6,14 @@
     {% for adj in adjuntos %}
     {% set tipo = adj.get('tipo', 'link') %}
     <a href="{{ adj.url }}" target="_blank" rel="noopener"
-       class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border hover:shadow-sm transition-shadow
+       class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border hover:bg-gray-50 transition-colors
               {% if tipo == 'folder' %}bg-yellow-50 border-yellow-200 text-yellow-700
               {% elif tipo == 'sheet' %}bg-green-50 border-green-200 text-green-700
               {% elif tipo == 'doc' %}bg-blue-50 border-blue-200 text-blue-700
               {% elif tipo == 'slides' %}bg-orange-50 border-orange-200 text-orange-700
               {% elif tipo == 'pdf' %}bg-red-50 border-red-200 text-red-700
               {% else %}bg-gray-50 border-gray-200 text-gray-600{% endif %}">
-        {% if tipo == 'folder' %}📁{% elif tipo == 'sheet' %}📊{% elif tipo == 'doc' %}📄{% elif tipo == 'slides' %}📑{% elif tipo == 'pdf' %}📕{% else %}🔗{% endif %}
+        {% if tipo == 'folder' %}{{ icon('folder', 13) }}{% elif tipo == 'sheet' %}{{ icon('bar-chart', 13) }}{% elif tipo == 'doc' %}{{ icon('file', 13) }}{% elif tipo == 'slides' %}{{ icon('file', 13) }}{% elif tipo == 'pdf' %}{{ icon('file', 13) }}{% else %}{{ icon('link', 13) }}{% endif %}
         {{ adj.get('nombre', adj.url[:30]) }}
     </a>
     {% endfor %}
@@ -27,15 +28,15 @@
     <template x-for="(link, i) in links" :key="i">
         <div class="flex gap-2 mb-2">
             <input type="text" :name="'adj_nombre_'+i" x-model="link.nombre" placeholder="Nombre (ej: Carpeta Q1)"
-                   class="w-1/3 text-xs border border-gray-300 rounded-lg px-2 py-1.5">
+                   class="w-1/3 text-xs border border-gray-300 rounded-md px-2 py-1.5">
             <input type="url" :name="'adj_url_'+i" x-model="link.url" placeholder="https://drive.google.com/..."
-                   class="flex-1 text-xs border border-gray-300 rounded-lg px-2 py-1.5">
+                   class="flex-1 text-xs border border-gray-300 rounded-md px-2 py-1.5">
             <button type="button" @click="links.splice(i, 1)" x-show="links.length > 1"
-                    class="text-red-400 hover:text-red-600 text-xs px-1">✕</button>
+                    class="text-red-400 hover:text-red-600 text-xs px-1">{{ icon('x', 13) }}</button>
         </div>
     </template>
     <button type="button" @click="if(links.length < {{ max }}) links.push({ nombre: '', url: '' })"
             class="text-xs text-brand-600 hover:text-brand-700 font-medium">+ Agregar link</button>
-    <p class="text-xs text-gray-400 mt-1">Auto-detecta: Drive 📁, Sheets 📊, Docs 📄, Slides 📑, PDF 📕</p>
+    <p class="text-xs text-gray-400 mt-1">Auto-detecta carpetas de Drive, Sheets, Docs, Slides y PDF</p>
 </div>
 {% endmacro %}

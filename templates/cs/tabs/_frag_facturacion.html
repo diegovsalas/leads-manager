@@ -1,13 +1,13 @@
 {# FEAT-2026-08-14: fragmento recuperado del cs_account_detail.html
    original, sin cambios funcionales. Se carga por AJAX al desplegar
    su <details>, para no pagar sus agregados en la primera pintura. #}
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+        <div class="bg-white rounded-md border border-gray-100 p-5 mb-6">
             <h2 class="text-sm font-semibold text-gray-800 mb-4">Facturación por Mes — AROMATEX vs PESTEX</h2>
             <div style="max-height:220px"><canvas id="factTabChartUN"></canvas></div>
         </div>
 
-        {% set un_tabs = {'AROMATEX': {'icon': '🌿', 'color': 'purple'}, 'PESTEX': {'icon': '🛡️', 'color': 'green'}} %}
-        <div x-data="{ unTab: 'all' }" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        {% set un_tabs = {'AROMATEX': {'icon': 'leaf', 'color': 'purple'}, 'PESTEX': {'icon': 'shield', 'color': 'green'}} %}
+        <div x-data="{ unTab: 'all' }" class="bg-white rounded-md border border-gray-100 p-5">
             <!-- UN filter tabs -->
             <div class="flex items-center gap-2 mb-4">
                 <button @click="unTab='all'" :class="unTab==='all' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600'"

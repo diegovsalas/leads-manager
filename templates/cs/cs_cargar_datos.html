@@ -1,4 +1,5 @@
 {% extends "cs/cs_base.html" %}
+{% from "cs/_icons.html" import icon %}
 {% block title %}Cargar Datos — CS Avantex{% endblock %}
 {% block breadcrumb %}Cargar Datos{% endblock %}
 
@@ -15,7 +16,7 @@
 <div style="margin-bottom:14px;">
     {% for cat, msg in messages %}
     <div class="card" style="padding:12px 16px;border-left:4px solid {% if cat == 'error' %}var(--red,#c4412b){% else %}var(--blue,#2eaadc){% endif %};font-size:13px;">
-        <strong>{{ '⚠ Error' if cat == 'error' else 'ℹ' }}:</strong> {{ msg }}
+        <strong>{{ 'Error' if cat == 'error' else 'Aviso' }}:</strong> {{ msg }}
     </div>
     {% endfor %}
 </div>
@@ -102,9 +103,9 @@
         <details style="margin-top:12px">
             <summary style="font-size:12px;color:var(--ink-3);cursor:pointer">O subir CSV manualmente</summary>
         {% else %}
-        <div style="padding:10px;background:#fef3c7;border-radius:7px;margin-bottom:12px;font-size:12px;color:#92400e">
+        <div style="padding:10px;background:var(--warn-soft);border-radius:7px;margin-bottom:12px;font-size:12px;color:var(--warn-ink)">
             <strong>Zoho Analytics no configurado.</strong> Configura las variables de entorno para sincronizar automáticamente.
-            <a href="#zoho-setup" onclick="document.getElementById('zoho-setup-info').style.display='block'" style="color:#92400e;text-decoration:underline">Ver instrucciones</a>
+            <a href="#zoho-setup" onclick="document.getElementById('zoho-setup-info').style.display='block'" style="color:var(--warn-ink);text-decoration:underline">Ver instrucciones</a>
         </div>
         <div id="zoho-setup-info" style="display:none;padding:12px;background:var(--bg-sunken);border-radius:7px;margin-bottom:12px;font-size:11px;line-height:1.6">
             <strong>Pasos para conectar Zoho Analytics:</strong><br>

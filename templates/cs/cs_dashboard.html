@@ -1,4 +1,5 @@
 {% extends "cs/cs_base.html" %}
+{% from "cs/_icons.html" import icon %}
 {% block title %}Dashboard — CS Avantex{% endblock %}
 {% block breadcrumb %}Dashboard{% endblock %}
 
@@ -14,10 +15,10 @@
         <!-- FEAT-2026-06-29: filtro global por Unidad de Negocio -->
         <select id="cs-un-select" onchange="_csChangeUN(this.value)" class="btn" style="appearance:auto;padding-right:24px;" title="Unidad de Negocio">
             <option value="">Todas las UN</option>
-            <option value="Aromatex">🟧 Aromatex</option>
-            <option value="Pestex">🟨 Pestex</option>
-            <option value="Weldex">🟦 Weldex</option>
-            <option value="Nexo">🟪 Nexo</option>
+            <option value="Aromatex">Aromatex</option>
+            <option value="Pestex">Pestex</option>
+            <option value="Weldex">Weldex</option>
+            <option value="Nexo">Nexo</option>
         </select>
         <select onchange="_csChangePeriodo(this.value)" class="btn" style="appearance:auto;padding-right:24px">
             {% for p in periodos %}
@@ -27,13 +28,13 @@
         <!-- FEAT-2026-07-03: sync manual de fuentes externas (super_admin) -->
         {% if (user_rol or '').lower().replace(' ','_') == 'super_admin' %}
         <button type="button" onclick="_csSyncZoho(this)" class="btn" title="Fuerza el sync de Zoho Analytics → cs_appointments (operación/citas)">
-            🔄 Zoho (Citas)
+            {{ icon('refresh', 14) }} Zoho (Citas)
         </button>
         <button type="button" onclick="_csDiagnoseZoho(this)" class="btn" title="Diagnostica el error del refresh_token probando las 4 regiones de Zoho" style="font-size:12px;padding:4px 8px;">
-            🔍
+            {{ icon('search', 14) }}
         </button>
         <button type="button" onclick="_csSyncSavio(this)" class="btn" title="Fuerza el sync de Savio → savio_invoices + savio_payments + cs_invoices (facturación y pagos)">
-            💰 Savio (Facturas+Pagos)
+            {{ icon('wallet', 14) }} Savio (Facturas+Pagos)
         </button>
         {% endif %}
     </div>
@@ -92,7 +93,7 @@ async function _csDiagnoseZoho(btn){
         let msg = 'DIAGNÓSTICO ZOHO\n';
         msg += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
         msg += (d.diagnostico || 'sin diagnóstico') + '\n\n';
-        msg += '🔧 ACCIÓN: ' + (d.accion_sugerida || '—') + '\n\n';
+        msg += 'ACCIÓN: ' + (d.accion_sugerida || '—') + '\n\n';
         msg += 'Dominio actual en Render: ' + (d.dominio_configurado || 'accounts.zoho.com') + '\n';
         if(d.region_correcta){
             msg += '✓ Región correcta: ' + d.region_correcta + '\n';
@@ -198,8 +199,8 @@ async function _csSyncSavio(btn){
         </div>
         <!-- FEAT-2026-07-03: badge de cuentas sin sub Savio (dinámico) -->
         <div id="mrr-huerfanas-chip" style="display:none;margin-top:6px;">
-            <button type="button" onclick="_csAbrirHuerfanas()" style="all:unset;cursor:pointer;background:#FEF3C7;color:#92400E;font-size:11px;font-weight:600;padding:3px 8px;border-radius:4px;display:inline-flex;align-items:center;gap:4px;" title="Ver cuentas con MRR observado pero sin subscription registrada en Savio">
-                ⚠ <span id="mrr-huerfanas-count">—</span> sin sub Savio · <span id="mrr-huerfanas-monto">—</span>
+            <button type="button" onclick="_csAbrirHuerfanas()" style="all:unset;cursor:pointer;background:var(--warn-soft);color:var(--warn-ink);font-size:11px;font-weight:600;padding:3px 8px;border-radius:4px;display:inline-flex;align-items:center;gap:4px;" title="Ver cuentas con MRR observado pero sin subscription registrada en Savio">
+                <span id="mrr-huerfanas-count">—</span> sin sub Savio · <span id="mrr-huerfanas-monto">—</span>
             </button>
         </div>
     </div>
@@ -386,7 +387,7 @@ async function _csSyncSavio(btn){
                     <td class="primary"><a href="/cs/account/{{ acc.id }}">{% if acc.client_id %}<span style="font-size:10px;font-weight:700;color:var(--copper);margin-right:4px">{{ acc.client_id }}</span>{% endif %}{{ acc.nombre }}</a></td>
                     <td><div class="hstack"><span class="ava">{{ acc.kam.nombre[:2]|upper if acc.kam else '?' }}</span><span class="muted">{{ acc.kam.nombre.split(' ')[0] if acc.kam else '-' }}</span></div></td>
                     <td class="r"><strong>${{ "{:,.0f}".format(item.mrr_observado) }}</strong></td>
-                    <td class="r" {% if gap_warn %}style="color:var(--warn-ink);" title="Savio desactualizado: real es {{ '%.1f'|format(ratio) }}× el contratado"{% endif %}>${{ "{:,.0f}".format(item.mrr) }}{% if gap_warn %} ⚠{% endif %}</td>
+                    <td class="r" {% if gap_warn %}style="color:var(--warn-ink);" title="Savio desactualizado: real es {{ '%.1f'|format(ratio) }}× el contratado"{% endif %}>${{ "{:,.0f}".format(item.mrr) }}{% if gap_warn %} {% endif %}</td>
                     <td class="r">{{ "{:.1f}".format(item.pct_total) }}%</td>
                     <td class="c"><span class="score {{ st }}">{{ hs.score if hs.score is not none else '—' }}</span></td>
                 </tr>
@@ -406,7 +407,7 @@ async function _csSyncSavio(btn){
                     </div>
                     <div class="bar" style="height:8px;"><span style="width:{{ top5_concentracion|int }}%;background:{{ conc_color }};"></span></div>
                     <div style="font-size:11px;color:var(--ink-3);margin-top:4px;">
-                        {% if top5_concentracion >= 70 %}⚠ Concentración alta — un churn top duele mucho.
+                        {% if top5_concentracion >= 70 %}Concentración alta — un churn top duele mucho.
                         {% elif top5_concentracion >= 50 %}Concentración moderada — vigila los tops.
                         {% else %}Diversificación sana del portafolio.{% endif %}
                     </div>
@@ -457,7 +458,7 @@ async function _csSyncSavio(btn){
                     <td class="r">{{ k.num_cuentas }}</td>
                     <td class="r">{{ "{:,}".format(k.sucursales) }}</td>
                     <td class="r"><strong>${{ "{:,.0f}".format(k.mrr_observado) }}</strong></td>
-                    <td class="r" {% if k_ratio >= 2 %}style="color:var(--warn-ink);" title="Real es {{ '%.1f'|format(k_ratio) }}× el contratado"{% endif %}>${{ "{:,.0f}".format(k.mrr) }}{% if k_ratio >= 2 %} ⚠{% endif %}</td>
+                    <td class="r" {% if k_ratio >= 2 %}style="color:var(--warn-ink);" title="Real es {{ '%.1f'|format(k_ratio) }}× el contratado"{% endif %}>${{ "{:,.0f}".format(k.mrr) }}{% if k_ratio >= 2 %} {% endif %}</td>
                     <!-- FEAT-2026-07-03: se llena dinámicamente por JS via /cs/api/email-response-times -->
                     <td class="r kam-response-cell" data-kam-id="{{ k.id }}"><span class="muted">—</span></td>
                 </tr>
@@ -492,15 +493,15 @@ async function _csSyncSavio(btn){
 
 <!-- FEAT-2026-07-03: Modal "Cuentas sin sub Savio" -->
 <div id="huerfanas-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;" onclick="if(event.target===this)_csCerrarHuerfanas()">
-    <div style="background:#fff;border-radius:12px;padding:24px;max-width:900px;width:92%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.3);">
+    <div style="background:var(--bg-card);border-radius:12px;padding:24px;max-width:900px;width:92%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.3);">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
             <div>
-                <h3 style="margin:0;font-size:18px;">⚠ Cuentas con MRR real pero sin subscription en Savio</h3>
+                <h3 style="margin:0;font-size:18px;">Cuentas con MRR real pero sin subscription en Savio</h3>
                 <p class="muted" style="font-size:12px;margin:4px 0 0;">MRR contratado = $0 pero MRR observado (facturación recurrente real de últimos 5m) > 0. Indica que Savio no tiene la sub registrada aunque el negocio sí factura.</p>
             </div>
-            <button onclick="_csCerrarHuerfanas()" style="all:unset;cursor:pointer;font-size:20px;color:#999;line-height:1;">×</button>
+            <button onclick="_csCerrarHuerfanas()" style="all:unset;cursor:pointer;font-size:20px;color:var(--ink-3);line-height:1;">×</button>
         </div>
-        <div id="huerfanas-summary" style="background:#FEF3C7;padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:13px;">
+        <div id="huerfanas-summary" style="background:var(--warn-soft);padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:13px;">
             Cargando…
         </div>
         <table class="tbl" style="width:100%;">
@@ -515,12 +516,12 @@ async function _csSyncSavio(btn){
                 </tr>
             </thead>
             <tbody id="huerfanas-body">
-                <tr><td colspan="6" style="text-align:center;padding:24px;color:#999">Cargando…</td></tr>
+                <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--ink-3)">Cargando…</td></tr>
             </tbody>
         </table>
-        <div style="margin-top:12px;font-size:11px;color:#666;background:#F3F4F6;padding:10px 12px;border-radius:6px;">
+        <div style="margin-top:12px;font-size:11px;color:var(--ink-2);background:var(--bg-surface-2);padding:10px 12px;border-radius:6px;">
             <strong>Cómo resolverlo:</strong> pasar esta lista al equipo que administra Savio para que
-            revise/recree las subscriptions de estas cuentas. Después clic en 💰 Savio (Fact+Pagos) y el MRR contratado se refleja.
+            revise/recree las subscriptions de estas cuentas. Después clic en Savio (Fact+Pagos) y el MRR contratado se refleja.
         </div>
     </div>
 </div>
@@ -550,7 +551,7 @@ function _csAbrirHuerfanas(){
   const render = d => {
     sum.innerHTML = `<strong>${d.total} cuentas</strong> · MRR no reflejado: <strong>$${Math.round(d.mrr_no_reflejado).toLocaleString('en-US')}/mes</strong> · ARR: <strong>$${Math.round(d.arr_no_reflejado).toLocaleString('en-US')}/año</strong>`;
     if(!d.cuentas.length){
-      body.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:#059669">✓ Sin cuentas huérfanas — todas las que facturan tienen sub en Savio</td></tr>';
+      body.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--ok)">✓ Sin cuentas huérfanas — todas las que facturan tienen sub en Savio</td></tr>';
       return;
     }
     body.innerHTML = d.cuentas.map(c => `
@@ -587,9 +588,9 @@ function _csCerrarHuerfanas(){
 
   function levelBadge(h){
     if(h === null || h === undefined) return '<span style="color:var(--ink-3)">sin datos</span>';
-    if(h <= 4)  return '<span style="background:#D4EDDA;color:#1B5E20;padding:2px 8px;border-radius:4px;font-size:12px">Excelente</span>';
-    if(h <= 24) return '<span style="background:#FFF3CD;color:#856404;padding:2px 8px;border-radius:4px;font-size:12px">Aceptable</span>';
-    return '<span style="background:#F8D7DA;color:#721C24;padding:2px 8px;border-radius:4px;font-size:12px">Lento</span>';
+    if(h <= 4)  return '<span style="background:var(--ok-soft);color:var(--ok-ink);padding:2px 8px;border-radius:4px;font-size:12px">Excelente</span>';
+    if(h <= 24) return '<span style="background:var(--warn-soft);color:var(--warn-ink);padding:2px 8px;border-radius:4px;font-size:12px">Aceptable</span>';
+    return '<span style="background:var(--danger-soft);color:var(--danger-ink);padding:2px 8px;border-radius:4px;font-size:12px">Lento</span>';
   }
 
   fetch('/cs/api/email-response-times').then(r=>r.json()).then(payload=>{
@@ -612,7 +613,7 @@ function _csCerrarHuerfanas(){
         gVal.style.color = h <= 4 ? 'var(--ok-ink)' : (h <= 24 ? 'var(--warn-ink)' : 'var(--danger-ink)');
         const b2 = global.pct_bajo_2h.toFixed(0);
         const b24= global.pct_bajo_24h.toFixed(0);
-        gFoot.innerHTML = `<span class="muted">${global.n_emails} correos · ${b2}% en 2h · ${b24}% en 24h${global.pendientes ? ' · <strong style="color:var(--warn-ink)">⚠ '+global.pendientes+' pendientes</strong>' : ''}</span>`;
+        gFoot.innerHTML = `<span class="muted">${global.n_emails} correos · ${b2}% en 2h · ${b24}% en 24h${global.pendientes ? ' · <strong style="color:var(--warn-ink)">'+global.pendientes+' pendientes</strong>' : ''}</span>`;
       }
     }
 
@@ -626,7 +627,7 @@ function _csCerrarHuerfanas(){
       }
       const color = d.median_hours <= 4 ? 'var(--ok-ink)'
                   : d.median_hours <= 24 ? 'var(--warn-ink)' : 'var(--danger-ink)';
-      const pend = d.pendientes ? ` <span title="Pendientes" style="color:var(--warn-ink)">⚠${d.pendientes}</span>` : '';
+      const pend = d.pendientes ? ` <span title="Pendientes" style="color:var(--warn-ink)">${d.pendientes}</span>` : '';
       td.innerHTML = `<span style="color:${color};font-weight:600" title="${d.n_emails} correos · ${d.pct_bajo_2h.toFixed(0)}% en 2h">${fmtHours(d.median_hours)}</span>${pend}`;
     });
 

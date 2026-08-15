@@ -1,3 +1,4 @@
+{% from "cs/_icons.html" import icon %}
 {# ═══════════════════════════════════════════════════════════════
    FEAT-2026-08-14: macros de UI compartidos del Client View.
    Empty states, skeletons y piezas chicas reutilizables.
@@ -9,20 +10,22 @@
    58% no tiene contactos. Por eso todo empty state ofrece la
    acción que lo llena, en vez de solo decir "sin datos".        #}
 {% macro empty_state(icono, titulo, mensaje, cta_texto=None, cta_onclick=None, cta_href=None) %}
-<div class="flex flex-col items-center justify-center text-center py-10 px-6">
-    <div class="w-11 h-11 rounded-full bg-gray-50 border border-gray-200 grid place-items-center text-lg mb-3"
-         aria-hidden="true">{{ icono }}</div>
+{# FEAT-2026-08-14: `icono` es ahora el NOMBRE de un icono Lucide
+   (ver cs/_icons.html), no un emoji. #}
+<div class="flex flex-col items-center justify-center text-center py-9 px-6">
+    <div class="w-9 h-9 rounded-md border grid place-items-center mb-3"
+         style="border-color:var(--border);color:var(--ink-3)">{{ icon(icono, 18) }}</div>
     <p class="text-sm font-semibold text-gray-700">{{ titulo }}</p>
     <p class="text-xs text-gray-500 mt-1 max-w-sm leading-relaxed">{{ mensaje }}</p>
     {% if cta_texto %}
     {% if cta_href %}
     <a href="{{ cta_href }}"
-       class="mt-4 inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-600 text-white text-xs font-semibold rounded-lg hover:bg-brand-700 transition-colors">
+       class="mt-4 inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-600 text-white text-xs font-semibold rounded-md hover:bg-brand-700 transition-colors">
         {{ cta_texto }}
     </a>
     {% else %}
     <button type="button" onclick="{{ cta_onclick }}"
-            class="mt-4 inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-600 text-white text-xs font-semibold rounded-lg hover:bg-brand-700 transition-colors">
+            class="mt-4 inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-600 text-white text-xs font-semibold rounded-md hover:bg-brand-700 transition-colors">
         {{ cta_texto }}
     </button>
     {% endif %}
@@ -41,7 +44,7 @@
     <div class="cv-skel-bar" style="width:32%;height:14px;margin-bottom:18px"></div>
     {% endif %}
     {% for i in range(filas) %}
-    <div class="bg-white rounded-2xl border border-gray-100 p-5 mb-3">
+    <div class="bg-white rounded-md border border-gray-100 p-5 mb-3">
         <div class="cv-skel-bar" style="width:{{ [46, 62, 38, 54][i % 4] }}%;height:12px"></div>
         <div class="cv-skel-bar" style="width:{{ [88, 74, 92, 80][i % 4] }}%;height:9px;margin-top:12px"></div>
         <div class="cv-skel-bar" style="width:{{ [64, 82, 58, 70][i % 4] }}%;height:9px;margin-top:8px"></div>

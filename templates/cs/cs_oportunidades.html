@@ -1,4 +1,5 @@
 {% extends "cs/cs_base.html" %}
+{% from "cs/_icons.html" import icon %}
 {% block title %}Oportunidades — CS Avantex{% endblock %}
 {% block breadcrumb %}Oportunidades{% endblock %}
 
@@ -8,12 +9,12 @@
 .opp-section { border:1px solid var(--border); border-radius:10px; padding:14px; background:var(--bg-surface,#fafaf7); }
 .opp-section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--copper-ink,#a45a2a); margin:0 0 10px; display:flex; align-items:center; gap:6px; }
 .opp-label { font-size:11px; color:var(--ink-3); display:block; margin-bottom:4px; font-weight:500; }
-.opp-input { width:100%; height:36px; border:1px solid var(--border); border-radius:7px; padding:0 10px; font-size:13px; background:#fff; }
+.opp-input { width:100%; height:36px; border:1px solid var(--border); border-radius:7px; padding:0 10px; font-size:13px; background:var(--bg-card); }
 .opp-input:focus { outline:none; border-color:var(--copper,#c97432); }
 .opp-input[readonly] { background:var(--bg-sunken,#f0ede6); color:var(--ink-2); cursor:not-allowed; }
-.opp-textarea { width:100%; border:1px solid var(--border); border-radius:7px; padding:10px; font-size:13px; font-family:inherit; line-height:1.5; background:#fff; resize:vertical; }
+.opp-textarea { width:100%; border:1px solid var(--border); border-radius:7px; padding:10px; font-size:13px; font-family:inherit; line-height:1.5; background:var(--bg-card); resize:vertical; }
 .opp-tabs { display:flex; gap:6px; margin-bottom:10px; }
-.opp-tab { flex:1; padding:8px 12px; border:1.5px solid var(--border); border-radius:8px; background:#fff; font-size:12px; font-weight:600; cursor:pointer; text-align:center; }
+.opp-tab { flex:1; padding:8px 12px; border:1.5px solid var(--border); border-radius:8px; background:var(--bg-card); font-size:12px; font-weight:600; cursor:pointer; text-align:center; }
 .opp-tab.active { border-color:var(--copper,#c97432); background:var(--copper-soft,#f5e3d0); color:var(--copper-ink,#a45a2a); }
 </style>
 

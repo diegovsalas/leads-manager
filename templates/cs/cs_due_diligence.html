@@ -11,24 +11,24 @@
 .dd-hero{border:1px solid var(--border);border-radius:18px;background:linear-gradient(135deg,#ffffff 0%,#f8fafc 60%,rgba(63,73,148,.08) 100%);padding:20px 22px;margin-bottom:16px;box-shadow:var(--shadow-xs);}
 .dd-hero h1{margin:0;font-family:var(--font-display);font-weight:500;font-size:28px;letter-spacing:-.02em;color:var(--ink-1);}
 .dd-hero .sub{margin:5px 0 0;color:var(--ink-3);font-size:13px;}
-.dd-client{border:1px solid var(--border);border-radius:14px;background:#fff;box-shadow:var(--shadow-xs);overflow:hidden;margin-bottom:12px;}
-.dd-client-head{display:grid;grid-template-columns:minmax(220px,1.4fr) repeat(5,minmax(90px,1fr));gap:12px;align-items:center;padding:14px 16px;background:#fff;}
+.dd-client{border:1px solid var(--border);border-radius:14px;background:var(--bg-card);box-shadow:var(--shadow-xs);overflow:hidden;margin-bottom:12px;}
+.dd-client-head{display:grid;grid-template-columns:minmax(220px,1.4fr) repeat(5,minmax(90px,1fr));gap:12px;align-items:center;padding:14px 16px;background:var(--bg-card);}
 .dd-client-name{font-weight:700;color:var(--ink-1);font-size:14px;}
 .dd-client-sub{font-size:11px;color:var(--ink-3);margin-top:3px;}
 .dd-metric-label{font-size:9px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em;}
 .dd-metric-value{font-size:14px;font-weight:700;color:var(--ink-1);margin-top:2px;font-variant-numeric:tabular-nums;}
-.dd-props{border-top:1px solid var(--border-subtle);background:#f8fafc;}
+.dd-props{border-top:1px solid var(--border-subtle);background:var(--bg-surface-2);}
 .dd-prop{display:grid;grid-template-columns:minmax(220px,1.2fr) repeat(6,minmax(82px,1fr)) 170px;gap:10px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border-subtle);font-size:12px;}
 .dd-prop:last-child{border-bottom:none;}
 .dd-prop-name{font-weight:600;color:var(--ink-1);}
 .dd-chip{display:inline-flex;align-items:center;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:700;white-space:nowrap;}
-.dd-chip.ok{background:#D4EDDA;color:#1B5E20}.dd-chip.warn{background:#FFF3CD;color:#856404}.dd-chip.danger{background:#F8D7DA;color:#721C24}.dd-chip.info{background:#EDE9FE;color:#6D28D9}.dd-chip.neutral{background:#E5E7EB;color:#4B5563}
+.dd-chip.ok{background:var(--ok-soft);color:var(--ok-ink)}.dd-chip.warn{background:var(--warn-soft);color:var(--warn-ink)}.dd-chip.danger{background:var(--danger-soft);color:var(--danger-ink)}.dd-chip.info{background:var(--copper-soft);color:var(--copper)}.dd-chip.neutral{background:var(--border);color:var(--ink-2)}
 .dd-modal{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1000;align-items:center;justify-content:center;padding:20px;}
-.dd-modal-card{background:#fff;border-radius:14px;max-width:760px;width:96%;max-height:86vh;overflow:auto;box-shadow:0 24px 80px rgba(15,23,42,.22);}
+.dd-modal-card{background:var(--bg-card);border-radius:14px;max-width:760px;width:96%;max-height:86vh;overflow:auto;box-shadow:0 24px 80px rgba(15,23,42,.22);}
 .dd-modal-head{display:flex;justify-content:space-between;align-items:center;padding:18px 20px;border-bottom:1px solid var(--border-subtle);}
 .dd-modal-body{padding:18px 20px;display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .dd-field label{display:block;font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;font-weight:700;}
-.dd-field input,.dd-field select{width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px;background:#fff;color:var(--ink-1);}
+.dd-field input,.dd-field select{width:100%;height:34px;border:1px solid var(--border);border-radius:7px;padding:0 10px;font-size:13px;background:var(--bg-card);color:var(--ink-1);}
 @media(max-width:1100px){.dd-client-head,.dd-prop{grid-template-columns:1fr 1fr}.dd-modal-body{grid-template-columns:1fr}}
 </style>
 
@@ -44,8 +44,8 @@
             <option value="{{ o }}" {% if o == origen_filtro %}selected{% endif %}>{{ o }}</option>
             {% endfor %}
         </select>
-        <a href="/cs/due-diligence/respuestas{% if origen_filtro %}?origen={{ origen_filtro }}{% endif %}" class="btn" style="background:#1F4E3D;color:#fff;">
-            📊 Ver Respuestas NPS
+        <a href="/cs/due-diligence/respuestas{% if origen_filtro %}?origen={{ origen_filtro }}{% endif %}" class="btn" style="background:var(--ok-ink);color:var(--bg-card);">
+            Ver Respuestas NPS
         </a>
     </div>
 </div>
@@ -108,7 +108,7 @@
     <div style="padding:14px 16px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;">
         {% for seg in ['Grande', 'Mediano', 'Chico'] %}
         {% set s = dd_summary.segmentos.get(seg, {'cuentas':0,'arr':0,'riesgo_alto':0}) %}
-        <div style="border:1px solid var(--border);border-radius:10px;padding:12px;background:#fff;">
+        <div style="border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--bg-card);">
             <div style="font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.06em;">{{ seg }}</div>
             <div style="font-size:22px;font-weight:700;margin-top:3px;">{{ s.cuentas }}</div>
             <div style="font-size:12px;color:var(--ink-2);">ARR ${{ "{:,.0f}".format(s.arr) }}</div>
@@ -124,7 +124,7 @@
     <div class="card-head">
         <h3>Acciones bulk</h3>
     </div>
-    <div style="padding:12px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;background:#F8F5F0;border-radius:8px;margin:0 16px 16px;">
+    <div style="padding:12px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;background:var(--bg-surface-2);border-radius:8px;margin:0 16px 16px;">
         <div style="flex:1;min-width:200px;font-size:13px;color:var(--ink-2);">
             📌 <strong>Promover todas al KAM</strong>
             <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">Marca en_due_diligence=false, asigna kam_id. Las cuentas empiezan a aparecer en KPIs normales.</div>
@@ -135,7 +135,7 @@
             <option value="{{ k.id }}">{{ k.nombre }}</option>
             {% endfor %}
         </select>
-        <button onclick="_ddPromoverTodas()" class="btn ghost" style="background:#1F4E3D;color:#fff;">
+        <button onclick="_ddPromoverTodas()" class="btn ghost" style="background:var(--ok-ink);color:var(--bg-card);">
             Promover {{ total_cuentas }} cuentas
         </button>
     </div>
@@ -206,7 +206,7 @@
                         {% if resp_completa %}
                         <button onclick="_ddVerRespuesta('{{ c.id }}')" class="btn ghost" style="font-size:11px;padding:4px 8px;color:var(--ok-ink);">NPS {{ resp_completa[0].nps }}</button>
                         {% elif resp %}
-                        <span class="muted" style="font-size:11px;align-self:center;">🔗 Link creado</span>
+                        <span class="muted" style="font-size:11px;align-self:center;">Link creado</span>
                         {% endif %}
                     </div>
                 </div>
@@ -218,7 +218,7 @@
                 <div style="font-size:48px;margin-bottom:12px;opacity:.4;">📦</div>
                 <div style="font-size:16px;font-weight:600;color:var(--ink-2);margin-bottom:6px;">Sin cuentas en Due Diligence</div>
                 <div style="font-size:13px;color:var(--ink-3);margin-bottom:20px;">Carga los 130 clientes de Fugaci con un clic</div>
-                <button onclick="_ddCargarSeedFugaci(this)" class="btn" style="background:#1F4E3D;color:#fff;font-weight:600;padding:10px 20px;">
+                <button onclick="_ddCargarSeedFugaci(this)" class="btn" style="background:var(--ok-ink);color:var(--bg-card);font-weight:600;padding:10px 20px;">
                     📥 Cargar 130 clientes Fugaci
                 </button>
         </div>
@@ -228,13 +228,13 @@
 
 <!-- Modal: URL generada -->
 <div id="modal-url" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;" onclick="if(event.target===this)_ddCerrarUrl()">
-    <div style="background:#fff;padding:24px;border-radius:12px;max-width:600px;width:92%;">
+    <div style="background:var(--bg-card);padding:24px;border-radius:12px;max-width:600px;width:92%;">
         <h3 style="margin-bottom:8px;">URL de encuesta generada</h3>
         <p class="muted" style="font-size:12px;margin-bottom:12px;" id="modal-url-cuenta"></p>
-        <div style="background:#F3F4F6;padding:10px 12px;border-radius:6px;font-family:monospace;font-size:12px;word-break:break-all;margin-bottom:12px;" id="modal-url-value"></div>
+        <div style="background:var(--bg-surface-2);padding:10px 12px;border-radius:6px;font-family:monospace;font-size:12px;word-break:break-all;margin-bottom:12px;" id="modal-url-value"></div>
         <div style="display:flex;gap:8px;">
-            <button onclick="_ddCopiarUrl()" class="btn ghost" style="background:#1F4E3D;color:#fff;">📋 Copiar</button>
-            <button onclick="window.open(document.getElementById('modal-url-value').textContent, '_blank')" class="btn ghost">🔗 Abrir en pestaña</button>
+            <button onclick="_ddCopiarUrl()" class="btn ghost" style="background:var(--ok-ink);color:var(--bg-card);"> Copiar</button>
+            <button onclick="window.open(document.getElementById('modal-url-value').textContent, '_blank')" class="btn ghost"> Abrir en pestaña</button>
             <button onclick="_ddCerrarUrl()" class="btn" style="margin-left:auto;">Cerrar</button>
         </div>
         <p class="muted" style="font-size:11px;margin-top:12px;">Envíala por email, WhatsApp o el canal que prefieras. La página tiene look Fugaci puro, sin referencias a Avantex.</p>
@@ -243,7 +243,7 @@
 
 <!-- Modal: Ver respuesta -->
 <div id="modal-resp" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;" onclick="if(event.target===this)_ddCerrarResp()">
-    <div style="background:#fff;padding:24px;border-radius:12px;max-width:600px;width:92%;max-height:80vh;overflow-y:auto;">
+    <div style="background:var(--bg-card);padding:24px;border-radius:12px;max-width:600px;width:92%;max-height:80vh;overflow-y:auto;">
         <h3 style="margin-bottom:16px;">Respuesta de encuesta</h3>
         <div id="modal-resp-body"></div>
         <div style="text-align:right;margin-top:16px;"><button onclick="_ddCerrarResp()" class="btn">Cerrar</button></div>

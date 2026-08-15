@@ -8,7 +8,7 @@
 <div class="grid gap-4 grid-cols-1 lg:grid-cols-[1fr_320px] items-start">
 
     {# ── Timeline ────────────────────────────────────────────── #}
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 min-w-0">
+    <div class="bg-white rounded-md border border-gray-100 p-5 min-w-0">
         <div class="flex items-baseline justify-between gap-3 mb-4 flex-wrap">
             <div>
                 <h2 class="text-sm font-semibold text-gray-800">Historial de contacto</h2>
@@ -29,13 +29,13 @@
         </div>
 
         {# Alta rápida de nota #}
-        <form method="POST" action="/cs/account/{{ account.id }}/notes" class="mb-5 p-4 bg-gray-50 rounded-xl border border-gray-200">
+        <form method="POST" action="/cs/account/{{ account.id }}/notes" class="mb-5 p-4 bg-gray-50 rounded-md border border-gray-200">
             <input type="hidden" name="autor" value="{{ user_nombre or '' }}">
             <label for="cv-hist-nota" class="cv-label">Registrar minuta o acuerdo</label>
             <textarea id="cv-hist-nota" name="contenido" rows="3" required
                       placeholder="Resumen de la llamada, acuerdos y siguientes pasos…"
                       class="cv-input resize-none"></textarea>
-            <button type="submit" class="mt-2 px-4 py-2 bg-brand-600 text-white text-sm font-semibold rounded-xl hover:bg-brand-700 transition-colors">
+            <button type="submit" class="mt-2 px-4 py-2 bg-brand-600 text-white text-sm font-semibold rounded-md hover:bg-brand-700 transition-colors">
                 Guardar en el historial
             </button>
         </form>
@@ -71,13 +71,13 @@
             Ningún evento de ese tipo en el historial.
         </p>
         {% else %}
-        {{ empty_state('🕓', 'Historial vacío',
+        {{ empty_state('clock', 'Historial vacío',
                        'No hay correos, notas ni incidencias registradas para esta cuenta. La nota de arriba será el primer evento.') }}
         {% endif %}
     </div>
 
     {# ── Contactos ───────────────────────────────────────────── #}
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 min-w-0">
+    <div class="bg-white rounded-md border border-gray-100 p-5 min-w-0">
         {{ section_head('Contactos', 'Con quién se sostiene la relación') }}
         {% if contactos %}
         <div class="space-y-3">
@@ -99,7 +99,7 @@
         <a href="/cs/contactos/crear?account_id={{ account.id }}"
            class="mt-4 block text-center text-xs font-semibold text-brand-600 hover:text-brand-700">+ Agregar contacto</a>
         {% else %}
-        {{ empty_state('👤', 'Sin contactos',
+        {{ empty_state('user', 'Sin contactos',
                        'No hay a quién buscar en esta cuenta.',
                        'Agregar el primero', cta_href='/cs/contactos/crear?account_id=' ~ account.id) }}
         {% endif %}

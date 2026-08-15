@@ -1,4 +1,5 @@
 {% extends "cs/cs_base.html" %}
+{% from "cs/_icons.html" import icon %}
 {% block title %}Incidencias — CS Avantex{% endblock %}
 {% block breadcrumb %}Incidencias{% endblock %}
 
@@ -74,7 +75,7 @@
                     <td class="muted" style="font-size:12.5px">{{ inc.fecha_incidencia.strftime('%d/%m/%Y') if inc.fecha_incidencia else '—' }}</td>
                     <td style="font-size:12.5px;{% if vencida %}color:var(--danger-ink);font-weight:600{% endif %}">
                         {{ inc.fecha_compromiso.strftime('%d/%m/%Y') if inc.fecha_compromiso else '—' }}
-                        {% if vencida %}⚠{% endif %}
+                        {% if vencida %}<span style="color:var(--danger)">{{ icon('alert-triangle', 13) }}</span>{% endif %}
                     </td>
                     <td class="c">
                         <span class="pill {% if inc.status == 'Abierta' %}danger{% elif inc.status == 'En proceso' %}warn{% else %}ok{% endif %}">

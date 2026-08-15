@@ -7,29 +7,29 @@
 {# ── Resumen de estado ───────────────────────────────────────── #}
 {% set inc_abiertas = incidencias|selectattr('status','ne','Resuelta')|list %}
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 min-w-0">
+    <div class="bg-white rounded-md border border-gray-100 p-4 min-w-0">
         <p class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Tareas abiertas</p>
         <p class="text-xl font-bold text-gray-800 tabular-nums mt-1">{{ tareas_pendientes }}</p>
     </div>
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 min-w-0">
+    <div class="bg-white rounded-md border border-gray-100 p-4 min-w-0">
         <p class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Entregables</p>
         <p class="text-xl font-bold text-gray-800 tabular-nums mt-1">{{ entregables|length }}</p>
     </div>
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 min-w-0">
+    <div class="bg-white rounded-md border border-gray-100 p-4 min-w-0">
         <p class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Incidencias abiertas</p>
         <p class="text-xl font-bold tabular-nums mt-1 {% if inc_abiertas %}text-red-700{% else %}text-gray-800{% endif %}">{{ inc_abiertas|length }}</p>
     </div>
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 min-w-0">
+    <div class="bg-white rounded-md border border-gray-100 p-4 min-w-0">
         <p class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Sucursales</p>
         <p class="text-xl font-bold text-gray-800 tabular-nums mt-1">{{ propiedades|length }}</p>
     </div>
 </div>
 
 {# ── Tareas ──────────────────────────────────────────────────── #}
-<div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 min-w-0 mb-4">
+<div class="bg-white rounded-md border border-gray-100 p-5 min-w-0 mb-4">
     {{ section_head('Tareas y juntas', 'Las de tipo QBR, Junta, Catch-up o Reunión alimentan el highlight de "próxima junta".') }}
 
-    <form action="/cs/account/{{ account.id }}/tasks" method="POST" class="mb-5 p-4 bg-gray-50 rounded-xl border border-gray-200">
+    <form action="/cs/account/{{ account.id }}/tasks" method="POST" class="mb-5 p-4 bg-gray-50 rounded-md border border-gray-200">
         <div class="grid gap-3 grid-cols-1 md:grid-cols-4">
             <div class="md:col-span-2">
                 <label for="tk-desc" class="cv-label">Descripción <span class="text-red-500">*</span></label>
@@ -57,7 +57,7 @@
                 <input id="tk-resp" name="responsable" class="cv-input" value="{{ user_nombre or '' }}">
             </div>
             <div class="md:col-span-2 flex items-end">
-                <button type="submit" class="px-4 py-2 bg-brand-600 text-white text-sm font-semibold rounded-xl hover:bg-brand-700 transition-colors">
+                <button type="submit" class="px-4 py-2 bg-brand-600 text-white text-sm font-semibold rounded-md hover:bg-brand-700 transition-colors">
                     Agregar tarea
                 </button>
             </div>
@@ -67,7 +67,7 @@
     {% if tasks %}
     <div class="space-y-2">
         {% for t in tasks %}
-        <div class="flex items-start gap-3 p-3 rounded-xl border {% if t.completada %}border-gray-100 bg-gray-50{% else %}border-gray-200{% endif %}">
+        <div class="flex items-start gap-3 p-3 rounded-md border {% if t.completada %}border-gray-100 bg-gray-50{% else %}border-gray-200{% endif %}">
             <form action="/cs/account/{{ account.id }}/tasks/{{ t.id }}/toggle" method="POST" class="pt-0.5">
                 <button type="submit" class="w-4 h-4 rounded border-2 grid place-items-center shrink-0
                     {% if t.completada %}bg-green-500 border-green-500 text-white{% else %}border-gray-300 hover:border-brand-500{% endif %}"
@@ -99,13 +99,13 @@
         {% endfor %}
     </div>
     {% else %}
-    {{ empty_state('📋', 'Sin tareas registradas',
+    {{ empty_state('clipboard', 'Sin tareas registradas',
                    'Agenda la próxima junta o catch-up con el formulario de arriba para que aparezca en el banner.') }}
     {% endif %}
 </div>
 
 {# ── Entregables ─────────────────────────────────────────────── #}
-<div id="entregables" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 min-w-0 mb-4">
+<div id="entregables" class="bg-white rounded-md border border-gray-100 p-5 min-w-0 mb-4">
     <div class="flex items-baseline justify-between gap-3 mb-4 flex-wrap">
         <div>
             <h2 class="text-sm font-semibold text-gray-800">Entregables recurrentes</h2>
@@ -124,7 +124,7 @@
             <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">{{ un }}</p>
             <div class="space-y-2">
                 {% for e in items %}
-                <div class="flex items-start gap-3 p-3 rounded-xl border border-gray-200">
+                <div class="flex items-start gap-3 p-3 rounded-md border border-gray-200">
                     <span class="w-6 h-6 rounded-full bg-brand-50 text-brand-700 text-[11px] font-bold grid place-items-center shrink-0">{{ loop.index }}</span>
                     <div class="min-w-0 flex-1">
                         <p class="text-sm text-gray-800">{{ e.descripcion }}</p>
@@ -145,14 +145,14 @@
         {% endfor %}
     </div>
     {% else %}
-    {{ empty_state('🗺️', 'Sin mapa de procesos',
+    {{ empty_state('route', 'Sin mapa de procesos',
                    'El 77% de las cuentas está en esta situación. Definir los entregables es lo que permite medir cumplimiento.',
                    'Definir el primer paso', cta_onclick="cvOpenModal('modal-add-entregable')") }}
     {% endif %}
 </div>
 
 {# ── Encuesta de carga operativa ─────────────────────────────── #}
-<details class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-4 group"
+<details class="bg-white rounded-md border border-gray-100 mb-4 group"
          {% if workload_survey %}open{% endif %}>
     <summary class="p-5 cursor-pointer list-none flex items-center justify-between gap-3">
         <div>
@@ -171,7 +171,7 @@
 </details>
 
 {# ── Incidencias ─────────────────────────────────────────────── #}
-<div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 min-w-0">
+<div class="bg-white rounded-md border border-gray-100 p-5 min-w-0">
     <div class="flex items-baseline justify-between gap-3 mb-4 flex-wrap">
         <div>
             <h2 class="text-sm font-semibold text-gray-800">Incidencias</h2>
@@ -232,7 +232,7 @@
         </table>
     </div>
     {% else %}
-    {{ empty_state('✅', 'Sin incidencias registradas',
+    {{ empty_state('check', 'Sin incidencias registradas',
                    'Ninguna incidencia levantada para esta cuenta. Si el cliente reporta algo, regístralo aquí para medir el SLA.',
                    'Registrar incidencia', cta_onclick="cvOpenModal('modal-add-incidencia')") }}
     {% endif %}

@@ -1,16 +1,16 @@
 {# FEAT-2026-08-14: fragmento recuperado del cs_account_detail.html
    original, sin cambios funcionales. Se carga por AJAX al desplegar
    su <details>, para no pagar sus agregados en la primera pintura. #}
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+        <div class="bg-white rounded-md border border-gray-100 p-5 mb-6">
             <h2 class="text-sm font-semibold text-gray-800 mb-4">Operación por Mes</h2>
             <div style="max-height:200px"><canvas id="opTabChart"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <div class="bg-white rounded-md border border-gray-100 p-5">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-sm font-semibold text-gray-700">Citas de Servicio · Plantilla activa</h2>
                 <div class="flex items-center gap-3">
                     <span class="text-xs text-gray-500">{{ appointments|length }} registros</span>
-                    <button onclick="abrirAgregarCita()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs rounded-lg font-medium">+ Agregar cita</button>
+                    <button onclick="abrirAgregarCita()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs rounded-md font-medium">+ Agregar cita</button>
                 </div>
             </div>
 

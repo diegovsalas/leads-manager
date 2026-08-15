@@ -16,11 +16,11 @@
    ═══════════════════════════════════════════════════════════════ #}
 
 <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
-    <a href="/cs/clientes" class="text-xs text-brand-600 hover:underline">← Todas las cuentas</a>
+    <a href="/cs/clientes" class="text-xs text-brand-600 hover:underline inline-flex items-center gap-1">{{ icon('arrow-left', 13) }} Todas las cuentas</a>
     <div class="flex items-center gap-2">
         <label for="cv-periodo" class="text-xs text-gray-500">Periodo</label>
         <select id="cv-periodo" onchange="window.location='/cs/account/{{ account.id }}?periodo='+this.value+'&tab='+cvTabActiva()"
-                class="text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white">
+                class="text-xs border border-gray-300 rounded-md px-2.5 py-1.5 bg-white">
             {% for p in periodos %}
             <option value="{{ p.value }}" {% if p.value == periodo_param %}selected{% endif %}>{{ p.label }}</option>
             {% endfor %}
@@ -34,7 +34,7 @@
 {% if account_alerts %}
 <div class="space-y-2 mb-4">
     {% for a in account_alerts %}
-    <div class="rounded-xl p-3 border-l-4 flex items-start justify-between gap-3 flex-wrap
+    <div class="rounded-md p-3 border-l-4 flex items-start justify-between gap-3 flex-wrap
         {% if a.severidad == 'critica' %}bg-red-50 border-red-500
         {% elif a.severidad == 'alta' %}bg-orange-50 border-orange-500
         {% else %}bg-amber-50 border-amber-400{% endif %}">
@@ -115,7 +115,7 @@
                 <button type="button" onclick="cvCloseModal('modal-renovacion')"
                         class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancelar</button>
                 <button type="submit"
-                        class="px-4 py-2 bg-brand-600 text-white text-sm font-semibold rounded-xl hover:bg-brand-700">Guardar</button>
+                        class="px-4 py-2 bg-brand-600 text-white text-sm font-semibold rounded-md hover:bg-brand-700">Guardar</button>
             </div>
         </form>
     </div>
@@ -145,25 +145,25 @@
 /* Los hijos de grid/flex no encogen por debajo de su contenido sin esto. */
 .cv-panel .grid > *, .cv-panel .flex > * { min-width: 0; }
 .cv-hl-lbl { font-size: 10px; font-weight: 600; letter-spacing: .07em;
-             text-transform: uppercase; color: #9ca3af; margin: 0 0 2px; }
-.cv-hl-val { font-size: 16px; font-weight: 700; color: #1f2937; margin: 0;
+             text-transform: uppercase; color: var(--ink-3); margin: 0 0 2px; }
+.cv-hl-val { font-size: 16px; font-weight: 700; color: var(--ink-1); margin: 0;
              font-variant-numeric: tabular-nums; line-height: 1.2;
              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cv-hl-val--sm { font-size: 13.5px; }
-.cv-hl-sub { font-size: 11px; color: #6b7280; margin: 2px 0 0;
+.cv-hl-sub { font-size: 11px; color: var(--ink-3); margin: 2px 0 0;
              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cv-hl-empty { font-size: 12px; font-weight: 600; color: #6d28d9; background: none;
+.cv-hl-empty { font-size: 12px; font-weight: 600; color: var(--copper); background: none;
                border: none; padding: 0; cursor: pointer; text-align: left; }
 .cv-hl-empty:hover { text-decoration: underline; }
 
 .cv-tabbar { display: flex; gap: 2px; border-bottom: 1px solid #e5e7eb;
              margin-bottom: 18px; overflow-x: auto; scrollbar-width: none; }
 .cv-tabbar::-webkit-scrollbar { display: none; }
-.cv-tab { padding: 9px 15px; font-size: 13.5px; font-weight: 500; color: #6b7280;
+.cv-tab { padding: 9px 15px; font-size: 13.5px; font-weight: 500; color: var(--ink-3);
           background: none; border: none; border-bottom: 2px solid transparent;
           cursor: pointer; white-space: nowrap; transition: color 120ms, border-color 120ms; }
-.cv-tab:hover { color: #4b5563; }
-.cv-tab--on { color: #6d28d9; border-bottom-color: #7c3aed; font-weight: 600; }
+.cv-tab:hover { color: var(--ink-2); }
+.cv-tab--on { color: var(--copper); border-bottom-color: var(--copper); font-weight: 600; }
 .cv-tab:focus-visible { outline: 2px solid #7c3aed; outline-offset: -2px; border-radius: 4px; }
 
 .cv-panel--off { display: none; }
@@ -174,44 +174,44 @@
                animation: cv-shimmer 1.3s ease-in-out infinite; }
 @keyframes cv-shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
 @media (prefers-reduced-motion: reduce) {
-    .cv-skel-bar { animation: none; background: #eef1f4; }
+    .cv-skel-bar { animation: none; background: var(--bg-surface-2); }
 }
 
 /* Formularios */
-.cv-label { display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px; }
+.cv-label { display: block; font-size: 11px; font-weight: 600; color: var(--ink-3); margin-bottom: 4px; }
 .cv-input { width: 100%; font-size: 13px; border: 1px solid #d1d5db; border-radius: 9px;
-            padding: 8px 11px; background: #fff; color: #1f2937; }
-.cv-input:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,.12); }
+            padding: 8px 11px; background: var(--bg-card); color: var(--ink-1); }
+.cv-input:focus { outline: none; border-color: var(--copper); box-shadow: 0 0 0 3px rgba(124,58,237,.12); }
 
 /* Modales del Client View */
 .cv-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45);
             z-index: 60; padding: 20px; overflow-y: auto; }
 .cv-modal--open { display: grid; place-items: center; }
-.cv-modal-box { background: #fff; border-radius: 16px; box-shadow: 0 20px 50px rgba(0,0,0,.25);
+.cv-modal-box { background: var(--bg-card); border-radius: 16px; box-shadow: 0 20px 50px rgba(0,0,0,.25);
                 width: 100%; max-width: 520px; padding: 22px; }
 
 /* Timeline */
 .cv-timeline { list-style: none; margin: 0; padding: 0; position: relative; }
 .cv-timeline::before { content: ''; position: absolute; left: 13px; top: 6px; bottom: 6px;
-                       width: 1px; background: #e5e7eb; }
+                       width: 1px; background: var(--border); }
 .cv-tl-item { display: flex; gap: 13px; padding-bottom: 18px; position: relative; }
 .cv-tl-item:last-child { padding-bottom: 0; }
-.cv-tl-dot { width: 27px; height: 27px; border-radius: 50%; background: #fff;
+.cv-tl-dot { width: 27px; height: 27px; border-radius: 50%; background: var(--bg-card);
              border: 1px solid #e5e7eb; display: grid; place-items: center;
              font-size: 12px; flex: none; z-index: 1; }
-.cv-tl-dot--incidencia { border-color: #fca5a5; background: #fef2f2; }
-.cv-tl-dot--correo { border-color: #bfdbfe; background: #eff6ff; }
-.cv-tl-dot--encuesta { border-color: #ddd6fe; background: #f5f3ff; }
+.cv-tl-dot--incidencia { border-color: var(--danger); background: var(--danger-soft); }
+.cv-tl-dot--correo { border-color: var(--copper-soft); background: var(--copper-soft); }
+.cv-tl-dot--encuesta { border-color: var(--copper-soft); background: var(--copper-soft); }
 .cv-tl-body { min-width: 0; flex: 1; padding-top: 3px; }
 
 .cv-filtro { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
-             border: 1px solid #e5e7eb; background: #fff; color: #6b7280; cursor: pointer; }
-.cv-filtro--on { background: #6d28d9; border-color: #6d28d9; color: #fff; }
+             border: 1px solid #e5e7eb; background: var(--bg-card); color: var(--ink-3); cursor: pointer; }
+.cv-filtro--on { background: var(--copper); border-color: var(--copper); color: var(--bg-card); }
 
-.cv-copy-btn { font-size: 11px; font-weight: 600; color: #6d28d9; background: #f5f3ff;
+.cv-copy-btn { font-size: 11px; font-weight: 600; color: var(--copper); background: var(--copper-soft);
                border: 1px solid #ddd6fe; border-radius: 8px; padding: 6px 10px;
                cursor: pointer; white-space: nowrap; }
-.cv-copy-btn:hover { background: #ede9fe; }
+.cv-copy-btn:hover { background: var(--copper-soft); }
 
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
            overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
@@ -261,11 +261,11 @@ async function cvCargarTab(name) {
     } catch (e) {
         cvCache[name] = false;   // permite reintentar
         panel.innerHTML = `
-            <div class="bg-white rounded-2xl border border-red-200 p-6 text-center">
+            <div class="bg-white rounded-md border border-red-200 p-6 text-center">
                 <p class="text-sm font-semibold text-gray-800">No se pudo cargar esta sección</p>
                 <p class="text-xs text-gray-500 mt-1">${e.message}</p>
                 <button type="button" onclick="cvCargarTab('${name}')"
-                        class="mt-3 px-3.5 py-2 bg-brand-600 text-white text-xs font-semibold rounded-lg">
+                        class="mt-3 px-3.5 py-2 bg-brand-600 text-white text-xs font-semibold rounded-md">
                     Reintentar
                 </button>
             </div>`;

@@ -1,0 +1,410 @@
+/* ═══════════════════════════════════════════════════════════════════
+   AVANTEX · Densidad Silenciosa
+   Sistema de diseño — FUENTE ÚNICA DE VERDAD.  FEAT-2026-08-14
+
+   Se carga DESPUÉS de avantex_cs.css y redefine sus variables. Los 281
+   renglones de CSS de componentes de ese archivo siguen intactos: solo
+   cambian los valores que consumen. Reemplaza al bloque "Pipe theme"
+   que vivía embebido en cs_base.html y que pisaba la paleta OKLCH.
+
+   Principio: la superficie calla para que el dato hable.
+     · El píxel se gana          · El borde antes que la sombra
+     · El color es semántica     · El icono es funcional
+     · Denso, no apretado
+
+   Contraste verificado (WCAG 2.1, fórmula de luminancia relativa):
+     claro   ink-1 16.5:1 · ink-2 7.3:1 · ink-3 4.6:1
+     oscuro  ink-1 14.5:1 · ink-2 7.3:1 · ink-3 4.6:1
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Modo claro ─────────────────────────────────────────────────── */
+:root,
+[data-theme="light"] {
+  /* Superficies. Canvas blanco puro; la separación es por borde y tono,
+     nunca por elevación. */
+  --bg-app:        #FFFFFF;
+  --bg-surface:    #FFFFFF;
+  --bg-card:       #FFFFFF;
+  --bg-surface-2:  #FBFBFA;
+  --bg-sunken:     #F6F6F4;
+  --bg-hover:      #F6F6F4;
+  --bg-tag:        #F6F6F4;
+  --bg-overlay:    #FFFFFF;
+
+  /* Bordes */
+  --border:        #E9E9E6;
+  --border-strong: #DCDCD8;
+  --border-subtle: #F0F0EE;
+
+  /* Texto — ink-4 es decorativo/deshabilitado, no apto para lectura */
+  --ink-1:         #1F1F1E;
+  --ink-2:         #575654;
+  --ink-3:         #767572;
+  --ink-4:         #757471;   /* 4.65:1 — se usa para texto en 4 vistas */
+  --ink-inverse:   #FFFFFF;
+
+  /* Acento primario: azul. Todo lo interactivo. En avantex_cs.css este
+     rol lo tiene --copper, así que se conserva el nombre. */
+  --copper:        #2F6FE0;
+  --copper-hover:  #1D4FA8;
+  --copper-soft:   #EEF3FD;
+  --copper-ink:    #1D4FA8;
+  --accent:        #2F6FE0;
+
+  /* Acento secundario: teal. Series de gráficas y datos destacados.
+     Nunca en controles, para no competir con la interactividad. */
+  --accent-alt:      #147D74;
+  --accent-alt-soft: #E8F4F2;
+
+  /* Semánticos — solo estado, jamás énfasis */
+  --ok:            #2E7D53;
+  --ok-soft:       #EAF4EE;
+  --ok-ink:        #256444;
+  --warn:          #9A6B10;
+  --warn-soft:     #FBF2E1;
+  --warn-ink:      #7A5410;
+  --danger:        #C0392B;
+  --danger-soft:   #FBEDEB;
+  --danger-ink:    #9A2E22;
+  --info:          #2F6FE0;
+  --olive:         #147D74;
+  --olive-soft:    #E8F4F2;
+  --olive-ink:     #0E5C55;
+
+  /* Marca (solo la firma del sidebar) */
+  --brand-steel:   #1F1F1E;
+  --brand-cyan:    #2F6FE0;
+  --brand-cyan-deep:#1D4FA8;
+
+  /* Sidebar claro: deja de ser un bloque índigo oscuro */
+  --side-bg:               #FBFBFA;
+  --side-border:           #E9E9E6;
+  --side-section:          #767572;
+  --side-brand:            #1F1F1E;
+  --side-item:             #575654;
+  --side-item-hover-bg:    #F0F0EE;
+  --side-item-active-bg:   #EEF3FD;
+  --side-item-active-ink:  #1D4FA8;
+  --side-item-active-bar:  #2F6FE0;
+
+  /* Sombras: casi inexistentes. Solo flota lo que de verdad flota. */
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: 0 1px 2px rgba(15,15,15,.05);
+  --shadow-lg: 0 4px 12px rgba(15,15,15,.08), 0 1px 2px rgba(15,15,15,.04);
+
+  /* Radios — solo tres escalones */
+  --r-xs: 4px;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+
+  /* Alturas fijas: no se improvisan por vista */
+  --h-topbar:   48px;
+  --h-viewhead: 44px;
+  --h-row:      32px;
+  --h-control:  30px;
+  --w-rail:     44px;
+  --w-sidebar:  208px;
+
+  /* Tipografía */
+  --font-sans:    Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-display: Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  color-scheme: light;
+}
+
+/* ── Modo oscuro ────────────────────────────────────────────────────
+   Tres estados importan: la preferencia "sistema" NO estampa atributo,
+   así que el bloque de media debe existir aparte del selector de tema. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg-app:        #191919;
+    --bg-surface:    #202020;
+    --bg-card:       #202020;
+    --bg-surface-2:  #242424;
+    --bg-sunken:     #161616;
+    --bg-hover:      #262626;
+    --bg-tag:        #262626;
+    --bg-overlay:    #252525;
+
+    --border:        #2E2E2E;
+    --border-strong: #3D3D3D;
+    --border-subtle: #242424;
+
+    --ink-1:         #E9E9E7;
+    --ink-2:         #A8A7A3;
+    --ink-3:         #83827E;
+    --ink-4:         #8C8B87;   /* 5.1:1 sobre #191919 */
+    --ink-inverse:   #191919;
+
+    --copper:        #5B93F0;
+    --copper-hover:  #7BA9F4;
+    --copper-soft:   #17233A;
+    --copper-ink:    #8CB4F5;
+    --accent:        #5B93F0;
+
+    --accent-alt:      #35A99C;
+    --accent-alt-soft: #122A28;
+
+    --ok:            #4E9E71;
+    --ok-soft:       #16271D;
+    --ok-ink:        #6DBA8D;
+    --warn:          #C79038;
+    --warn-soft:     #2A2113;
+    --warn-ink:      #DBA95A;
+    --danger:        #D9635A;
+    --danger-soft:   #2C1817;
+    --danger-ink:    #E88A82;
+    --info:          #5B93F0;
+    --olive:         #35A99C;
+    --olive-soft:    #122A28;
+    --olive-ink:     #5AC4B8;
+
+    --brand-steel:   #E9E9E7;
+    --brand-cyan:    #5B93F0;
+    --brand-cyan-deep:#8CB4F5;
+
+    --side-bg:               #1C1C1C;
+    --side-border:           #2E2E2E;
+    --side-section:          #83827E;
+    --side-brand:            #E9E9E7;
+    --side-item:             #A8A7A3;
+    --side-item-hover-bg:    #262626;
+    --side-item-active-bg:   #17233A;
+    --side-item-active-ink:  #8CB4F5;
+    --side-item-active-bar:  #5B93F0;
+
+    --shadow-xs: none;
+    --shadow-sm: none;
+    --shadow-md: 0 1px 2px rgba(0,0,0,.4);
+    --shadow-lg: 0 4px 12px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.3);
+
+    color-scheme: dark;
+  }
+}
+
+[data-theme="dark"] {
+  --bg-app:        #191919;
+  --bg-surface:    #202020;
+  --bg-card:       #202020;
+  --bg-surface-2:  #242424;
+  --bg-sunken:     #161616;
+  --bg-hover:      #262626;
+  --bg-tag:        #262626;
+  --bg-overlay:    #252525;
+
+  --border:        #2E2E2E;
+  --border-strong: #3D3D3D;
+  --border-subtle: #242424;
+
+  --ink-1:         #E9E9E7;
+  --ink-2:         #A8A7A3;
+  --ink-3:         #83827E;
+  --ink-4:         #8C8B87;
+  --ink-inverse:   #191919;
+
+  --copper:        #5B93F0;
+  --copper-hover:  #7BA9F4;
+  --copper-soft:   #17233A;
+  --copper-ink:    #8CB4F5;
+  --accent:        #5B93F0;
+
+  --accent-alt:      #35A99C;
+  --accent-alt-soft: #122A28;
+
+  --ok:            #4E9E71;
+  --ok-soft:       #16271D;
+  --ok-ink:        #6DBA8D;
+  --warn:          #C79038;
+  --warn-soft:     #2A2113;
+  --warn-ink:      #DBA95A;
+  --danger:        #D9635A;
+  --danger-soft:   #2C1817;
+  --danger-ink:    #E88A82;
+  --info:          #5B93F0;
+  --olive:         #35A99C;
+  --olive-soft:    #122A28;
+  --olive-ink:     #5AC4B8;
+
+  --brand-steel:   #E9E9E7;
+  --brand-cyan:    #5B93F0;
+  --brand-cyan-deep:#8CB4F5;
+
+  --side-bg:               #1C1C1C;
+  --side-border:           #2E2E2E;
+  --side-section:          #83827E;
+  --side-brand:            #E9E9E7;
+  --side-item:             #A8A7A3;
+  --side-item-hover-bg:    #262626;
+  --side-item-active-bg:   #17233A;
+  --side-item-active-ink:  #8CB4F5;
+  --side-item-active-bar:  #5B93F0;
+
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.3);
+
+  color-scheme: dark;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   DENSIDAD — las alturas que el sistema promete
+   ═══════════════════════════════════════════════════════════════════ */
+
+body, .shell, .side-link, .topbar, .content {
+  font-family: var(--font-sans);
+}
+
+body {
+  background: var(--bg-app);
+  color: var(--ink-1);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Barra superior: 52px → 48px */
+.topbar {
+  height: var(--h-topbar);
+  padding: 0 20px;
+  background: var(--bg-app);
+  border-bottom: 1px solid var(--border);
+  z-index: 30;
+}
+.topbar .breadcrumb { font-size: 12.5px; }
+.topbar .breadcrumb .cur { color: var(--ink-1); font-weight: 600; }
+.topbar .breadcrumb .sep { color: var(--ink-4); }
+
+.content { padding: 20px 20px 56px; background: var(--bg-app); }
+
+/* Encabezado de vista: título y acciones en la MISMA línea */
+.page-head {
+  min-height: var(--h-viewhead);
+  align-items: center;
+  margin-bottom: 14px;
+  gap: 10px;
+}
+.page-head h1 {
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 640;
+  letter-spacing: -.017em;
+  line-height: 1.3;
+}
+.page-head .sub { font-size: 12.5px; color: var(--ink-3); margin: 2px 0 0; }
+
+/* Tarjetas: borde, no sombra */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: none;
+}
+.card:hover { box-shadow: none; }
+
+/* Controles */
+.iconbtn {
+  width: var(--h-control); height: var(--h-control);
+  border-radius: var(--r-md);
+  background: transparent; border-color: transparent;
+  color: var(--ink-2);
+}
+.iconbtn:hover { background: var(--bg-hover); border-color: transparent; color: var(--ink-1); }
+.iconbtn svg { width: 16px; height: 16px; stroke-width: 1.5; }
+
+/* Navegación lateral */
+.sidebar { background: var(--side-bg); border-right: 1px solid var(--side-border); box-shadow: none; }
+.side-brand { height: var(--h-topbar); padding: 0 14px; border-bottom: 1px solid var(--side-border); }
+.side-link { border-radius: var(--r-sm); padding: 5px 8px; font-size: 12.5px; margin: 1px 6px; }
+.side-link .ico { width: 16px; height: 16px; stroke-width: 1.5; }
+.side-section { font-size: 10px; font-weight: 620; letter-spacing: .09em; padding: 14px 14px 5px; }
+
+/* ── Rail colapsable ────────────────────────────────────────────────
+   La barra lateral pasa de 208px a 44px con la tecla [ o el botón de
+   la barra superior. Por debajo de 1024px se colapsa sola: los 220px
+   fijos anteriores dejaban 170px de contenido en móvil y desbordaban
+   las 12 páginas del módulo. */
+.shell { grid-template-columns: var(--w-sidebar) minmax(0, 1fr); }
+
+.rail .shell { grid-template-columns: var(--w-rail) minmax(0, 1fr); }
+.rail .sidebar { width: var(--w-rail); overflow: hidden; }
+.rail .side-link { justify-content: center; padding: 5px 0; margin: 1px 5px; }
+.rail .side-link .label,
+.rail .side-section,
+.rail .side-brand .wm-full small,
+.rail .side-brand .tag-grupo,
+.rail .side-user .meta { display: none; }
+.rail .side-brand { justify-content: center; padding: 0; }
+.rail .side-brand .wm-row { font-size: 13px; }
+.rail .side-user { justify-content: center; padding: 8px 0; }
+.rail .side-link.active::before { left: 0; }
+
+/* Tooltip del rail: el icono solo necesita etiqueta al pasar el cursor */
+.rail .side-link { position: relative; }
+.rail .side-link:hover::after {
+  content: attr(data-label);
+  position: absolute; left: calc(100% + 8px); top: 50%;
+  transform: translateY(-50%);
+  background: var(--ink-1); color: var(--bg-app);
+  font-size: 11.5px; font-weight: 500; white-space: nowrap;
+  padding: 4px 8px; border-radius: var(--r-sm);
+  z-index: 50; pointer-events: none;
+}
+
+@media (max-width: 1023px) {
+  .shell { grid-template-columns: var(--w-rail) minmax(0, 1fr); }
+  .sidebar { width: var(--w-rail); overflow: hidden; }
+  .side-link { justify-content: center; padding: 5px 0; margin: 1px 5px; }
+  .side-link .label, .side-section,
+  .side-brand .wm-full small, .side-brand .tag-grupo,
+  .side-user .meta { display: none; }
+  .side-brand { justify-content: center; padding: 0; }
+  .side-user { justify-content: center; padding: 8px 0; }
+  .content { padding: 16px 16px 48px; }
+}
+
+/* Sidebar: avantex_cs.css fija estos colores en oklch literal, fuera del
+   sistema de tokens. Se redirigen aquí para que sigan al tema. */
+.side-brand .wm-steel,
+[data-theme="dark"] .side-brand .wm-steel { color: var(--side-brand); }
+.side-brand .wm-x,
+[data-theme="dark"] .side-brand .wm-x { color: var(--copper); }
+.side-brand .tag-grupo, .side-brand small { color: var(--ink-3); }
+.side-section,
+[data-theme="dark"] .side-section { color: var(--side-section); }
+.side-user .meta .name,
+[data-theme="dark"] .side-user .meta .name { color: var(--ink-1); }
+.side-user .meta .role,
+[data-theme="dark"] .side-user .meta .role { color: var(--ink-3); }
+.side-user .avatar {
+  background: var(--copper-soft); color: var(--copper-ink);
+  border: 1px solid var(--border);
+}
+.side-user .exit { color: var(--ink-3); }
+
+/* Avatares: avantex_cs.css los pinta con un gradiente y texto blanco, que
+   baja a ~3:1 en el extremo cálido. El sistema no usa gradientes: se
+   unifican al mismo tratamiento plano que el avatar del sidebar. */
+.ava, .side-user .avatar {
+  background: var(--copper-soft) !important;
+  color: var(--copper-ink) !important;
+  border: 1px solid var(--border);
+}
+.side-user .exit:hover { color: var(--ink-1); }
+
+/* Iconografía global: trazo fino, hereda color */
+.ico { stroke-width: 1.5; }
+
+/* Cifras alineadas */
+.tnum, .tabular { font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+  }
+}
