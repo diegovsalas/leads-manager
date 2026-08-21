@@ -60,16 +60,48 @@ def tasa_un(unidad, mensualidad):
 
     Se modela con tramos porque Pestex es escalonado. Una UN de tasa fija es
     simplemente un tramo con monto_hasta = NULL.
+
+    Gana el tramo MÁS ESPECÍFICO, no el primero por monto_desde. Sin esto, un
+    renglón catch-all (0 → sin tope) ensombrece cualquier escalón que se
+    capture después: la tasa nueva nunca aplicaría y nadie se enteraría.
+    Un tramo acotado le gana al abierto, y entre acotados gana el más estrecho.
+
     Devuelve (tasa, registro) o (None, None) si la UN no está configurada.
     """
     m = _d(mensualidad)
-    q = (ComisionTasa.query
-         .filter(ComisionTasa.unidad == unidad, ComisionTasa.activo.is_(True))
-         .order_by(ComisionTasa.monto_desde))
-    for t in q.all():
-        if m >= _d(t.monto_desde) and (t.monto_hasta is None or m <= _d(t.monto_hasta)):
-            return _d(t.tasa), t
-    return None, None
+    candidatos = [
+        t for t in ComisionTasa.query.filter(
+            ComisionTasa.unidad == unidad, ComisionTasa.activo.is_(True)).all()
+        if m >= _d(t.monto_desde) and (t.monto_hasta is None or m <= _d(t.monto_hasta))
+    ]
+    if not candidatos:
+        return None, None
+
+    def amplitud(t):
+        # None = sin tope: infinitamente amplio, siempre el último recurso
+        return (1, 0) if t.monto_hasta is None else (0, _d(t.monto_hasta) - _d(t.monto_desde))
+
+    mejor = min(candidatos, key=amplitud)
+    return _d(mejor.tasa), mejor
+
+
+def tramos_traslapados(unidad):
+    """Pares de tramos que se pisan entre sí. La UI lo muestra como aviso:
+    un traslape no rompe el cálculo (gana el más específico) pero casi
+    siempre significa que la configuración quedó a medias."""
+    filas = (ComisionTasa.query
+             .filter(ComisionTasa.unidad == unidad, ComisionTasa.activo.is_(True))
+             .order_by(ComisionTasa.monto_desde).all())
+    choques = []
+    for i, a in enumerate(filas):
+        for b in filas[i + 1:]:
+            a_hasta = _d(a.monto_hasta) if a.monto_hasta is not None else None
+            b_hasta = _d(b.monto_hasta) if b.monto_hasta is not None else None
+            solapan = (a_hasta is None or _d(b.monto_desde) <= a_hasta) and \
+                      (b_hasta is None or _d(a.monto_desde) <= b_hasta)
+            if solapan:
+                choques.append((a, b))
+    return choques
 
 
 def factor_descuento(pct_descuento):

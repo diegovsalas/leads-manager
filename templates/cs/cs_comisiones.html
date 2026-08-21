@@ -1,0 +1,394 @@
+{% extends "cs/cs_base.html" %}
+{% from "cs/_icons.html" import icon %}
+{% from "cs/_ui.html" import empty_state, chip %}
+{% block title %}Comisiones — Avantex{% endblock %}
+{% block breadcrumb %}Comisiones{% endblock %}
+
+{% block content %}
+{# FEAT-2026-08-21: matriz editable del tabulador multi-UN.
+   Todo lo que consume comisiones.py se captura aquí: cambiar una
+   política no requiere tocar código ni desplegar. #}
+
+<div class="cm-head">
+  <div>
+    <h1>Tabulador de comisiones</h1>
+    <p class="sub">La bolsa que cada unidad ya paga se reparte entre cuatro etapas.
+       Cambiar estos valores afecta toda venta que se cierre a partir de ahora;
+       lo ya pagado queda congelado.</p>
+  </div>
+</div>
+
+{% with mensajes = get_flashed_messages(with_categories=true) %}
+  {% if mensajes %}
+    {% for cat, msg in mensajes %}
+    <div class="cm-flash {{ 'is-err' if cat == 'error' else 'is-ok' }}">
+      {{ icon('alert-triangle' if cat == 'error' else 'check', 15) }}<span>{{ msg }}</span>
+    </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+{# ── 1 · Pesos de las etapas ─────────────────────────────────── #}
+<section class="cm-card">
+  <div class="cm-card-h">
+    <div>
+      <h2>Reparto por etapa</h2>
+      <p class="hint">Cuánto vale cada etapa dentro de la bolsa. Deben sumar 100%
+         exactamente, o la comisión se duplicaría o se perdería.</p>
+    </div>
+    <span class="cm-total {{ 'is-ok' if pesos_cuadran else 'is-err' }}">
+      {{ "%.0f"|format(suma_pesos * 100) }}%
+      {% if pesos_cuadran %}cuadra{% else %}NO cuadra{% endif %}
+    </span>
+  </div>
+
+  <form method="POST" action="/comisiones/pesos">
+    <div class="tw">
+      <table>
+        <thead><tr>
+          <th style="width:190px">Etapa</th><th style="width:96px" class="n">Peso</th>
+          <th>Qué incluye</th>
+        </tr></thead>
+        <tbody>
+          {% for e in etapas %}
+          <tr>
+            <td class="nw"><strong>{{ e.nombre }}</strong></td>
+            <td class="n">
+              <input class="cm-in cm-in-n" name="peso_{{ e.clave }}" inputmode="decimal"
+                     value="{{ "%.4g"|format(e.peso * 100) }}" aria-label="Peso de {{ e.nombre }}"><span class="cm-suf">%</span>
+            </td>
+            <td class="q">{{ e.descripcion }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="cm-actions">
+      <button type="submit" class="cm-btn cm-btn-primary">{{ icon('check', 14) }}Guardar pesos</button>
+      <span class="hint">Se valida la suma antes de guardar.</span>
+    </div>
+  </form>
+</section>
+
+{# ── 2 · Tasas por unidad de negocio ─────────────────────────── #}
+<section class="cm-card">
+  <div class="cm-card-h">
+    <div>
+      <h2>Tasa por unidad de negocio</h2>
+      <p class="hint">La bolsa a repartir, sobre la primera mensualidad. Una unidad
+         con varios tramos es escalonada: se aplica el que corresponda al monto de la venta.</p>
+    </div>
+    <button type="button" class="cm-btn" onclick="cmToggle('form-tramo')">
+      {{ icon('plus', 14) }}Agregar tramo
+    </button>
+  </div>
+
+  <div id="form-tramo" class="cm-nuevo" hidden>
+    <form method="POST" action="/comisiones/tasa/nueva" class="cm-grid">
+      <label>Unidad<input class="cm-in" name="unidad" required placeholder="Pestex" list="lista-un"></label>
+      <datalist id="lista-un">
+        {% for un in por_unidad.keys() %}<option value="{{ un }}">{% endfor %}
+      </datalist>
+      <label>Desde<input class="cm-in" name="monto_desde" inputmode="decimal" value="0"></label>
+      <label>Hasta<input class="cm-in" name="monto_hasta" inputmode="decimal" placeholder="sin tope"></label>
+      <label>Tasa %<input class="cm-in" name="tasa" inputmode="decimal" required placeholder="25.4"></label>
+      <label class="cm-wide">Nota<input class="cm-in" name="nota" placeholder="Opcional"></label>
+      <div class="cm-actions">
+        <button type="submit" class="cm-btn cm-btn-primary">Agregar</button>
+        <button type="button" class="cm-btn" onclick="cmToggle('form-tramo')">Cancelar</button>
+      </div>
+    </form>
+  </div>
+
+  {% for unidad, tramos in por_unidad.items() %}
+  <div class="cm-un">
+    <div class="cm-un-h">
+      <span class="cm-un-nom">{{ unidad }}</span>
+      {% if tramos|length > 1 %}{{ chip('escalonada · ' ~ tramos|length ~ ' tramos', 'info') }}
+      {% else %}{{ chip('tasa fija', 'neutral') }}{% endif %}
+      {% if tramos | selectattr('nota') | first %}{{ chip('con salvedad', 'warn') }}{% endif %}
+      {% if traslapes.get(unidad) %}{{ chip('tramos traslapados', 'danger') }}{% endif %}
+    </div>
+
+    {% if traslapes.get(unidad) %}
+    <div class="cm-traslape">
+      {{ icon('alert-triangle', 14) }}
+      <span><strong>Hay tramos que se pisan.</strong> El cálculo usa el más específico
+        —un rango acotado le gana a uno sin tope— pero normalmente esto significa que
+        quedó un renglón general ensombreciendo los escalones nuevos. Acota o desactiva
+        el que sobra.</span>
+    </div>
+    {% endif %}
+
+    <div class="tw">
+      <table>
+        <thead><tr>
+          <th class="n" style="width:110px">Desde</th>
+          <th class="n" style="width:110px">Hasta</th>
+          <th class="n" style="width:92px">Tasa</th>
+          <th>Nota</th>
+          <th style="width:76px">Activa</th>
+          <th style="width:120px"></th>
+        </tr></thead>
+        <tbody>
+          {% for t in tramos %}
+          <tr>
+            <form method="POST" action="/comisiones/tasa/{{ t.id }}" id="ft{{ t.id }}"></form>
+            <td class="n"><input form="ft{{ t.id }}" class="cm-in cm-in-n" name="monto_desde"
+                   inputmode="decimal" value="{{ "%.0f"|format(t.monto_desde) }}" aria-label="Monto desde"></td>
+            <td class="n"><input form="ft{{ t.id }}" class="cm-in cm-in-n" name="monto_hasta"
+                   inputmode="decimal" placeholder="sin tope"
+                   value="{{ "%.0f"|format(t.monto_hasta) if t.monto_hasta is not none else '' }}" aria-label="Monto hasta"></td>
+            <td class="n"><input form="ft{{ t.id }}" class="cm-in cm-in-n" name="tasa"
+                   inputmode="decimal" value="{{ "%.4g"|format(t.tasa * 100) }}" aria-label="Tasa"><span class="cm-suf">%</span></td>
+            <td><input form="ft{{ t.id }}" class="cm-in" name="nota" value="{{ t.nota }}"
+                   placeholder="—" aria-label="Nota"></td>
+            <td><input form="ft{{ t.id }}" type="checkbox" name="activo" {% if t.activo %}checked{% endif %}
+                   aria-label="Tramo activo"></td>
+            <td>
+              <button form="ft{{ t.id }}" type="submit" class="cm-btn cm-btn-sm">Guardar</button>
+              <button form="fd{{ t.id }}" type="submit" class="cm-btn cm-btn-sm cm-btn-danger"
+                      title="Eliminar tramo" aria-label="Eliminar tramo">{{ icon('trash', 13) }}</button>
+            </td>
+          </tr>
+          <tr class="cm-formrow">
+            <td colspan="6">
+              <form method="POST" action="/comisiones/tasa/{{ t.id }}/eliminar" id="fd{{ t.id }}"
+                    onsubmit="return confirm('¿Eliminar este tramo de {{ unidad }}?')"></form>
+              {% if t.regla_origen %}<span class="cm-origen">Regla de origen: {{ t.regla_origen }}</span>{% endif %}
+              {% if t.nota %}<span class="cm-salvedad">{{ icon('alert-triangle', 12) }} {{ t.nota }}</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+</section>
+
+{# ── 3 · Castigo por descuento ───────────────────────────────── #}
+<section class="cm-card">
+  <div class="cm-card-h">
+    <div>
+      <h2>Castigo por descuento en el cierre</h2>
+      <p class="hint">Si se cierra debajo de lista, la tasa se reduce con este factor.
+         El descuento castiga por partida doble: la base baja sola y encima la tasa se reduce.</p>
+    </div>
+  </div>
+
+  <div class="cm-nota-fija">
+    {{ icon('info', 15) }}
+    <span><strong>El precio de lista no entra en esta tabla.</strong> Una venta sin descuento
+      siempre paga 100%. Los pisos de aquí abajo son exclusivos: aplican a partir de que
+      haya algún descuento.</span>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead><tr>
+        <th class="n" style="width:110px">Descuento desde</th>
+        <th class="n" style="width:96px">Factor</th>
+        <th>Tramo</th>
+        <th style="width:130px">Requiere autorización</th>
+        <th style="width:92px"></th>
+      </tr></thead>
+      <tbody>
+        <tr class="cm-lista">
+          <td class="n">—</td><td class="n">100%</td>
+          <td class="q">Sin descuento — precio de lista</td>
+          <td class="q">No</td><td><span class="hint">fijo</span></td>
+        </tr>
+        {% for d in descuentos %}
+        <tr>
+          <form method="POST" action="/comisiones/descuento/{{ d.id }}" id="fx{{ d.id }}"></form>
+          <td class="n"><input form="fx{{ d.id }}" class="cm-in cm-in-n" name="descuento_desde"
+                 inputmode="decimal" value="{{ "%.4g"|format(d.descuento_desde * 100) }}"
+                 aria-label="Descuento desde"><span class="cm-suf">%</span></td>
+          <td class="n"><input form="fx{{ d.id }}" class="cm-in cm-in-n" name="factor"
+                 inputmode="decimal" value="{{ "%.4g"|format(d.factor * 100) }}"
+                 aria-label="Factor"><span class="cm-suf">%</span></td>
+          <td><input form="fx{{ d.id }}" class="cm-in" name="etiqueta" value="{{ d.etiqueta }}"
+                 aria-label="Descripción del tramo"></td>
+          <td><input form="fx{{ d.id }}" type="checkbox" name="requiere_autorizacion"
+                 {% if d.requiere_autorizacion %}checked{% endif %} aria-label="Requiere autorización"></td>
+          <td><button form="fx{{ d.id }}" type="submit" class="cm-btn cm-btn-sm">Guardar</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{# ── 4 · Simulador ───────────────────────────────────────────── #}
+<section class="cm-card">
+  <div class="cm-card-h">
+    <div>
+      <h2>Probar la configuración</h2>
+      <p class="hint">Calcula con los valores de arriba, sin cerrar ninguna venta.
+         Sirve para verificar un cambio antes de que aplique de verdad.</p>
+    </div>
+  </div>
+
+  <div class="cm-sim">
+    <label>Unidad
+      <select class="cm-in" id="sim-un">
+        {% for un in por_unidad.keys() %}<option value="{{ un }}">{{ un }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Mensualidad de lista
+      <input class="cm-in" id="sim-lista" inputmode="decimal" value="43000">
+    </label>
+    <label>Mensualidad cerrada
+      <input class="cm-in" id="sim-cerrada" inputmode="decimal" value="43000">
+    </label>
+    <button type="button" class="cm-btn cm-btn-primary" onclick="cmSimular()">Calcular</button>
+  </div>
+
+  <div id="sim-out" class="cm-simout" hidden></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.cm-head{margin-bottom:16px}
+.cm-head h1{font-size:18px;font-weight:640;letter-spacing:-.017em;margin:0}
+.cm-head .sub{font-size:12.5px;color:var(--ink-3);margin:3px 0 0;max-width:74ch;line-height:1.5}
+
+.cm-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);
+         padding:16px;margin-bottom:14px}
+.cm-card-h{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
+           flex-wrap:wrap;margin-bottom:12px}
+.cm-card-h h2{font-size:14px;font-weight:620;margin:0}
+.hint{font-size:11.5px;color:var(--ink-3);margin:3px 0 0;max-width:72ch;line-height:1.5}
+
+.cm-total{font-size:12.5px;font-weight:620;padding:4px 10px;border-radius:var(--r-sm);white-space:nowrap}
+.cm-total.is-ok{background:var(--ok-soft);color:var(--ok)}
+.cm-total.is-err{background:var(--danger-soft);color:var(--danger)}
+
+.cm-flash{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:var(--r-sm);
+          font-size:12.5px;margin-bottom:12px;border:1px solid var(--border)}
+.cm-flash.is-ok{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}
+.cm-flash.is-err{background:var(--danger-soft);color:var(--danger);border-color:var(--danger)}
+
+.tw{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r-md);margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead th{text-align:left;padding:7px 11px;font-size:10px;font-weight:620;letter-spacing:.07em;
+         text-transform:uppercase;color:var(--ink-3);background:var(--bg-surface-2);
+         border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:5px 11px;border-bottom:1px solid var(--border-subtle);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+td.nw{white-space:nowrap}
+td.q{color:var(--ink-2);line-height:1.4}
+
+.cm-in{height:26px;padding:0 7px;background:var(--bg-app);color:var(--ink-1);
+       border:1px solid var(--border-strong);border-radius:var(--r-sm);
+       font-family:inherit;font-size:12px;width:100%;min-width:0}
+.cm-in-n{text-align:right;font-variant-numeric:tabular-nums;width:74px;display:inline-block}
+.cm-in:focus{outline:none;border-color:var(--copper);box-shadow:0 0 0 3px var(--copper-soft)}
+.cm-suf{font-size:11px;color:var(--ink-3);margin-left:3px}
+
+.cm-btn{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;
+        border-radius:var(--r-sm);border:1px solid var(--border-strong);background:var(--bg-app);
+        color:var(--ink-1);font-family:inherit;font-size:12px;font-weight:520;cursor:pointer;
+        white-space:nowrap}
+.cm-btn:hover{background:var(--bg-hover)}
+.cm-btn-primary{background:var(--copper);border-color:var(--copper);color:#fff}
+.cm-btn-primary:hover{background:var(--copper-hover)}
+.cm-btn-sm{height:24px;padding:0 8px;font-size:11.5px}
+.cm-btn-danger{color:var(--danger);border-color:var(--border)}
+.cm-btn-danger:hover{background:var(--danger-soft);border-color:var(--danger)}
+.cm-btn:focus-visible{outline:2px solid var(--copper);outline-offset:1px}
+
+.cm-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+
+.cm-un{margin-bottom:14px}
+.cm-un:last-child{margin-bottom:0}
+.cm-un-h{display:flex;align-items:center;gap:7px;margin-bottom:6px;flex-wrap:wrap}
+.cm-un-nom{font-size:12.5px;font-weight:620}
+
+.cm-formrow td{padding-top:0;padding-bottom:7px;border-bottom:1px solid var(--border)}
+.cm-origen{font-size:11px;color:var(--ink-3);margin-right:12px}
+.cm-salvedad{display:inline-flex;align-items:flex-start;gap:5px;font-size:11px;
+             color:var(--warn-ink);line-height:1.45}
+
+.cm-nuevo{border:1px solid var(--border);border-radius:var(--r-md);
+          background:var(--bg-surface-2);padding:12px;margin-bottom:12px}
+.cm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:9px;align-items:end}
+.cm-grid label,.cm-sim label{display:flex;flex-direction:column;gap:3px;font-size:11px;
+                             font-weight:560;color:var(--ink-2);min-width:0}
+.cm-wide{grid-column:span 2}
+
+.cm-nota-fija{display:flex;align-items:flex-start;gap:8px;padding:9px 12px;margin-bottom:11px;
+              border:1px solid var(--border);border-left:2px solid var(--copper);
+              border-radius:var(--r-sm);background:var(--bg-surface-2);
+              font-size:11.5px;color:var(--ink-2);line-height:1.5}
+.cm-nota-fija strong{color:var(--ink-1)}
+.cm-traslape{display:flex;align-items:flex-start;gap:7px;padding:8px 11px;margin-bottom:7px;
+             border:1px solid var(--danger);border-radius:var(--r-sm);
+             background:var(--danger-soft);color:var(--danger-ink);
+             font-size:11.5px;line-height:1.5}
+.cm-traslape strong{color:var(--danger)}
+.cm-lista td{background:var(--bg-surface-2)}
+
+.cm-sim{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;
+        align-items:end;margin-bottom:12px}
+.cm-simout{border:1px solid var(--border);border-radius:var(--r-md);padding:13px;
+           background:var(--bg-surface-2);font-size:12.5px}
+.cm-simout .cm-linea{display:flex;justify-content:space-between;gap:14px;padding:3px 0}
+.cm-simout .cm-tot{border-top:1px solid var(--border);margin-top:6px;padding-top:7px;
+                   font-weight:620;font-size:14px}
+.cm-simout .n{font-variant-numeric:tabular-nums}
+
+@media(max-width:720px){ .cm-wide{grid-column:span 1} }
+</style>
+
+<script>
+function cmToggle(id){
+  const e = document.getElementById(id);
+  e.hidden = !e.hidden;
+  if (!e.hidden) { const f = e.querySelector('input'); if (f) f.focus(); }
+}
+
+async function cmSimular(){
+  const un = document.getElementById('sim-un').value;
+  const lista = document.getElementById('sim-lista').value;
+  const cerrada = document.getElementById('sim-cerrada').value;
+  const out = document.getElementById('sim-out');
+  out.hidden = false;
+  out.textContent = 'Calculando…';
+  try {
+    const r = await fetch(`/comisiones/simular?unidad=${encodeURIComponent(un)}`
+                        + `&lista=${encodeURIComponent(lista)}&cerrada=${encodeURIComponent(cerrada)}`);
+    const d = await r.json();
+    if (d.error) { out.innerHTML = `<span style="color:var(--danger)">${d.error}</span>`; return; }
+    const money = v => '$' + Number(v).toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2});
+    const pct = v => (Number(v)*100).toFixed(2).replace(/\.00$/,'') + '%';
+    let h = '';
+    h += `<div class="cm-linea"><span>Tasa base de ${d.unidad}</span><span class="n">${pct(d.tasa_base)}</span></div>`;
+    h += `<div class="cm-linea"><span>Descuento otorgado</span><span class="n">${pct(d.descuento)}</span></div>`;
+    h += `<div class="cm-linea"><span>Factor por descuento — ${d.etiqueta_descuento}</span><span class="n">${pct(d.factor_descuento)}</span></div>`;
+    h += `<div class="cm-linea"><span>Tasa aplicada</span><span class="n">${pct(d.tasa_aplicada)}</span></div>`;
+    if (d.descuento > 0) {
+      h += `<div class="cm-linea" style="color:var(--ink-3)"><span>Habría sido sin descuento</span><span class="n">${money(d.comision_sin_descuento)}</span></div>`;
+    }
+    h += `<div class="cm-linea cm-tot"><span>Comisión total a repartir</span><span class="n">${money(d.comision_total)}</span></div>`;
+    h += '<div style="margin-top:9px">';
+    d.etapas.forEach(e => {
+      h += `<div class="cm-linea"><span>${e.nombre} <span style="color:var(--ink-3)">${pct(e.peso)}</span></span><span class="n">${money(e.monto)}</span></div>`;
+    });
+    h += '</div>';
+    if (d.requiere_autorizacion) {
+      h += `<div class="cm-linea" style="color:var(--danger);margin-top:7px"><span>Este descuento requiere autorización.</span><span></span></div>`;
+    }
+    if (d.nota_un) {
+      h += `<div style="margin-top:9px;color:var(--warn-ink);font-size:11px;line-height:1.5">${d.nota_un}</div>`;
+    }
+    out.innerHTML = h;
+  } catch (e) {
+    out.innerHTML = `<span style="color:var(--danger)">No se pudo calcular: ${e.message}</span>`;
+  }
+}
+</script>
+{% endblock %}

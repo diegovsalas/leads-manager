@@ -551,6 +551,7 @@ def create_app():
     from blueprints.sdr           import sdr_bp
     from blueprints.sdr_directivo import sdr_directivo_bp, lemlist_webhook_bp
     from blueprints.sales         import sales_bp, clients_bp
+    from blueprints.comisiones_admin import comisiones_bp
     from blueprints.costs         import costs_bp
     from blueprints.aircall       import aircall_bp
     from blueprints.zoho          import zoho_bp
@@ -587,6 +588,8 @@ def create_app():
     app.register_blueprint(sdr_directivo_bp, url_prefix="/api/sdr-directivo")
     app.register_blueprint(lemlist_webhook_bp, url_prefix="/api/webhooks")
     app.register_blueprint(sales_bp,         url_prefix="/api/sales")
+    # FEAT-2026-08-21: matriz editable del tabulador de comisiones
+    app.register_blueprint(comisiones_bp,    url_prefix="/comisiones")
     app.register_blueprint(clients_bp,       url_prefix="/api/clients")
     app.register_blueprint(costs_bp,         url_prefix="/api/costs")
     app.register_blueprint(aircall_bp,       url_prefix="/api/aircall")

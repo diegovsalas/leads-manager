@@ -158,6 +158,9 @@ function switchTab(name){
                 {{ icon('upload') }}<span class="label">Cargar Datos</span>
             </a>
             <!-- FEAT-2026-07-06: Due Diligence (adquisiciones antes de asignar KAM) -->
+            <a href="/comisiones/" data-label="Comisiones" class="side-link {% if request.blueprint == 'comisiones_admin' %}active{% endif %}">
+                {{ icon('wallet') }}<span class="label">Comisiones</span>
+            </a>
             <a href="/cs/due-diligence" data-label="Due Diligence" class="side-link {% if request.endpoint == 'due_diligence.index' %}active{% endif %}">
                 {{ icon('search') }}<span class="label">Due Diligence</span>
             </a>
