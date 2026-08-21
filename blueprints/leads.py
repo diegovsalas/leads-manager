@@ -1,7 +1,7 @@
 # blueprints/leads.py
 import re
 import uuid
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, current_app
 from sqlalchemy import or_, func
 from extensions import db, socketio
 from models import Lead, EtapaPipeline, OrigenLead, Usuario
@@ -572,6 +572,16 @@ def mover_lead(lead_id):
 
     etapa_anterior = lead.etapa_pipeline.value
     lead.etapa_pipeline = nueva_etapa
+
+    # FEAT-2026-08-21: propone quién hizo cada etapa del tabulador de
+    # comisiones. Solo propone: nunca pisa una atribución ya corregida a
+    # mano, y no falla el movimiento del lead si algo sale mal.
+    try:
+        from comisiones import registrar_avance
+        registrar_avance(lead, nueva_etapa.value, lead.usuario_asignado_id)
+    except Exception as e:
+        current_app.logger.warning(f"[comisiones] atribución automática falló: {e}")
+
     db.session.commit()
 
     log_actividad("mover", "lead", lead.id, f"{lead.nombre}: {etapa_anterior} → {nueva_etapa.value}")
@@ -897,3 +907,97 @@ def registrar_respuesta(lead_id):
         "respondio": True,
         "etapa": lead.etapa_pipeline.value,
     })
+
+
+# ══════════════════════════════════════════════
+# COMISIONES POR ETAPA — FEAT-2026-08-21
+# Tabulador multi-UN: la bolsa que cada UN ya paga se reparte entre
+# 4 etapas y cada quien cobra las que hizo.
+# ══════════════════════════════════════════════
+@leads_bp.route("/<uuid:lead_id>/comision", methods=["GET"])
+def comision_lead(lead_id):
+    """Devuelve la atribución del lead y el reparto que resultaría al
+    cerrarlo. Sirve para revisar antes de que la venta se congele."""
+    import comisiones as C
+    from models import ComisionEtapa
+
+    lead = db.session.get(Lead, lead_id)
+    if not lead:
+        return jsonify({"error": "Lead no encontrado"}), 404
+
+    unidad = (request.args.get("unidad") or lead.marca_interes or "").strip()
+    try:
+        lista = float(request.args.get("lista") or lead.valor_estimado or 0)
+        cerrada = float(request.args.get("cerrada") or lista)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Montos inválidos"}), 400
+
+    atrib = C.atribucion_de(lead.id)
+    etapas = [{"clave": e.clave, "nombre": e.nombre, "peso": float(e.peso),
+               "descripcion": e.descripcion,
+               "usuario_id": str(atrib[e.clave]) if atrib.get(e.clave) else None}
+              for e in ComisionEtapa.query.order_by(ComisionEtapa.orden).all()]
+
+    r = C.calcular(unidad, lista, cerrada, atrib) if unidad and lista else {
+        "error": "Falta unidad de negocio o mensualidad de lista."}
+
+    if r.get("error"):
+        return jsonify({"lead_id": str(lead.id), "unidad": unidad,
+                        "etapas": etapas, "error": r["error"]})
+
+    return jsonify({
+        "lead_id": str(lead.id), "unidad": unidad, "etapas": etapas,
+        "mensualidad_lista": float(r["mensualidad_lista"]),
+        "mensualidad_cerrada": float(r["mensualidad_cerrada"]),
+        "descuento": float(r["descuento"]),
+        "tasa_base": float(r["tasa_base"]),
+        "factor_descuento": float(r["factor_descuento"]),
+        "etiqueta_descuento": r["etiqueta_descuento"],
+        "requiere_autorizacion": r["requiere_autorizacion"],
+        "comision_total": float(r["comision_total"]),
+        "comision_sin_descuento": float(r["comision_sin_descuento"]),
+        "detalle_etapas": [{"clave": d["clave"], "nombre": d["nombre"],
+                            "peso": float(d["peso"]), "monto": float(d["monto"]),
+                            "usuario_id": str(d["usuario_id"]) if d["usuario_id"] else None}
+                           for d in r["detalle_etapas"]],
+        "participaciones": [{"usuario_id": str(p["usuario_id"]), "nombre": p["nombre"],
+                             "etapas": p["etapas"], "pct": float(p["pct"]),
+                             "monto": float(p["monto"])}
+                            for p in r["participaciones"]],
+        "peso_sin_asignar": float(r["peso_sin_asignar"]),
+        "monto_sin_asignar": float(r["monto_sin_asignar"]),
+        "repartido": float(r["repartido"]),
+        "cuadra": r["cuadra"],
+        "nota_un": r["nota_un"],
+    })
+
+
+@leads_bp.route("/<uuid:lead_id>/comision/atribucion", methods=["POST"])
+def fijar_atribucion_lead(lead_id):
+    """Corrección manual de quién hizo cada etapa. Body: {etapa, usuario_id}.
+    usuario_id vacío deja la etapa sin responsable (no se paga)."""
+    import comisiones as C
+
+    lead = db.session.get(Lead, lead_id)
+    if not lead:
+        return jsonify({"error": "Lead no encontrado"}), 404
+
+    data = request.get_json() or {}
+    clave = (data.get("etapa") or "").strip()
+    if not clave:
+        return jsonify({"error": "Falta la etapa"}), 400
+
+    uid = (data.get("usuario_id") or "").strip() or None
+    if uid:
+        try:
+            uuid.UUID(uid)
+        except (ValueError, TypeError):
+            return jsonify({"error": "usuario_id inválido"}), 400
+        if not db.session.get(Usuario, uid):
+            return jsonify({"error": "Vendedor no encontrado"}), 404
+
+    C.fijar_atribucion(lead.id, clave, uid, session.get("user_nombre", ""))
+    db.session.commit()
+    log_actividad("editar", "lead", lead.id,
+                  f"Atribución de comisión · {clave} → {uid or 'sin responsable'}")
+    return jsonify({"ok": True, "etapa": clave, "usuario_id": uid})

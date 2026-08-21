@@ -1236,6 +1236,97 @@ class CSDocumento(db.Model):
 
 
 # ──────────────────────────────────────────────
+# FEAT-2026-08-21: comisiones multi-UN por etapa
+# La bolsa que cada UN ya paga se reparte entre 4 etapas y cada
+# quien cobra las que hizo. No incrementa el costo de comisión.
+# La lógica de cálculo vive en comisiones.py.
+# ──────────────────────────────────────────────
+class ComisionTasa(db.Model):
+    """Tasa por UN. Un tramo con monto_hasta NULL es una tasa fija;
+    varios tramos modelan un escalonado como el de Pestex."""
+    __tablename__ = "comision_tasas"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    unidad = db.Column(db.String(40), nullable=False, index=True)
+    monto_desde = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    monto_hasta = db.Column(db.Numeric(14, 2), nullable=True)   # NULL = sin tope
+    tasa = db.Column(db.Numeric(6, 4), nullable=False)          # 0.4000 = 40%
+    modalidad = db.Column(db.String(60), default="Pago único, mes 1")
+    regla_origen = db.Column(db.Text, default="")
+    nota = db.Column(db.Text, default="")                       # candados y salvedades
+    activo = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+
+
+class ComisionEtapa(db.Model):
+    """Las 4 etapas del tabulador y su peso. Deben sumar 1.0000."""
+    __tablename__ = "comision_etapas"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    clave = db.Column(db.String(40), nullable=False, unique=True)
+    nombre = db.Column(db.String(80), nullable=False)
+    peso = db.Column(db.Numeric(6, 4), nullable=False)
+    descripcion = db.Column(db.Text, default="")
+    orden = db.Column(db.Integer, nullable=False, default=0)
+
+
+class ComisionDescuento(db.Model):
+    """Castigo por cerrar debajo de lista.
+
+    descuento_desde es el PISO EXCLUSIVO del tramo. El precio de lista
+    (descuento = 0) NO se resuelve aquí: comisiones.py le asigna factor
+    1.0 antes de consultar esta tabla. En el tabulador original el tramo
+    del 85% aparece con piso 0.0%, lo que haría que una venta sin
+    descuento cobrara 85%.
+    """
+    __tablename__ = "comision_descuentos"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    descuento_desde = db.Column(db.Numeric(6, 4), nullable=False)
+    factor = db.Column(db.Numeric(6, 4), nullable=False)
+    etiqueta = db.Column(db.String(120), default="")
+    requiere_autorizacion = db.Column(db.Boolean, default=False, nullable=False)
+
+
+class LeadAtribucion(db.Model):
+    """Quién hizo cada etapa de un lead. Se propone automáticamente al
+    mover el lead en el pipeline; el gerente puede corregirlo y entonces
+    es_automatica queda en False para no volver a pisarlo."""
+    __tablename__ = "lead_atribuciones"
+    __table_args__ = (db.UniqueConstraint("lead_id", "etapa", name="uq_lead_etapa"),)
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    lead_id = db.Column(UUID(as_uuid=True), db.ForeignKey("leads.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    etapa = db.Column(db.String(40), nullable=False)
+    usuario_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=True)
+    es_automatica = db.Column(db.Boolean, default=True, nullable=False)
+    definida_por = db.Column(db.String(200), default="")
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    usuario = db.relationship("Usuario")
+
+
+class SaleParticipacion(db.Model):
+    """Reparto congelado al cerrar la venta. No se recalcula: si mañana
+    cambian los pesos, lo ya pagado no se mueve."""
+    __tablename__ = "sale_participaciones"
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    sale_id = db.Column(UUID(as_uuid=True), db.ForeignKey("sales.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    usuario_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"),
+                           nullable=True, index=True)
+    etapas = db.Column(db.Text, nullable=False, default="")     # "Prospectar, Cita"
+    porcentaje = db.Column(db.Numeric(6, 4), nullable=False)    # 0.3000 = 30%
+    monto = db.Column(db.Numeric(14, 2), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+
+    usuario = db.relationship("Usuario")
+
+
+# ──────────────────────────────────────────────
 # Tabla: actividad_log (auditoría)
 # ──────────────────────────────────────────────
 class ActividadLog(db.Model):

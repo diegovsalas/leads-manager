@@ -229,3 +229,79 @@ CREATE INDEX IF NOT EXISTS ix_cs_documentos_account ON cs_documentos (account_id
 -- calculaban el avance al revés porque progreso_pct asumía que más es mejor.
 ALTER TABLE cs_objetivos ADD COLUMN IF NOT EXISTS direccion VARCHAR(10) DEFAULT 'subir';
 ALTER TABLE cs_objetivos ADD COLUMN IF NOT EXISTS valor_inicial NUMERIC(14,2);
+
+-- ══════════════════════════════════════════════════════════════
+-- FEAT-2026-08-21: Comisiones multi-UN repartidas por etapa.
+-- Implementa el "Tabulador de comisiones multiUN": la bolsa que
+-- cada UN ya paga hoy se reparte entre 4 etapas, y cada quien
+-- cobra las que hizo. NO incrementa el costo de comisión.
+-- ══════════════════════════════════════════════════════════════
+
+-- Tasa por UN. Un tramo único (monto_hasta NULL) = tasa fija.
+-- Pestex es escalonado, por eso se modela con tramos y no con
+-- una columna suelta.
+CREATE TABLE IF NOT EXISTS comision_tasas (
+    id           SERIAL PRIMARY KEY,
+    unidad       VARCHAR(40)   NOT NULL,
+    monto_desde  NUMERIC(14,2) NOT NULL DEFAULT 0,
+    monto_hasta  NUMERIC(14,2),              -- NULL = sin tope
+    tasa         NUMERIC(6,4)  NOT NULL,     -- 0.4000 = 40%
+    modalidad    VARCHAR(60)   DEFAULT 'Pago único, mes 1',
+    regla_origen TEXT          DEFAULT '',
+    nota         TEXT          DEFAULT '',   -- candados y salvedades
+    activo       BOOLEAN       NOT NULL DEFAULT TRUE,
+    created_at   TIMESTAMPTZ   DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_comision_tasas_un ON comision_tasas (unidad, monto_desde);
+
+-- Pesos de las 4 etapas. Deben sumar 1.0000.
+CREATE TABLE IF NOT EXISTS comision_etapas (
+    id          SERIAL PRIMARY KEY,
+    clave       VARCHAR(40)  NOT NULL UNIQUE,
+    nombre      VARCHAR(80)  NOT NULL,
+    peso        NUMERIC(6,4) NOT NULL,
+    descripcion TEXT DEFAULT '',
+    orden       INTEGER NOT NULL DEFAULT 0
+);
+
+-- Castigo por descuento en el cierre.
+-- OJO: descuento_desde es el PISO EXCLUSIVO del tramo. El precio de
+-- lista (descuento = 0) NO entra aquí: se resuelve antes, con factor
+-- 1.0. En el Sheet el tramo de 85% aparece con piso "0.0%", lo que
+-- haría que una venta sin descuento cobrara 85%.
+CREATE TABLE IF NOT EXISTS comision_descuentos (
+    id              SERIAL PRIMARY KEY,
+    descuento_desde NUMERIC(6,4) NOT NULL,
+    factor          NUMERIC(6,4) NOT NULL,
+    etiqueta        VARCHAR(120) DEFAULT '',
+    requiere_autorizacion BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+-- Quién hizo cada etapa de un lead. Se propone automáticamente al
+-- mover el lead en el pipeline y el gerente puede corregirlo.
+CREATE TABLE IF NOT EXISTS lead_atribuciones (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lead_id      UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+    etapa        VARCHAR(40) NOT NULL,
+    usuario_id   UUID REFERENCES usuarios(id),
+    es_automatica BOOLEAN NOT NULL DEFAULT TRUE,
+    definida_por VARCHAR(200) DEFAULT '',
+    created_at   TIMESTAMPTZ DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (lead_id, etapa)
+);
+CREATE INDEX IF NOT EXISTS ix_lead_atribuciones_lead ON lead_atribuciones (lead_id);
+
+-- Reparto congelado al cerrar la venta. Se guarda el resultado, no
+-- se recalcula: si mañana cambian los pesos, lo ya pagado no se mueve.
+CREATE TABLE IF NOT EXISTS sale_participaciones (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sale_id     UUID NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+    usuario_id  UUID REFERENCES usuarios(id),
+    etapas      TEXT NOT NULL DEFAULT '',    -- 'Prospectar, Cita'
+    porcentaje  NUMERIC(6,4) NOT NULL,       -- 0.3000 = 30%
+    monto       NUMERIC(14,2) NOT NULL,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_sale_participaciones_sale ON sale_participaciones (sale_id);
+CREATE INDEX IF NOT EXISTS ix_sale_participaciones_user ON sale_participaciones (usuario_id);
