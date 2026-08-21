@@ -1,10 +1,142 @@
-{% extends "cs/cs_base.html" %}
-{% from "cs/_icons.html" import icon %}
-{% from "cs/_ui.html" import empty_state, chip %}
-{% block title %}Comisiones — Avantex{% endblock %}
-{% block breadcrumb %}Comisiones{% endblock %}
+<!doctype html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comisiones — Avantex</title>
+<link rel="icon" type="image/x-icon" href="/static/img/favicon.ico"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;520;600;620;660&display=swap" rel="stylesheet">
+{# FEAT-2026-08-21: pantalla del Pipe, no de CS. Las comisiones son un tema
+   comercial. Usa los tokens de Densidad Silenciosa pero con cromo propio,
+   sin la barra lateral de Customer Success. #}
+<link rel="stylesheet" href="/static/css/avantex-tokens.css"/>
+<style>
+.cm-head{margin-bottom:16px}
+.cm-head h1{font-size:18px;font-weight:640;letter-spacing:-.017em;margin:0}
+.cm-head .sub{font-size:12.5px;color:var(--ink-3);margin:3px 0 0;max-width:74ch;line-height:1.5}
 
-{% block content %}
+.cm-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);
+         padding:16px;margin-bottom:14px}
+.cm-card-h{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
+           flex-wrap:wrap;margin-bottom:12px}
+.cm-card-h h2{font-size:14px;font-weight:620;margin:0}
+.hint{font-size:11.5px;color:var(--ink-3);margin:3px 0 0;max-width:72ch;line-height:1.5}
+
+.cm-total{font-size:12.5px;font-weight:620;padding:4px 10px;border-radius:var(--r-sm);white-space:nowrap}
+.cm-total.is-ok{background:var(--ok-soft);color:var(--ok)}
+.cm-total.is-err{background:var(--danger-soft);color:var(--danger)}
+
+.cm-flash{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:var(--r-sm);
+          font-size:12.5px;margin-bottom:12px;border:1px solid var(--border)}
+.cm-flash.is-ok{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}
+.cm-flash.is-err{background:var(--danger-soft);color:var(--danger);border-color:var(--danger)}
+
+.tw{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r-md);margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead th{text-align:left;padding:7px 11px;font-size:10px;font-weight:620;letter-spacing:.07em;
+         text-transform:uppercase;color:var(--ink-3);background:var(--bg-surface-2);
+         border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:5px 11px;border-bottom:1px solid var(--border-subtle);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+td.nw{white-space:nowrap}
+td.q{color:var(--ink-2);line-height:1.4}
+
+.cm-in{height:26px;padding:0 7px;background:var(--bg-app);color:var(--ink-1);
+       border:1px solid var(--border-strong);border-radius:var(--r-sm);
+       font-family:inherit;font-size:12px;width:100%;min-width:0}
+.cm-in-n{text-align:right;font-variant-numeric:tabular-nums;width:74px;display:inline-block}
+.cm-in:focus{outline:none;border-color:var(--copper);box-shadow:0 0 0 3px var(--copper-soft)}
+.cm-suf{font-size:11px;color:var(--ink-3);margin-left:3px}
+
+.cm-btn{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;
+        border-radius:var(--r-sm);border:1px solid var(--border-strong);background:var(--bg-app);
+        color:var(--ink-1);font-family:inherit;font-size:12px;font-weight:520;cursor:pointer;
+        white-space:nowrap}
+.cm-btn:hover{background:var(--bg-hover)}
+.cm-btn-primary{background:var(--copper);border-color:var(--copper);color:#fff}
+.cm-btn-primary:hover{background:var(--copper-hover)}
+.cm-btn-sm{height:24px;padding:0 8px;font-size:11.5px}
+.cm-btn-danger{color:var(--danger);border-color:var(--border)}
+.cm-btn-danger:hover{background:var(--danger-soft);border-color:var(--danger)}
+.cm-btn:focus-visible{outline:2px solid var(--copper);outline-offset:1px}
+
+.cm-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+
+.cm-un{margin-bottom:14px}
+.cm-un:last-child{margin-bottom:0}
+.cm-un-h{display:flex;align-items:center;gap:7px;margin-bottom:6px;flex-wrap:wrap}
+.cm-un-nom{font-size:12.5px;font-weight:620}
+
+.cm-formrow td{padding-top:0;padding-bottom:7px;border-bottom:1px solid var(--border)}
+.cm-origen{font-size:11px;color:var(--ink-3);margin-right:12px}
+.cm-salvedad{display:inline-flex;align-items:flex-start;gap:5px;font-size:11px;
+             color:var(--warn-ink);line-height:1.45}
+
+.cm-nuevo{border:1px solid var(--border);border-radius:var(--r-md);
+          background:var(--bg-surface-2);padding:12px;margin-bottom:12px}
+.cm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:9px;align-items:end}
+.cm-grid label,.cm-sim label{display:flex;flex-direction:column;gap:3px;font-size:11px;
+                             font-weight:560;color:var(--ink-2);min-width:0}
+.cm-wide{grid-column:span 2}
+
+.cm-nota-fija{display:flex;align-items:flex-start;gap:8px;padding:9px 12px;margin-bottom:11px;
+              border:1px solid var(--border);border-left:2px solid var(--copper);
+              border-radius:var(--r-sm);background:var(--bg-surface-2);
+              font-size:11.5px;color:var(--ink-2);line-height:1.5}
+.cm-nota-fija strong{color:var(--ink-1)}
+.cm-traslape{display:flex;align-items:flex-start;gap:7px;padding:8px 11px;margin-bottom:7px;
+             border:1px solid var(--danger);border-radius:var(--r-sm);
+             background:var(--danger-soft);color:var(--danger-ink);
+             font-size:11.5px;line-height:1.5}
+.cm-traslape strong{color:var(--danger)}
+.cm-lista td{background:var(--bg-surface-2)}
+
+.cm-sim{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;
+        align-items:end;margin-bottom:12px}
+.cm-simout{border:1px solid var(--border);border-radius:var(--r-md);padding:13px;
+           background:var(--bg-surface-2);font-size:12.5px}
+.cm-simout .cm-linea{display:flex;justify-content:space-between;gap:14px;padding:3px 0}
+.cm-simout .cm-tot{border-top:1px solid var(--border);margin-top:6px;padding-top:7px;
+                   font-weight:620;font-size:14px}
+.cm-simout .n{font-variant-numeric:tabular-nums}
+
+@media(max-width:720px){ .cm-wide{grid-column:span 1} }
+
+.cm-chip{display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:var(--r-sm);
+         font-size:10.5px;font-weight:600;white-space:nowrap;
+         background:var(--bg-tag);color:var(--ink-2);border:1px solid var(--border)}
+.cm-chip.is-info{background:var(--copper-soft);color:var(--copper-ink);border-color:transparent}
+.cm-chip.is-warn{background:var(--warn-soft);color:var(--warn-ink);border-color:transparent}
+.cm-chip.is-danger{background:var(--danger-soft);color:var(--danger);border-color:transparent}
+
+/* Cromo propio: esta pantalla vive en el Pipe, no en CS */
+.cm-top{position:sticky;top:0;z-index:30;height:48px;display:flex;align-items:center;gap:10px;
+        padding:0 20px;background:var(--bg-app);border-bottom:1px solid var(--border)}
+.cm-top a{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--copper);
+          text-decoration:none;font-weight:520}
+.cm-top a:hover{text-decoration:underline}
+.cm-top .sep{color:var(--ink-4)}
+.cm-top .cur{font-size:12.5px;color:var(--ink-1);font-weight:600}
+.cm-top .sp{flex:1}
+.cm-top .rol{font-size:11px;color:var(--ink-3)}
+.cm-wrap{max-width:1180px;margin:0 auto;padding:20px 20px 60px}
+</style>
+</head>
+<body>
+
+{% from "cs/_icons.html" import icon %}
+
+<div class="cm-top">
+  <a href="/">{{ icon('arrow-left', 14) }}Pipe</a>
+  <span class="sep">/</span>
+  <span class="cur">Comisiones</span>
+  <span class="sp"></span>
+  <span class="rol">{{ user_nombre }}</span>
+</div>
+
+<div class="cm-wrap">
 {# FEAT-2026-08-21: matriz editable del tabulador multi-UN.
    Todo lo que consume comisiones.py se captura aquí: cambiar una
    política no requiere tocar código ni desplegar. #}
@@ -104,10 +236,10 @@
   <div class="cm-un">
     <div class="cm-un-h">
       <span class="cm-un-nom">{{ unidad }}</span>
-      {% if tramos|length > 1 %}{{ chip('escalonada · ' ~ tramos|length ~ ' tramos', 'info') }}
-      {% else %}{{ chip('tasa fija', 'neutral') }}{% endif %}
-      {% if tramos | selectattr('nota') | first %}{{ chip('con salvedad', 'warn') }}{% endif %}
-      {% if traslapes.get(unidad) %}{{ chip('tramos traslapados', 'danger') }}{% endif %}
+      {% if tramos|length > 1 %}<span class="cm-chip is-info">escalonada · {{ tramos|length }} tramos</span>
+      {% else %}<span class="cm-chip">tasa fija</span>{% endif %}
+      {% if tramos | selectattr('nota') | first %}<span class="cm-chip is-warn">con salvedad</span>{% endif %}
+      {% if traslapes.get(unidad) %}<span class="cm-chip is-danger">tramos traslapados</span>{% endif %}
     </div>
 
     {% if traslapes.get(unidad) %}
@@ -247,102 +379,7 @@
 
   <div id="sim-out" class="cm-simout" hidden></div>
 </section>
-{% endblock %}
-
-{% block scripts %}
-<style>
-.cm-head{margin-bottom:16px}
-.cm-head h1{font-size:18px;font-weight:640;letter-spacing:-.017em;margin:0}
-.cm-head .sub{font-size:12.5px;color:var(--ink-3);margin:3px 0 0;max-width:74ch;line-height:1.5}
-
-.cm-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);
-         padding:16px;margin-bottom:14px}
-.cm-card-h{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
-           flex-wrap:wrap;margin-bottom:12px}
-.cm-card-h h2{font-size:14px;font-weight:620;margin:0}
-.hint{font-size:11.5px;color:var(--ink-3);margin:3px 0 0;max-width:72ch;line-height:1.5}
-
-.cm-total{font-size:12.5px;font-weight:620;padding:4px 10px;border-radius:var(--r-sm);white-space:nowrap}
-.cm-total.is-ok{background:var(--ok-soft);color:var(--ok)}
-.cm-total.is-err{background:var(--danger-soft);color:var(--danger)}
-
-.cm-flash{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:var(--r-sm);
-          font-size:12.5px;margin-bottom:12px;border:1px solid var(--border)}
-.cm-flash.is-ok{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}
-.cm-flash.is-err{background:var(--danger-soft);color:var(--danger);border-color:var(--danger)}
-
-.tw{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r-md);margin-bottom:10px}
-table{width:100%;border-collapse:collapse;font-size:12.5px}
-thead th{text-align:left;padding:7px 11px;font-size:10px;font-weight:620;letter-spacing:.07em;
-         text-transform:uppercase;color:var(--ink-3);background:var(--bg-surface-2);
-         border-bottom:1px solid var(--border);white-space:nowrap}
-tbody td{padding:5px 11px;border-bottom:1px solid var(--border-subtle);vertical-align:middle}
-tbody tr:last-child td{border-bottom:none}
-td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
-td.nw{white-space:nowrap}
-td.q{color:var(--ink-2);line-height:1.4}
-
-.cm-in{height:26px;padding:0 7px;background:var(--bg-app);color:var(--ink-1);
-       border:1px solid var(--border-strong);border-radius:var(--r-sm);
-       font-family:inherit;font-size:12px;width:100%;min-width:0}
-.cm-in-n{text-align:right;font-variant-numeric:tabular-nums;width:74px;display:inline-block}
-.cm-in:focus{outline:none;border-color:var(--copper);box-shadow:0 0 0 3px var(--copper-soft)}
-.cm-suf{font-size:11px;color:var(--ink-3);margin-left:3px}
-
-.cm-btn{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;
-        border-radius:var(--r-sm);border:1px solid var(--border-strong);background:var(--bg-app);
-        color:var(--ink-1);font-family:inherit;font-size:12px;font-weight:520;cursor:pointer;
-        white-space:nowrap}
-.cm-btn:hover{background:var(--bg-hover)}
-.cm-btn-primary{background:var(--copper);border-color:var(--copper);color:#fff}
-.cm-btn-primary:hover{background:var(--copper-hover)}
-.cm-btn-sm{height:24px;padding:0 8px;font-size:11.5px}
-.cm-btn-danger{color:var(--danger);border-color:var(--border)}
-.cm-btn-danger:hover{background:var(--danger-soft);border-color:var(--danger)}
-.cm-btn:focus-visible{outline:2px solid var(--copper);outline-offset:1px}
-
-.cm-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-
-.cm-un{margin-bottom:14px}
-.cm-un:last-child{margin-bottom:0}
-.cm-un-h{display:flex;align-items:center;gap:7px;margin-bottom:6px;flex-wrap:wrap}
-.cm-un-nom{font-size:12.5px;font-weight:620}
-
-.cm-formrow td{padding-top:0;padding-bottom:7px;border-bottom:1px solid var(--border)}
-.cm-origen{font-size:11px;color:var(--ink-3);margin-right:12px}
-.cm-salvedad{display:inline-flex;align-items:flex-start;gap:5px;font-size:11px;
-             color:var(--warn-ink);line-height:1.45}
-
-.cm-nuevo{border:1px solid var(--border);border-radius:var(--r-md);
-          background:var(--bg-surface-2);padding:12px;margin-bottom:12px}
-.cm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:9px;align-items:end}
-.cm-grid label,.cm-sim label{display:flex;flex-direction:column;gap:3px;font-size:11px;
-                             font-weight:560;color:var(--ink-2);min-width:0}
-.cm-wide{grid-column:span 2}
-
-.cm-nota-fija{display:flex;align-items:flex-start;gap:8px;padding:9px 12px;margin-bottom:11px;
-              border:1px solid var(--border);border-left:2px solid var(--copper);
-              border-radius:var(--r-sm);background:var(--bg-surface-2);
-              font-size:11.5px;color:var(--ink-2);line-height:1.5}
-.cm-nota-fija strong{color:var(--ink-1)}
-.cm-traslape{display:flex;align-items:flex-start;gap:7px;padding:8px 11px;margin-bottom:7px;
-             border:1px solid var(--danger);border-radius:var(--r-sm);
-             background:var(--danger-soft);color:var(--danger-ink);
-             font-size:11.5px;line-height:1.5}
-.cm-traslape strong{color:var(--danger)}
-.cm-lista td{background:var(--bg-surface-2)}
-
-.cm-sim{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;
-        align-items:end;margin-bottom:12px}
-.cm-simout{border:1px solid var(--border);border-radius:var(--r-md);padding:13px;
-           background:var(--bg-surface-2);font-size:12.5px}
-.cm-simout .cm-linea{display:flex;justify-content:space-between;gap:14px;padding:3px 0}
-.cm-simout .cm-tot{border-top:1px solid var(--border);margin-top:6px;padding-top:7px;
-                   font-weight:620;font-size:14px}
-.cm-simout .n{font-variant-numeric:tabular-nums}
-
-@media(max-width:720px){ .cm-wide{grid-column:span 1} }
-</style>
+</div>
 
 <script>
 function cmToggle(id){
@@ -391,4 +428,5 @@ async function cmSimular(){
   }
 }
 </script>
-{% endblock %}
+</body>
+</html>

@@ -19,7 +19,7 @@ from models import ComisionTasa, ComisionEtapa, ComisionDescuento
 from blueprints.auth import is_admin_role
 from actividad import log_actividad
 
-comisiones_bp = Blueprint("comisiones_admin", __name__, template_folder="../templates/cs")
+comisiones_bp = Blueprint("comisiones_admin", __name__, template_folder="../templates")
 
 
 def _solo_admin():
@@ -75,7 +75,7 @@ def index():
     traslapes = {k: v for k, v in traslapes.items() if v}
 
     return render_template(
-        "cs_comisiones.html",
+        "comisiones.html",
         por_unidad=por_unidad, etapas=etapas, descuentos=descuentos,
         traslapes=traslapes,
         suma_pesos=suma_pesos,
