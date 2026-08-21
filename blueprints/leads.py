@@ -938,15 +938,22 @@ def comision_lead(lead_id):
                "usuario_id": str(atrib[e.clave]) if atrib.get(e.clave) else None}
               for e in ComisionEtapa.query.order_by(ComisionEtapa.orden).all()]
 
+    # El tabulador NO aplica a todos los leads: solo a ventas cruzadas de un
+    # vendedor multi-UN en las que participó más de una persona. El resto
+    # comisiona con el esquema de siempre.
+    aplica, motivo = C.aplica_tabulador(lead)
+
     r = C.calcular(unidad, lista, cerrada, atrib) if unidad and lista else {
         "error": "Falta unidad de negocio o mensualidad de lista."}
 
     if r.get("error"):
         return jsonify({"lead_id": str(lead.id), "unidad": unidad,
-                        "etapas": etapas, "error": r["error"]})
+                        "etapas": etapas, "aplica_tabulador": aplica,
+                        "motivo": motivo, "error": r["error"]})
 
     return jsonify({
         "lead_id": str(lead.id), "unidad": unidad, "etapas": etapas,
+        "aplica_tabulador": aplica, "motivo": motivo,
         "mensualidad_lista": float(r["mensualidad_lista"]),
         "mensualidad_cerrada": float(r["mensualidad_cerrada"]),
         "descuento": float(r["descuento"]),
