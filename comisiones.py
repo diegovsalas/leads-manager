@@ -207,23 +207,21 @@ def calcular(unidad, mensualidad_lista, mensualidad_cerrada, atribucion):
 
 # ── ¿Esta venta va por el tabulador? ─────────────────────────────
 
-# "Aromatex Home" es una línea de producto de Aromatex, no otra unidad de
-# negocio. Sin esta equivalencia, 7 de los 9 vendedores con más de una marca
-# contarían como multi-UN solo por tener ambas, y sus ventas normales
-# entrarían al tabulador sin deberlo.
-# Si el criterio cambia, es la única línea que hay que tocar.
-UN_EQUIVALENTES = {"Aromatex Home": "Aromatex"}
-
-
 def unidades_de(usuario):
-    """Unidades de negocio distintas de un vendedor, ya normalizadas."""
-    marcas = getattr(usuario, "especialidad_marca", None) or []
-    return {UN_EQUIVALENTES.get(m, m) for m in marcas if m}
+    """Unidades de negocio declaradas de un vendedor. Informativo: ya NO
+    decide si es multi-UN."""
+    return {m for m in (getattr(usuario, "especialidad_marca", None) or []) if m}
 
 
 def es_multi_un(usuario):
-    """True si el vendedor atiende más de una unidad de negocio."""
-    return len(unidades_de(usuario)) > 1
+    """True solo si tiene el perfil asignado a mano.
+
+    Antes se infería de especialidad_marca, pero eso metía por error a los
+    vendedores que solo tienen Aromatex y Aromatex Home —una línea de
+    producto, no dos negocios—. El perfil es una decisión de la dirección,
+    no algo que se deduzca de las marcas que atiende.
+    """
+    return bool(getattr(usuario, "perfil_multi_un", False))
 
 
 def aplica_tabulador(lead):
@@ -231,12 +229,12 @@ def aplica_tabulador(lead):
 
     Se cumplen DOS condiciones, no una:
 
-      1. El lead pertenece a un vendedor multi-UN. El tabulador nació para
-         resolver las ventas cruzadas entre unidades; un vendedor de una sola
-         UN no está en ese supuesto.
+      1. El dueño del lead tiene el perfil "vendedor multi UN" asignado.
+         Es una decisión explícita de la dirección, no algo que se deduzca
+         de las marcas que el vendedor atiende.
       2. Participó más de una persona en las cuatro etapas. Si alguien hizo
          todo solo, no hay nada que repartir y cobra con el esquema de
-         siempre, aunque sea multi-UN.
+         siempre, aunque tenga el perfil.
 
     Devuelve (aplica: bool, motivo: str) — el motivo se muestra en pantalla
     para que nadie tenga que adivinar por qué una venta comisionó de un modo
@@ -251,16 +249,15 @@ def aplica_tabulador(lead):
         return False, "El lead no tiene vendedor asignado."
 
     if not es_multi_un(dueno):
-        uns = ", ".join(sorted(unidades_de(dueno))) or "ninguna"
-        return False, (f"{dueno.nombre} atiende una sola unidad ({uns}). "
-                       f"El tabulador es para ventas cruzadas entre unidades.")
+        return False, (f"{dueno.nombre} no tiene el perfil de vendedor multi-UN. "
+                       f"El tabulador solo aplica a quien lo tenga asignado.")
 
     participantes = {uid for uid in atribucion_de(lead.id).values() if uid}
     if len(participantes) < 2:
         return False, ("Participó una sola persona en las cuatro etapas. "
                        "No hay nada que repartir.")
 
-    return True, (f"{dueno.nombre} es multi-UN y participaron "
+    return True, (f"{dueno.nombre} tiene el perfil multi-UN y participaron "
                   f"{len(participantes)} personas.")
 
 

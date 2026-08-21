@@ -2245,6 +2245,16 @@ fbq('track','PageView');
       <input type="checkbox" id="mv-turno" checked/> En turno (recibe leads automáticos vía round-robin)
     </label>
   </div>
+  <div class="form-group">
+    <label class="form-label" style="display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="mv-multiun"/> Vendedor multi UN
+    </label>
+    <div style="font-size:11px;color:var(--text2);margin-top:2px;padding-left:24px;">
+      Sus ventas compartidas comisionan por el tabulador de etapas
+      (Prospectar / Cita / Cotización / Cierre). Las que haga solo siguen
+      con el esquema normal.
+    </div>
+  </div>
 
   <div class="modal-actions">
     <button class="btn" onclick="closeVendedorModal()">Cancelar</button>
@@ -5737,6 +5747,7 @@ function openVendedorModal(){
   document.getElementById('mv-gmail').value='';
   document.getElementById('mv-email-signature').value='';
   document.getElementById('mv-turno').checked=true;
+  document.getElementById('mv-multiun').checked=false;
   document.querySelectorAll('#mv-marcas-pills input').forEach(c=>c.checked=false);
   document.getElementById('mv-title').textContent='Nuevo vendedor';
   document.getElementById('modal-vendedor').classList.add('open');
@@ -5757,6 +5768,7 @@ function editVendedor(id){
   document.getElementById('mv-gmail').value=v.gmail_address||'';
   document.getElementById('mv-email-signature').value=v.email_signature||'';
   document.getElementById('mv-turno').checked=!!v.en_turno;
+  document.getElementById('mv-multiun').checked=!!v.perfil_multi_un;
   document.querySelectorAll('#mv-marcas-pills input').forEach(c=>{
     c.checked=(v.especialidad_marca||[]).includes(c.value);
   });
@@ -5791,6 +5803,7 @@ async function guardarVendedor(){
     gmail_address:    document.getElementById('mv-gmail').value.trim().toLowerCase()||null,
     email_signature:  document.getElementById('mv-email-signature').value.trim()||null,
     en_turno:         document.getElementById('mv-turno').checked,
+    perfil_multi_un:  document.getElementById('mv-multiun').checked,
   };
   if(!body.nombre){document.getElementById('mv-nombre').focus();showToast('Falta','Nombre requerido');return;}
   if(!body.correo){document.getElementById('mv-correo').focus();showToast('Falta','Correo requerido');return;}

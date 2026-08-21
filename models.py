@@ -126,6 +126,10 @@ class Usuario(db.Model):
     )
     ultimo_lead_asignado = db.Column(db.DateTime(timezone=True), nullable=True)
     en_turno = db.Column(db.Boolean, default=True, nullable=False)
+    # FEAT-2026-08-21: el tabulador de comisiones por etapa aplica solo a
+    # quien tenga este perfil. Se asigna a mano, no se infiere de las marcas:
+    # tener Aromatex + Aromatex Home no vuelve multi-UN a nadie.
+    perfil_multi_un = db.Column(db.Boolean, default=False, nullable=False)
     baileys_session = db.Column(db.String(50), nullable=True)  # ej: "janeth", "azael" — para /scan/{session}
     zona_cobertura = db.Column(ARRAY(db.String(80)), nullable=False, default=list, server_default="{}")  # ej: {"Nuevo León", "Tamaulipas"}
     gmail_address = db.Column(db.String(200), nullable=True)  # Gmail corp para monitoreo (gmail_monitor.py)
@@ -157,6 +161,7 @@ class Usuario(db.Model):
             "especialidad_marca": self.especialidad_marca or [],
             "ultimo_lead_asignado": self.ultimo_lead_asignado.isoformat() if self.ultimo_lead_asignado else None,
             "en_turno": self.en_turno,
+            "perfil_multi_un": bool(self.perfil_multi_un),
             "baileys_session": self.baileys_session,
             "zona_cobertura": self.zona_cobertura or [],
             "gmail_address": self.gmail_address,

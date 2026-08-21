@@ -84,6 +84,8 @@ def crear_completo():
       rol_comercial (str, default "Asesor Comercial")
       rol_login (str, default "Vendedor") — Vendedor | KAM | Super Admin
       en_turno (bool, default True)
+      perfil_multi_un (bool, default False) — habilita el tabulador de
+        comisiones por etapa para sus ventas compartidas
     """
     data = request.get_json() or {}
     nombre = (data.get("nombre") or "").strip()
@@ -122,6 +124,9 @@ def crear_completo():
         especialidad_marca=list(data.get("especialidad_marca") or []),
         zona_cobertura=list(data.get("zona_cobertura") or []),
         en_turno=bool(data.get("en_turno", True)),
+        # FEAT-2026-08-21: solo con este perfil aplica el tabulador de
+        # comisiones por etapa. Se asigna a mano, no se infiere.
+        perfil_multi_un=bool(data.get("perfil_multi_un", False)),
         gmail_address=(data.get("gmail_address") or "").strip().lower() or None,
         email_signature=(data.get("email_signature") or "").strip() or None,
     )
@@ -186,6 +191,8 @@ def actualizar_completo(vendedor_id):
         perfil.zona_cobertura = data["zona_cobertura"]
     if "en_turno" in data:
         perfil.en_turno = bool(data["en_turno"])
+    if "perfil_multi_un" in data:
+        perfil.perfil_multi_un = bool(data["perfil_multi_un"])
     if "gmail_address" in data:
         perfil.gmail_address = (data["gmail_address"] or "").strip().lower() or None
     if "email_signature" in data:

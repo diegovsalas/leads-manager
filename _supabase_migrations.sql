@@ -305,3 +305,9 @@ CREATE TABLE IF NOT EXISTS sale_participaciones (
 );
 CREATE INDEX IF NOT EXISTS ix_sale_participaciones_sale ON sale_participaciones (sale_id);
 CREATE INDEX IF NOT EXISTS ix_sale_participaciones_user ON sale_participaciones (usuario_id);
+
+-- FEAT-2026-08-21: perfil "vendedor multi UN". El tabulador de comisiones
+-- por etapa aplica solo a quien tenga esta bandera, asignada a mano. Antes
+-- se infería de especialidad_marca, lo que metía por error a quienes solo
+-- tenían Aromatex + Aromatex Home.
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS perfil_multi_un BOOLEAN NOT NULL DEFAULT FALSE;
