@@ -605,6 +605,7 @@ fbq('track','PageView');
       </label>
       <span style="font-size:13px;color:var(--text2);">Pipe total:</span>
       <span style="font-size:14px;font-weight:600;color:var(--green);" id="pipe-total">$0</span>
+      <button class="btn" onclick="descargarPipeCSV()" title="Descarga el pipe visible en CSV, con la etapa de cada lead y quién hizo cada etapa del tabulador">&#11015; CSV</button>
       <button class="btn btn-filled" onclick="openLeadModal()">+ Nuevo lead</button>
     </div>
     </div>
@@ -4557,6 +4558,20 @@ function initPipeView(){
   }catch(e){}
   applyPipeFilters();
 }
+// FEAT-2026-08-21: descarga del pipe en CSV. Arrastra los filtros activos
+// de vendedor y UN para que el archivo coincida con lo que el usuario ve.
+// El backend vuelve a aplicar los permisos: esto es conveniencia, no seguridad.
+function descargarPipeCSV(){
+  const p = new URLSearchParams();
+  const fv = document.getElementById('filtro-vendedor');
+  if (fv && fv.value) p.set('vendedor', fv.value);
+  // el filtro global de UN vive en localStorage, igual que lo lee _injectUN
+  const un = (localStorage.getItem('avantex_un') || '').trim();
+  if (un && un !== 'Todas') p.set('un', un);
+  const qs = p.toString();
+  window.location.href = '/api/leads/export.csv' + (qs ? '?' + qs : '');
+}
+
 function cambiarFiltroVendedor(uuid){
   const url=new URL(location.href);
   if(uuid){url.searchParams.set('vendedor',uuid);}else{url.searchParams.delete('vendedor');}

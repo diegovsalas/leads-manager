@@ -1,7 +1,10 @@
 # blueprints/leads.py
+import csv
+import io
 import re
 import uuid
-from flask import Blueprint, request, jsonify, session, current_app
+from datetime import datetime
+from flask import Blueprint, request, jsonify, session, current_app, Response
 from sqlalchemy import or_, func
 from extensions import db, socketio
 from models import Lead, EtapaPipeline, OrigenLead, Usuario
@@ -1008,3 +1011,118 @@ def fijar_atribucion_lead(lead_id):
     log_actividad("editar", "lead", lead.id,
                   f"Atribución de comisión · {clave} → {uid or 'sin responsable'}")
     return jsonify({"ok": True, "etapa": clave, "usuario_id": uid})
+
+
+# ══════════════════════════════════════════════
+# EXPORT CSV DEL PIPE — FEAT-2026-08-21
+# ══════════════════════════════════════════════
+EXPORT_PIPE_COLUMNAS = [
+    "Etapa del pipeline", "Empresa", "Contacto", "Teléfono", "Unidad de negocio",
+    "Origen", "Vendedor asignado", "Valor estimado", "ICP", "Nivel ICP",
+    "Estado", "Tipo de cliente", "En nurturing", "Creado", "Último contacto",
+    "Próximo contacto", "Días en el pipe",
+    # Etapas del tabulador de comisiones: quién hizo cada una
+    "Prospectar", "Cita", "Cotización y seguimiento", "Cierre",
+    "Aplica tabulador", "Notas",
+]
+
+
+@leads_bp.route("/export.csv", methods=["GET"])
+def exportar_pipe_csv():
+    """Descarga el pipe en CSV, con la etapa de cada lead y quién hizo cada
+    etapa del tabulador de comisiones.
+
+    Respeta EXACTAMENTE los mismos filtros que listar_leads(): un vendedor
+    solo exporta sus leads, y el filtro global por UN aplica igual. Sin esto
+    el botón sería una fuga de datos.
+
+    Acepta ?etapa= para exportar una sola columna del tablero.
+    """
+    from blueprints.auth import get_vendedor_filter, effective_un_from_request
+    from un_filter import filtrar_leads_por_un
+    import comisiones as C
+
+    vendedor_id = get_vendedor_filter()
+    q = Lead.query
+    if vendedor_id:
+        q = q.filter(Lead.usuario_asignado_id == vendedor_id)
+    else:
+        filtro = (request.args.get("vendedor") or "").strip()
+        if filtro == "sin_asignar":
+            q = q.filter(Lead.usuario_asignado_id.is_(None))
+        elif filtro:
+            try:
+                uuid.UUID(filtro)
+                q = q.filter(Lead.usuario_asignado_id == filtro)
+            except (ValueError, TypeError):
+                pass
+    q = filtrar_leads_por_un(q, Lead, effective_un_from_request(request.args.get("un")))
+
+    etapa_filtro = (request.args.get("etapa") or "").strip()
+    if etapa_filtro:
+        try:
+            q = q.filter(Lead.etapa_pipeline == EtapaPipeline(etapa_filtro))
+        except ValueError:
+            return jsonify({"error": f"Etapa desconocida: {etapa_filtro}"}), 400
+
+    leads = q.order_by(Lead.etapa_pipeline, Lead.fecha_actualizacion.desc()).all()
+
+    # Atribuciones y vendedores en dos consultas, no una por lead.
+    from models import LeadAtribucion
+    ids = [l.id for l in leads]
+    atrib = {}
+    if ids:
+        for a in LeadAtribucion.query.filter(LeadAtribucion.lead_id.in_(ids)).all():
+            atrib.setdefault(str(a.lead_id), {})[a.etapa] = a.usuario_id
+    nombres = {str(u.id): u.nombre for u in Usuario.query.all()}
+    perfiles = {str(u.id): bool(u.perfil_multi_un) for u in Usuario.query.all()}
+
+    hoy = datetime.utcnow()
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(EXPORT_PIPE_COLUMNAS)
+
+    for l in leads:
+        a = atrib.get(str(l.id), {})
+        dueno = str(l.usuario_asignado_id) if l.usuario_asignado_id else None
+
+        # Mismo criterio que aplica_tabulador(), sin volver a consultar la BD
+        participantes = {u for u in a.values() if u}
+        aplica = bool(dueno and perfiles.get(dueno) and len(participantes) >= 2)
+
+        dias = (hoy - l.fecha_creacion.replace(tzinfo=None)).days if l.fecha_creacion else ""
+
+        w.writerow([
+            l.etapa_pipeline.value if l.etapa_pipeline else "",
+            l.empresa_nombre or "",
+            l.nombre or "",
+            l.telefono or "",
+            l.marca_interes or "",
+            l.origen.value if l.origen else "",
+            nombres.get(dueno, "") if dueno else "Sin asignar",
+            float(l.valor_estimado) if l.valor_estimado is not None else "",
+            l.icp_score if l.icp_score is not None else "",
+            l.icp_nivel or "",
+            l.estado_cliente or "",
+            l.tipo_cliente or "",
+            "sí" if l.en_nurturing else "no",
+            l.fecha_creacion.strftime("%Y-%m-%d") if l.fecha_creacion else "",
+            l.fecha_ultimo_contacto.strftime("%Y-%m-%d") if l.fecha_ultimo_contacto else "",
+            l.proximo_contacto.strftime("%Y-%m-%d") if l.proximo_contacto else "",
+            dias,
+            nombres.get(str(a.get("prospectar")), "") if a.get("prospectar") else "",
+            nombres.get(str(a.get("cita")), "") if a.get("cita") else "",
+            nombres.get(str(a.get("cotizacion")), "") if a.get("cotizacion") else "",
+            nombres.get(str(a.get("cierre")), "") if a.get("cierre") else "",
+            "sí" if aplica else "no",
+            (l.notas or "").replace("\n", " ").replace("\r", " "),
+        ])
+
+    sufijo = f"_{etapa_filtro.replace(' ', '-')}" if etapa_filtro else ""
+    nombre = f"pipe{sufijo}_{hoy.strftime('%Y%m%d_%H%M')}.csv"
+    # BOM para que Excel en Windows abra los acentos correctamente
+    return Response(
+        "﻿" + out.getvalue(),
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{nombre}"'},
+    )
