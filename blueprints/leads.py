@@ -1247,9 +1247,15 @@ def cerrar_lead(lead_id):
 # ══════════════════════════════════════════════
 EXPORT_PIPE_COLUMNAS = [
     "Etapa del pipeline", "Empresa", "Contacto", "Teléfono", "Unidad de negocio",
-    "Origen", "Vendedor asignado", "Valor estimado", "ICP", "Nivel ICP",
+    "Origen", "Vendedor asignado", "Valor estimado",
+    "Tipo de venta",                       # Recurrente / Eventual
+    "ICP", "Nivel ICP",
     "Estado", "Tipo de cliente", "En nurturing", "Creado", "Último contacto",
     "Próximo contacto", "Días en el pipe",
+    # Datos del cierre. Solo se llenan en los leads ganados.
+    "Fecha de cierre", "Monto de cierre",
+    "Factura", "Fecha de factura", "Monto facturado",
+    "Forma de pago", "Condiciones y notas de pago",
     # Etapas del tabulador de comisiones: quién hizo cada una
     "Prospectar", "Cita", "Cotización y seguimiento", "Cierre",
     "Aplica tabulador", "Notas",
@@ -1306,6 +1312,24 @@ def exportar_pipe_csv():
     nombres = {str(u.id): u.nombre for u in Usuario.query.all()}
     perfiles = {str(u.id): bool(u.perfil_multi_un) for u in Usuario.query.all()}
 
+    # Datos del cierre, también en dos consultas y no una por lead.
+    from models import Sale, Cotizacion
+    ventas = {}
+    pagos = {}
+    if ids:
+        for s in Sale.query.filter(Sale.lead_id.in_(ids)).all():
+            ventas[str(s.lead_id)] = s
+        # La forma de pago vive en la cotización, no en el lead. Nos quedamos
+        # con la más reciente de cada uno, que es la que se terminó cerrando.
+        for c in (Cotizacion.query
+                  .filter(Cotizacion.lead_id.in_(ids))
+                  .order_by(Cotizacion.lead_id, Cotizacion.fecha.asc()).all()):
+            if c.condiciones_pago:
+                pagos[str(c.lead_id)] = c.condiciones_pago
+
+    def _fecha(v):
+        return v.strftime("%Y-%m-%d") if v else ""
+
     hoy = datetime.utcnow()
     out = io.StringIO()
     w = csv.writer(out)
@@ -1321,6 +1345,16 @@ def exportar_pipe_csv():
 
         dias = (hoy - l.fecha_creacion.replace(tzinfo=None)).days if l.fecha_creacion else ""
 
+        # Fecha de cierre: la de la venta es la buena. Los leads cerrados antes
+        # de que existieran las ventas no la tienen, así que se cae a la fecha
+        # de factura. No se usa fecha_actualizacion: cambia con cualquier edición
+        # y daría una fecha de cierre falsa.
+        venta = ventas.get(str(l.id))
+        f_cierre = _fecha(venta.closed_at) if venta else (
+            _fecha(l.factura_fecha) or _fecha(l.factura_registrada_at))
+        monto_cierre = (float(venta.monthly_amount or venta.total_amount or 0)
+                        if venta else "")
+
         w.writerow([
             l.etapa_pipeline.value if l.etapa_pipeline else "",
             l.empresa_nombre or "",
@@ -1330,6 +1364,7 @@ def exportar_pipe_csv():
             l.origen.value if l.origen else "",
             nombres.get(dueno, "") if dueno else "Sin asignar",
             float(l.valor_estimado) if l.valor_estimado is not None else "",
+            l.tipo_venta or "",
             l.icp_score if l.icp_score is not None else "",
             l.icp_nivel or "",
             l.estado_cliente or "",
@@ -1339,6 +1374,13 @@ def exportar_pipe_csv():
             l.fecha_ultimo_contacto.strftime("%Y-%m-%d") if l.fecha_ultimo_contacto else "",
             l.proximo_contacto.strftime("%Y-%m-%d") if l.proximo_contacto else "",
             dias,
+            f_cierre,
+            monto_cierre,
+            l.factura_numero or "",
+            _fecha(l.factura_fecha),
+            float(l.factura_monto) if l.factura_monto is not None else "",
+            pagos.get(str(l.id), ""),
+            (l.factura_notas or "").replace("\n", " ").replace("\r", " "),
             nombres.get(str(a.get("prospectar")), "") if a.get("prospectar") else "",
             nombres.get(str(a.get("cita")), "") if a.get("cita") else "",
             nombres.get(str(a.get("cotizacion")), "") if a.get("cotizacion") else "",
