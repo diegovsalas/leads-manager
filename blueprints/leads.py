@@ -9,6 +9,7 @@ from sqlalchemy import or_, func
 from extensions import db, socketio
 from models import Lead, EtapaPipeline, OrigenLead, Usuario
 from icp_scoring import calcular_icp, INDUSTRIAS, TAMANOS
+from blueprints.auth import require_role
 from actividad import log_actividad
 from meta_conversions import send_pipeline_event
 
@@ -579,9 +580,17 @@ def mover_lead(lead_id):
     # FEAT-2026-08-21: propone quién hizo cada etapa del tabulador de
     # comisiones. Solo propone: nunca pisa una atribución ya corregida a
     # mano, y no falla el movimiento del lead si algo sale mal.
+    #
+    # FIX-2026-08-24: se atribuye a QUIEN MUEVE el lead, no a su dueño.
+    # Antes se pasaba lead.usuario_asignado_id, así que las cuatro etapas
+    # quedaban siempre a nombre de la misma persona; como aplica_tabulador()
+    # exige dos participantes distintos, el tabulador no se activaba nunca.
+    # Si no hay sesión (movimientos automáticos: bots, webhooks, ETL) se
+    # conserva el dueño como responsable.
     try:
         from comisiones import registrar_avance
-        registrar_avance(lead, nueva_etapa.value, lead.usuario_asignado_id)
+        quien_mueve = session.get("usuario_id") or lead.usuario_asignado_id
+        registrar_avance(lead, nueva_etapa.value, quien_mueve)
     except Exception as e:
         current_app.logger.warning(f"[comisiones] atribución automática falló: {e}")
 
@@ -983,9 +992,15 @@ def comision_lead(lead_id):
 
 
 @leads_bp.route("/<uuid:lead_id>/comision/atribucion", methods=["POST"])
+@require_role(["super_admin"])
 def fijar_atribucion_lead(lead_id):
     """Corrección manual de quién hizo cada etapa. Body: {etapa, usuario_id}.
-    usuario_id vacío deja la etapa sin responsable (no se paga)."""
+    usuario_id vacío deja la etapa sin responsable (no se paga).
+
+    FIX-2026-08-24: esta ruta decide a quién se le paga y estaba abierta a
+    cualquiera con sesión. La atribución automática sigue siendo de todos
+    (la genera quien mueve el lead); corregirla a mano es de dirección.
+    """
     import comisiones as C
 
     lead = db.session.get(Lead, lead_id)

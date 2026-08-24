@@ -2464,6 +2464,14 @@ fbq('track','PageView');
       <div class="lp-section-title">Cotizaciones</div>
       <div id="lp-cotizaciones" style="font-size:13px;color:var(--text3);">Cargando...</div>
     </div>
+
+    <!-- Solo aparece en leads de un vendedor con perfil multi UN -->
+    <div class="lp-section" id="lp-comision-section" style="display:none;">
+      <div class="lp-section-title">Participación por etapa</div>
+      <div id="lp-comision-estado" style="font-size:12px;line-height:1.5;margin-bottom:10px;padding:8px 10px;border-radius:var(--r);"></div>
+      <div id="lp-comision-etapas"></div>
+      <div id="lp-comision-reparto"></div>
+    </div>
   </div>
   <div class="lp-actions">
     <button class="btn btn-filled" onclick="closeLeadPanel();abrirChat(document.getElementById('lp-id').value,document.getElementById('lp-nombre').textContent,document.getElementById('lp-telefono').textContent)">Chat</button>
@@ -5303,10 +5311,105 @@ async function abrirLeadPanel(id){
       </div>`).join('');
     }).catch(()=>{cotDiv.innerHTML='<span style="color:var(--text3);">Error al cargar</span>';});
 
+    // Participación por etapa — solo si el dueño es vendedor multi UN
+    cargarComisionLead(l);
+
     // Open panel
     document.getElementById('lead-panel').classList.add('open');
     document.getElementById('lp-overlay').classList.add('open');
   }catch(e){console.error('Lead panel error:',e);}
+}
+
+// El tabulador de etapas solo corre en las ventas compartidas de un vendedor
+// multi UN. En el resto del pipe esta sección ni siquiera aparece, porque esas
+// ventas comisionan con el esquema de siempre.
+async function cargarComisionLead(l){
+  const sec = document.getElementById('lp-comision-section');
+  if(!sec) return;
+  const dueno = l.usuario_asignado;
+  if(!dueno || !dueno.perfil_multi_un){ sec.style.display='none'; return; }
+  sec.style.display='';
+
+  const estado = document.getElementById('lp-comision-estado');
+  const cont   = document.getElementById('lp-comision-etapas');
+  const rep    = document.getElementById('lp-comision-reparto');
+  estado.textContent='Cargando...';
+  estado.style.background='var(--bg)'; estado.style.color='var(--text2)';
+  cont.innerHTML=''; rep.innerHTML='';
+
+  let d;
+  try{
+    const r = await fetch('/api/leads/'+l.id+'/comision');
+    d = await r.json();
+    if(!r.ok) throw new Error(d.error||'error');
+  }catch(e){
+    estado.textContent='No se pudo cargar la participación por etapa.';
+    estado.style.background='var(--red-bg)'; estado.style.color='var(--red)';
+    return;
+  }
+
+  // Por qué esta venta se reparte o no. El motivo viene del backend para que
+  // nadie tenga que adivinar con qué criterio comisionó.
+  const aplica = !!d.aplica_tabulador;
+  estado.innerHTML = `<strong>${aplica?'Se reparte entre los participantes':'Comisión con el esquema normal'}</strong>`
+                   + `<br><span style="opacity:.85;">${_esc(d.motivo||'')}</span>`;
+  estado.style.background = aplica ? 'var(--green-bg)' : 'var(--bg)';
+  estado.style.color      = aplica ? 'var(--green)'    : 'var(--text2)';
+
+  // Las cuatro etapas con quién las hizo. Corregir a mano es de dirección:
+  // define a quién se le paga.
+  const opts = _vendedores.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  cont.innerHTML = (d.etapas||[]).map(e=>{
+    const resp = e.usuario_id ? _vendedores.find(v=>String(v.id)===String(e.usuario_id)) : null;
+    const control = IS_ADMIN
+      ? `<select onchange="fijarAtribucionLead('${l.id}','${e.clave}',this.value)"
+                 style="font-size:12px;padding:2px 4px;border:1px solid var(--border);border-radius:var(--r);max-width:150px;">
+           <option value="">Sin responsable</option>
+           ${opts.map(v=>`<option value="${v.id}"${String(v.id)===String(e.usuario_id)?' selected':''}>${_esc(v.nombre)}</option>`).join('')}
+         </select>`
+      : `<span style="font-size:12px;color:${resp?'var(--text)':'var(--text3)'};">${resp?_esc(resp.nombre):'Sin responsable'}</span>`;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border-light);">
+      <span style="font-size:12px;min-width:120px;">${_esc(e.nombre)}</span>
+      <span style="font-size:11px;color:var(--text3);font-family:var(--mono);min-width:34px;">${Math.round((e.peso||0)*100)}%</span>
+      <span style="margin-left:auto;">${control}</span>
+    </div>`;
+  }).join('') || '<div style="font-size:12px;color:var(--text3);">No hay etapas configuradas en el tabulador.</div>';
+
+  // El reparto en dinero. Si falta la unidad o el monto, el backend lo dice.
+  if(d.error){
+    rep.innerHTML = `<div style="margin-top:10px;font-size:11px;color:var(--orange);">${_esc(d.error)}</div>`;
+    return;
+  }
+  if(!aplica || !(d.participaciones||[]).length){ rep.innerHTML=''; return; }
+
+  const filas = d.participaciones.map(p=>`<div style="display:flex;gap:8px;font-size:12px;padding:3px 0;">
+      <span>${_esc(p.nombre)}</span>
+      <span style="color:var(--text3);font-size:11px;">${(p.etapas||[]).join(', ')}</span>
+      <span style="margin-left:auto;font-family:var(--mono);">${Math.round(p.pct*100)}%</span>
+      <span style="font-family:var(--mono);color:var(--green);font-weight:600;min-width:74px;text-align:right;">${fmt$(p.monto)}</span>
+    </div>`).join('');
+  const pendiente = d.monto_sin_asignar > 0
+    ? `<div style="font-size:11px;color:var(--orange);margin-top:4px;">${fmt$(d.monto_sin_asignar)} sin repartir: hay etapas sin responsable.</div>`
+    : '';
+  rep.innerHTML = `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:6px;">
+        <span>Reparto al cerrar</span><span style="font-family:var(--mono);">Total ${fmt$(d.comision_total)}</span>
+      </div>${filas}${pendiente}
+    </div>`;
+}
+
+async function fijarAtribucionLead(leadId, etapa, usuarioId){
+  try{
+    const r = await fetch('/api/leads/'+leadId+'/comision/atribucion',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({etapa: etapa, usuario_id: usuarioId||''})
+    });
+    const d = await r.json();
+    if(!r.ok){ showToast('Error', d.error||'No se pudo guardar'); return; }
+    showToast('Participación actualizada','Se recalculó el reparto');
+    const l = await (await fetch('/api/leads/'+leadId)).json();
+    cargarComisionLead(l);   // el reparto cambia, hay que repintarlo
+  }catch(e){ showToast('Error', e.message||'No se pudo guardar'); }
 }
 
 function closeLeadPanel(){
