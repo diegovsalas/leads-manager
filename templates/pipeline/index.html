@@ -2323,7 +2323,7 @@ fbq('track','PageView');
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Monto del cierre (MXN)</label>
-        <input class="form-input" id="mg-monto" type="number" min="0" step="0.01" placeholder="0.00"/>
+        <input class="form-input" id="mg-monto" type="number" min="0" step="0.01" placeholder="0.00" oninput="_mgPreviewComision()"/>
         <div style="font-size:10px;color:var(--text3);margin-top:2px;">Editable si difiere del valor estimado</div>
       </div>
       <div class="form-group">
@@ -2340,6 +2340,30 @@ fbq('track','PageView');
       <label class="form-label">Notas (opcional)</label>
       <textarea class="form-input" id="mg-notas" rows="2" style="resize:vertical;" placeholder="Forma de pago, condiciones de crédito, contacto de pago..."></textarea>
     </div>
+
+    <!-- FEAT-2026-08-24: la comisión se calcula y se congela al cerrar.
+         Este bloque muestra el reparto ANTES de confirmar. -->
+    <div class="form-group" id="mg-comision-block" style="display:none;border-top:1px solid var(--border);padding-top:12px;">
+      <label class="form-label">Comisión de esta venta</label>
+
+      <div id="mg-lista-row" style="display:none;margin-bottom:8px;">
+        <label class="form-label" style="font-weight:400;font-size:11px;">Mensualidad de lista (antes de descuento)</label>
+        <input class="form-input" id="mg-lista" type="number" min="0" step="0.01" placeholder="0.00" oninput="_mgPreviewComision()"/>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px;">El descuento sobre este precio ajusta la comisión.</div>
+      </div>
+
+      <div id="mg-comtype-row" style="display:none;margin-bottom:8px;">
+        <label class="form-label" style="font-weight:400;font-size:11px;">¿Quién generó este lead?</label>
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="nl-pill mg-ct-pill" data-val="autogenerado" onclick="_mgSelectComType('autogenerado')">Lo generó el vendedor</button>
+          <button type="button" class="nl-pill mg-ct-pill" data-val="lead_otorgado" onclick="_mgSelectComType('lead_otorgado')">Se le otorgó</button>
+        </div>
+        <input type="hidden" id="mg-comtype" value=""/>
+      </div>
+
+      <div id="mg-comision-preview" style="font-size:12px;color:var(--text2);"></div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn" onclick="closeGanadoModal()">Cancelar</button>
       <button class="btn" style="background:#16a34a;color:#fff;font-weight:500;padding:6px 12px;" onclick="confirmarGanado()">Confirmar cierre ganado</button>
@@ -6070,6 +6094,112 @@ function _mgSelectTipo(val){
   document.querySelectorAll('#mg-tipo-venta-group .mg-tv-pill').forEach(p=>{
     p.classList.toggle('active', p.dataset.val===val);
   });
+  _mgPreviewComision();
+}
+
+function _mgSelectComType(val){
+  document.getElementById('mg-comtype').value = val||'';
+  document.querySelectorAll('#mg-comtype-row .mg-ct-pill').forEach(p=>{
+    p.classList.toggle('active', p.dataset.val===val);
+  });
+  _mgPreviewComision();
+}
+
+// Recurrente = suscripción mensual; Eventual = servicio de una sola vez.
+function _mgTipoVenta(){
+  return document.getElementById('mg-tipo-venta').value === 'Eventual'
+    ? 'servicio_unico' : 'suscripcion_nueva';
+}
+
+// Muestra qué comisión se va a congelar, con los montos que están capturados
+// en este momento. No escribe nada: solo consulta.
+let _mgPreviewTimer = null;
+function _mgPreviewComision(){
+  clearTimeout(_mgPreviewTimer);
+  _mgPreviewTimer = setTimeout(_mgPreviewComisionAhora, 250);
+}
+
+async function _mgPreviewComisionAhora(){
+  const leadId = document.getElementById('mg-lead-id').value;
+  const bloque = document.getElementById('mg-comision-block');
+  const salida = document.getElementById('mg-comision-preview');
+  if(!leadId || !bloque) return;
+
+  const monto = parseFloat(document.getElementById('mg-monto').value || 0);
+  if(!monto){ bloque.style.display='none'; return; }
+  bloque.style.display='';
+
+  const tipo  = _mgTipoVenta();
+  const lista = parseFloat(document.getElementById('mg-lista').value || 0) || monto;
+  const body  = {
+    mensualidad_lista: lista,
+    mensualidad_cerrada: monto,
+    total_amount: tipo==='servicio_unico' ? monto : 0,
+    sale_type: tipo,
+  };
+  const ct = document.getElementById('mg-comtype').value;
+  if(ct) body.commission_type = ct;
+
+  salida.innerHTML = '<span style="color:var(--text3);">Calculando...</span>';
+  let d;
+  try{
+    const r = await fetch('/api/leads/'+leadId+'/cierre/preview',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)});
+    d = await r.json();
+    if(!r.ok) throw new Error(d.error||'error');
+  }catch(e){
+    salida.innerHTML = '<span style="color:var(--orange);">No se pudo calcular la comisión.</span>';
+    return;
+  }
+
+  if(d.venta_existente){
+    salida.innerHTML = `<div style="color:var(--orange);">Este lead ya tiene una venta registrada por ${fmt$(d.venta_existente.comision)}. No se creará otra.</div>`;
+    return;
+  }
+  if(d.error){
+    salida.innerHTML = `<span style="color:var(--orange);">${_esc(d.error)}</span>`;
+    return;
+  }
+
+  const tabulador = d.esquema === 'tabulador';
+  // La mensualidad de lista solo importa cuando hay tabulador: el descuento
+  // sobre el precio de lista ajusta la comisión.
+  document.getElementById('mg-lista-row').style.display   = tabulador ? '' : 'none';
+  // Autogenerado/otorgado solo mueve el número en el esquema normal.
+  document.getElementById('mg-comtype-row').style.display = tabulador ? 'none' : '';
+  if(!tabulador && !document.getElementById('mg-comtype').value && d.commission_type){
+    document.getElementById('mg-comtype').value = d.commission_type;
+    document.querySelectorAll('#mg-comtype-row .mg-ct-pill').forEach(p=>{
+      p.classList.toggle('active', p.dataset.val===d.commission_type);
+    });
+  }
+
+  let html = `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+      <span style="font-weight:600;color:${tabulador?'var(--green)':'var(--text)'};">
+        ${tabulador?'Se reparte entre los participantes':'Comisión con el esquema normal'}</span>
+      <span style="font-family:var(--mono);font-weight:600;">${fmt$(d.comision_total)}</span>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">${_esc(d.motivo||'')}</div>`;
+
+  if(tabulador){
+    html += (d.participaciones||[]).map(p=>`<div style="display:flex;gap:8px;padding:2px 0;">
+        <span>${_esc(p.nombre)}</span>
+        <span style="color:var(--text3);font-size:11px;">${(p.etapas||[]).join(', ')}</span>
+        <span style="margin-left:auto;font-family:var(--mono);">${Math.round(p.pct*100)}%</span>
+        <span style="font-family:var(--mono);color:var(--green);min-width:74px;text-align:right;">${fmt$(p.monto)}</span>
+      </div>`).join('');
+    if(d.monto_sin_asignar > 0){
+      html += `<div style="font-size:11px;color:var(--orange);margin-top:4px;">${fmt$(d.monto_sin_asignar)} sin repartir: hay etapas sin responsable. Se puede corregir desde el panel del lead.</div>`;
+    }
+    if(d.requiere_autorizacion){
+      html += `<div style="font-size:11px;color:var(--orange);margin-top:4px;">Descuento ${_esc(d.etiqueta_descuento||'')}: requiere autorización.</div>`;
+    }
+  }else if(d.beneficiario){
+    html += `<div style="font-size:12px;">Para ${_esc(d.beneficiario)}${d.tasa!=null?` · tasa ${d.tasa}`:''}</div>`;
+  }
+  html += `<div style="font-size:10px;color:var(--text3);margin-top:8px;">Este reparto se congela al confirmar: si después cambian los pesos del tabulador, esta venta no se mueve.</div>`;
+  salida.innerHTML = html;
 }
 
 // Abrir el modal para editar factura de un lead ya cerrado ganado
@@ -6077,6 +6207,10 @@ function _mgSelectTipo(val){
 async function abrirEditarFactura(){
   const leadId = document.getElementById('lp-id')?.value;
   if(!leadId){showToast('Error','No hay lead activo');return;}
+  // Este lead YA está cerrado y su comisión ya se congeló. Aquí solo se
+  // corrigen los datos de la factura: no se vuelve a cerrar la venta.
+  _mgModo = 'factura';
+  document.getElementById('mg-comision-block').style.display='none';
   document.getElementById('mg-lead-id').value = leadId;
   _mgSelectTipo('');
   // Cargar valores actuales
@@ -6145,11 +6279,22 @@ async function nuevaVentaMismoCliente(){
   }, 200);
 }
 
+// El modal de "Ganado" sirve para dos cosas distintas: cerrar la venta
+// (crea venta + congela comisión) o solo corregir la factura de un lead ya
+// cerrado. Sin esta bandera, editar una factura intentaría cerrar de nuevo.
+let _mgModo = 'cierre';
+
 async function openGanadoModal(leadId){
+  _mgModo = 'cierre';
   document.getElementById('mg-lead-id').value=leadId;
   // Limpiar campos del modal
   document.getElementById('mg-numero').value='';
   document.getElementById('mg-notas').value='';
+  // Bloque de comisión: arranca limpio en cada cierre
+  document.getElementById('mg-comision-block').style.display='none';
+  document.getElementById('mg-comision-preview').innerHTML='';
+  document.getElementById('mg-lista').value='';
+  _mgSelectComType('');
   _mgSelectTipo('');
   // Default: fecha hoy
   document.getElementById('mg-fecha').value=new Date().toISOString().split('T')[0];
@@ -6159,11 +6304,15 @@ async function openGanadoModal(leadId){
     if(r.ok){
       const lead=await r.json();
       document.getElementById('mg-monto').value=lead.valor_estimado||'';
+      // El valor estimado es el precio de lista; el monto del cierre puede
+      // bajar si hubo descuento, y esa diferencia mueve la comisión.
+      document.getElementById('mg-lista').value=lead.valor_estimado||'';
       if(lead.tipo_venta) _mgSelectTipo(lead.tipo_venta);
     }else{
       document.getElementById('mg-monto').value='';
     }
   }catch{ document.getElementById('mg-monto').value=''; }
+  _mgPreviewComision();
   document.getElementById('modal-ganado').classList.add('open');
   setTimeout(()=>document.getElementById('mg-monto').focus(),100);
 }
@@ -6211,17 +6360,44 @@ async function confirmarGanado(){
     const r2=await fetch('/api/leads/'+leadId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(!r2.ok){const e=await r2.json().catch(()=>({error:'Error'}));throw new Error(e.error||'Datos de factura no guardaron');}
 
-    // 2. Mover a Cerrado Ganado
-    const r1=await fetch('/api/leads/'+leadId+'/mover',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({etapa_pipeline:'Cerrado Ganado'})});
-    if(!r1.ok){const e=await r1.json().catch(()=>({error:'Error'}));throw new Error(e.error||'No se pudo mover');}
+    // Modo factura: el lead ya está cerrado y su comisión ya se congeló.
+    // Solo se guardaron los datos de arriba; no hay nada más que hacer.
+    if(_mgModo === 'factura'){
+      closeGanadoModal();
+      showToast('Factura actualizada', numero ? 'Folio '+numero : 'Datos guardados');
+      setTimeout(()=>{if(typeof loadKanban==='function')loadKanban();},500);
+      return;
+    }
 
+    // 2. Cerrar: registra la venta, congela la comisión y mueve la etapa.
+    //    FIX-2026-08-24: antes esto era un PATCH /mover, que movía la tarjeta
+    //    pero no generaba venta ni comisión — la tabla sales quedaba vacía.
+    const tipoV = _mgTipoVenta();
+    const cerrada = parseFloat(monto || 0);
+    const cierreBody = {
+      mensualidad_cerrada: cerrada,
+      mensualidad_lista: parseFloat(document.getElementById('mg-lista').value || 0) || cerrada,
+      total_amount: tipoV==='servicio_unico' ? cerrada : 0,
+      sale_type: tipoV,
+      sale_category: tipoVenta==='Eventual' ? 'eventual' : 'recurrente',
+    };
+    const ct = document.getElementById('mg-comtype').value;
+    if(ct) cierreBody.commission_type = ct;
+
+    const r1=await fetch('/api/leads/'+leadId+'/cerrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cierreBody)});
+    const cierre = await r1.json().catch(()=>({}));
+    if(!r1.ok){
+      // 409 = ya tenía venta. La etapa no se movió: se avisa y no se finge éxito.
+      throw new Error(cierre.error||'No se pudo cerrar la venta');
+    }
     closeGanadoModal();
     const tipoLabel = tipoVenta==='Recurrente' ? '🔁 Recurrente' : '📅 Eventual';
-    if(numero){
-      showToast('🎉 Ganado', tipoLabel+' · Factura '+numero);
-    }else{
-      showToast('🎉 Ganado', tipoLabel+' · Recuerda capturar la factura después');
-    }
+    // El detalle que importa ahora es la comisión: es lo que se acaba de congelar.
+    const detalleCom = cierre.esquema==='tabulador'
+      ? `Comisión ${fmt$(cierre.comision_total)} repartida entre ${(cierre.participaciones||[]).length} personas`
+      : `Comisión ${fmt$(cierre.comision_total)}`;
+    showToast('🎉 Ganado', tipoLabel+' · '+detalleCom
+              + (numero ? ' · Factura '+numero : ''));
     // Refrescar la meta del vendedor (si la vista es propia)
     if(typeof loadMetaVendedor==='function') loadMetaVendedor();
     setTimeout(()=>{if(typeof loadKanban==='function')loadKanban();else location.reload();},500);

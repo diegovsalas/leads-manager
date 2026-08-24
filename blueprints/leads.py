@@ -1029,6 +1029,220 @@ def fijar_atribucion_lead(lead_id):
 
 
 # ══════════════════════════════════════════════
+# CIERRE DE VENTA — FEAT-2026-08-24
+#
+# Hasta hoy, mover un lead a "Cerrado Ganado" no generaba nada: la tabla
+# sales quedaba vacía y la comisión nunca se congelaba. Este es el único
+# camino que crea la venta.
+# ══════════════════════════════════════════════
+
+# De dónde salió el lead decide si el vendedor lo generó (cobra completo) o
+# se lo dieron (cobra la mitad). Es una propuesta: la pantalla de cierre lo
+# muestra y el gerente puede cambiarlo antes de confirmar.
+ORIGEN_A_COMISION = {
+    "Prospeccion":   "autogenerado",
+    "Upselling":     "autogenerado",
+    "Cross-selling": "autogenerado",
+    "Meta Ads":          "lead_otorgado",
+    "Web":               "lead_otorgado",
+    "WhatsApp Organico": "lead_otorgado",
+}
+
+
+@leads_bp.route("/<uuid:lead_id>/cierre/preview", methods=["POST"])
+def preview_cierre(lead_id):
+    """Cómo quedaría la venta con los montos que se están capturando, antes
+    de confirmar. No escribe nada."""
+    import comisiones as C
+    from blueprints.sales import _calc_commission
+    from models import Sale
+
+    lead = db.session.get(Lead, lead_id)
+    if not lead:
+        return jsonify({"error": "Lead no encontrado"}), 404
+
+    data = request.get_json() or {}
+    unidad = (data.get("unidad") or lead.marca_interes or "").strip()
+    try:
+        lista   = float(data.get("mensualidad_lista") or lead.valor_estimado or 0)
+        cerrada = float(data.get("mensualidad_cerrada") or lista)
+        total   = float(data.get("total_amount") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Montos inválidos"}), 400
+
+    sale_type  = data.get("sale_type") or "suscripcion_nueva"
+    com_type   = data.get("commission_type") or ORIGEN_A_COMISION.get(
+        lead.origen.value if lead.origen else "", "lead_otorgado")
+
+    aplica, motivo = C.aplica_tabulador(lead)
+    out = {"aplica_tabulador": aplica, "motivo": motivo,
+           "unidad": unidad, "commission_type": com_type,
+           "venta_existente": None}
+
+    ya = Sale.query.filter_by(lead_id=lead.id).first()
+    if ya:
+        out["venta_existente"] = {"id": str(ya.id),
+                                  "comision": float(ya.commission_amount or 0),
+                                  "cerrada_el": ya.closed_at.isoformat() if ya.closed_at else None}
+
+    if aplica:
+        r = C.calcular(unidad, lista, cerrada, C.atribucion_de(lead.id))
+        if r.get("error"):
+            out["error"] = r["error"]
+            return jsonify(out)
+        out.update({
+            "esquema": "tabulador",
+            "comision_total": float(r["comision_total"]),
+            "descuento": float(r["descuento"]),
+            "etiqueta_descuento": r["etiqueta_descuento"],
+            "requiere_autorizacion": r["requiere_autorizacion"],
+            "participaciones": [{"usuario_id": str(p["usuario_id"]), "nombre": p["nombre"],
+                                 "etapas": p["etapas"], "pct": float(p["pct"]),
+                                 "monto": float(p["monto"])}
+                                for p in r["participaciones"]],
+            "monto_sin_asignar": float(r["monto_sin_asignar"]),
+            "nota_un": r["nota_un"],
+        })
+    else:
+        rate, amount = _calc_commission(sale_type, com_type, cerrada, total)
+        out.update({
+            "esquema": "normal",
+            "comision_total": round(amount, 2),
+            "tasa": rate,
+            "beneficiario": lead.usuario_asignado.nombre if lead.usuario_asignado else None,
+        })
+    return jsonify(out)
+
+
+@leads_bp.route("/<uuid:lead_id>/cerrar", methods=["POST"])
+def cerrar_lead(lead_id):
+    """Cierra el lead como ganado: registra la venta, congela el reparto de
+    comisión y mueve la etapa. Todo en una sola transacción.
+
+    El reparto se congela a propósito: si mañana cambian los pesos del
+    tabulador, lo ya cerrado no se mueve.
+    """
+    from decimal import Decimal
+    from datetime import datetime, timezone
+    import comisiones as C
+    from blueprints.auth import get_vendedor_filter
+    from blueprints.sales import _calc_commission, _parse_dt
+    from models import Sale
+
+    lead = db.session.get(Lead, lead_id)
+    if not lead:
+        return jsonify({"error": "Lead no encontrado"}), 404
+
+    # Un vendedor solo cierra sus propios leads.
+    vendedor_id = get_vendedor_filter()
+    if vendedor_id and str(lead.usuario_asignado_id) != str(vendedor_id):
+        return jsonify({"error": "No tienes permisos sobre este lead"}), 403
+
+    # Una venta por lead. Si ya existe se devuelve, no se duplica.
+    ya = Sale.query.filter_by(lead_id=lead.id).first()
+    if ya:
+        return jsonify({"error": "Este lead ya tiene una venta registrada",
+                        "sale_id": str(ya.id)}), 409
+
+    data = request.get_json() or {}
+    unidad = (data.get("unidad") or lead.marca_interes or "").strip()
+    if not unidad:
+        return jsonify({"error": "Falta la unidad de negocio"}), 400
+
+    sale_type = data.get("sale_type") or "suscripcion_nueva"
+    if sale_type not in ("suscripcion_nueva", "servicio_unico", "upsell"):
+        return jsonify({"error": "Tipo de venta inválido"}), 400
+
+    try:
+        lista   = float(data.get("mensualidad_lista") or lead.valor_estimado or 0)
+        cerrada = float(data.get("mensualidad_cerrada") or lista)
+        total   = float(data.get("total_amount") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Montos inválidos"}), 400
+
+    if sale_type == "servicio_unico":
+        if total <= 0:
+            return jsonify({"error": "Un servicio único necesita monto total"}), 400
+    elif cerrada <= 0:
+        return jsonify({"error": "Falta la mensualidad cerrada"}), 400
+
+    com_type = data.get("commission_type") or ORIGEN_A_COMISION.get(
+        lead.origen.value if lead.origen else "", "lead_otorgado")
+    if com_type not in ("autogenerado", "lead_otorgado"):
+        return jsonify({"error": "Tipo de comisión inválido"}), 400
+
+    # Quien cierra hizo la etapa de cierre. Se registra ANTES de calcular,
+    # porque cambia quiénes participan y por lo tanto el reparto.
+    quien_cierra = session.get("usuario_id") or lead.usuario_asignado_id
+    try:
+        C.registrar_avance(lead, EtapaPipeline.CIERRE_GANADO.value, quien_cierra)
+        db.session.flush()
+    except Exception as e:
+        current_app.logger.warning(f"[comisiones] atribución de cierre falló: {e}")
+
+    aplica, motivo = C.aplica_tabulador(lead)
+    resultado = None
+    if aplica:
+        resultado = C.calcular(unidad, lista, cerrada, C.atribucion_de(lead.id))
+        if resultado.get("error"):
+            db.session.rollback()
+            return jsonify({"error": resultado["error"]}), 400
+        rate = None
+        amount = float(resultado["comision_total"])
+    else:
+        rate, amount = _calc_commission(sale_type, com_type, cerrada, total)
+
+    sale = Sale(
+        lead_id=lead.id,
+        user_id=lead.usuario_asignado_id,
+        unit=unidad,
+        sale_type=sale_type,
+        sale_category=data.get("sale_category") or "recurrente",
+        uen=data.get("uen"),
+        lead_source=lead.origen.value if lead.origen else None,
+        monthly_amount=Decimal(str(cerrada)),
+        total_amount=Decimal(str(total or cerrada)),
+        commission_type=com_type,
+        commission_rate=Decimal(str(rate)) if rate is not None else None,
+        commission_amount=Decimal(str(round(amount, 2))),
+        closed_at=_parse_dt(data.get("closed_at")) or datetime.now(timezone.utc),
+        contract_signed_at=_parse_dt(data.get("contract_signed_at")),
+        first_payment_at=_parse_dt(data.get("first_payment_at")),
+        service_start_at=_parse_dt(data.get("service_start_at")),
+    )
+    db.session.add(sale)
+    db.session.flush()          # necesitamos sale.id para congelar el reparto
+
+    if aplica:
+        C.congelar_en_venta(sale, resultado)
+
+    etapa_anterior = lead.etapa_pipeline.value
+    lead.etapa_pipeline = EtapaPipeline.CIERRE_GANADO
+    db.session.commit()
+
+    log_actividad("cerrar", "lead", lead.id,
+                  f"{lead.nombre}: venta registrada · {unidad} · "
+                  f"comisión ${amount:,.2f} · esquema "
+                  f"{'tabulador por etapas' if aplica else 'normal'}")
+    try:
+        socketio.emit("lead_movido", {"lead_id": str(lead.id),
+                                      "etapa_anterior": etapa_anterior,
+                                      "etapa_nueva": EtapaPipeline.CIERRE_GANADO.value})
+    except Exception:
+        pass
+
+    out = {"ok": True, "sale_id": str(sale.id),
+           "esquema": "tabulador" if aplica else "normal",
+           "motivo": motivo, "comision_total": round(amount, 2)}
+    if aplica:
+        out["participaciones"] = [{"nombre": p["nombre"], "etapas": p["etapas"],
+                                   "pct": float(p["pct"]), "monto": float(p["monto"])}
+                                  for p in resultado["participaciones"]]
+        out["monto_sin_asignar"] = float(resultado["monto_sin_asignar"])
+    return jsonify(out), 201
+
+
+# ══════════════════════════════════════════════
 # EXPORT CSV DEL PIPE — FEAT-2026-08-21
 # ══════════════════════════════════════════════
 EXPORT_PIPE_COLUMNAS = [
