@@ -1139,6 +1139,10 @@ fbq('track','PageView');
       <button id="vend-tab-admin"      class="btn"           onclick="switchVendedoresTab('Super Admin')" style="font-size:12px;border-radius:0;padding:6px 14px;">Super Admins <span id="vend-cnt-admin" style="font-size:10px;opacity:.7;margin-left:4px;"></span></button>
       <button id="vend-tab-todos"      class="btn"           onclick="switchVendedoresTab('todos')"    style="font-size:12px;border-radius:0;padding:6px 14px;">Todos <span id="vend-cnt-todos" style="font-size:10px;opacity:.7;margin-left:4px;"></span></button>
     </div>
+    <label id="vend-bajas-wrap" style="margin-left:16px;display:none;align-items:center;gap:6px;font-size:11px;color:var(--text2);cursor:pointer;user-select:none;">
+      <input type="checkbox" id="vend-ver-bajas" onchange="toggleVerBajas(this.checked)" style="margin:0;cursor:pointer;">
+      Ver dados de baja <span id="vend-cnt-bajas" style="font-family:var(--mono);opacity:.75;"></span>
+    </label>
     <span style="margin-left:auto;font-size:11px;color:var(--text2);" id="vend-tab-hint"></span>
   </div>
   <div class="table-wrap">
@@ -5526,6 +5530,17 @@ function showToast(title,msg){const c=document.getElementById('toasts'),t=docume
 // Vendedores
 let _vendedores=[];
 let _vendedoresTab='Vendedor'; // default: solo vendedores
+let _verBajas=false;           // los dados de baja se ocultan por defecto
+
+// Un usuario está dado de baja cuando su login quedó inactivo (no puede entrar).
+// Ojo: en_turno=false NO basta — un KAM o un Super Admin nunca están en turno
+// porque no reciben leads, y no por eso están dados de baja.
+function _esBaja(v){ return !!(v.login && v.login.activo === false); }
+
+function toggleVerBajas(on){
+  _verBajas = !!on;
+  renderVendedoresTabla();
+}
 
 const ROL_CHIPS = {
   'Developer':   {bg:'#111827', fg:'#ffffff', label:'Developer'},
@@ -5562,17 +5577,6 @@ async function loadVendedores(){
   try{
     const r=await fetch('/api/vendedores/');_vendedores=await r.json();
 
-    // Counts por rol para los tabs
-    const counts={'Vendedor':0,'KAM':0,'Super Admin':0};
-    _vendedores.forEach(v=>{
-      const rol = _vendedorRol(v);
-      if(rol==='Vendedor'||rol==='KAM') counts[rol]++;
-      else if(rol) counts['Super Admin']++;
-    });
-    document.getElementById('vend-cnt-vendedor').textContent = counts['Vendedor'];
-    document.getElementById('vend-cnt-kam').textContent      = counts['KAM'];
-    document.getElementById('vend-cnt-admin').textContent    = counts['Super Admin'];
-    document.getElementById('vend-cnt-todos').textContent    = _vendedores.length;
 
     // Load metas if admin
     let metas=[];
@@ -5597,11 +5601,39 @@ async function loadVendedores(){
   }catch(e){console.error('Vendedores error:',e);}
 }
 
+// Los contadores de las pestañas cuentan lo que realmente se está mostrando,
+// para que no digan "12 Vendedores" cuando en la tabla hay 9.
+function _actualizarContadoresVendedores(){
+  const bajas = _vendedores.filter(_esBaja).length;
+  const base  = _verBajas ? _vendedores : _vendedores.filter(v=>!_esBaja(v));
+
+  const counts={'Vendedor':0,'KAM':0,'Super Admin':0};
+  base.forEach(v=>{
+    const rol = _vendedorRol(v);
+    if(rol==='Vendedor'||rol==='KAM') counts[rol]++;
+    else if(rol) counts['Super Admin']++;
+  });
+  document.getElementById('vend-cnt-vendedor').textContent = counts['Vendedor'];
+  document.getElementById('vend-cnt-kam').textContent      = counts['KAM'];
+  document.getElementById('vend-cnt-admin').textContent    = counts['Super Admin'];
+  document.getElementById('vend-cnt-todos').textContent    = base.length;
+
+  // El interruptor solo aparece si hay alguien dado de baja que mostrar.
+  const wrap = document.getElementById('vend-bajas-wrap');
+  if(wrap){
+    wrap.style.display = bajas ? 'flex' : 'none';
+    document.getElementById('vend-cnt-bajas').textContent = bajas ? `(${bajas})` : '';
+  }
+}
+
 function renderVendedoresTabla(){
   const tb=document.getElementById('vendedores-tbody');tb.innerHTML='';
+  _actualizarContadoresVendedores();
+  // Los dados de baja se ocultan salvo que se pida verlos explícitamente.
+  const base = _verBajas ? _vendedores : _vendedores.filter(v=>!_esBaja(v));
   const filtered = _vendedoresTab==='todos'
-    ? _vendedores
-    : _vendedores.filter(v => {
+    ? base
+    : base.filter(v => {
         const rol=_vendedorRol(v);
         if(_vendedoresTab==='Super Admin') return rol && rol!=='Vendedor' && rol!=='KAM';
         return rol === _vendedoresTab;
@@ -5617,7 +5649,11 @@ function renderVendedoresTabla(){
   document.getElementById('vend-tab-hint').textContent = hint;
 
   if(!filtered.length){
-    tb.innerHTML='<tr><td colspan="11" style="color:var(--text2);text-align:center;padding:18px;">Sin usuarios en esta categoría</td></tr>';
+    const ocultos = _verBajas ? 0 : _vendedores.filter(_esBaja).length;
+    const nota = ocultos
+      ? `<div style="font-size:11px;color:var(--text3);margin-top:6px;">Hay ${ocultos} dado${ocultos>1?'s':''} de baja oculto${ocultos>1?'s':''}. Marca “Ver dados de baja” para verlo${ocultos>1?'s':''}.</div>`
+      : '';
+    tb.innerHTML=`<tr><td colspan="11" style="color:var(--text2);text-align:center;padding:18px;">Sin usuarios en esta categoría${nota}</td></tr>`;
     return;
   }
 
@@ -5651,18 +5687,30 @@ function renderVendedoresTabla(){
       return `<td style="font-size:12px;font-weight:600;color:${color};white-space:nowrap;">${pct}%</td>`;
     }
 
+    const baja = _esBaja(v);
+    const bajaChip = baja
+      ? ` <span style="background:#fee2e2;color:#991b1b;font-size:9px;font-weight:700;padding:2px 6px;border-radius:99px;text-transform:uppercase;letter-spacing:.3px;vertical-align:middle;">Baja</span>`
+      : '';
     const loginBadge = v.login
-      ? `<div style="font-size:10px;color:var(--text3);">📧 ${_esc(v.login.correo)}${v.login.activo?'':' <span style="color:var(--red)">(inactivo)</span>'}</div>`
+      ? `<div style="font-size:10px;color:var(--text3);">📧 ${_esc(v.login.correo)}</div>`
       : `<div style="font-size:10px;color:var(--orange);">⚠ sin cuenta de login</div>`;
-    const accionesCell = v.login
+
+    // Un usuario dado de baja no necesita "Reset pwd" (no puede entrar);
+    // lo que necesita es el camino de regreso.
+    const accionesCell = baja
+      ? `<button class="btn" onclick="reactivarVendedor('${v.id}','${_esc(v.nombre)}')" style="font-size:11px;padding:3px 8px;color:var(--green);font-weight:600;">Reactivar</button>
+         <button class="btn" onclick="editVendedor('${v.id}')" style="font-size:11px;padding:3px 8px;">Editar</button>`
+      : v.login
       ? `<button class="btn" onclick="editVendedor('${v.id}')" style="font-size:11px;padding:3px 8px;">Editar</button>
          <button class="btn" onclick="resetPasswordVendedor('${v.id}','${_esc(v.nombre)}')" style="font-size:11px;padding:3px 8px;color:var(--orange);">Reset pwd</button>
-         <button class="btn" onclick="eliminarVendedor('${v.id}','${_esc(v.nombre)}')" style="font-size:11px;padding:3px 8px;color:var(--red);">Eliminar</button>`
+         <button class="btn" onclick="eliminarVendedor('${v.id}','${_esc(v.nombre)}')" style="font-size:11px;padding:3px 8px;color:var(--red);">Dar de baja</button>`
       : `<button class="btn" onclick="editVendedor('${v.id}')" style="font-size:11px;padding:3px 8px;">Editar</button>
-         <button class="btn" onclick="eliminarVendedor('${v.id}','${_esc(v.nombre)}')" style="font-size:11px;padding:3px 8px;color:var(--red);">Eliminar</button>`;
+         <button class="btn" onclick="eliminarVendedor('${v.id}','${_esc(v.nombre)}')" style="font-size:11px;padding:3px 8px;color:var(--red);">Dar de baja</button>`;
 
-    tb.innerHTML+=`<tr>
-      <td class="td-name"><strong>${_esc(v.nombre)}</strong>${loginBadge}</td>
+    // Atenuamos con color de fondo y no con opacity, para que los botones
+    // de la fila sigan siendo legibles y accionables.
+    tb.innerHTML+=`<tr${baja?' style="background:#f8fafc;"':''}>
+      <td class="td-name"><strong${baja?' style="color:var(--text2);font-weight:500;"':''}>${_esc(v.nombre)}</strong>${bajaChip}${loginBadge}</td>
       <td><span style="background:${chip.bg};color:${chip.fg};font-size:10px;font-weight:700;padding:3px 8px;border-radius:99px;text-transform:uppercase;letter-spacing:.3px;">${chip.label}</span></td>
       <td style="font-size:12px;">${marcas}</td>
       <td>${turno}</td>
@@ -5853,18 +5901,43 @@ async function resetPasswordVendedor(id, nombre){
 
 async function eliminarVendedor(id, nombre){
   const ok = confirm(
-    '¿Eliminar usuario/vendedor '+nombre+'?\n\n' +
-    'Se hará una baja segura: dejará de estar en turno y su login quedará inactivo. ' +
-    'No se borran leads, metas, correos ni historial.'
+    '¿Dar de baja a '+nombre+'?\n\n' +
+    'Perderá el acceso al sistema y dejará de recibir leads.\n' +
+    'Su historial se conserva: leads, metas, correos y oportunidades siguen a su nombre.\n\n' +
+    'Puedes revertirlo después con el botón Reactivar.'
   );
   if(!ok)return;
   try{
     const r=await fetch('/api/vendedores/'+id,{method:'DELETE'});
     const d=await r.json();
-    if(!r.ok){showToast('Error',d.error||'No se pudo eliminar');return;}
-    showToast('Usuario eliminado', 'Baja segura aplicada a '+nombre);
+    if(!r.ok){showToast('Error',d.error||'No se pudo dar de baja');return;}
+    showToast('Baja aplicada', nombre+' ya no puede entrar ni recibir leads');
     await loadVendedores();
-  }catch(e){showToast('Error',e.message||'No se pudo eliminar');}
+  }catch(e){showToast('Error',e.message||'No se pudo dar de baja');}
+}
+
+async function reactivarVendedor(id, nombre){
+  const v = _vendedores.find(x=>String(x.id)===String(id));
+  const esVendedor = v && _vendedorRol(v)==='Vendedor';
+  const ok = confirm(
+    '¿Reactivar a '+nombre+'?\n\n' +
+    'Recuperará el acceso al sistema con su misma contraseña.' +
+    (esVendedor ? '\nAdemás volverá al turno y empezará a recibir leads.' : '')
+  );
+  if(!ok)return;
+  try{
+    // en_turno solo aplica a Vendedores: son los únicos en el reparto de leads.
+    const payload = esVendedor ? {activo:true, en_turno:true} : {activo:true};
+    const r=await fetch('/api/vendedores/'+id+'/full',{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    const d=await r.json();
+    if(!r.ok){showToast('Error',d.error||'No se pudo reactivar');return;}
+    showToast('Usuario reactivado', nombre+' ya puede entrar al sistema');
+    await loadVendedores();
+  }catch(e){showToast('Error',e.message||'No se pudo reactivar');}
 }
 
 // Gastos modal
