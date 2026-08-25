@@ -3,7 +3,7 @@ import csv
 import io
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, session, current_app, Response
 from sqlalchemy import or_, func
 from extensions import db, socketio
@@ -704,6 +704,15 @@ def actualizar_lead(lead_id):
         db.session.rollback()
         return jsonify({"error": "El lead se quedaría sin teléfono ni correo"}), 400
 
+    # FIX-2026-08-25: si el lead se cerró sin monto y ahora llega la factura,
+    # se completa la venta. Nunca debe tumbar el guardado de la factura.
+    comision_recalculada = None
+    if "factura_monto" in data or "valor_estimado" in data:
+        try:
+            comision_recalculada = recalcular_venta_de_lead(lead)
+        except Exception as e:
+            current_app.logger.warning(f"[cierre] recálculo de comisión falló: {e}")
+
     # factura_fecha como Date (viene "YYYY-MM-DD" del frontend)
     if "factura_fecha" in data:
         from datetime import date as _date
@@ -752,7 +761,10 @@ def actualizar_lead(lead_id):
         _apply_icp(lead)
 
     db.session.commit()
-    return jsonify(lead.to_dict())
+    out = lead.to_dict()
+    if comision_recalculada is not None:
+        out["comision_recalculada"] = comision_recalculada
+    return jsonify(out)
 
 
 @leads_bp.route("/<uuid:lead_id>", methods=["DELETE"])
@@ -1180,6 +1192,49 @@ def preview_cierre(lead_id):
     return jsonify(out)
 
 
+def recalcular_venta_de_lead(lead):
+    """Completa una venta que se cerró sin monto, cuando llega la factura.
+
+    Sin esto, un cierre hecho "para completar después" se quedaría con
+    comisión cero para siempre: nadie vuelve a mirar esas ventas.
+
+    Devuelve el monto de comisión resultante, o None si no había nada que
+    recalcular. No hace commit: lo hace quien la llama.
+    """
+    from decimal import Decimal
+    import comisiones as C
+    from blueprints.sales import _calc_commission
+    from models import Sale
+
+    venta = Sale.query.filter_by(lead_id=lead.id).first()
+    if not venta or venta.commission_status != "pendiente_monto":
+        return None
+
+    monto = float(lead.factura_monto or lead.valor_estimado or 0)
+    if monto <= 0:
+        return None
+
+    lista = float(lead.valor_estimado or monto)
+    venta.monthly_amount = Decimal(str(monto))
+    venta.total_amount = Decimal(str(monto))
+
+    aplica, _ = C.aplica_tabulador(lead)
+    if aplica:
+        r = C.calcular(venta.unit, lista, monto, C.atribucion_de(lead.id))
+        if r.get("error"):
+            return None
+        venta.commission_rate = None
+        C.congelar_en_venta(venta, r)      # ya asigna commission_amount
+    else:
+        rate, amount = _calc_commission(
+            venta.sale_type, venta.commission_type, monto, monto)
+        venta.commission_rate = Decimal(str(rate))
+        venta.commission_amount = Decimal(str(round(amount, 2)))
+
+    venta.commission_status = "pendiente"
+    return float(venta.commission_amount)
+
+
 @leads_bp.route("/<uuid:lead_id>/cerrar", methods=["POST"])
 def cerrar_lead(lead_id):
     """Cierra el lead como ganado: registra la venta, congela el reparto de
@@ -1226,11 +1281,17 @@ def cerrar_lead(lead_id):
     except (TypeError, ValueError):
         return jsonify({"error": "Montos inválidos"}), 400
 
-    if sale_type == "servicio_unico":
-        if total <= 0:
-            return jsonify({"error": "Un servicio único necesita monto total"}), 400
-    elif cerrada <= 0:
-        return jsonify({"error": "Falta la mensualidad cerrada"}), 400
+    # FIX-2026-08-25: cerrar NUNCA puede fallar por falta de monto.
+    #
+    # El modal siempre permitió cerrar sin factura ("puedes cerrar igual y
+    # completar después"), pero este endpoint lo rechazaba con 400. El
+    # vendedor veía un error y el lead ni siquiera se movía: peor que antes,
+    # porque antes al menos avanzaba de etapa.
+    #
+    # Ahora la venta se crea igual, con monto 0 y comisión 0, y queda
+    # marcada como pendiente de monto. Al capturar la factura después se
+    # recalcula (ver recalcular_venta_de_lead).
+    sin_monto = (total <= 0) if sale_type == "servicio_unico" else (cerrada <= 0)
 
     com_type = data.get("commission_type") or ORIGEN_A_COMISION.get(
         lead.origen.value if lead.origen else "", "lead_otorgado")
@@ -1248,7 +1309,12 @@ def cerrar_lead(lead_id):
 
     aplica, motivo = C.aplica_tabulador(lead)
     resultado = None
-    if aplica:
+    if sin_monto:
+        # Sin monto no hay nada que calcular. La venta se registra igual para
+        # no perder el cierre, y la comisión queda esperando la factura.
+        aplica, rate, amount = False, None, 0.0
+        motivo = "Falta el monto del cierre: la comisión se calcula al capturar la factura."
+    elif aplica:
         resultado = C.calcular(unidad, lista, cerrada, C.atribucion_de(lead.id))
         if resultado.get("error"):
             db.session.rollback()
@@ -1271,6 +1337,9 @@ def cerrar_lead(lead_id):
         commission_type=com_type,
         commission_rate=Decimal(str(rate)) if rate is not None else None,
         commission_amount=Decimal(str(round(amount, 2))),
+        # Estado explícito para que una venta sin monto no se confunda con
+        # una comisión de cero legítima.
+        commission_status="pendiente_monto" if sin_monto else "pendiente",
         closed_at=_parse_dt(data.get("closed_at")) or datetime.now(timezone.utc),
         contract_signed_at=_parse_dt(data.get("contract_signed_at")),
         first_payment_at=_parse_dt(data.get("first_payment_at")),
@@ -1410,8 +1479,22 @@ def exportar_pipe_csv():
             if c.condiciones_pago:
                 pagos[str(c.lead_id)] = c.condiciones_pago
 
+    # FIX-2026-08-25: las fechas con hora se guardan en UTC. Formatearlas sin
+    # convertir hacía que todo cierre después de las 18:00 de México saliera
+    # con la fecha del día siguiente. Se convierte a hora local antes de
+    # recortar a día. Las columnas que son DATE puro no llevan hora y se
+    # formatean tal cual.
+    from zoneinfo import ZoneInfo
+    TZ_MX = ZoneInfo("America/Monterrey")
+
     def _fecha(v):
-        return v.strftime("%Y-%m-%d") if v else ""
+        if not v:
+            return ""
+        if isinstance(v, datetime):
+            if v.tzinfo is None:
+                v = v.replace(tzinfo=timezone.utc)
+            v = v.astimezone(TZ_MX)
+        return v.strftime("%Y-%m-%d")
 
     hoy = datetime.utcnow()
     out = io.StringIO()
@@ -1454,9 +1537,9 @@ def exportar_pipe_csv():
             l.estado_cliente or "",
             l.tipo_cliente or "",
             "sí" if l.en_nurturing else "no",
-            l.fecha_creacion.strftime("%Y-%m-%d") if l.fecha_creacion else "",
-            l.fecha_ultimo_contacto.strftime("%Y-%m-%d") if l.fecha_ultimo_contacto else "",
-            l.proximo_contacto.strftime("%Y-%m-%d") if l.proximo_contacto else "",
+            _fecha(l.fecha_creacion),
+            _fecha(l.fecha_ultimo_contacto),
+            _fecha(l.proximo_contacto),
             dias,
             f_cierre,
             monto_cierre,

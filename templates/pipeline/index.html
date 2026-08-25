@@ -6135,8 +6135,20 @@ async function _mgPreviewComisionAhora(){
   if(!leadId || !bloque) return;
 
   const monto = parseFloat(document.getElementById('mg-monto').value || 0);
-  if(!monto){ bloque.style.display='none'; return; }
   bloque.style.display='';
+  if(!monto){
+    // Cerrar sin monto está permitido: la venta se registra y la comisión
+    // queda esperando la factura. Pero hay que decirlo, no dejarlo en blanco.
+    document.getElementById('mg-lista-row').style.display='none';
+    document.getElementById('mg-comtype-row').style.display='none';
+    document.getElementById('mg-comision-preview').innerHTML='';
+    salida.innerHTML='';
+    estado.innerHTML='<strong>Comisión pendiente</strong><br>'
+      + '<span style="opacity:.85;">Sin monto de cierre no se puede calcular. '
+      + 'La venta se registra igual y la comisión se calcula cuando captures la factura.</span>';
+    estado.style.background='var(--orange-bg)'; estado.style.color='var(--orange)';
+    return;
+  }
 
   const tipo  = _mgTipoVenta();
   const lista = parseFloat(document.getElementById('mg-lista').value || 0) || monto;
@@ -6373,7 +6385,12 @@ async function confirmarGanado(){
     // Solo se guardaron los datos de arriba; no hay nada más que hacer.
     if(_mgModo === 'factura'){
       closeGanadoModal();
-      showToast('Factura actualizada', numero ? 'Folio '+numero : 'Datos guardados');
+      // Si el cierre se había hecho sin monto, capturar la factura completa
+      // la venta: el backend lo avisa y aquí se hace visible.
+      const rec = (await r2.clone().json().catch(()=>({}))).comision_recalculada;
+      showToast('Factura actualizada',
+        rec != null ? 'Comisión calculada: '+fmt$(rec)
+                    : (numero ? 'Folio '+numero : 'Datos guardados'));
       setTimeout(()=>{if(typeof loadKanban==='function')loadKanban();},500);
       return;
     }
