@@ -1218,19 +1218,15 @@ def cerrar_lead(lead_id):
 
     etapa_anterior = lead.etapa_pipeline.value
     lead.etapa_pipeline = EtapaPipeline.CIERRE_GANADO
-    db.session.commit()
 
-    log_actividad("cerrar", "lead", lead.id,
-                  f"{lead.nombre}: venta registrada · {unidad} · "
-                  f"comisión ${amount:,.2f} · esquema "
-                  f"{'tabulador por etapas' if aplica else 'normal'}")
-    try:
-        socketio.emit("lead_movido", {"lead_id": str(lead.id),
-                                      "etapa_anterior": etapa_anterior,
-                                      "etapa_nueva": EtapaPipeline.CIERRE_GANADO.value})
-    except Exception:
-        pass
-
+    # FIX-2026-08-24: la respuesta se arma ANTES del commit.
+    #
+    # SQLAlchemy expira los objetos al confirmar, así que leer sale.id o
+    # lead.nombre después dispara un SELECT nuevo. Si esa consulta falla —una
+    # conexión caída del pooler basta— el endpoint revienta con 500 aunque la
+    # venta YA quedó guardada. El vendedor ve un error, reintenta, y se topa
+    # con el 409 de "este lead ya tiene una venta". Peor que un error: un
+    # error mentiroso.
     out = {"ok": True, "sale_id": str(sale.id),
            "esquema": "tabulador" if aplica else "normal",
            "motivo": motivo, "comision_total": round(amount, 2)}
@@ -1239,6 +1235,26 @@ def cerrar_lead(lead_id):
                                    "pct": float(p["pct"]), "monto": float(p["monto"])}
                                   for p in resultado["participaciones"]]
         out["monto_sin_asignar"] = float(resultado["monto_sin_asignar"])
+    detalle_log = (f"{lead.nombre}: venta registrada · {unidad} · "
+                   f"comisión ${amount:,.2f} · esquema "
+                   f"{'tabulador por etapas' if aplica else 'normal'}")
+    lead_id_str = str(lead.id)
+
+    db.session.commit()
+
+    # Nada de lo que sigue vuelve a tocar los objetos de la sesión, y ninguno
+    # de estos pasos debe tumbar un cierre que ya está guardado.
+    try:
+        log_actividad("cerrar", "lead", lead_id_str, detalle_log)
+    except Exception as e:
+        current_app.logger.warning(f"[cierre] no se pudo registrar la actividad: {e}")
+    try:
+        socketio.emit("lead_movido", {"lead_id": lead_id_str,
+                                      "etapa_anterior": etapa_anterior,
+                                      "etapa_nueva": EtapaPipeline.CIERRE_GANADO.value})
+    except Exception:
+        pass
+
     return jsonify(out), 201
 
 
