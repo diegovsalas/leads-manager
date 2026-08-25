@@ -124,6 +124,12 @@ def crear_lead():
             origen_enum = None
 
     marca = data.get("marca_interes", "")
+
+    # FEAT-2026-08-25: leads multi UN. marca_interes sigue siendo la unidad
+    # DUEÑA del trato —la que manda para comisión, metas y reporteo— y
+    # marcas_interes lleva todas las que están en juego, ya normalizadas.
+    from un_filter import normalizar_marcas
+    marcas_lista = normalizar_marcas(data.get("marcas_interes") or ([marca] if marca else []))
     cantidad = data.get("cantidad_productos")
     precio = data.get("precio_unitario")
     valor = data.get("valor_estimado")
@@ -150,6 +156,7 @@ def crear_lead():
                     estado_cliente=data.get("estado_cliente") or data.get("estado"),
                     origen=origen_enum,
                     marca_interes=marca,
+                    marcas_interes=marcas_lista,
                     etapa_pipeline=etapa,
                     cantidad_productos=cantidad,
                     precio_unitario=precio,
@@ -319,6 +326,7 @@ def crear_lead():
             estado_cliente=data.get("estado_cliente") or data.get("estado"),
             origen=origen_enum,
             marca_interes=marca,
+            marcas_interes=marcas_lista,
             etapa_pipeline=etapa,
             cantidad_productos=cantidad,
             precio_unitario=precio,
@@ -677,6 +685,17 @@ def actualizar_lead(lead_id):
             if campo == "email" and value:
                 value = str(value).strip().lower() or None
             setattr(lead, campo, value)
+
+    # Unidades en juego. Se normalizan igual que al crear, y la unidad dueña
+    # se mantiene dentro de la lista: si se saca, el lead desaparecería de su
+    # propia vista del pipe.
+    if "marcas_interes" in data:
+        from un_filter import normalizar_marcas, normalizar_un
+        nuevas = normalizar_marcas(data.get("marcas_interes") or [])
+        dueña = normalizar_un(lead.marca_interes)
+        if dueña and dueña not in nuevas:
+            nuevas.insert(0, dueña)
+        lead.marcas_interes = nuevas
 
     # FEAT-2026-08-25: editar un lead no puede dejarlo sin ninguna forma de
     # contacto. Se valida sobre el resultado, no sobre lo que vino en el body:
@@ -1311,6 +1330,7 @@ def cerrar_lead(lead_id):
 EXPORT_PIPE_COLUMNAS = [
     "Etapa del pipeline", "Empresa", "Contacto", "Teléfono", "Unidad de negocio",
     "Origen", "Vendedor asignado", "Valor estimado",
+    "Unidades en juego",                   # todas, si el lead es multi UN
     "Tipo de venta",                       # Recurrente / Eventual
     "ICP", "Nivel ICP",
     "Estado", "Tipo de cliente", "En nurturing", "Creado", "Último contacto",
@@ -1427,6 +1447,7 @@ def exportar_pipe_csv():
             l.origen.value if l.origen else "",
             nombres.get(dueno, "") if dueno else "Sin asignar",
             float(l.valor_estimado) if l.valor_estimado is not None else "",
+            ", ".join(l.marcas_interes or ([l.marca_interes] if l.marca_interes else [])),
             l.tipo_venta or "",
             l.icp_score if l.icp_score is not None else "",
             l.icp_nivel or "",

@@ -60,16 +60,39 @@ def filtrar_leads_por_un(query, lead_model, un):
     Política: leads con marca_interes vacío/NULL siguen visibles
     (para forzar clasificación). Solo se OCULTAN los leads con
     marca_interes seteada que NO corresponde a la UN buscada.
+
+    FEAT-2026-08-25: un lead puede tener varias unidades en juego
+    (marcas_interes). Basta con que UNA de ellas caiga en la UN buscada
+    para que aparezca: un lead de Aromatex+Pestex se ve en las dos vistas.
     """
     if not un or not es_un_valida(un):
         return query
-    aliases = _UN_ALIASES[un.capitalize()]
-    # OR: marca vacía (siempre visible) OR marca matchea cualquier alias
+    canon = un.capitalize()
+    aliases = _UN_ALIASES[canon]
+    # marcas_interes se guarda YA normalizado a UN canónicas (ver
+    # normalizar_marcas), así que aquí basta una comparación exacta. Nada de
+    # adivinar mayúsculas.
     return query.filter(or_(
         lead_model.marca_interes.is_(None),
         lead_model.marca_interes == "",
         func.lower(lead_model.marca_interes).in_(aliases),
+        lead_model.marcas_interes.any(canon),
     ))
+
+
+def normalizar_marcas(valores):
+    """Lista de marcas capturadas → UN canónicas, sin repetidos y en orden.
+
+    'Aromatex Home' entra como 'Aromatex', igual que en el resto del filtro.
+    Lo que no corresponde a ninguna UN conocida se descarta: guardar basura
+    en el array rompería el filtro para ese lead.
+    """
+    out = []
+    for v in (valores or []):
+        canon = normalizar_un(v)
+        if canon and canon not in out:
+            out.append(canon)
+    return out
 
 
 def filtrar_cs_accounts_por_un(query, account_model, un):

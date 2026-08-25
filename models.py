@@ -189,7 +189,13 @@ class Lead(db.Model):
                 values_callable=lambda e: [x.value for x in e]),
         nullable=True,
     )
+    # marca_interes = la unidad DUEÑA del trato. Es la que manda para comisión,
+    # metas y reporteo, porque todo eso se calcula contra una sola unidad.
     marca_interes = db.Column(db.String(80), nullable=True)
+    # FEAT-2026-08-25: leads multi UN. Todas las unidades en juego, incluida la
+    # dueña. Un lead de Aromatex+Pestex aparece en las dos vistas del pipe.
+    marcas_interes = db.Column(ARRAY(db.String(80)), nullable=False,
+                               default=list, server_default="{}")
     etapa_pipeline = db.Column(
         db.Enum(EtapaPipeline, name="etapa_pipeline_enum",
                 values_callable=lambda e: [x.value for x in e]),
@@ -323,6 +329,11 @@ class Lead(db.Model):
             "nombre": self.nombre,
             "origen": self.origen.value if self.origen else None,
             "marca_interes": self.marca_interes,
+            # Siempre trae al menos la unidad dueña, aunque la columna esté vacía
+            # (leads creados antes de que existieran los multi UN).
+            "marcas_interes": list(self.marcas_interes or
+                                   ([self.marca_interes] if self.marca_interes else [])),
+            "es_multi_un": len(self.marcas_interes or []) > 1,
             "etapa_pipeline": self.etapa_pipeline.value,
             "cantidad_productos": self.cantidad_productos,
             "precio_unitario": float(self.precio_unitario) if self.precio_unitario else None,

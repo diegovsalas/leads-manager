@@ -329,6 +329,31 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] leads.telefono nullable failed: %s", e)
 
+        # ─── leads.marcas_interes (FEAT-2026-08-25): leads multi UN ───
+        # Se rellena con la marca que ya tenía cada lead, para que la columna
+        # nunca esté vacía y el filtro por UN siga devolviendo lo mismo que antes.
+        try:
+            with db.engine.begin() as conn:
+                exists = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'leads' AND column_name = 'marcas_interes'
+                """)).first()
+                if not exists:
+                    app.logger.info("[auto-migrate] adding leads.marcas_interes...")
+                    conn.execute(text(
+                        "ALTER TABLE leads ADD COLUMN marcas_interes VARCHAR(80)[] "
+                        "NOT NULL DEFAULT '{}'"
+                    ))
+                    conn.execute(text("""
+                        UPDATE leads SET marcas_interes = ARRAY[marca_interes]
+                        WHERE marca_interes IS NOT NULL AND marca_interes <> ''
+                    """))
+                    conn.execute(text(
+                        "CREATE INDEX IF NOT EXISTS ix_leads_marcas_interes "
+                        "ON leads USING GIN (marcas_interes)"))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] leads.marcas_interes failed: %s", e)
+
         # ─── sales_emails.direccion (FEAT-2026-07-07): 'IN' entrantes / 'OUT' salientes ───
         try:
             with db.engine.begin() as conn:

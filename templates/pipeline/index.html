@@ -724,7 +724,7 @@ fbq('track','PageView');
             <div class="k-card-detail">{{ lead.cantidad_productos }} x ${{ "{:,.0f}".format(lead.precio_unitario) }}</div>
             {% endif %}
             <div class="k-card-tags">
-              {% if lead.marca_interes %}<span class="tag tag-marca">{{ lead.marca_interes }}</span>{% else %}<span class="tag" style="background:#fee2e2;color:#991b1b;font-weight:600;" title="Este lead no tiene UN asignada. Edítalo para clasificarlo.">⚠ Sin UN</span>{% endif %}
+              {% if lead.marcas_interes and lead.marcas_interes|length > 1 %}{% for m in lead.marcas_interes %}<span class="tag tag-marca">{{ m }}</span>{% endfor %}{% elif lead.marca_interes %}<span class="tag tag-marca">{{ lead.marca_interes }}</span>{% else %}<span class="tag" style="background:#fee2e2;color:#991b1b;font-weight:600;" title="Este lead no tiene UN asignada. Edítalo para clasificarlo.">⚠ Sin UN</span>{% endif %}
               {% if lead.meta_campaign_info %}<span class="tag" style="background:#e0e7ff;color:#3730a3;font-weight:600;" title="{{ lead.meta_campaign_info.nombre }}">📣 {{ lead.meta_campaign_info.nombre }}</span>{% elif lead.meta_campaign %}<span class="tag" style="background:#f3f4f6;color:#6b7280;font-family:var(--mono);font-size:10px;" title="Campaign ID Meta (no registrada)">📣 {{ lead.meta_campaign[-10:] }}</span>{% endif %}
               {% if lead.valor_calculado %}<span class="tag tag-valor">${{ "{:,.0f}".format(lead.valor_calculado) }}</span>{% endif %}
               {% if lead.tipo_cliente == 'Recurrente' %}<span class="tag" style="background:#dcfce7;color:#16a34a;">Cliente recurrente</span>{% endif %}
@@ -795,7 +795,7 @@ fbq('track','PageView');
           {% if lead.telefono %}<div class="td-phone" style="font-size:11px;">{{ lead.telefono }}</div>
           {% elif lead.email %}<div style="font-size:11px;color:var(--text3);">{{ lead.email }}</div>{% endif %}
         </td>
-        <td>{% if lead.marca_interes %}<span class="tag tag-marca">{{ lead.marca_interes }}</span>{% else %}-{% endif %}</td>
+        <td>{% if lead.marcas_interes and lead.marcas_interes|length > 1 %}{% for m in lead.marcas_interes %}<span class="tag tag-marca">{{ m }}</span>{% endfor %}{% elif lead.marca_interes %}<span class="tag tag-marca">{{ lead.marca_interes }}</span>{% else %}-{% endif %}</td>
         <td style="font-size:12px;color:var(--text2);">{% if lead.cantidad_productos %}{{ lead.cantidad_productos }} x ${{ "{:,.0f}".format(lead.precio_unitario) }}{% else %}-{% endif %}</td>
         <td>{% if lead.valor_calculado %}<span style="font-weight:600;color:var(--green);">${{ "{:,.0f}".format(lead.valor_calculado) }}</span>{% else %}-{% endif %}</td>
         <td><span class="tag" style="background:{{ pipeline[etapa.value].color }}22;color:{{ pipeline[etapa.value].color }};">{{ etapa.value }}</span></td>
@@ -5245,7 +5245,9 @@ async function abrirLeadPanel(id){
     const etapaColor=ETAPA_COLORS[l.etapa_pipeline]||'#787774';
     document.getElementById('lp-etapa').innerHTML=`<span class="tag" style="background:${etapaColor}22;color:${etapaColor};">${l.etapa_pipeline}</span>`;
     document.getElementById('lp-origen').textContent=l.origen||'Manual';
-    document.getElementById('lp-marca').innerHTML=l.marca_interes?`<span class="tag tag-marca">${l.marca_interes}</span>`:'—';
+    document.getElementById('lp-marca').innerHTML=(l.marcas_interes&&l.marcas_interes.length)
+      ? l.marcas_interes.map(m=>`<span class="tag tag-marca">${_esc(m)}</span>`).join(' ')
+      : (l.marca_interes?`<span class="tag tag-marca">${l.marca_interes}</span>`:'—');
     document.getElementById('lp-vendedor').textContent=l.usuario_asignado?l.usuario_asignado.nombre:'Sin asignar';
     // Reset el select de reasignación al abrir un lead
     const venSel=document.getElementById('lp-vendedor-select');
@@ -6746,8 +6748,9 @@ window.IS_ADMIN_AI = IS_ADMIN || false;
         </div>
       </div>
       <div class="nl-row">
-        <label class="nl-label">Unidad de negocio *</label>
+        <label class="nl-label">Unidades de negocio * <span style="color:var(--text3);font-weight:400;font-size:10px;">(puedes elegir varias)</span></label>
         <div class="nl-pills" id="nl-unidad-pills"></div>
+        <div id="nl-multiun-aviso" style="display:none;font-size:11px;color:var(--text2);margin-top:6px;line-height:1.4;"></div>
       </div>
       <div class="nl-row two">
         <div>
@@ -7475,6 +7478,36 @@ async function _nlLoadMe(){
 
 let _nlMeNombre = 'vos';
 
+// Con varias unidades seleccionadas, la PRIMERA del orden en pantalla es la
+// dueña del trato: con esa se calcula la comisión y a esa meta cuenta la
+// venta. Se marca visualmente para que quien captura lo sepa.
+function nlMarcarUnidadDuena(){
+  const pills=[...document.querySelectorAll('#nl-unidad-pills .nl-pill')];
+  const activas=pills.filter(p=>p.classList.contains('active'));
+  pills.forEach(p=>{
+    p.textContent = p.dataset.val;
+    p.style.fontWeight='';
+  });
+  if(activas.length>1){
+    activas[0].textContent = activas[0].dataset.val+' ·';
+    activas[0].style.fontWeight='700';
+  }
+  const aviso=document.getElementById('nl-multiun-aviso');
+  if(aviso){
+    aviso.style.display = activas.length>1 ? '' : 'none';
+    if(activas.length>1){
+      aviso.textContent = `Lead multi UN: ${activas.map(p=>p.dataset.val).join(' + ')}. `
+        + `Aparecerá en las ${activas.length} vistas del pipe. La comisión y la meta van a ${activas[0].dataset.val}.`;
+    }
+  }
+}
+
+// Las unidades seleccionadas, en el orden en que aparecen. La primera manda.
+function nlUnidadesSeleccionadas(){
+  return [...document.querySelectorAll('#nl-unidad-pills .nl-pill.active')]
+    .map(p=>p.dataset.val);
+}
+
 // Refleja en el pie del modal a quién le va a quedar el lead, para que no
 // haya sorpresas después de guardar.
 function nlActualizarAsignacion(){
@@ -7516,11 +7549,20 @@ async function openLeadModal(leadToEdit){
   const userMarcas=me.is_admin?allMarcas:(me.marcas&&me.marcas.length?me.marcas:allMarcas);
   const pillsEl=document.getElementById('nl-unidad-pills');
   pillsEl.innerHTML='';
+  // FEAT-2026-08-25: se pueden elegir VARIAS unidades. La primera que se
+  // marca es la dueña del trato —la que manda para comisión y metas— y se
+  // señala con un punto para que no haya dudas de cuál es.
   userMarcas.forEach((m,i)=>{
     const p=document.createElement('div');p.className='nl-pill'+(i===0?' active':'');p.dataset.val=m;p.textContent=m;
-    p.onclick=()=>{pillsEl.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');};
+    p.onclick=()=>{
+      p.classList.toggle('active');
+      // Nunca dejar cero unidades seleccionadas.
+      if(!pillsEl.querySelector('.nl-pill.active')) p.classList.add('active');
+      nlMarcarUnidadDuena();
+    };
     pillsEl.appendChild(p);
   });
+  nlMarcarUnidadDuena();
 
   // FEAT-2026-08-25: un admin puede dar de alta el lead a nombre de otro
   // vendedor. Para el resto la fila ni aparece: crean a su propio nombre.
@@ -7598,13 +7640,23 @@ async function openLeadModal(leadToEdit){
     if(l.valor_estimado) document.getElementById('nl-valor-estimado').value = l.valor_estimado;
     if(l.tipo_cliente) document.getElementById('nl-tipo-cliente').value = l.tipo_cliente;
     document.getElementById('nl-notas').value = l.notas || '';
-    // Marca pill
-    if(l.marca_interes){
-      const p=document.querySelector(`#nl-unidad-pills .nl-pill[data-val="${l.marca_interes}"]`);
-      if(p){
-        document.querySelectorAll('#nl-unidad-pills .nl-pill').forEach(x=>x.classList.remove('active'));
-        p.classList.add('active');
+    // Unidades: se marcan todas las que trae el lead, no solo la dueña.
+    const suyas = (l.marcas_interes && l.marcas_interes.length)
+      ? l.marcas_interes
+      : (l.marca_interes ? [l.marca_interes] : []);
+    if(suyas.length){
+      document.querySelectorAll('#nl-unidad-pills .nl-pill').forEach(x=>x.classList.remove('active'));
+      suyas.forEach(m=>{
+        const p=document.querySelector(`#nl-unidad-pills .nl-pill[data-val="${m}"]`);
+        if(p) p.classList.add('active');
+      });
+      // Si ninguna coincide (marca vieja fuera del catálogo) no dejamos el
+      // lead sin unidad: se vuelve a marcar la primera.
+      if(!document.querySelector('#nl-unidad-pills .nl-pill.active')){
+        const primera=document.querySelector('#nl-unidad-pills .nl-pill');
+        if(primera) primera.classList.add('active');
       }
+      nlMarcarUnidadDuena();
     }
     // Origen pill
     if(l.origen){
@@ -7876,7 +7928,9 @@ async function nlSubmit(mode){
   const notas=document.getElementById('nl-notas').value.trim();
   const tipoCliente=document.getElementById('nl-tipo-cliente').value;
   const calificado=document.getElementById('nl-calificado').checked;
-  const unidad=document.querySelector('#nl-unidad-pills .nl-pill.active')?.dataset.val||'';
+  // La primera seleccionada es la unidad dueña del trato.
+  const unidades=nlUnidadesSeleccionadas();
+  const unidad=unidades[0]||'';
   const origen=document.querySelector('#nl-origen-pills .nl-pill.active')?.dataset.val||'Prospeccion';
   const tipoVenta=document.querySelector('#nl-tipo-venta-pills .nl-pill.active')?.dataset.val||'';
 
@@ -7911,7 +7965,7 @@ async function nlSubmit(mode){
     empresa_nombre: isB2C ? null : (empresa||null),
     account_id: isB2C ? null : accountIdLinked,
     estado_cliente:estado||null,
-    marca_interes:unidad, origen,
+    marca_interes:unidad, marcas_interes:unidades, origen,
     num_sucursales:sucursales?parseInt(sucursales):null,
     tipo_industria:industria||null, tamano_empresa:tamano||null,
     cantidad_productos:cantidad?parseInt(cantidad):null,
