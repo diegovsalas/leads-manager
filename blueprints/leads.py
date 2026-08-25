@@ -106,6 +106,15 @@ def crear_lead():
 
     data = request.get_json() or {}
 
+    # FEAT-2026-08-25: el teléfono dejó de ser obligatorio, pero un lead sin
+    # ninguna forma de contacto no sirve para nada. Se exige al menos uno.
+    telefono_in = (data.get("telefono") or "").strip() or None
+    email_in    = (data.get("email") or data.get("correo") or "").strip().lower() or None
+    if not telefono_in and not email_in:
+        return jsonify({"error": "Hace falta un teléfono o un correo para contactar al lead"}), 400
+    if email_in and ("@" not in email_in or "." not in email_in.split("@")[-1]):
+        return jsonify({"error": f"El correo '{email_in}' no parece válido"}), 400
+
     origen_valor = data.get("origen", "")
     origen_enum = None
     if origen_valor:
@@ -135,7 +144,8 @@ def crear_lead():
                 etapa = EtapaPipeline.NUEVO_LEAD
                 lead = Lead(
                     nombre=data.get("nombre", "Sin nombre"),
-                    telefono=data.get("telefono"),
+                    telefono=telefono_in,
+                    email=email_in,
                     empresa_nombre=data.get("empresa_nombre") or data.get("empresa"),
                     estado_cliente=data.get("estado_cliente") or data.get("estado"),
                     origen=origen_enum,
@@ -171,7 +181,7 @@ def crear_lead():
         from asignacion import asignar_lead_comercial
         try:
             lead = asignar_lead_comercial({
-                "telefono":           data.get("telefono"),
+                "telefono":           telefono_in,
                 "nombre":             data.get("nombre", "Sin nombre"),
                 "origen":             origen_valor,
                 "marca_interes":      marca,
@@ -275,19 +285,24 @@ def crear_lead():
                     else:
                         raise
 
-        # Auto-vincular Contact si viene nombre+telefono y no existe
+        # Auto-vincular Contact. Antes exigía teléfono; ahora un lead que solo
+        # trae correo también genera (o encuentra) su contacto.
         contact_id = data.get("contact_id")
         nombre_contacto = data.get("nombre")
-        if not contact_id and nombre_contacto and data.get("telefono"):
+        if not contact_id and nombre_contacto and (telefono_in or email_in):
             step = "buscar_contact"
-            existing_c = Contact.query.filter(Contact.telefono == data["telefono"]).first()
+            if telefono_in:
+                existing_c = Contact.query.filter(Contact.telefono == telefono_in).first()
+            else:
+                existing_c = Contact.query.filter(
+                    db.func.lower(Contact.email) == email_in).first()
             if existing_c:
                 contact_id = existing_c.id
             else:
                 step = "crear_contact"
                 new_c = Contact(
-                    nombre=nombre_contacto, telefono=data["telefono"],
-                    whatsapp=data["telefono"], account_id=account_id,
+                    nombre=nombre_contacto, telefono=telefono_in,
+                    whatsapp=telefono_in, email=email_in, account_id=account_id,
                 )
                 db.session.add(new_c)
                 db.session.flush()
@@ -296,7 +311,8 @@ def crear_lead():
         step = "construir_lead"
         lead = Lead(
             nombre=data.get("nombre", "Sin nombre"),
-            telefono=data.get("telefono"),
+            telefono=telefono_in,
+            email=email_in,
             empresa_nombre=empresa_str or None,  # legacy compat
             account_id=account_id,
             contact_id=contact_id,
@@ -517,11 +533,33 @@ def me():
         if u and u.especialidad_marca:
             marcas = list(u.especialidad_marca)
 
-    is_admin = rol.lower().replace(" ", "_") == "super_admin"
+    # FIX-2026-08-25: antes era una comparación literal contra "super_admin",
+    # así que Developer y los Super Admin segmentados no contaban como admin
+    # y el modal les escondía opciones que sí les tocan.
+    from blueprints.auth import is_admin_role
+    is_admin = is_admin_role()
+
+    # Un admin da de alta leads de cualquier unidad, no solo de las suyas.
+    if is_admin:
+        from un_filter import UN_CANONICAS
+        marcas = list(UN_CANONICAS)
+
+    # Vendedores a los que se les puede asignar el lead. Solo los admin
+    # pueden asignar a otra persona; el resto crea a su propio nombre.
+    vendedores = []
+    if is_admin:
+        vendedores = [
+            {"id": str(u.id), "nombre": u.nombre,
+             "marcas": list(u.especialidad_marca or []),
+             "multi_un": bool(u.perfil_multi_un)}
+            for u in Usuario.query.filter_by(en_turno=True).order_by(Usuario.nombre).all()
+        ]
+
     return jsonify({
         "user_id": user_id, "usuario_id": usuario_id,
         "nombre": nombre, "rol": rol, "is_admin": is_admin,
-        "marcas": marcas,  # ej. ["Aromatex", "Pestex"]
+        "marcas": marcas,          # ej. ["Aromatex", "Pestex"]
+        "vendedores": vendedores,  # vacío si no es admin
     })
 
 
@@ -624,7 +662,7 @@ def actualizar_lead(lead_id):
             except (ValueError, TypeError):
                 return jsonify({"error": f"{uuid_field} inválido"}), 400
 
-    for campo in ["nombre", "telefono", "marca_interes", "cantidad_productos",
+    for campo in ["nombre", "telefono", "email", "marca_interes", "cantidad_productos",
                    "precio_unitario", "valor_estimado", "motivo_perdida",
                    "usuario_asignado_id", "tipo_industria", "tamano_empresa",
                    "num_sucursales", "tipo_cliente", "tipo_venta", "notas",
@@ -636,7 +674,16 @@ def actualizar_lead(lead_id):
             value = data[campo]
             if campo in ("account_id", "contact_id") and value == "":
                 value = None
+            if campo == "email" and value:
+                value = str(value).strip().lower() or None
             setattr(lead, campo, value)
+
+    # FEAT-2026-08-25: editar un lead no puede dejarlo sin ninguna forma de
+    # contacto. Se valida sobre el resultado, no sobre lo que vino en el body:
+    # borrar el teléfono está bien si ya tenía correo, y al revés.
+    if not (lead.telefono or "").strip() and not (lead.email or "").strip():
+        db.session.rollback()
+        return jsonify({"error": "El lead se quedaría sin teléfono ni correo"}), 400
 
     # factura_fecha como Date (viene "YYYY-MM-DD" del frontend)
     if "factura_fecha" in data:

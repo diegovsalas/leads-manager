@@ -178,7 +178,11 @@ class Lead(db.Model):
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
     # FEAT-2026-06-29: telefono ya NO es unique. Un cliente puede tener N
     # leads (recurrente + eventual + repetidas). Index para performance.
-    telefono = db.Column(db.String(30), nullable=False, index=True)
+    # FEAT-2026-08-25: el teléfono deja de ser obligatorio. A veces solo se
+    # tiene el correo (ferias, formularios web, listas compradas). Se exige
+    # que venga al menos uno de los dos; eso se valida al crear, no aquí.
+    telefono = db.Column(db.String(30), nullable=True, index=True)
+    email = db.Column(db.String(200), nullable=True, index=True)
     nombre = db.Column(db.String(200), nullable=True)
     origen = db.Column(
         db.Enum(OrigenLead, name="origen_lead_enum",
@@ -315,6 +319,7 @@ class Lead(db.Model):
         return {
             "id": str(self.id),
             "telefono": self.telefono,
+            "email": self.email,
             "nombre": self.nombre,
             "origen": self.origen.value if self.origen else None,
             "marca_interes": self.marca_interes,

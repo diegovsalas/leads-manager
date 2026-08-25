@@ -782,12 +782,19 @@ fbq('track','PageView');
     <div style="margin-left:auto;"><button class="btn btn-filled" onclick="openLeadModal()">+ Nuevo lead</button></div>
   </div>
   <div class="table-wrap">
-    <table><thead><tr><th>Nombre</th><th>Telefono</th><th>Unidad</th><th>Cantidad</th><th>Valor</th><th>Etapa</th><th>Vendedor</th><th>Origen</th></tr></thead>
+    <table><thead><tr><th>Empresa</th><th>Contacto</th><th>Unidad</th><th>Cantidad</th><th>Valor</th><th>Etapa</th><th>Vendedor</th><th>Origen</th></tr></thead>
     <tbody id="leads-tbody">
       {% for etapa in etapas %}{% for lead in pipeline[etapa.value].leads %}
       <tr data-marca="{{ lead.marca_interes or '' }}" onclick="abrirLeadPanel('{{ lead.id }}')">
-        <td class="td-name">{{ lead.nombre or 'Sin nombre' }}</td>
-        <td class="td-phone">{{ lead.telefono or '-' }}</td>
+        {# FEAT-2026-08-25: manda la empresa, no la persona. Los leads sin
+           empresa (uso personal) caen al nombre del contacto para no dejar
+           el renglón en blanco. #}
+        <td class="td-name">{% if lead.empresa_nombre %}{{ lead.empresa_nombre }}{% else %}<span style="color:var(--text2);">{{ lead.nombre or 'Sin empresa' }}</span>{% endif %}</td>
+        <td style="font-size:12px;color:var(--text2);">
+          {{ lead.nombre or '-' }}
+          {% if lead.telefono %}<div class="td-phone" style="font-size:11px;">{{ lead.telefono }}</div>
+          {% elif lead.email %}<div style="font-size:11px;color:var(--text3);">{{ lead.email }}</div>{% endif %}
+        </td>
         <td>{% if lead.marca_interes %}<span class="tag tag-marca">{{ lead.marca_interes }}</span>{% else %}-{% endif %}</td>
         <td style="font-size:12px;color:var(--text2);">{% if lead.cantidad_productos %}{{ lead.cantidad_productos }} x ${{ "{:,.0f}".format(lead.precio_unitario) }}{% else %}-{% endif %}</td>
         <td>{% if lead.valor_calculado %}<span style="font-weight:600;color:var(--green);">${{ "{:,.0f}".format(lead.valor_calculado) }}</span>{% else %}-{% endif %}</td>
@@ -6694,9 +6701,20 @@ window.IS_ADMIN_AI = IS_ADMIN || false;
       <span class="nl-kbd">Esc para cerrar</span>
     </div>
     <div class="nl-body">
-      <div class="nl-row">
-        <label class="nl-label">Teléfono *</label>
-        <input class="nl-input" id="nl-phone" type="tel" placeholder="52 81 1234 5678" autocomplete="off"/>
+      {# FEAT-2026-08-25: teléfono y correo, con al menos uno obligatorio.
+         A veces del lead solo se tiene el correo. #}
+      <div class="nl-row two">
+        <div style="position:relative;">
+          <label class="nl-label">Teléfono</label>
+          <input class="nl-input" id="nl-phone" type="tel" placeholder="52 81 1234 5678" autocomplete="off"/>
+        </div>
+        <div>
+          <label class="nl-label">Correo</label>
+          <input class="nl-input" id="nl-email" type="email" placeholder="contacto@empresa.com" autocomplete="off"/>
+        </div>
+      </div>
+      <div class="nl-row" style="margin-top:-6px;">
+        <div style="font-size:11px;color:var(--text3);">Se necesita al menos uno de los dos para poder contactarlo.</div>
         <div id="nl-dup-banner" style="display:none;"></div>
       </div>
       <div class="nl-row">
@@ -6806,6 +6824,15 @@ window.IS_ADMIN_AI = IS_ADMIN || false;
         </label>
       </div>
     </div>
+    {# FEAT-2026-08-25: un admin puede dar de alta leads a nombre de otro
+       vendedor sin tener que entrar con la cuenta de esa persona. #}
+    <div class="nl-row" id="nl-vendedor-row" style="display:none;padding:0 18px 12px;">
+      <label class="nl-label">Asignar a</label>
+      <select class="nl-input" id="nl-vendedor" onchange="nlActualizarAsignacion()">
+        <option value="">— Yo mismo —</option>
+      </select>
+    </div>
+
     <div class="nl-foot">
       <div class="nl-assign" id="nl-assign-preview">Se asignará a vos</div>
       <div class="nl-btns">
@@ -7446,6 +7473,19 @@ async function _nlLoadMe(){
   catch(e){_nlMe={nombre:'Usuario',marcas:[],is_admin:false};return _nlMe;}
 }
 
+let _nlMeNombre = 'vos';
+
+// Refleja en el pie del modal a quién le va a quedar el lead, para que no
+// haya sorpresas después de guardar.
+function nlActualizarAsignacion(){
+  const sel = document.getElementById('nl-vendedor');
+  const destino = (sel && sel.value)
+    ? sel.options[sel.selectedIndex].textContent.split(' · ')[0]
+    : _nlMeNombre;
+  document.getElementById('nl-assign-preview').innerHTML =
+    `Se asignará a <strong>${_esc(destino)}</strong>`;
+}
+
 async function openLeadModal(leadToEdit){
   _nlEditingLead = leadToEdit || null;
   const me=await _nlLoadMe();
@@ -7456,7 +7496,7 @@ async function openLeadModal(leadToEdit){
   document.getElementById('nl-save-add-btn').style.display = _nlEditingLead ? 'none' : '';
   document.getElementById('nl-phone').disabled = !!_nlEditingLead;
   // Reset
-  ['nl-phone','nl-nombre','nl-empresa','nl-account-id','nl-sucursales','nl-cantidad','nl-precio','nl-valor-estimado','nl-notas'].forEach(id=>document.getElementById(id).value='');
+  ['nl-phone','nl-email','nl-nombre','nl-empresa','nl-account-id','nl-sucursales','nl-cantidad','nl-precio','nl-valor-estimado','nl-notas'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('nl-estado').value='';
   document.getElementById('nl-industria').value='';
   document.getElementById('nl-tamano').value='';
@@ -7472,7 +7512,7 @@ async function openLeadModal(leadToEdit){
     _NL_ESTADOS.forEach(s=>{estSel.innerHTML+=`<option value="${s}">${s}</option>`;});
   }
   // Unidades pills (filtradas por marcas del usuario)
-  const allMarcas=['Aromatex','Pestex','Weldex'];
+  const allMarcas=['Aromatex','Pestex','Weldex','Nexo'];
   const userMarcas=me.is_admin?allMarcas:(me.marcas&&me.marcas.length?me.marcas:allMarcas);
   const pillsEl=document.getElementById('nl-unidad-pills');
   pillsEl.innerHTML='';
@@ -7481,6 +7521,24 @@ async function openLeadModal(leadToEdit){
     p.onclick=()=>{pillsEl.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');};
     pillsEl.appendChild(p);
   });
+
+  // FEAT-2026-08-25: un admin puede dar de alta el lead a nombre de otro
+  // vendedor. Para el resto la fila ni aparece: crean a su propio nombre.
+  const venRow=document.getElementById('nl-vendedor-row');
+  const venSel=document.getElementById('nl-vendedor');
+  if(me.is_admin && (me.vendedores||[]).length){
+    venRow.style.display='';
+    venSel.innerHTML='<option value="">— Yo mismo ('+(me.nombre||'')+') —</option>';
+    me.vendedores.forEach(v=>{
+      const marcas=(v.marcas||[]).join(', ');
+      venSel.innerHTML+=`<option value="${v.id}">${_esc(v.nombre)}${marcas?' · '+_esc(marcas):''}</option>`;
+    });
+    venSel.value='';
+  }else{
+    venRow.style.display='none';
+    venSel.value='';
+  }
+  _nlMeNombre = me.nombre || 'vos';
   // Origen pills (default Prospección activo)
   document.getElementById('nl-origen-pills').querySelectorAll('.nl-pill').forEach((p,i)=>{
     p.onclick=()=>{p.parentElement.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');};
@@ -7510,12 +7568,13 @@ async function openLeadModal(leadToEdit){
     });
   }
   // Asignación preview
-  document.getElementById('nl-assign-preview').innerHTML=`Se asignará a <strong>${me.nombre||'vos'}</strong>`;
+  nlActualizarAsignacion();
 
   // ── Modo edición: prellenar todos los campos con los datos del lead ──
   if(_nlEditingLead){
     const l = _nlEditingLead;
     document.getElementById('nl-phone').value = l.telefono || '';
+    document.getElementById('nl-email').value = l.email || '';
     document.getElementById('nl-nombre').value = l.nombre || '';
     // Empresa linkeada
     if(l.account_id && l.empresa_nombre){
@@ -7821,7 +7880,18 @@ async function nlSubmit(mode){
   const origen=document.querySelector('#nl-origen-pills .nl-pill.active')?.dataset.val||'Prospeccion';
   const tipoVenta=document.querySelector('#nl-tipo-venta-pills .nl-pill.active')?.dataset.val||'';
 
-  if(!phone||phone.length<10){_nlToast('Teléfono inválido (mínimo 10 dígitos)',true);return;}
+  // FEAT-2026-08-25: teléfono O correo. Si viene teléfono, sigue teniendo que
+  // ser válido; lo que ya no se exige es que venga.
+  const email=document.getElementById('nl-email').value.trim().toLowerCase();
+  if(!phone && !email){
+    _nlToast('Hace falta un teléfono o un correo',true);
+    document.getElementById('nl-phone').focus();return;
+  }
+  if(phone && phone.length<10){_nlToast('Teléfono inválido (mínimo 10 dígitos)',true);return;}
+  if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+    _nlToast('El correo no parece válido',true);
+    document.getElementById('nl-email').focus();return;
+  }
   if(!nombre){_nlToast('Falta nombre del contacto',true);return;}
   if(!unidad){_nlToast('Seleccioná una unidad de negocio',true);return;}
   const isB2C_check=document.getElementById('nl-b2c').checked;
@@ -7830,12 +7900,14 @@ async function nlSubmit(mode){
     if(!industria){_nlToast('Seleccioná la Industria del cliente',true);document.getElementById('nl-industria').focus();return;}
   }
 
-  const phoneNorm=phone.length===10?'52'+phone:phone;
+  const phoneNorm=phone ? (phone.length===10?'52'+phone:phone) : null;
 
   const isB2C=document.getElementById('nl-b2c').checked;
   const accountIdLinked=document.getElementById('nl-account-id').value||null;
+  const asignarA=document.getElementById('nl-vendedor')?.value||null;
   const body={
-    telefono:phoneNorm, nombre,
+    telefono:phoneNorm, email:email||null, nombre,
+    ...(asignarA ? {usuario_asignado_id: asignarA} : {}),
     empresa_nombre: isB2C ? null : (empresa||null),
     account_id: isB2C ? null : accountIdLinked,
     estado_cliente:estado||null,
@@ -7918,7 +7990,7 @@ async function nlSubmit(mode){
       if(mode==='close'){closeLeadModal(true);setTimeout(()=>{if(typeof loadKanban==='function')loadKanban();else location.reload();},400);}
       else if(mode==='add-another'){
         // Reset y reabrir
-        ['nl-phone','nl-nombre','nl-empresa','nl-account-id','nl-sucursales','nl-cantidad','nl-precio','nl-notas'].forEach(id=>document.getElementById(id).value='');
+        ['nl-phone','nl-email','nl-nombre','nl-empresa','nl-account-id','nl-sucursales','nl-cantidad','nl-precio','nl-notas'].forEach(id=>document.getElementById(id).value='');
         document.getElementById('nl-tipo-cliente').value='';
         document.getElementById('nl-b2c').checked=false;
         document.getElementById('nl-empresa-row').style.display='';

@@ -298,6 +298,37 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] usuarios.gmail_backfilled_in_at failed: %s", e)
 
+        # ─── leads.email + teléfono opcional (FEAT-2026-08-25) ───
+        # A veces del lead solo se tiene el correo. Se agrega la columna y se
+        # quita el NOT NULL del teléfono; la regla "al menos uno de los dos"
+        # se valida al crear, no en la base, para no romper importaciones.
+        try:
+            with db.engine.begin() as conn:
+                exists = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'leads' AND column_name = 'email'
+                """)).first()
+                if not exists:
+                    app.logger.info("[auto-migrate] adding leads.email...")
+                    conn.execute(text("ALTER TABLE leads ADD COLUMN email VARCHAR(200)"))
+                    conn.execute(text(
+                        "CREATE INDEX IF NOT EXISTS ix_leads_email ON leads (email)"))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] leads.email failed: %s", e)
+
+        try:
+            with db.engine.begin() as conn:
+                notnull = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'leads' AND column_name = 'telefono'
+                      AND is_nullable = 'NO'
+                """)).first()
+                if notnull:
+                    app.logger.info("[auto-migrate] dropping NOT NULL on leads.telefono...")
+                    conn.execute(text("ALTER TABLE leads ALTER COLUMN telefono DROP NOT NULL"))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] leads.telefono nullable failed: %s", e)
+
         # ─── sales_emails.direccion (FEAT-2026-07-07): 'IN' entrantes / 'OUT' salientes ───
         try:
             with db.engine.begin() as conn:
