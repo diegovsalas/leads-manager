@@ -15,7 +15,9 @@ from decimal import Decimal, InvalidOperation
 from flask import Blueprint, render_template, request, redirect, jsonify, session, flash
 
 from extensions import db
-from models import ComisionTasa, ComisionEtapa, ComisionDescuento
+from models import (ComisionTasa, ComisionEtapa, ComisionDescuento,
+                    ComisionPolitica, ComisionCorte,
+                    Sale, SaleParticipacion, Usuario, MetaVendedor)
 from blueprints.auth import is_admin_role
 from actividad import log_actividad
 
@@ -259,3 +261,233 @@ def simular():
                     "monto": float(d["monto"])} for d in r["detalle_etapas"]],
         "nota_un": r["nota_un"],
     })
+
+
+# ══════════════════════════════════════════════════════════════════
+# CORTE MENSUAL — FEAT-2026-08-26
+#
+# "La meta habilita el pago": las comisiones se calculan y congelan al
+# cerrar cada venta, como siempre. Lo que decide el corte es si al terminar
+# el mes se autorizan o se retienen.
+#
+# El sistema NO define qué pasa con lo retenido. Que se pierda o se arrastre
+# al mes siguiente es una decisión con implicaciones laborales, y se toma
+# aquí, mes con mes: liberar o cancelar. Queda registrado quién lo decidió.
+# ══════════════════════════════════════════════════════════════════
+
+def _rango_mes(mes):
+    """'2026-08' -> (inicio, fin) en datetime UTC, fin exclusivo."""
+    from datetime import datetime, timezone as _tz
+    y, m = (int(x) for x in mes.split("-"))
+    ini = datetime(y, m, 1, tzinfo=_tz.utc)
+    fin = datetime(y + 1, 1, 1, tzinfo=_tz.utc) if m == 12 \
+        else datetime(y, m + 1, 1, tzinfo=_tz.utc)
+    return ini, fin
+
+
+def _comisiones_del_mes(mes):
+    """Comisión que le corresponde a cada vendedor por las ventas CERRADAS
+    en ese mes. Devuelve {usuario_id: {"comision": float, "vendido": float}}.
+
+    Se mide por fecha de cierre de la venta, no por creación del lead: un
+    lead de julio cerrado en agosto se paga en agosto.
+
+    En una venta compartida cada quien cobra su tajada (sale_participaciones).
+    Solo cuando la venta no tiene reparto se le abona completa a su dueño.
+    """
+    ini, fin = _rango_mes(mes)
+    ventas = Sale.query.filter(
+        Sale.closed_at >= ini, Sale.closed_at < fin,
+        Sale.status == "activa",
+    ).all()
+    if not ventas:
+        return {}
+
+    repartos = {}
+    for p in SaleParticipacion.query.filter(
+            SaleParticipacion.sale_id.in_([v.id for v in ventas])).all():
+        repartos.setdefault(str(p.sale_id), []).append(p)
+
+    out = {}
+    for v in ventas:
+        partes = repartos.get(str(v.id))
+        if partes:
+            for p in partes:
+                if not p.usuario_id:
+                    continue
+                acc = out.setdefault(str(p.usuario_id), {"comision": 0.0, "vendido": 0.0})
+                acc["comision"] += float(p.monto or 0)
+        elif v.user_id:
+            acc = out.setdefault(str(v.user_id), {"comision": 0.0, "vendido": 0.0})
+            acc["comision"] += float(v.commission_amount or 0)
+        # El monto vendido siempre se le acredita al dueño de la venta.
+        if v.user_id:
+            acc = out.setdefault(str(v.user_id), {"comision": 0.0, "vendido": 0.0})
+            acc["vendido"] += float(v.monthly_amount or v.total_amount or 0)
+    return out
+
+
+def _meta_del_mes(usuario_id, mes, base):
+    m = MetaVendedor.query.filter_by(usuario_id=usuario_id, mes=mes).first()
+    if not m:
+        return 0.0
+    rec = float(m.meta_recurrente_mxn or 0)
+    ev = float(m.meta_eventual_mxn or 0)
+    if base == "recurrente":
+        return rec
+    if base == "eventual":
+        return ev
+    return rec + ev or float(m.meta_mxn or 0)
+
+
+@comisiones_bp.route("/corte")
+def corte():
+    """Pantalla del corte: qué vendió cada quien, contra su meta, y en qué
+    quedaron sus comisiones."""
+    err = _solo_admin()
+    if err:
+        return err
+
+    from datetime import datetime, timezone as _tz
+    mes = (request.args.get("mes") or "").strip() or \
+        datetime.now(_tz.utc).strftime("%Y-%m")
+
+    pol = ComisionPolitica.vigente()
+    db.session.commit()
+
+    datos = _comisiones_del_mes(mes)
+    guardados = {str(c.usuario_id): c
+                 for c in ComisionCorte.query.filter_by(mes=mes).all()}
+
+    filas = []
+    for u in Usuario.query.order_by(Usuario.nombre).all():
+        uid = str(u.id)
+        d = datos.get(uid)
+        meta = _meta_del_mes(u.id, mes, pol.base)
+        if not d and not meta:
+            continue                      # ni vendió ni tenía meta: no sale
+        vendido = d["vendido"] if d else 0.0
+        comision = d["comision"] if d else 0.0
+        cumpl = (vendido / meta) if meta > 0 else 0.0
+        guardado = guardados.get(uid)
+        filas.append({
+            "usuario_id": uid, "vendedor": u.nombre,
+            "meta": meta, "vendido": vendido,
+            "cumplimiento": cumpl, "comision": comision,
+            "alcanzo": (not pol.meta_habilita_pago) or (meta > 0 and cumpl >= float(pol.umbral)),
+            "guardado": guardado.to_dict() if guardado else None,
+        })
+
+    return render_template("comisiones_corte.html", mes=mes, politica=pol,
+                           filas=filas, **_ctx())
+
+
+@comisiones_bp.route("/politica", methods=["POST"])
+def guardar_politica():
+    err = _solo_admin()
+    if err:
+        return err
+    pol = ComisionPolitica.vigente()
+    pol.meta_habilita_pago = request.form.get("meta_habilita_pago") == "on"
+    umbral = _dec(request.form.get("umbral"), None)
+    if umbral is not None:
+        # se captura en porcentaje (100) y se guarda en fracción (1.0)
+        pol.umbral = umbral / 100 if umbral > 1 else umbral
+    base = (request.form.get("base") or "total").strip()
+    if base in ("total", "recurrente", "eventual"):
+        pol.base = base
+    db.session.commit()
+    log_actividad("editar", "comision", None,
+                  f"Política de pago: meta {'habilita' if pol.meta_habilita_pago else 'NO condiciona'} "
+                  f"· umbral {float(pol.umbral)*100:.0f}% · base {pol.base}")
+    flash("Política de pago actualizada", "ok")
+    return redirect(request.referrer or "/comisiones/corte")
+
+
+@comisiones_bp.route("/corte/aplicar", methods=["POST"])
+def aplicar_corte():
+    """Congela el corte del mes: guarda para cada vendedor qué vendió, qué
+    meta tenía y si su comisión queda autorizada o retenida."""
+    err = _solo_admin()
+    if err:
+        return err
+
+    mes = (request.form.get("mes") or "").strip()
+    if not mes:
+        return jsonify({"error": "Falta el mes"}), 400
+
+    pol = ComisionPolitica.vigente()
+    datos = _comisiones_del_mes(mes)
+    quien = session.get("user_nombre", "")
+    n_aut = n_ret = 0
+
+    for u in Usuario.query.all():
+        uid = str(u.id)
+        d = datos.get(uid)
+        meta = _meta_del_mes(u.id, mes, pol.base)
+        if not d and not meta:
+            continue
+        vendido = d["vendido"] if d else 0.0
+        comision = d["comision"] if d else 0.0
+        cumpl = (vendido / meta) if meta > 0 else 0.0
+
+        if not pol.meta_habilita_pago:
+            estado, motivo = "autorizada", "La meta no condiciona el pago."
+        elif meta <= 0:
+            estado, motivo = "retenida", "Sin meta capturada para el mes: no se puede evaluar."
+        elif cumpl >= float(pol.umbral):
+            estado = "autorizada"
+            motivo = f"Alcanzó {cumpl*100:.0f}% de su meta."
+        else:
+            estado = "retenida"
+            motivo = f"Alcanzó {cumpl*100:.0f}%, por debajo del {float(pol.umbral)*100:.0f}% requerido."
+
+        c = ComisionCorte.query.filter_by(usuario_id=u.id, mes=mes).first()
+        if not c:
+            c = ComisionCorte(usuario_id=u.id, mes=mes)
+            db.session.add(c)
+        # Una decisión ya tomada a mano no se pisa al recalcular.
+        if c.decidido_por and c.decidido_por != "sistema":
+            c.meta_mxn, c.vendido_mxn = meta, vendido
+            c.cumplimiento, c.comision_mxn = cumpl, comision
+            continue
+        c.meta_mxn, c.vendido_mxn = meta, vendido
+        c.cumplimiento, c.comision_mxn = cumpl, comision
+        c.estado, c.motivo = estado, motivo
+        c.decidido_por = "sistema"
+        n_aut += estado == "autorizada"
+        n_ret += estado == "retenida"
+
+    db.session.commit()
+    log_actividad("editar", "comision", None,
+                  f"Corte de {mes}: {n_aut} autorizadas, {n_ret} retenidas · por {quien}")
+    flash(f"Corte de {mes} aplicado: {n_aut} autorizadas, {n_ret} retenidas", "ok")
+    return redirect(f"/comisiones/corte?mes={mes}")
+
+
+@comisiones_bp.route("/corte/<uuid:corte_id>/estado", methods=["POST"])
+def cambiar_estado_corte(corte_id):
+    """Liberar o cancelar una comisión retenida. Es la decisión que el
+    sistema no toma solo."""
+    err = _solo_admin()
+    if err:
+        return err
+
+    c = db.session.get(ComisionCorte, corte_id)
+    if not c:
+        return jsonify({"error": "Corte no encontrado"}), 404
+
+    nuevo = (request.form.get("estado") or "").strip()
+    if nuevo not in ("autorizada", "retenida", "cancelada"):
+        return jsonify({"error": "Estado inválido"}), 400
+
+    anterior = c.estado
+    c.estado = nuevo
+    c.motivo = (request.form.get("motivo") or "").strip() or c.motivo
+    c.decidido_por = session.get("user_nombre", "") or "dirección"
+    db.session.commit()
+    log_actividad("editar", "comision", None,
+                  f"Comisión de {c.usuario.nombre if c.usuario else '?'} en {c.mes}: "
+                  f"{anterior} → {nuevo} · por {c.decidido_por}")
+    flash(f"Comisión {nuevo}", "ok")
+    return redirect(f"/comisiones/corte?mes={c.mes}")

@@ -1273,6 +1273,10 @@ class ComisionTasa(db.Model):
     monto_hasta = db.Column(db.Numeric(14, 2), nullable=True)   # NULL = sin tope
     tasa = db.Column(db.Numeric(6, 4), nullable=False)          # 0.4000 = 40%
     modalidad = db.Column(db.String(60), default="Pago único, mes 1")
+    # FEAT-2026-08-26: tasa propia para ventas cruzadas. Cuando el lead tiene
+    # dos o más unidades en juego se usa esta en vez de la de la unidad dueña,
+    # para que vender cruzado no pague menos que vender solo.
+    es_multi_un = db.Column(db.Boolean, nullable=False, default=False)
     regla_origen = db.Column(db.Text, default="")
     nota = db.Column(db.Text, default="")                       # candados y salvedades
     activo = db.Column(db.Boolean, default=True, nullable=False)
@@ -1307,6 +1311,86 @@ class ComisionDescuento(db.Model):
     factor = db.Column(db.Numeric(6, 4), nullable=False)
     etiqueta = db.Column(db.String(120), default="")
     requiere_autorizacion = db.Column(db.Boolean, default=False, nullable=False)
+
+
+class ComisionPolitica(db.Model):
+    """Cuándo se autoriza el pago de las comisiones del mes. Una sola fila.
+
+    FEAT-2026-08-26: la meta habilita el pago. Las comisiones se calculan y
+    congelan al cerrar cada venta, como siempre; lo que decide esta política
+    es si al cierre de mes se autorizan o se retienen.
+
+    Deliberadamente NO define qué pasa con lo retenido. Que una comisión
+    retenida se pierda o se arrastre al mes siguiente es una decisión de
+    dirección con implicaciones laborales, y se toma mes con mes desde la
+    pantalla del corte: liberar o cancelar. El sistema deja el estado, no
+    la política.
+    """
+    __tablename__ = "comision_politica"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    meta_habilita_pago = db.Column(db.Boolean, nullable=False, default=False)
+    # 1.0000 = hay que llegar al 100% de la meta para que se autorice
+    umbral = db.Column(db.Numeric(6, 4), nullable=False, default=1)
+    # contra qué meta se mide: total | recurrente | eventual
+    base = db.Column(db.String(20), nullable=False, default="total")
+    nota = db.Column(db.Text, default="")
+    actualizado_en = db.Column(db.DateTime(timezone=True), default=_utcnow,
+                               onupdate=_utcnow)
+
+    @staticmethod
+    def vigente():
+        """La política actual, creándola apagada si aún no existe."""
+        p = ComisionPolitica.query.first()
+        if not p:
+            p = ComisionPolitica(meta_habilita_pago=False, umbral=1, base="total")
+            db.session.add(p)
+            db.session.flush()
+        return p
+
+
+class ComisionCorte(db.Model):
+    """El corte de un vendedor en un mes: qué vendió, qué meta tenía, y en
+    qué quedaron sus comisiones.
+
+    Se guarda el resultado en vez de recalcularlo cada vez porque es la
+    constancia de una decisión: quién autorizó o retuvo, y cuándo.
+    """
+    __tablename__ = "comision_cortes"
+    __table_args__ = (db.UniqueConstraint("usuario_id", "mes", name="uq_corte_usuario_mes"),)
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    usuario_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"),
+                           nullable=False, index=True)
+    mes = db.Column(db.String(7), nullable=False, index=True)   # '2026-08'
+    meta_mxn = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    vendido_mxn = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    cumplimiento = db.Column(db.Numeric(6, 4), nullable=False, default=0)  # 0.76 = 76%
+    comision_mxn = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    # autorizada | retenida | cancelada
+    estado = db.Column(db.String(20), nullable=False, default="retenida")
+    motivo = db.Column(db.Text, default="")
+    decidido_por = db.Column(db.String(120), default="")
+    decidido_en = db.Column(db.DateTime(timezone=True), default=_utcnow,
+                            onupdate=_utcnow)
+
+    usuario = db.relationship("Usuario")
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "usuario_id": str(self.usuario_id),
+            "vendedor": self.usuario.nombre if self.usuario else None,
+            "mes": self.mes,
+            "meta_mxn": float(self.meta_mxn or 0),
+            "vendido_mxn": float(self.vendido_mxn or 0),
+            "cumplimiento": float(self.cumplimiento or 0),
+            "comision_mxn": float(self.comision_mxn or 0),
+            "estado": self.estado,
+            "motivo": self.motivo or "",
+            "decidido_por": self.decidido_por or "",
+            "decidido_en": self.decidido_en.isoformat() if self.decidido_en else None,
+        }
 
 
 class LeadAtribucion(db.Model):

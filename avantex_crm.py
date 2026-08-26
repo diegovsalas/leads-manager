@@ -329,6 +329,23 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] leads.telefono nullable failed: %s", e)
 
+        # ─── comision_tasas.es_multi_un (FEAT-2026-08-26) ───
+        # Las tablas comision_politica y comision_cortes las crea create_all;
+        # una columna nueva sobre una tabla que ya existe, no.
+        try:
+            with db.engine.begin() as conn:
+                exists = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'comision_tasas' AND column_name = 'es_multi_un'
+                """)).first()
+                if not exists:
+                    app.logger.info("[auto-migrate] adding comision_tasas.es_multi_un...")
+                    conn.execute(text(
+                        "ALTER TABLE comision_tasas ADD COLUMN es_multi_un "
+                        "BOOLEAN NOT NULL DEFAULT FALSE"))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] comision_tasas.es_multi_un failed: %s", e)
+
         # ─── leads.marcas_interes (FEAT-2026-08-25): leads multi UN ───
         # Se rellena con la marca que ya tenía cada lead, para que la columna
         # nunca esté vacía y el filtro por UN siga devolviendo lo mismo que antes.

@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Corte de comisiones — Avantex</title>
+<link rel="icon" type="image/x-icon" href="/static/img/favicon.ico"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;520;600;620;660&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/avantex-tokens.css"/>
+<style>
+.cm-top{height:var(--h-topbar);display:flex;align-items:center;gap:8px;padding:0 18px;
+        border-bottom:1px solid var(--border);background:var(--bg-card);font-size:12.5px}
+.cm-top a{display:inline-flex;align-items:center;gap:5px;color:var(--ink-2);text-decoration:none}
+.cm-top a:hover{color:var(--ink-1)}
+.cm-top .sep{color:var(--ink-4)}
+.cm-top .cur{font-weight:620;color:var(--ink-1)}
+.cm-top .sp{flex:1}
+.cm-top .rol{color:var(--ink-3)}
+
+.cm-wrap{max-width:1180px;margin:0 auto;padding:18px}
+.cm-head{margin-bottom:16px}
+.cm-head h1{font-size:18px;font-weight:640;letter-spacing:-.017em;margin:0}
+.cm-head .sub{font-size:12.5px;color:var(--ink-3);margin:3px 0 0;max-width:78ch;line-height:1.5}
+
+.cm-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);
+         padding:16px;margin-bottom:14px}
+.cm-card-h{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
+           flex-wrap:wrap;margin-bottom:12px}
+.cm-card-h h2{font-size:14px;font-weight:620;margin:0}
+.hint{font-size:11.5px;color:var(--ink-3);margin:3px 0 0;max-width:74ch;line-height:1.5}
+
+.cm-flash{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:var(--r-sm);
+          font-size:12.5px;margin-bottom:12px;border:1px solid var(--border)}
+.cm-flash.is-ok{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}
+.cm-flash.is-err{background:var(--danger-soft);color:var(--danger);border-color:var(--danger)}
+
+.tw{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r-md)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead th{text-align:left;padding:7px 11px;font-size:10px;font-weight:620;letter-spacing:.07em;
+         text-transform:uppercase;color:var(--ink-3);background:var(--bg-surface-2);
+         border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:6px 11px;border-bottom:1px solid var(--border-subtle);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+td.nw{white-space:nowrap}
+tfoot td{padding:8px 11px;font-weight:620;border-top:1px solid var(--border);
+         background:var(--bg-surface-2);font-variant-numeric:tabular-nums}
+
+.cm-in{height:26px;padding:0 7px;background:var(--bg-app);color:var(--ink-1);
+       border:1px solid var(--border-strong);border-radius:var(--r-sm);
+       font-family:inherit;font-size:12px}
+.cm-in:focus{outline:none;border-color:var(--copper);box-shadow:0 0 0 3px var(--copper-soft)}
+.cm-in-n{text-align:right;font-variant-numeric:tabular-nums;width:70px}
+
+.cm-btn{height:var(--h-control);padding:0 11px;border:1px solid var(--border-strong);
+        background:var(--bg-card);color:var(--ink-1);border-radius:var(--r-sm);
+        font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.cm-btn:hover{background:var(--bg-surface-2)}
+.cm-btn-primary{background:var(--copper);border-color:var(--copper);color:#fff;font-weight:560}
+.cm-btn-primary:hover{filter:brightness(.94)}
+.cm-btn-sm{height:24px;padding:0 8px;font-size:11.5px}
+.cm-btn-danger{color:var(--danger);border-color:var(--danger)}
+
+.chip{display:inline-block;padding:2px 8px;border-radius:99px;font-size:10.5px;
+      font-weight:620;letter-spacing:.02em;white-space:nowrap}
+.chip-ok{background:var(--ok-soft);color:var(--ok)}
+.chip-ret{background:var(--warn-soft);color:var(--warn)}
+.chip-can{background:var(--danger-soft);color:var(--danger)}
+.chip-none{background:var(--bg-surface-2);color:var(--ink-3)}
+
+.bar{position:relative;height:6px;border-radius:99px;background:var(--bg-surface-2);
+     min-width:88px;overflow:hidden}
+.bar > span{display:block;height:100%;border-radius:99px;background:var(--ok)}
+.bar > span.corta{background:var(--warn)}
+
+.pol{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px}
+.pol label{font-size:11.5px;color:var(--ink-2);display:block;margin-bottom:4px}
+.pol .campo{display:flex;flex-direction:column}
+.sw{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-1)}
+.acciones{display:flex;gap:5px;justify-content:flex-end}
+.acciones form{display:inline}
+</style>
+</head>
+<body>
+
+{% from "cs/_icons.html" import icon %}
+
+<div class="cm-top">
+  <a href="/">{{ icon('arrow-left', 14) }}Pipe</a>
+  <span class="sep">/</span>
+  <a href="/comisiones/">Comisiones</a>
+  <span class="sep">/</span>
+  <span class="cur">Corte del mes</span>
+  <span class="sp"></span>
+  <span class="rol">{{ user_nombre }}</span>
+</div>
+
+<div class="cm-wrap">
+
+<div class="cm-head">
+  <h1>Corte de comisiones</h1>
+  <p class="sub">Cada venta calcula y congela su comisión al cerrarse. Aquí se decide,
+    al terminar el mes, cuáles se autorizan a pago y cuáles quedan retenidas.
+    Se mide por <strong>fecha de cierre de la venta</strong>, no por cuándo entró el lead.</p>
+</div>
+
+{% with mensajes = get_flashed_messages(with_categories=true) %}
+  {% for categoria, texto in mensajes %}
+    <div class="cm-flash {{ 'is-err' if categoria == 'error' else 'is-ok' }}">{{ texto }}</div>
+  {% endfor %}
+{% endwith %}
+
+<div class="cm-card">
+  <div class="cm-card-h">
+    <div>
+      <h2>Política de pago</h2>
+      <p class="hint">Define si alcanzar la meta es requisito para cobrar. Cambiarla no
+        recalcula meses ya decididos a mano.</p>
+    </div>
+  </div>
+  <form method="post" action="/comisiones/politica" class="pol">
+    <label class="sw">
+      <input type="checkbox" name="meta_habilita_pago" {% if politica.meta_habilita_pago %}checked{% endif %}>
+      <span>La meta habilita el pago</span>
+    </label>
+    <div class="campo">
+      <label>Umbral requerido</label>
+      <input class="cm-in cm-in-n" name="umbral" value="{{ '%.0f'|format(politica.umbral * 100) }}">
+    </div>
+    <div class="campo">
+      <label>Medido contra</label>
+      <select class="cm-in" name="base">
+        <option value="total" {% if politica.base=='total' %}selected{% endif %}>Meta total</option>
+        <option value="recurrente" {% if politica.base=='recurrente' %}selected{% endif %}>Solo recurrente</option>
+        <option value="eventual" {% if politica.base=='eventual' %}selected{% endif %}>Solo eventual</option>
+      </select>
+    </div>
+    <button class="cm-btn cm-btn-primary" type="submit">Guardar política</button>
+  </form>
+  {% if not politica.meta_habilita_pago %}
+    <p class="hint" style="margin-top:10px;">Ahora mismo la meta <strong>no condiciona</strong> el pago:
+      al aplicar el corte, todas las comisiones quedan autorizadas.</p>
+  {% endif %}
+</div>
+
+<div class="cm-card">
+  <div class="cm-card-h">
+    <div>
+      <h2>{{ mes }}</h2>
+      <p class="hint">Aplicar el corte guarda la decisión del mes. Lo que ya se haya
+        liberado o cancelado a mano no se pisa al volver a aplicarlo.</p>
+    </div>
+    <form method="get" action="/comisiones/corte" style="display:flex;gap:6px;align-items:center;">
+      <input class="cm-in" type="month" name="mes" value="{{ mes }}">
+      <button class="cm-btn" type="submit">Ver</button>
+    </form>
+  </div>
+
+  {% if not filas %}
+    <p class="hint">Ningún vendedor tiene ventas cerradas ni meta capturada en este mes.</p>
+  {% else %}
+  <div class="tw">
+    <table>
+      <thead>
+        <tr>
+          <th>Vendedor</th>
+          <th class="n">Meta</th>
+          <th class="n">Vendido</th>
+          <th>Cumplimiento</th>
+          <th class="n">Comisión</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for f in filas %}
+        {% set g = f.guardado %}
+        <tr>
+          <td class="nw">{{ f.vendedor }}</td>
+          <td class="n">{% if f.meta %}${{ '{:,.0f}'.format(f.meta) }}{% else %}<span style="color:var(--ink-4)">sin meta</span>{% endif %}</td>
+          <td class="n">${{ '{:,.0f}'.format(f.vendido) }}</td>
+          <td class="nw">
+            {% if f.meta %}
+              <div style="display:flex;align-items:center;gap:7px;">
+                <div class="bar"><span class="{{ '' if f.alcanzo else 'corta' }}"
+                     style="width:{{ [f.cumplimiento * 100, 100]|min }}%"></span></div>
+                <span style="font-variant-numeric:tabular-nums;">{{ '%.0f'|format(f.cumplimiento * 100) }}%</span>
+              </div>
+            {% else %}
+              <span style="color:var(--ink-4)">—</span>
+            {% endif %}
+          </td>
+          <td class="n">${{ '{:,.2f}'.format(f.comision) }}</td>
+          <td class="nw">
+            {% if g %}
+              {% if g.estado == 'autorizada' %}<span class="chip chip-ok">Autorizada</span>
+              {% elif g.estado == 'cancelada' %}<span class="chip chip-can">Cancelada</span>
+              {% else %}<span class="chip chip-ret">Retenida</span>{% endif %}
+              {% if g.decidido_por and g.decidido_por != 'sistema' %}
+                <div style="font-size:10px;color:var(--ink-4);margin-top:2px;">por {{ g.decidido_por }}</div>
+              {% endif %}
+            {% else %}
+              <span class="chip chip-none">Sin aplicar</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if g and g.estado != 'autorizada' %}
+            <div class="acciones">
+              <form method="post" action="/comisiones/corte/{{ g.id }}/estado">
+                <input type="hidden" name="estado" value="autorizada">
+                <button class="cm-btn cm-btn-sm" type="submit">Liberar</button>
+              </form>
+              {% if g.estado != 'cancelada' %}
+              <form method="post" action="/comisiones/corte/{{ g.id }}/estado"
+                    onsubmit="return confirm('¿Cancelar la comisión de {{ f.vendedor }} en {{ mes }}? Esto la da por perdida.');">
+                <input type="hidden" name="estado" value="cancelada">
+                <button class="cm-btn cm-btn-sm cm-btn-danger" type="submit">Cancelar</button>
+              </form>
+              {% endif %}
+            </div>
+            {% elif g and g.estado == 'autorizada' %}
+            <div class="acciones">
+              <form method="post" action="/comisiones/corte/{{ g.id }}/estado">
+                <input type="hidden" name="estado" value="retenida">
+                <button class="cm-btn cm-btn-sm" type="submit">Retener</button>
+              </form>
+            </div>
+            {% endif %}
+          </td>
+        </tr>
+        {% if g and g.motivo %}
+        <tr>
+          <td colspan="7" style="padding-top:0;font-size:11px;color:var(--ink-3);border-bottom:1px solid var(--border-subtle);">
+            {{ g.motivo }}
+          </td>
+        </tr>
+        {% endif %}
+      {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td>Total del mes</td>
+          <td class="n">${{ '{:,.0f}'.format(filas|sum(attribute='meta')) }}</td>
+          <td class="n">${{ '{:,.0f}'.format(filas|sum(attribute='vendido')) }}</td>
+          <td></td>
+          <td class="n">${{ '{:,.2f}'.format(filas|sum(attribute='comision')) }}</td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <form method="post" action="/comisiones/corte/aplicar" style="margin-top:12px;">
+    <input type="hidden" name="mes" value="{{ mes }}">
+    <button class="cm-btn cm-btn-primary" type="submit">Aplicar corte de {{ mes }}</button>
+  </form>
+  {% endif %}
+</div>
+
+</div>
+</body>
+</html>

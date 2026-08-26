@@ -1038,7 +1038,8 @@ def comision_lead(lead_id):
     # comisiona con el esquema de siempre.
     aplica, motivo = C.aplica_tabulador(lead)
 
-    r = C.calcular(unidad, lista, cerrada, atrib) if unidad and lista else {
+    r = C.calcular(unidad, lista, cerrada, atrib,
+                   multi_un=C.lead_es_multi_un(lead)) if unidad and lista else {
         "error": "Falta unidad de negocio o mensualidad de lista."}
 
     if r.get("error"):
@@ -1170,7 +1171,8 @@ def preview_cierre(lead_id):
                                   "cerrada_el": ya.closed_at.isoformat() if ya.closed_at else None}
 
     if aplica:
-        r = C.calcular(unidad, lista, cerrada, C.atribucion_de(lead.id))
+        r = C.calcular(unidad, lista, cerrada, C.atribucion_de(lead.id),
+                           multi_un=C.lead_es_multi_un(lead))
         if r.get("error"):
             out["error"] = r["error"]
             return jsonify(out)
@@ -1226,7 +1228,8 @@ def recalcular_venta_de_lead(lead):
 
     aplica, _ = C.aplica_tabulador(lead)
     if aplica:
-        r = C.calcular(venta.unit, lista, monto, C.atribucion_de(lead.id))
+        r = C.calcular(venta.unit, lista, monto, C.atribucion_de(lead.id),
+                     multi_un=C.lead_es_multi_un(lead))
         if r.get("error"):
             return None
         venta.commission_rate = None
@@ -1321,7 +1324,8 @@ def cerrar_lead(lead_id):
         aplica, rate, amount = False, None, 0.0
         motivo = "Falta el monto del cierre: la comisión se calcula al capturar la factura."
     elif aplica:
-        resultado = C.calcular(unidad, lista, cerrada, C.atribucion_de(lead.id))
+        resultado = C.calcular(unidad, lista, cerrada, C.atribucion_de(lead.id),
+                           multi_un=C.lead_es_multi_un(lead))
         if resultado.get("error"):
             db.session.rollback()
             return jsonify({"error": resultado["error"]}), 400

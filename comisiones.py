@@ -55,7 +55,7 @@ def peso_de(clave):
     return _d(e.peso) if e else Decimal("0")
 
 
-def tasa_un(unidad, mensualidad):
+def tasa_un(unidad, mensualidad, multi_un=False):
     """Tasa aplicable a esa UN para ese nivel de mensualidad.
 
     Se modela con tramos porque Pestex es escalonado. Una UN de tasa fija es
@@ -66,12 +66,30 @@ def tasa_un(unidad, mensualidad):
     capture después: la tasa nueva nunca aplicaría y nadie se enteraría.
     Un tramo acotado le gana al abierto, y entre acotados gana el más estrecho.
 
+    FEAT-2026-08-26: si la venta es cruzada (multi_un) y hay una tasa marcada
+    como multi UN, esa manda sobre la de la unidad dueña. Así vender cruzado
+    no paga menos que vender solo. Si no se ha configurado ninguna, se cae a
+    la tasa de la unidad de siempre en vez de dejar la venta sin tasa.
+
     Devuelve (tasa, registro) o (None, None) si la UN no está configurada.
     """
     m = _d(mensualidad)
+
+    if multi_un:
+        cruzadas = [
+            t for t in ComisionTasa.query.filter(
+                ComisionTasa.es_multi_un.is_(True), ComisionTasa.activo.is_(True)).all()
+            if m >= _d(t.monto_desde) and (t.monto_hasta is None or m <= _d(t.monto_hasta))
+        ]
+        if cruzadas:
+            mejor = min(cruzadas, key=lambda t: (1, 0) if t.monto_hasta is None
+                        else (0, _d(t.monto_hasta) - _d(t.monto_desde)))
+            return _d(mejor.tasa), mejor
+
     candidatos = [
         t for t in ComisionTasa.query.filter(
-            ComisionTasa.unidad == unidad, ComisionTasa.activo.is_(True)).all()
+            ComisionTasa.unidad == unidad, ComisionTasa.activo.is_(True),
+            ComisionTasa.es_multi_un.is_(False)).all()
         if m >= _d(t.monto_desde) and (t.monto_hasta is None or m <= _d(t.monto_hasta))
     ]
     if not candidatos:
@@ -83,6 +101,17 @@ def tasa_un(unidad, mensualidad):
 
     mejor = min(candidatos, key=amplitud)
     return _d(mejor.tasa), mejor
+
+
+def lead_es_multi_un(lead):
+    """La venta es cruzada cuando el lead tiene dos o más unidades en juego.
+
+    Se mide por unidades, no por número de participantes: que dos personas
+    trabajen un lead de una sola unidad no lo vuelve una venta cruzada. Quién
+    participó es lo que decide el REPARTO (ver aplica_tabulador); cuántas
+    unidades hay en juego es lo que decide la TASA.
+    """
+    return len(getattr(lead, "marcas_interes", None) or []) > 1
 
 
 def tramos_traslapados(unidad):
@@ -126,7 +155,7 @@ def factor_descuento(pct_descuento):
 
 # ── Cálculo ──────────────────────────────────────────────────────
 
-def calcular(unidad, mensualidad_lista, mensualidad_cerrada, atribucion):
+def calcular(unidad, mensualidad_lista, mensualidad_cerrada, atribucion, multi_un=False):
     """Calcula la comisión total y su reparto.
 
     atribucion: {clave_etapa: usuario_id or None}
@@ -142,7 +171,7 @@ def calcular(unidad, mensualidad_lista, mensualidad_cerrada, atribucion):
     if desc < 0:
         desc = Decimal("0")          # se cerró por encima de lista: sin castigo
 
-    tasa, reg = tasa_un(unidad, cerrada)
+    tasa, reg = tasa_un(unidad, cerrada, multi_un=multi_un)
     if tasa is None:
         return {"error": f"La unidad «{unidad}» no tiene tasa configurada.",
                 "unidad": unidad}
