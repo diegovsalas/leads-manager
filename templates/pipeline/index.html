@@ -243,7 +243,12 @@ tbody td{padding:8px 12px;font-size:14px;}
 /* Modal */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:500;display:flex;align-items:flex-start;justify-content:center;padding-top:10vh;opacity:0;pointer-events:none;transition:opacity 120ms;}
 .modal-overlay.open{opacity:1;pointer-events:all;}
-.modal{background:var(--bg-card);border-radius:var(--r2);padding:28px 32px;width:460px;box-shadow:var(--shadow-lg);transform:translateY(-8px);transition:transform 120ms;}
+/* FIX-2026-08-26: sin límite de alto, un modal más largo que la pantalla
+   dejaba sus botones fuera del área visible y sin forma de llegar a ellos.
+   Le pasó al de "Cerrar como Ganado" al crecer con el bloque de comisión:
+   el vendedor veía el formulario pero no podía confirmar. Los modales que
+   ya traen su propio max-height en línea siguen mandando sobre esto. */
+.modal{background:var(--bg-card);border-radius:var(--r2);padding:28px 32px;width:460px;box-shadow:var(--shadow-lg);transform:translateY(-8px);transition:transform 120ms;max-height:88vh;overflow-y:auto;}
 .modal-overlay.open .modal{transform:translateY(0);}
 .modal-title{font-size:18px;font-weight:700;margin-bottom:20px;}
 .form-group{margin-bottom:14px;}
@@ -252,6 +257,10 @@ tbody td{padding:8px 12px;font-size:14px;}
 .form-input:focus,.form-select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(63,73,148,.15);}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border-light);}
+/* En el cierre ganado los botones se quedan pegados abajo: es un formulario
+   largo y no debe hacer falta descubrir que hay que bajar para confirmar.
+   Acotado a este modal para no alterar la caja de los demás. */
+#modal-ganado .modal-actions{position:sticky;bottom:-28px;background:var(--bg-card);margin:20px -32px -28px;padding:16px 32px 28px;}
 
 /* Project page */
 .project-page{padding:32px 64px 60px;max-width:900px;overflow-y:auto;flex:1;}
