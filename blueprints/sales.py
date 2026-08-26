@@ -16,6 +16,7 @@ from sqlalchemy import or_
 
 from extensions import db
 from models import Sale, Client, Lead, EtapaPipeline, Usuario
+from blueprints.auth import require_role
 
 sales_bp = Blueprint("sales", __name__)
 clients_bp = Blueprint("clients", __name__)
@@ -63,6 +64,7 @@ def _current_user_id():
 
 
 @sales_bp.route("/", methods=["GET"])
+@require_role(["super_admin"])
 def list_sales():
     """Filtros: ?unit=&user_id=&commission_status=&status="""
     q = Sale.query
@@ -83,6 +85,7 @@ def list_sales():
 
 
 @sales_bp.route("/<uuid:sale_id>", methods=["GET"])
+@require_role(["super_admin"])
 def get_sale(sale_id):
     sale = db.session.get(Sale, sale_id)
     if not sale:
@@ -91,6 +94,7 @@ def get_sale(sale_id):
 
 
 @sales_bp.route("/", methods=["POST"])
+@require_role(["super_admin"])
 def create_sale():
     """Crea una venta calculando la comisión y marcando el lead como ganado."""
     data = request.get_json() or {}
@@ -146,6 +150,7 @@ def create_sale():
 
 
 @sales_bp.route("/<uuid:sale_id>", methods=["PATCH"])
+@require_role(["super_admin"])
 def update_sale(sale_id):
     sale = db.session.get(Sale, sale_id)
     if not sale:
@@ -187,6 +192,7 @@ def update_sale(sale_id):
 
 
 @sales_bp.route("/<uuid:sale_id>", methods=["DELETE"])
+@require_role(["super_admin"])
 def delete_sale(sale_id):
     sale = db.session.get(Sale, sale_id)
     if not sale:
@@ -197,6 +203,7 @@ def delete_sale(sale_id):
 
 
 @sales_bp.route("/stats", methods=["GET"])
+@require_role(["super_admin"])
 def sales_stats():
     """Resumen de comisiones por status + total por unidad."""
     base = Sale.query
