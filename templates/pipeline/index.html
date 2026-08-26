@@ -5368,6 +5368,9 @@ async function abrirLeadPanel(id){
 async function cargarComisionLead(l){
   const sec = document.getElementById('lp-comision-section');
   if(!sec) return;
+  // FEAT-2026-08-26: solo dirección ve el reparto. Sin esto el vendedor
+  // recibiría un 403 del backend y vería un error en vez de nada.
+  if(!IS_ADMIN){ sec.style.display='none'; return; }
   const dueno = l.usuario_asignado;
   if(!dueno || !dueno.perfil_multi_un){ sec.style.display='none'; return; }
   sec.style.display='';
@@ -6143,6 +6146,10 @@ async function _mgPreviewComisionAhora(){
   const salida = document.getElementById('mg-comision-preview');
   if(!leadId || !bloque) return;
 
+  // FEAT-2026-08-26: los vendedores no ven comisiones al cerrar. El backend
+  // ya no se las manda; aquí ni siquiera se pregunta.
+  if(!IS_ADMIN){ bloque.style.display='none'; return; }
+
   const monto = parseFloat(document.getElementById('mg-monto').value || 0);
   bloque.style.display='';
   if(!monto){
@@ -6427,12 +6434,17 @@ async function confirmarGanado(){
     }
     closeGanadoModal();
     const tipoLabel = tipoVenta==='Recurrente' ? '🔁 Recurrente' : '📅 Eventual';
-    // El detalle que importa ahora es la comisión: es lo que se acaba de congelar.
-    const detalleCom = cierre.esquema==='tabulador'
-      ? `Comisión ${fmt$(cierre.comision_total)} repartida entre ${(cierre.participaciones||[]).length} personas`
-      : `Comisión ${fmt$(cierre.comision_total)}`;
-    showToast('🎉 Ganado', tipoLabel+' · '+detalleCom
-              + (numero ? ' · Factura '+numero : ''));
+    // Para dirección el dato que importa es la comisión, porque es lo que se
+    // acaba de congelar. Al vendedor se le confirma el cierre y ya: la
+    // respuesta ni siquiera trae cifras (ver cerrar_lead).
+    let detalle = numero ? 'Factura '+numero : 'Venta registrada';
+    if(cierre.comision_total != null){
+      detalle = cierre.esquema==='tabulador'
+        ? `Comisión ${fmt$(cierre.comision_total)} repartida entre ${(cierre.participaciones||[]).length} personas`
+        : `Comisión ${fmt$(cierre.comision_total)}`;
+      if(numero) detalle += ' · Factura '+numero;
+    }
+    showToast('🎉 Ganado', tipoLabel+' · '+detalle);
     // Refrescar la meta del vendedor (si la vista es propia)
     if(typeof loadMetaVendedor==='function') loadMetaVendedor();
     setTimeout(()=>{if(typeof loadKanban==='function')loadKanban();else location.reload();},500);

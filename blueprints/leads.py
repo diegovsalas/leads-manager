@@ -762,8 +762,12 @@ def actualizar_lead(lead_id):
 
     db.session.commit()
     out = lead.to_dict()
+    # La comisión se recalculó igual; solo no se le informa a quien no
+    # debe verla (ver el bloque equivalente en cerrar_lead).
     if comision_recalculada is not None:
-        out["comision_recalculada"] = comision_recalculada
+        from blueprints.auth import is_admin_role
+        if is_admin_role():
+            out["comision_recalculada"] = comision_recalculada
     return jsonify(out)
 
 
@@ -1005,6 +1009,7 @@ def registrar_respuesta(lead_id):
 # 4 etapas y cada quien cobra las que hizo.
 # ══════════════════════════════════════════════
 @leads_bp.route("/<uuid:lead_id>/comision", methods=["GET"])
+@require_role(["super_admin"])
 def comision_lead(lead_id):
     """Devuelve la atribución del lead y el reparto que resultaría al
     cerrarlo. Sirve para revisar antes de que la venta se congele."""
@@ -1128,6 +1133,7 @@ ORIGEN_A_COMISION = {
 
 
 @leads_bp.route("/<uuid:lead_id>/cierre/preview", methods=["POST"])
+@require_role(["super_admin"])
 def preview_cierre(lead_id):
     """Cómo quedaría la venta con los montos que se están capturando, antes
     de confirmar. No escribe nada."""
@@ -1362,14 +1368,23 @@ def cerrar_lead(lead_id):
     # venta YA quedó guardada. El vendedor ve un error, reintenta, y se topa
     # con el 409 de "este lead ya tiene una venta". Peor que un error: un
     # error mentiroso.
-    out = {"ok": True, "sale_id": str(sale.id),
-           "esquema": "tabulador" if aplica else "normal",
-           "motivo": motivo, "comision_total": round(amount, 2)}
-    if aplica:
-        out["participaciones"] = [{"nombre": p["nombre"], "etapas": p["etapas"],
-                                   "pct": float(p["pct"]), "monto": float(p["monto"])}
-                                  for p in resultado["participaciones"]]
-        out["monto_sin_asignar"] = float(resultado["monto_sin_asignar"])
+    # FEAT-2026-08-26: un vendedor cierra, pero no ve comisiones.
+    #
+    # Se decide aquí y no en la pantalla: esconder el bloque con CSS dejaría
+    # las cifras viajando en la respuesta, visibles en la pestaña de red del
+    # navegador. Lo que no se debe ver, no se manda.
+    from blueprints.auth import is_admin_role
+    ve_comisiones = is_admin_role()
+
+    out = {"ok": True, "sale_id": str(sale.id)}
+    if ve_comisiones:
+        out.update({"esquema": "tabulador" if aplica else "normal",
+                    "motivo": motivo, "comision_total": round(amount, 2)})
+        if aplica:
+            out["participaciones"] = [{"nombre": p["nombre"], "etapas": p["etapas"],
+                                       "pct": float(p["pct"]), "monto": float(p["monto"])}
+                                      for p in resultado["participaciones"]]
+            out["monto_sin_asignar"] = float(resultado["monto_sin_asignar"])
     detalle_log = (f"{lead.nombre}: venta registrada · {unidad} · "
                    f"comisión ${amount:,.2f} · esquema "
                    f"{'tabulador por etapas' if aplica else 'normal'}")
