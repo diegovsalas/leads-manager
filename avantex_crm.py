@@ -678,6 +678,8 @@ def create_app():
     app.register_blueprint(meta_campaigns_bp, url_prefix="/api/meta-campaigns")
     app.register_blueprint(sales_emails_bp,   url_prefix="/api/sales-emails")
     app.register_blueprint(chat_ai_bp,        url_prefix="/api/chat-ai")
+    from tareas import tareas_bp
+    app.register_blueprint(tareas_bp,         url_prefix="/tareas")
 
     # Serve React app at /app/
     @app.route("/app/")
@@ -693,7 +695,10 @@ def create_app():
     @app.before_request
     def require_login():
         allowed = ("/login", "/auth/google", "/webhook/", "/static/", "/api/v1/",
-                   "/encuesta/", "/dd-encuesta/", "/soporte/")  # público sin login
+                   "/encuesta/", "/dd-encuesta/", "/soporte/",
+                   # FEAT-2026-08-31: las dispara un cron externo, que no
+                   # puede iniciar sesión. Van protegidas por TAREAS_SECRET.
+                   "/tareas/")  # público sin login
         if any(request.path.startswith(p) for p in allowed):
             return
         if not session.get("user_id"):
@@ -928,7 +933,15 @@ def create_app():
             db.session.rollback()
 
     # ── Cadencia automatica (cada 15 minutos) ──
-    _start_scheduler(app)
+    # FEAT-2026-08-31: en plan gratuito el proceso web se duerme y con él
+    # las tareas. Con SCHEDULER_EN_PROCESO=0 no arranca aquí y las dispara
+    # un cron externo por HTTP (ver tareas.py). Nunca los dos a la vez.
+    from tareas import scheduler_en_proceso
+    if scheduler_en_proceso():
+        _start_scheduler(app)
+    else:
+        app.logger.info("Scheduler interno APAGADO — las tareas las dispara "
+                        "un programador externo vía /tareas/<nombre>")
 
     return app
 
