@@ -6438,6 +6438,10 @@ async function confirmarGanado(){
       total_amount: tipoV==='servicio_unico' ? cerrada : 0,
       sale_type: tipoV,
       sale_category: tipoVenta==='Eventual' ? 'eventual' : 'recurrente',
+      // FIX-2026-09-01: la fecha que capturó el vendedor ES la fecha de
+      // cierre. Sin esto la venta se grababa con el día del registro, y el
+      // corte de comisiones la contaba en el mes equivocado.
+      closed_at: fecha || null,
     };
     const ct = document.getElementById('mg-comtype').value;
     if(ct) cierreBody.commission_type = ct;

@@ -1200,6 +1200,37 @@ def preview_cierre(lead_id):
     return jsonify(out)
 
 
+def _fecha_de_cierre(valor):
+    """La fecha de cierre que capturó el vendedor, no la de hoy.
+
+    FIX-2026-09-01: al cerrar no se enviaba esta fecha, así que la venta se
+    grababa con el momento del registro. Un cierre del 10 de agosto capturado
+    el 1 de septiembre quedaba con fecha de septiembre — y como el corte de
+    comisiones mide por fecha de cierre, la comisión caía en el mes que no era.
+
+    Una fecha suelta ('2026-08-10') se ancla al MEDIODÍA de México, no a la
+    medianoche: guardada como medianoche UTC y releída en hora local, saldría
+    el día anterior.
+    """
+    from datetime import datetime as _dt, time as _time
+    from zoneinfo import ZoneInfo
+    MX = ZoneInfo("America/Monterrey")
+
+    texto = (valor or "").strip()
+    if not texto:
+        return datetime.now(timezone.utc)
+    try:
+        if len(texto) == 10:                       # YYYY-MM-DD
+            d = _dt.strptime(texto, "%Y-%m-%d").date()
+            return _dt.combine(d, _time(12, 0), tzinfo=MX).astimezone(timezone.utc)
+        parsed = _dt.fromisoformat(texto.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=MX)
+        return parsed.astimezone(timezone.utc)
+    except (ValueError, TypeError):
+        return datetime.now(timezone.utc)
+
+
 def recalcular_venta_de_lead(lead):
     """Completa una venta que se cerró sin monto, cuando llega la factura.
 
@@ -1350,7 +1381,7 @@ def cerrar_lead(lead_id):
         # Estado explícito para que una venta sin monto no se confunda con
         # una comisión de cero legítima.
         commission_status="pendiente_monto" if sin_monto else "pendiente",
-        closed_at=_parse_dt(data.get("closed_at")) or datetime.now(timezone.utc),
+        closed_at=_fecha_de_cierre(data.get("closed_at")),
         contract_signed_at=_parse_dt(data.get("contract_signed_at")),
         first_payment_at=_parse_dt(data.get("first_payment_at")),
         service_start_at=_parse_dt(data.get("service_start_at")),
