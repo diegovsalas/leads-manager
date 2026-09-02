@@ -716,7 +716,7 @@ def _kpis_vendedor(vendedor_usuario_id: str, inicio: date, fin: date) -> dict:
 
 
 @dashboard_bp.route("/vendedores-tabla", methods=["GET"])
-@require_role(["super_admin"])
+@require_role(["reportes"])
 def vendedores_tabla():
     """Tabla embudo de conversión por VENDEDOR (mismo shape que leads-por-origen
     pero agrupado por usuario_asignado_id). Para comparar vendedores en la junta.
@@ -960,7 +960,7 @@ def ventas_reporte_csv():
 
 
 @dashboard_bp.route("/vendedores-review", methods=["GET"])
-@require_role(["super_admin"])
+@require_role(["reportes"])
 def vendedores_review():
     """Lista de vendedores con KPIs resumen para la vista master de revisión.
     FEAT-2026-06-29: filtro global ?un= por especialidad_marca."""

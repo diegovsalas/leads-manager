@@ -37,6 +37,7 @@ def _run_pending_migrations(app):
                     "Super Admin Comercial",
                     "Super Admin Nexo",
                     "Gerente Comercial Aromatex",
+                    "Revisión Comercial",
                 ):
                     conn.execute(text(
                         f"ALTER TYPE rol_crm_enum ADD VALUE IF NOT EXISTS '{value}'"

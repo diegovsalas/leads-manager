@@ -86,6 +86,9 @@ class RolCRM(enum.Enum):
     SUPER_ADMIN_COMERCIAL = "Super Admin Comercial"
     SUPER_ADMIN_NEXO = "Super Admin Nexo"
     GERENTE_COMERCIAL_AROMATEX = "Gerente Comercial Aromatex"
+    # FEAT-2026-09-02: análisis comercial. Reportes y pipe completo de todas
+    # las unidades, sin acceso a comisiones.
+    REVISION_COMERCIAL = "Revisión Comercial"
     VENDEDOR    = "Vendedor"
     KAM         = "KAM"
 

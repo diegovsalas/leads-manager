@@ -425,7 +425,7 @@ fbq('track','PageView');
       <div class="slink" onclick="showView('accounts',this)">&#127970; <span class="sl-text">Empresas</span> <span class="slink-badge" id="sidebar-acc-count"></span></div>
       <div class="slink" onclick="showView('contacts',this)">&#128101; <span class="sl-text">Contactos</span> <span class="slink-badge" id="sidebar-con-count"></span></div>
       <div class="slink" onclick="showView('leads',this)">&#128101; <span class="sl-text">Leads</span></div>
-      <div class="slink admin-only" onclick="showView('revision',this)">&#128202; <span class="sl-text">Revisión Comercial</span></div>
+      <div class="slink reportes-only" onclick="showView('revision',this)">&#128202; <span class="sl-text">Revisión Comercial</span></div>
 
       <div class="sidebar-divider admin-only"></div>
       <div class="sidebar-section admin-only">Inteligencia</div>
@@ -2858,12 +2858,16 @@ window.setUN = function(un){
 // Default según rol (lo seteamos en DOMContentLoaded, ver más abajo)
 
 // Role-based access
-window.ROL_USUARIO='{{ user_rol }}'.toLowerCase().replaceAll(' ','_');
+// FIX-2026-09-02: sin quitar acentos, 'Revisión Comercial' nunca empataba.
+window.ROL_USUARIO='{{ user_rol }}'.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replaceAll(' ','_');
 window.VENDEDOR_ID='{{ usuario_id }}';
 window.MI_ESPECIALIDAD = {{ mi_especialidad|tojson|safe }};
 const ADMIN_ROLES=new Set(['developer','super_admin','super_admin_aromatex','super_admin_pestex','super_admin_comercial','super_admin_nexo']);
 const IS_ADMIN=ADMIN_ROLES.has(ROL_USUARIO);
 const IS_DEVELOPER=ROL_USUARIO==='developer';
+// FEAT-2026-09-02: IS_ADMIN gobierna las comisiones. Ver reportes es otra
+// cosa: el perfil de análisis comercial los ve sin ver dinero de nómina.
+const VE_REPORTES=IS_ADMIN||ROL_USUARIO==='revision_comercial';
 // Gerente Comercial Aromatex no es admin pleno, pero sí puede reasignar leads a vendedores.
 const CAN_REASIGNAR_VENDEDOR=IS_ADMIN||ROL_USUARIO==='gerente_comercial_aromatex';
 const EMAIL_SEND_ENABLED=false;
@@ -6500,6 +6504,9 @@ async function crearGasto(){
 function applyRoleVisibility(){
   if(!CAN_REASIGNAR_VENDEDOR){
     document.querySelectorAll('.reasignar-wrap').forEach(el=>el.style.display='none');
+  }
+  if(!VE_REPORTES){
+    document.querySelectorAll('.reportes-only').forEach(el=>el.style.display='none');
   }
   if(IS_ADMIN)return;
   // Hide elements for vendedor role

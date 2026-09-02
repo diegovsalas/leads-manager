@@ -16,7 +16,12 @@ SCOPED_SUPER_ADMIN_ROLES = {
     "super_admin_nexo",
 }
 ADMIN_ROLES = FULL_ACCESS_ROLES | SCOPED_SUPER_ADMIN_ROLES
-COMMERCIAL_READ_ROLES = ADMIN_ROLES | {"gerente_comercial_aromatex"}
+# FEAT-2026-09-02: perfil de análisis comercial. Ve el pipe completo de todas
+# las unidades y las pantallas de reporte, pero NO las comisiones: revisa
+# ventas, no nómina. Deliberadamente fuera de ADMIN_ROLES, que es lo que
+# gobierna el acceso a comisiones (ver leads.py y sales.py).
+REPORTES_ROLES = ADMIN_ROLES | {"revision_comercial"}
+COMMERCIAL_READ_ROLES = REPORTES_ROLES | {"gerente_comercial_aromatex"}
 
 ROLE_UN_SCOPE = {
     "super_admin_aromatex": ("Aromatex",),
@@ -28,9 +33,19 @@ ROLE_UN_SCOPE = {
 
 
 def rol_norm(value=None):
-    """Normaliza roles guardados como texto: 'Super Admin Nexo' -> 'super_admin_nexo'."""
+    """Normaliza roles guardados como texto: 'Super Admin Nexo' -> 'super_admin_nexo'.
+
+    FIX-2026-09-02: también quita acentos. Sin esto 'Revisión Comercial'
+    normalizaba a 'revisión_comercial' y no empataba nunca con su clave.
+    Ningún rol anterior lleva acentos, así que para ellos no cambia nada.
+    """
+    import unicodedata
     raw = value if value is not None else session.get("user_rol", "")
-    return (raw or "").lower().replace(" ", "_")
+    sin_acentos = "".join(
+        c for c in unicodedata.normalize("NFD", raw or "")
+        if unicodedata.category(c) != "Mn"
+    )
+    return sin_acentos.lower().replace(" ", "_")
 
 
 def is_developer_role(role=None):
@@ -43,6 +58,11 @@ def is_full_access_role(role=None):
 
 def is_admin_role(role=None):
     return rol_norm(role) in ADMIN_ROLES
+
+
+def is_reportes_role(role=None):
+    """Puede ver reportes y el pipe completo. No implica ver comisiones."""
+    return rol_norm(role) in REPORTES_ROLES
 
 
 def is_commercial_read_role(role=None):
@@ -85,6 +105,11 @@ def require_role(roles):
             # aceptan Developer y los cuatro Super Admin segmentados.
             if not allowed and "super_admin" in normalized_roles:
                 allowed = is_admin_role()
+            # @require_role(["reportes"]) = admins + el perfil de análisis
+            # comercial. Se usa en las pantallas de reporte, que no muestran
+            # comisiones; no sirve para proteger nada de dinero.
+            if not allowed and "reportes" in normalized_roles:
+                allowed = is_reportes_role()
             if not allowed:
                 return jsonify({"error": "No autorizado", "rol_requerido": roles}), 403
             return f(*args, **kwargs)
