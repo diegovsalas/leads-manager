@@ -843,7 +843,7 @@ def vendedores_tabla():
 
 
 @dashboard_bp.route("/ventas-reporte.csv", methods=["GET"])
-@require_role(["super_admin"])
+@require_role(["reportes"])
 def ventas_reporte_csv():
     """Descarga ventas ganadas del periodo, una fila por lead_id.
 
@@ -997,7 +997,7 @@ def vendedores_review():
 
 
 @dashboard_bp.route("/vendedor-review/<uuid:vendedor_id>", methods=["GET"])
-@require_role(["super_admin"])
+@require_role(["reportes"])
 def vendedor_review(vendedor_id):
     """Drill-down completo de UN vendedor para la junta de revisión.
     - KPIs del mes
