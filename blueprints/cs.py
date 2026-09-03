@@ -4833,18 +4833,39 @@ def incidencias_general():
           "promedio": round(sum(v) / len(v), 1)} for (s, t), v in dias_por_tipo.items()],
         key=lambda x: -x["promedio"])
 
-    # Registros cuyo tipo pertenece a otro servicio. Entraron antes de que
-    # existiera el bloqueo; se muestran para poder corregirlos, no para
-    # esconderlos: mientras estén así, distorsionan el análisis.
+    # ── Lo que requiere atención ──────────────────────────────────
+    #
+    # Dos cosas distintas que comparten una misma consecuencia: no se puede
+    # actuar sobre ellas.
+    #
+    # Sin sucursal no se puede ir a resolver. No es un dato faltante: es la
+    # razón por la que algunas llevan meses abiertas.
+    #
+    # Mal clasificadas distorsionan los conteos de abajo: una falla de
+    # equipo cuenta como plaga.
     from incidencia_tipos import diagnosticar, TIPOS_POR_SERVICIO
+
+    def _nom(i):
+        a = cuentas.get(str(i.account_id))
+        return a.nombre if a else "(cuenta borrada)"
+
     mal_clasificadas = [
-        {"inc": i, "deberia_ser": duenio,
-         "cuenta": cuentas.get(str(i.account_id)).nombre if cuentas.get(str(i.account_id)) else "?"}
+        {"inc": i, "deberia_ser": duenio, "cuenta": _nom(i)}
         for i, duenio in diagnosticar(incidencias)
     ]
+
+    sin_sucursal = sorted(
+        [{"inc": i, "cuenta": _nom(i),
+          "abierta": (i.status or "Abierta") != "Resuelta"}
+         for i in incidencias if not (i.propiedad_nombre or "").strip()],
+        key=lambda x: (not x["abierta"], x["inc"].fecha_incidencia or date.min),
+    )
+    sin_sucursal_abiertas = sum(1 for x in sin_sucursal if x["abierta"])
 
     return render_template("cs/cs_incidencias_general.html",
                            resumen=resumen, ranking=ranking,
                            tiempos_tipo=tiempos_tipo, desde=desde,
                            mal_clasificadas=mal_clasificadas,
+                           sin_sucursal=sin_sucursal,
+                           sin_sucursal_abiertas=sin_sucursal_abiertas,
                            tipos_catalogo=TIPOS_POR_SERVICIO, **_ctx())

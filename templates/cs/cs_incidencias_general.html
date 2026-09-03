@@ -4,8 +4,52 @@
 {% block breadcrumb %}Incidencias · Vista general{% endblock %}
 
 {% block content %}
-{# FEAT-2026-09-03: la vista interna. Aquí importa dónde duele más, cuánto
-   tardamos y qué se está venciendo — no lucir bien ante nadie. #}
+{# FEAT-2026-09-03 · reorganizada 2026-09-04
+   Antes eran seis tarjetas apiladas compitiendo entre sí. Ahora hay dos
+   bloques con jerarquía: primero lo que hay que ATENDER, después el
+   ANÁLISIS. Lo que no se puede accionar no va arriba. #}
+
+<style>
+.sec{margin:32px 0 0}
+.sec:first-of-type{margin-top:22px}
+.sec-h{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
+.sec-h h2{font-size:16px;font-weight:640;margin:0;letter-spacing:-.01em}
+.sec-h .cuenta{font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.sec-sub{font-size:12.5px;color:var(--ink-3);margin:0 0 14px;max-width:76ch;line-height:1.5}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:10px}
+.kpi{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);padding:15px 16px}
+.kpi .et{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);
+         font-weight:620;margin-bottom:5px}
+.kpi .v{font-size:27px;font-weight:640;line-height:1.05;font-variant-numeric:tabular-nums}
+.kpi .n{font-size:10.5px;color:var(--ink-4);margin-top:3px}
+.kpi.alerta{border-color:var(--danger)}
+.kpi.alerta .v{color:var(--danger)}
+.kpi.aviso .v{color:var(--warn)}
+
+.riesgo{background:var(--bg-card);border:1px solid var(--warn);border-radius:var(--r-md);
+        padding:16px 18px;margin-bottom:12px}
+.riesgo.grave{border-color:var(--danger)}
+.riesgo-h{display:flex;align-items:center;gap:8px;margin-bottom:3px}
+.riesgo-h h3{font-size:14px;font-weight:640;margin:0;color:var(--warn)}
+.riesgo.grave .riesgo-h h3{color:var(--danger)}
+.riesgo p.q{font-size:12.5px;color:var(--ink-2);margin:0 0 12px;max-width:78ch;line-height:1.5}
+
+.dos{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:12px}
+.panel{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);padding:16px 18px}
+.panel h3{font-size:14px;font-weight:640;margin:0 0 2px}
+.panel .q{font-size:11.5px;color:var(--ink-3);margin:0 0 13px;line-height:1.5}
+
+.barra-fila{display:flex;align-items:center;gap:11px;padding:6px 0}
+.barra-fila .n{font-size:12.5px;min-width:148px}
+.barra-track{flex:1;height:7px;background:var(--bg-surface-2);border-radius:99px;overflow:hidden;min-width:44px}
+.barra-track span{display:block;height:100%;background:var(--copper);border-radius:99px}
+.barra-fila .v{font-size:12.5px;font-variant-numeric:tabular-nums;min-width:54px;text-align:right}
+
+table td, table th{padding:7px 11px}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.vacio{color:var(--ink-4)}
+</style>
 
 <div class="page-head">
     <div>
@@ -13,132 +57,172 @@
         <p class="sub">Todas las cuentas juntas. Para saber dónde está el problema, no para enseñarlo.</p>
     </div>
     <div class="actions">
-        <a href="/cs/incidencias/cliente" class="btn">Ver por cliente</a>
+        <form method="get" style="display:flex;gap:6px;align-items:center">
+            <input type="date" name="desde" value="{{ desde }}"
+                   style="font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--r)">
+            <button class="btn" type="submit">Filtrar</button>
+            {% if desde %}<a href="/cs/incidencias/general" class="btn">Todo</a>{% endif %}
+        </form>
+        <a href="/cs/incidencias/cliente" class="btn">Por cliente</a>
     </div>
 </div>
 
-<form method="get" style="margin-bottom:16px;display:flex;gap:8px;align-items:center">
-    <label style="font-size:12px;color:var(--ink-3)">Desde</label>
-    <input type="date" name="desde" value="{{ desde }}"
-           style="font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--r)">
-    <button class="btn" type="submit">Aplicar</button>
-    {% if desde %}<a href="/cs/incidencias/general" class="muted" style="font-size:12px">quitar filtro</a>{% endif %}
-</form>
-
-<div class="kpi-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px">
-    <div class="card" style="padding:14px">
-        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em">Reportes</div>
-        <div style="font-size:26px;font-weight:640">{{ resumen.total }}</div>
+{# ══ Los números de arriba ══ #}
+<div class="kpis">
+    <div class="kpi">
+        <div class="et">Reportes</div>
+        <div class="v">{{ resumen.total }}</div>
     </div>
-    <div class="card" style="padding:14px">
-        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em">Abiertas</div>
-        <div style="font-size:26px;font-weight:640;{% if resumen.abiertas %}color:var(--warn){% endif %}">{{ resumen.abiertas }}</div>
+    <div class="kpi {% if resumen.abiertas %}aviso{% endif %}">
+        <div class="et">Abiertas</div>
+        <div class="v">{{ resumen.abiertas }}</div>
     </div>
-    <div class="card" style="padding:14px">
-        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em">SLA vencido</div>
-        <div style="font-size:26px;font-weight:640;{% if resumen.vencidas %}color:var(--danger){% endif %}">{{ resumen.vencidas }}</div>
+    <div class="kpi {% if resumen.vencidas %}alerta{% endif %}">
+        <div class="et">SLA vencido</div>
+        <div class="v">{{ resumen.vencidas }}</div>
     </div>
-    <div class="card" style="padding:14px">
-        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em">Días promedio</div>
-        <div style="font-size:26px;font-weight:640">
-            {% if resumen.dias_promedio is not none %}{{ resumen.dias_promedio }}{% else %}—{% endif %}</div>
+    <div class="kpi {% if sin_sucursal_abiertas %}alerta{% endif %}">
+        <div class="et">Sin sucursal</div>
+        <div class="v">{{ sin_sucursal|length }}</div>
+        {% if sin_sucursal_abiertas %}
+        <div class="n" style="color:var(--danger)">{{ sin_sucursal_abiertas }} sigue{{ 'n' if sin_sucursal_abiertas != 1 }} abierta{{ 's' if sin_sucursal_abiertas != 1 }}</div>
+        {% endif %}
+    </div>
+    <div class="kpi">
+        <div class="et">Días promedio</div>
+        <div class="v">{% if resumen.dias_promedio is not none %}{{ resumen.dias_promedio }}{% else %}—{% endif %}</div>
         {% if resumen.resueltas_con_fecha %}
-        <div class="muted" style="font-size:10.5px">sobre {{ resumen.resueltas_con_fecha }} resueltas</div>
+        <div class="n">sobre {{ resumen.resueltas_con_fecha }} resueltas</div>
         {% endif %}
     </div>
 </div>
 
-
-{# ── Registros mal clasificados ── #}
-{% if mal_clasificadas %}
-<div class="card" style="margin-bottom:14px;border-color:var(--warn)">
-    <h2 style="font-size:15px;font-weight:620;margin:0 0 4px;color:var(--warn)">
-        {{ icon('alert-triangle', 15) }} {{ mal_clasificadas|length }}
-        registro{{ 's' if mal_clasificadas|length != 1 }} mal clasificado{{ 's' if mal_clasificadas|length != 1 }}
-    </h2>
-    <p class="muted" style="font-size:12px;margin:0 0 12px">
-        El tipo pertenece a otro servicio. Entraron antes de que existiera el bloqueo, y mientras
-        sigan así distorsionan los conteos de arriba: una falla de equipo cuenta como plaga.
-    </p>
-    <div class="table-wrap">
-        <table>
-            <thead><tr><th>Folio</th><th>Cuenta</th><th>Está como</th><th>Debería ser</th><th></th></tr></thead>
-            <tbody>
-            {% for m in mal_clasificadas %}
-                <tr>
-                    <td style="font-family:var(--mono);font-size:12px">{{ m.inc.folio or '—' }}</td>
-                    <td class="primary">{{ m.cuenta }}</td>
-                    <td><span class="pill warn">{{ m.inc.servicio }}</span> {{ m.inc.tipo }}</td>
-                    <td><span class="pill ok">{{ m.deberia_ser }}</span> {{ m.inc.tipo }}</td>
-                    <td class="c">
-                        <form method="post" action="/cs/incidencias/{{ m.inc.id }}/reclasificar" style="display:inline">
-                            <input type="hidden" name="servicio" value="{{ m.deberia_ser }}">
-                            <input type="hidden" name="tipo" value="{{ m.inc.tipo }}">
-                            <button class="btn" type="submit" style="font-size:12px;padding:3px 9px">Corregir</button>
-                        </form>
-                    </td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
+{# ══ 1. LO QUE HAY QUE ATENDER ══ #}
+{% if sin_sucursal or mal_clasificadas %}
+<div class="sec">
+    <div class="sec-h">
+        <h2>Requieren atención</h2>
+        <span class="cuenta">{{ sin_sucursal|length + mal_clasificadas|length }} registro{{ 's' if (sin_sucursal|length + mal_clasificadas|length) != 1 }}</span>
     </div>
+    <p class="sec-sub">Dos problemas distintos con la misma consecuencia: no se puede actuar sobre ellos.</p>
+
+    {% if sin_sucursal %}
+    <div class="riesgo {% if sin_sucursal_abiertas %}grave{% endif %}">
+        <div class="riesgo-h">
+            {{ icon('alert-triangle', 15) }}
+            <h3>{{ sin_sucursal|length }} sin sucursal</h3>
+        </div>
+        <p class="q">
+            Tienen cliente, pero nadie indicó en qué sucursal. Sin ese dato no se puede ir a
+            resolver{% if sin_sucursal_abiertas %} — y eso explica por qué
+            {{ sin_sucursal_abiertas }} sigue{{ 'n' if sin_sucursal_abiertas != 1 }} abierta{{ 's' if sin_sucursal_abiertas != 1 }}{% endif %}.
+            Todas vienen del portal de tickets.
+        </p>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Folio</th><th>Cliente</th><th>Tipo</th><th>Reportada</th><th class="c">Status</th></tr></thead>
+                <tbody>
+                {% for x in sin_sucursal %}
+                    <tr>
+                        <td style="font-family:var(--mono);font-size:12px">{{ x.inc.folio or '—' }}</td>
+                        <td class="primary">{{ x.cuenta }}</td>
+                        <td style="font-size:12.5px">{{ x.inc.tipo }}</td>
+                        <td class="muted" style="font-size:12.5px">
+                            {{ x.inc.fecha_incidencia.strftime('%d/%m/%Y') if x.inc.fecha_incidencia else '—' }}</td>
+                        <td class="c">
+                            <span class="pill {% if not x.abierta %}ok{% elif x.inc.status == 'En proceso' %}info{% else %}warn{% endif %}">
+                                {{ x.inc.status }}</span>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if mal_clasificadas %}
+    <div class="riesgo">
+        <div class="riesgo-h">
+            {{ icon('alert-circle', 15) }}
+            <h3>{{ mal_clasificadas|length }} mal clasificada{{ 's' if mal_clasificadas|length != 1 }}</h3>
+        </div>
+        <p class="q">
+            El tipo pertenece a otro servicio. Entraron antes de que existiera el bloqueo, y
+            mientras sigan así distorsionan los conteos de abajo: una falla de equipo cuenta como plaga.
+        </p>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Folio</th><th>Cliente</th><th>Está como</th><th>Debería ser</th><th></th></tr></thead>
+                <tbody>
+                {% for m in mal_clasificadas %}
+                    <tr>
+                        <td style="font-family:var(--mono);font-size:12px">{{ m.inc.folio or '—' }}</td>
+                        <td class="primary">{{ m.cuenta }}</td>
+                        <td><span class="pill warn">{{ m.inc.servicio }}</span> {{ m.inc.tipo }}</td>
+                        <td><span class="pill ok">{{ m.deberia_ser }}</span> {{ m.inc.tipo }}</td>
+                        <td class="c">
+                            <form method="post" action="/cs/incidencias/{{ m.inc.id }}/reclasificar" style="display:inline">
+                                <input type="hidden" name="servicio" value="{{ m.deberia_ser }}">
+                                <input type="hidden" name="tipo" value="{{ m.inc.tipo }}">
+                                <button class="btn" type="submit" style="font-size:12px;padding:3px 9px">Corregir</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endif %}
 
-{# ── Qué domina, por servicio ── #}
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-bottom:14px">
-{% for servicio, tipos in resumen.por_servicio.items() %}
-{% set total_serv = tipos|sum(attribute=1) %}
-<div class="card">
-    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px">
-        <h2 style="font-size:15px;font-weight:620;margin:0">
-            {% if servicio == 'Fumigacion' %}Plagas{% else %}Fallas de equipo{% endif %}
-            <span class="muted" style="font-weight:400;font-size:12.5px">· {{ servicio }}</span>
-        </h2>
-        <span class="muted" style="font-size:12.5px">{{ total_serv }}</span>
-    </div>
-    {% for tipo, n in tipos %}
-    {% set pct = (n / total_serv * 100)|round %}
-    <div style="display:flex;align-items:center;gap:10px;padding:5px 0">
-        <span style="font-size:12.5px;min-width:150px">{{ tipo }}</span>
-        <div style="flex:1;height:8px;background:var(--bg-surface-2);border-radius:99px;overflow:hidden;min-width:50px">
-            <span style="display:block;height:100%;width:{{ pct }}%;background:var(--copper);border-radius:99px"></span>
+{# ══ 2. QUÉ ESTÁ PASANDO ══ #}
+<div class="sec">
+    <div class="sec-h"><h2>Qué se está reportando</h2></div>
+    <p class="sec-sub">El tipo significa cosas distintas según el servicio: en Fumigación es la plaga, en Aroma la falla del equipo.</p>
+    <div class="dos">
+    {% for servicio, tipos in resumen.por_servicio.items() %}
+    {% set total_serv = tipos|sum(attribute=1) %}
+    <div class="panel">
+        <h3>{% if servicio == 'Fumigacion' %}Plagas{% else %}Fallas de equipo{% endif %}</h3>
+        <p class="q">{{ servicio }} · {{ total_serv }} reporte{{ 's' if total_serv != 1 }}</p>
+        {% for tipo, n in tipos %}
+        {% set pct = (n / total_serv * 100)|round %}
+        <div class="barra-fila">
+            <span class="n">{{ tipo }}</span>
+            <div class="barra-track"><span style="width:{{ pct }}%"></span></div>
+            <span class="v"><b>{{ n }}</b> <span class="muted">{{ pct }}%</span></span>
         </div>
-        <span style="font-size:12.5px;font-variant-numeric:tabular-nums;min-width:48px;text-align:right">
-            <b>{{ n }}</b> <span class="muted">{{ pct }}%</span></span>
+        {% endfor %}
     </div>
     {% endfor %}
-</div>
-{% endfor %}
+    </div>
 </div>
 
-{# ── Qué cuentas concentran el problema ── #}
-<div class="card" style="margin-bottom:14px">
-    <h2 style="font-size:15px;font-weight:620;margin:0 0 4px">Cuentas por volumen de reportes</h2>
-    <p class="muted" style="font-size:12px;margin:0 0 12px">
-        Ordenadas por total. Las que tienen muchas abiertas o SLA vencido son las que
-        conviene atender antes de que se conviertan en una queja.
-    </p>
+{# ══ 3. DÓNDE Y CUÁNTO TARDAMOS ══ #}
+<div class="sec">
+    <div class="sec-h"><h2>Dónde se concentra</h2></div>
+    <p class="sec-sub">Las cuentas con muchas abiertas o SLA vencido son las que conviene atender antes de que se conviertan en una queja.</p>
     <div class="table-wrap">
         <table>
             <thead><tr>
-                <th>Cuenta</th><th class="c">Total</th><th class="c">Abiertas</th>
-                <th class="c">SLA vencido</th><th class="c">Días promedio</th><th></th>
+                <th>Cuenta</th><th class="n">Total</th><th class="n">Abiertas</th>
+                <th class="n">SLA vencido</th><th class="n">Días prom.</th><th></th>
             </tr></thead>
             <tbody>
             {% for r in ranking %}
                 <tr>
                     <td class="primary">{{ r.cuenta }}</td>
-                    <td class="c" style="font-variant-numeric:tabular-nums">{{ r.total }}</td>
-                    <td class="c" style="font-variant-numeric:tabular-nums;{% if r.abiertas %}color:var(--warn);font-weight:600{% endif %}">
-                        {{ r.abiertas or '—' }}</td>
-                    <td class="c" style="font-variant-numeric:tabular-nums;{% if r.vencidas %}color:var(--danger);font-weight:600{% endif %}">
-                        {{ r.vencidas or '—' }}</td>
-                    <td class="c" style="font-variant-numeric:tabular-nums">
-                        {% if r.dias_promedio is not none %}{{ r.dias_promedio }}{% else %}<span class="muted">—</span>{% endif %}</td>
-                    <td class="c">
-                        <a href="/cs/incidencias/cliente?account_id={{ r.account_id }}" class="muted" style="font-size:12px">ver</a>
-                    </td>
+                    <td class="n">{{ r.total }}</td>
+                    <td class="n" {% if r.abiertas %}style="color:var(--warn);font-weight:600"{% endif %}>
+                        {{ r.abiertas or '' }}{% if not r.abiertas %}<span class="vacio">—</span>{% endif %}</td>
+                    <td class="n" {% if r.vencidas %}style="color:var(--danger);font-weight:600"{% endif %}>
+                        {{ r.vencidas or '' }}{% if not r.vencidas %}<span class="vacio">—</span>{% endif %}</td>
+                    <td class="n">{% if r.dias_promedio is not none %}{{ r.dias_promedio }}{% else %}<span class="vacio">—</span>{% endif %}</td>
+                    <td class="c"><a href="/cs/incidencias/cliente?account_id={{ r.account_id }}"
+                                     class="muted" style="font-size:12px">ver</a></td>
                 </tr>
             {% endfor %}
             </tbody>
@@ -146,53 +230,51 @@
     </div>
 </div>
 
-{# ── Qué nos cuesta más resolver ── #}
-<div class="card" style="margin-bottom:14px">
-    <h2 style="font-size:15px;font-weight:620;margin:0 0 4px">Qué nos cuesta más resolver</h2>
-    <p class="muted" style="font-size:12px;margin:0 0 12px">
-        Días promedio de solución por tipo, de mayor a menor. Solo cuenta lo que ya se
-        resolvió y tiene ambas fechas capturadas.
-    </p>
-    <div class="table-wrap">
-        <table>
-            <thead><tr><th>Servicio</th><th>Tipo</th><th class="c">Resueltas</th><th class="c">Días promedio</th></tr></thead>
-            <tbody>
-            {% for t in tiempos_tipo %}
-                <tr>
-                    <td><span class="pill info">{{ t.servicio }}</span></td>
-                    <td>{{ t.tipo }}</td>
-                    <td class="c" style="font-variant-numeric:tabular-nums">{{ t.n }}</td>
-                    <td class="c" style="font-variant-numeric:tabular-nums;font-weight:620">{{ t.promedio }}</td>
-                </tr>
-            {% else %}
-                <tr><td colspan="4" class="muted" style="text-align:center;padding:14px">
-                    Todavía no hay incidencias resueltas con fecha de reporte y de solución.</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
+<div class="sec" style="margin-bottom:28px">
+    <div class="dos">
+        <div class="panel">
+            <h3>Qué nos cuesta más resolver</h3>
+            <p class="q">Días promedio por tipo. Solo cuenta lo resuelto con ambas fechas capturadas.</p>
+            <div class="table-wrap" style="border:none">
+                <table>
+                    <thead><tr><th>Tipo</th><th class="n">Resueltas</th><th class="n">Días</th></tr></thead>
+                    <tbody>
+                    {% for t in tiempos_tipo[:8] %}
+                        <tr>
+                            <td style="font-size:12.5px">{{ t.tipo }}
+                                <div class="muted" style="font-size:10.5px">{{ t.servicio }}</div></td>
+                            <td class="n">{{ t.n }}</td>
+                            <td class="n" style="font-weight:620">{{ t.promedio }}</td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="3" class="muted" style="text-align:center;padding:16px">
+                            Todavía no hay resueltas con fecha de reporte y de solución.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
-{# ── Sucursales más golpeadas, de todas las cuentas ── #}
-<div class="card">
-    <h2 style="font-size:15px;font-weight:620;margin:0 0 12px">Sucursales con más reportes</h2>
-    <div class="table-wrap">
-        <table>
-            <thead><tr><th>Sucursal</th><th class="c">Reportes</th></tr></thead>
-            <tbody>
-            {% for sucursal, n in resumen.por_sucursal[:15] %}
-                <tr>
-                    <td {% if sucursal == 'Sin sucursal' %}class="muted"{% endif %}>{{ sucursal }}</td>
-                    <td class="c" style="font-variant-numeric:tabular-nums">{{ n }}</td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
+        <div class="panel">
+            <h3>Sucursales con más reportes</h3>
+            <p class="q">De todas las cuentas juntas.</p>
+            <div class="table-wrap" style="border:none">
+                <table>
+                    <thead><tr><th>Sucursal</th><th class="n">Reportes</th></tr></thead>
+                    <tbody>
+                    {% for sucursal, n in resumen.por_sucursal[:8] %}
+                        {% if sucursal != 'Sin sucursal' %}
+                        <tr>
+                            <td style="font-size:12.5px">{{ sucursal }}</td>
+                            <td class="n">{{ n }}</td>
+                        </tr>
+                        {% endif %}
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
-    {% if resumen.por_sucursal|length > 15 %}
-    <p class="muted" style="font-size:11.5px;margin:10px 0 0">
-        Se muestran las 15 con más reportes de {{ resumen.por_sucursal|length }} en total.</p>
-    {% endif %}
 </div>
 
 {% endblock %}
