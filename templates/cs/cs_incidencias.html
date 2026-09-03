@@ -42,6 +42,7 @@
                 <tr>
                     <th>Folio</th>
                     <th>Cuenta</th>
+                    <th>Sucursal</th>
                     <th>Servicio / Tipo</th>
                     <th>Responsable</th>
                     <th>Reportada</th>
@@ -59,10 +60,17 @@
                     <td class="primary">
                         {% if acc %}<a href="/cs/account/{{ acc.id }}">{% if acc.client_id %}<span style="font-size:10px;font-weight:700;color:var(--copper);margin-right:4px">{{ acc.client_id }}</span>{% endif %}{{ acc.nombre }}</a>{% else %}<span class="muted">—</span>{% endif %}
                     </td>
+                    {# FEAT-2026-09-03: la sucursal tenía su dato pero iba enterrada como
+                       línea gris dentro de la columna de tipo. Con columna propia se puede
+                       escanear la tabla y ver de un golpe qué sucursal concentra reportes. #}
+                    <td>
+                        {% if inc.propiedad_nombre %}<div style="font-size:12.5px">{{ inc.propiedad_nombre }}</div>
+                        {% else %}<span class="muted">—</span>{% endif %}
+                        {% if inc.zona %}<div class="muted" style="font-size:11px">{{ inc.zona }}</div>{% endif %}
+                    </td>
                     <td>
                         <span class="pill info" style="margin-right:4px">{{ inc.servicio }}</span>
                         <span style="font-size:12.5px">{{ inc.tipo }}</span>
-                        {% if inc.propiedad_nombre %}<div class="muted" style="font-size:11px">{{ inc.propiedad_nombre }}</div>{% endif %}
                         {% if inc.evidencia_urls %}
                         <div style="display:flex;gap:4px;margin-top:4px">
                             {% for url in inc.evidencia_urls %}

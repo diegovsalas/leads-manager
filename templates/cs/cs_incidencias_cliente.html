@@ -1,0 +1,149 @@
+{% extends "cs/cs_base.html" %}
+{% from "cs/_icons.html" import icon %}
+{% block title %}Incidencias por cliente — CS Avantex{% endblock %}
+{% block breadcrumb %}Incidencias por cliente{% endblock %}
+
+{% block content %}
+{# FEAT-2026-09-03: la vista que se le enseña AL cliente. Habla de sus
+   sucursales y de qué le está pasando, no de nuestra operación interna. #}
+
+<div class="page-head">
+    <div>
+        <h1>Incidencias por cliente</h1>
+        <p class="sub">Qué se ha reportado, de qué tipo y en qué sucursal.</p>
+    </div>
+    <div class="actions">
+        <a href="/cs/incidencias/general" class="btn">Ver vista general</a>
+    </div>
+</div>
+
+<form method="get" style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <label style="font-size:12px;color:var(--ink-3)">Cliente</label>
+    <select name="account_id" onchange="this.form.submit()"
+            style="font-size:13px;padding:7px 12px;border:1px solid var(--border);border-radius:var(--r);min-width:260px">
+        {% for c in cuentas %}
+        <option value="{{ c.id }}" {% if cuenta and c.id == cuenta.id %}selected{% endif %}>{{ c.nombre }}</option>
+        {% endfor %}
+    </select>
+</form>
+
+{% if not cuenta %}
+<div class="card"><p class="muted">Ninguna cuenta tiene incidencias registradas todavía.</p></div>
+{% else %}
+
+<div class="kpi-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px">
+    <div class="card" style="padding:14px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em">Reportes totales</div>
+        <div style="font-size:26px;font-weight:640">{{ resumen.total }}</div>
+    </div>
+    <div class="card" style="padding:14px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em">Abiertas</div>
+        <div style="font-size:26px;font-weight:640;{% if resumen.abiertas %}color:var(--warn){% endif %}">{{ resumen.abiertas }}</div>
+    </div>
+    <div class="card" style="padding:14px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em">Sucursales con reportes</div>
+        <div style="font-size:26px;font-weight:640">{{ resumen.por_sucursal|length }}</div>
+    </div>
+    <div class="card" style="padding:14px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em">Días promedio de solución</div>
+        <div style="font-size:26px;font-weight:640">
+            {% if resumen.dias_promedio is not none %}{{ resumen.dias_promedio }}{% else %}—{% endif %}
+        </div>
+        {% if resumen.resueltas_con_fecha %}
+        <div class="muted" style="font-size:10.5px">sobre {{ resumen.resueltas_con_fecha }} resueltas</div>
+        {% endif %}
+    </div>
+</div>
+
+{# ── Tipo de plaga / tipo de incidencia, separado por servicio ── #}
+{% for servicio, tipos in resumen.por_servicio.items() %}
+{% set total_serv = tipos|sum(attribute=1) %}
+<div class="card" style="margin-bottom:14px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px">
+        <h2 style="font-size:15px;font-weight:620;margin:0">
+            {% if servicio == 'Fumigacion' %}Tipo de plaga{% else %}Tipo de incidencia{% endif %}
+            <span class="muted" style="font-weight:400;font-size:12.5px">· {{ servicio }}</span>
+        </h2>
+        <span class="muted" style="font-size:12.5px">{{ total_serv }} reporte{{ 's' if total_serv != 1 }}</span>
+    </div>
+    {% for tipo, n in tipos %}
+    {% set pct = (n / total_serv * 100)|round %}
+    <div style="display:flex;align-items:center;gap:12px;padding:6px 0">
+        <span style="font-size:13px;min-width:190px">{{ tipo }}</span>
+        <div style="flex:1;height:9px;background:var(--bg-surface-2);border-radius:99px;overflow:hidden;min-width:70px">
+            <span style="display:block;height:100%;width:{{ pct }}%;background:var(--copper);border-radius:99px"></span>
+        </div>
+        <span style="font-size:13px;font-variant-numeric:tabular-nums;min-width:58px;text-align:right">
+            <b>{{ n }}</b> <span class="muted">· {{ pct }}%</span>
+        </span>
+    </div>
+    {% endfor %}
+</div>
+{% endfor %}
+
+{# ── Dónde se repite cada problema ── #}
+<div class="card" style="margin-bottom:14px">
+    <h2 style="font-size:15px;font-weight:620;margin:0 0 4px">Por sucursal</h2>
+    <p class="muted" style="font-size:12px;margin:0 0 12px">
+        Qué problema se repite en cada sitio. Una sucursal con el mismo tipo varias veces
+        no es un incidente aislado: es algo que no se resolvió de raíz.
+    </p>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Sucursal</th><th class="c">Reportes</th><th>Qué se ha reportado</th></tr></thead>
+            <tbody>
+            {% for sucursal, tipos in cruce %}
+                {% set total_suc = tipos.values()|sum %}
+                <tr>
+                    <td class="primary">{{ sucursal }}</td>
+                    <td class="c" style="font-variant-numeric:tabular-nums">{{ total_suc }}</td>
+                    <td>
+                        {% for tipo, n in tipos.most_common() %}
+                        <span class="pill {% if n > 1 %}warn{% else %}info{% endif %}" style="margin:2px 3px 2px 0">
+                            {{ tipo }}{% if n > 1 %} × {{ n }}{% endif %}
+                        </span>
+                        {% endfor %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{# ── El detalle, uno por uno ── #}
+<div class="card">
+    <h2 style="font-size:15px;font-weight:620;margin:0 0 12px">Todos los reportes</h2>
+    <div class="table-wrap">
+        <table>
+            <thead><tr>
+                <th>Folio</th><th>Sucursal</th><th>Tipo</th>
+                <th>Reportada</th><th>Solución</th><th class="c">Status</th>
+            </tr></thead>
+            <tbody>
+            {% for i in incidencias %}
+                <tr>
+                    <td style="font-family:var(--mono);font-size:12px">{{ i.folio or '—' }}</td>
+                    <td>{{ i.propiedad_nombre or '—' }}
+                        {% if i.zona %}<div class="muted" style="font-size:11px">{{ i.zona }}</div>{% endif %}
+                    </td>
+                    <td style="font-size:12.5px">
+                        <span class="pill info" style="margin-right:4px">{{ i.servicio }}</span>{{ i.tipo }}
+                    </td>
+                    <td class="muted" style="font-size:12.5px">
+                        {{ i.fecha_incidencia.strftime('%d/%m/%Y') if i.fecha_incidencia else '—' }}</td>
+                    <td class="muted" style="font-size:12.5px">
+                        {{ i.fecha_solucion.strftime('%d/%m/%Y') if i.fecha_solucion else '—' }}</td>
+                    <td class="c">
+                        <span class="pill {% if i.status == 'Resuelta' %}ok{% elif i.status == 'En proceso' %}info{% else %}warn{% endif %}">
+                            {{ i.status }}</span>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}

@@ -1,0 +1,161 @@
+{% extends "cs/cs_base.html" %}
+{% from "cs/_icons.html" import icon %}
+{% block title %}Incidencias — vista general — CS Avantex{% endblock %}
+{% block breadcrumb %}Incidencias · Vista general{% endblock %}
+
+{% block content %}
+{# FEAT-2026-09-03: la vista interna. Aquí importa dónde duele más, cuánto
+   tardamos y qué se está venciendo — no lucir bien ante nadie. #}
+
+<div class="page-head">
+    <div>
+        <h1>Incidencias · vista general</h1>
+        <p class="sub">Todas las cuentas juntas. Para saber dónde está el problema, no para enseñarlo.</p>
+    </div>
+    <div class="actions">
+        <a href="/cs/incidencias/cliente" class="btn">Ver por cliente</a>
+    </div>
+</div>
+
+<form method="get" style="margin-bottom:16px;display:flex;gap:8px;align-items:center">
+    <label style="font-size:12px;color:var(--ink-3)">Desde</label>
+    <input type="date" name="desde" value="{{ desde }}"
+           style="font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--r)">
+    <button class="btn" type="submit">Aplicar</button>
+    {% if desde %}<a href="/cs/incidencias/general" class="muted" style="font-size:12px">quitar filtro</a>{% endif %}
+</form>
+
+<div class="kpi-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px">
+    <div class="card" style="padding:14px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em">Reportes</div>
+        <div style="font-size:26px;font-weight:640">{{ resumen.total }}</div>
+    </div>
+    <div class="card" style="padding:14px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em">Abiertas</div>
+        <div style="font-size:26px;font-weight:640;{% if resumen.abiertas %}color:var(--warn){% endif %}">{{ resumen.abiertas }}</div>
+    </div>
+    <div class="card" style="padding:14px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em">SLA vencido</div>
+        <div style="font-size:26px;font-weight:640;{% if resumen.vencidas %}color:var(--danger){% endif %}">{{ resumen.vencidas }}</div>
+    </div>
+    <div class="card" style="padding:14px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em">Días promedio</div>
+        <div style="font-size:26px;font-weight:640">
+            {% if resumen.dias_promedio is not none %}{{ resumen.dias_promedio }}{% else %}—{% endif %}</div>
+        {% if resumen.resueltas_con_fecha %}
+        <div class="muted" style="font-size:10.5px">sobre {{ resumen.resueltas_con_fecha }} resueltas</div>
+        {% endif %}
+    </div>
+</div>
+
+{# ── Qué domina, por servicio ── #}
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-bottom:14px">
+{% for servicio, tipos in resumen.por_servicio.items() %}
+{% set total_serv = tipos|sum(attribute=1) %}
+<div class="card">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px">
+        <h2 style="font-size:15px;font-weight:620;margin:0">
+            {% if servicio == 'Fumigacion' %}Plagas{% else %}Fallas de equipo{% endif %}
+            <span class="muted" style="font-weight:400;font-size:12.5px">· {{ servicio }}</span>
+        </h2>
+        <span class="muted" style="font-size:12.5px">{{ total_serv }}</span>
+    </div>
+    {% for tipo, n in tipos %}
+    {% set pct = (n / total_serv * 100)|round %}
+    <div style="display:flex;align-items:center;gap:10px;padding:5px 0">
+        <span style="font-size:12.5px;min-width:150px">{{ tipo }}</span>
+        <div style="flex:1;height:8px;background:var(--bg-surface-2);border-radius:99px;overflow:hidden;min-width:50px">
+            <span style="display:block;height:100%;width:{{ pct }}%;background:var(--copper);border-radius:99px"></span>
+        </div>
+        <span style="font-size:12.5px;font-variant-numeric:tabular-nums;min-width:48px;text-align:right">
+            <b>{{ n }}</b> <span class="muted">{{ pct }}%</span></span>
+    </div>
+    {% endfor %}
+</div>
+{% endfor %}
+</div>
+
+{# ── Qué cuentas concentran el problema ── #}
+<div class="card" style="margin-bottom:14px">
+    <h2 style="font-size:15px;font-weight:620;margin:0 0 4px">Cuentas por volumen de reportes</h2>
+    <p class="muted" style="font-size:12px;margin:0 0 12px">
+        Ordenadas por total. Las que tienen muchas abiertas o SLA vencido son las que
+        conviene atender antes de que se conviertan en una queja.
+    </p>
+    <div class="table-wrap">
+        <table>
+            <thead><tr>
+                <th>Cuenta</th><th class="c">Total</th><th class="c">Abiertas</th>
+                <th class="c">SLA vencido</th><th class="c">Días promedio</th><th></th>
+            </tr></thead>
+            <tbody>
+            {% for r in ranking %}
+                <tr>
+                    <td class="primary">{{ r.cuenta }}</td>
+                    <td class="c" style="font-variant-numeric:tabular-nums">{{ r.total }}</td>
+                    <td class="c" style="font-variant-numeric:tabular-nums;{% if r.abiertas %}color:var(--warn);font-weight:600{% endif %}">
+                        {{ r.abiertas or '—' }}</td>
+                    <td class="c" style="font-variant-numeric:tabular-nums;{% if r.vencidas %}color:var(--danger);font-weight:600{% endif %}">
+                        {{ r.vencidas or '—' }}</td>
+                    <td class="c" style="font-variant-numeric:tabular-nums">
+                        {% if r.dias_promedio is not none %}{{ r.dias_promedio }}{% else %}<span class="muted">—</span>{% endif %}</td>
+                    <td class="c">
+                        <a href="/cs/incidencias/cliente?account_id={{ r.account_id }}" class="muted" style="font-size:12px">ver</a>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{# ── Qué nos cuesta más resolver ── #}
+<div class="card" style="margin-bottom:14px">
+    <h2 style="font-size:15px;font-weight:620;margin:0 0 4px">Qué nos cuesta más resolver</h2>
+    <p class="muted" style="font-size:12px;margin:0 0 12px">
+        Días promedio de solución por tipo, de mayor a menor. Solo cuenta lo que ya se
+        resolvió y tiene ambas fechas capturadas.
+    </p>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Servicio</th><th>Tipo</th><th class="c">Resueltas</th><th class="c">Días promedio</th></tr></thead>
+            <tbody>
+            {% for t in tiempos_tipo %}
+                <tr>
+                    <td><span class="pill info">{{ t.servicio }}</span></td>
+                    <td>{{ t.tipo }}</td>
+                    <td class="c" style="font-variant-numeric:tabular-nums">{{ t.n }}</td>
+                    <td class="c" style="font-variant-numeric:tabular-nums;font-weight:620">{{ t.promedio }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="4" class="muted" style="text-align:center;padding:14px">
+                    Todavía no hay incidencias resueltas con fecha de reporte y de solución.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{# ── Sucursales más golpeadas, de todas las cuentas ── #}
+<div class="card">
+    <h2 style="font-size:15px;font-weight:620;margin:0 0 12px">Sucursales con más reportes</h2>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Sucursal</th><th class="c">Reportes</th></tr></thead>
+            <tbody>
+            {% for sucursal, n in resumen.por_sucursal[:15] %}
+                <tr>
+                    <td {% if sucursal == 'Sin sucursal' %}class="muted"{% endif %}>{{ sucursal }}</td>
+                    <td class="c" style="font-variant-numeric:tabular-nums">{{ n }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if resumen.por_sucursal|length > 15 %}
+    <p class="muted" style="font-size:11.5px;margin:10px 0 0">
+        Se muestran las 15 con más reportes de {{ resumen.por_sucursal|length }} en total.</p>
+    {% endif %}
+</div>
+
+{% endblock %}

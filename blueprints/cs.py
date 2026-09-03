@@ -4618,3 +4618,157 @@ def delete_task(account_id, task_id):
         db.session.delete(task)
         db.session.commit()
     return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=proyectos")
+
+
+# ══════════════════════════════════════════════════════════════════
+# DASHBOARD DE INCIDENCIAS — FEAT-2026-09-03
+#
+# Dos lecturas del mismo dato, porque responden preguntas distintas:
+#
+#   /cs/incidencias/cliente  → una cuenta, desglosada por tipo. Es la vista
+#       que se le enseña AL cliente: qué le está pasando, dónde y desde
+#       cuándo. Habla de sus sucursales, no de nuestra operación.
+#
+#   /cs/incidencias/general  → todas las cuentas juntas. Es para nosotros:
+#       qué plaga domina, qué cuentas concentran reportes, cuánto tardamos
+#       y qué se está venciendo.
+#
+# El "tipo" cambia de significado según el servicio: en Fumigación es la
+# plaga (Roedores, Cucarachas…) y en Aroma es la falla del equipo (Robo,
+# Ruidos, No huele). Por eso las dos vistas separan por servicio en vez de
+# mezclar todos los tipos en una sola lista.
+# ══════════════════════════════════════════════════════════════════
+
+def _dias_resolucion(inc):
+    """Días entre que se reportó y se resolvió. None si sigue abierta."""
+    if not inc.fecha_solucion or not inc.fecha_incidencia:
+        return None
+    return (inc.fecha_solucion - inc.fecha_incidencia).days
+
+
+def _resumen_incidencias(incidencias):
+    """Conteos que sirven igual para la vista de cliente y la general."""
+    from collections import Counter, defaultdict
+
+    por_servicio = defaultdict(Counter)     # servicio -> tipo -> n
+    por_sucursal = Counter()
+    por_status = Counter()
+    por_mes = Counter()
+    tiempos = []
+
+    for i in incidencias:
+        por_servicio[i.servicio or "Sin servicio"][i.tipo or "Sin tipo"] += 1
+        por_sucursal[(i.propiedad_nombre or "").strip() or "Sin sucursal"] += 1
+        por_status[i.status or "Abierta"] += 1
+        if i.fecha_incidencia:
+            por_mes[i.fecha_incidencia.strftime("%Y-%m")] += 1
+        d = _dias_resolucion(i)
+        if d is not None and d >= 0:
+            tiempos.append(d)
+
+    promedio = round(sum(tiempos) / len(tiempos), 1) if tiempos else None
+    return {
+        "total": len(incidencias),
+        "por_servicio": {s: c.most_common() for s, c in por_servicio.items()},
+        "por_sucursal": por_sucursal.most_common(),
+        "por_status": dict(por_status),
+        "por_mes": sorted(por_mes.items()),
+        "dias_promedio": promedio,
+        "resueltas_con_fecha": len(tiempos),
+        "abiertas": sum(n for s, n in por_status.items() if s != "Resuelta"),
+        "vencidas": sum(1 for i in incidencias if _incidencia_vencida(i)),
+    }
+
+
+@cs_bp.route("/incidencias/cliente")
+@require_cs_admin
+def incidencias_por_cliente():
+    """Desglose de una cuenta: qué tipo de incidencia tiene y en qué sucursal."""
+    cuentas = (CSAccount.query
+               .join(CSIncidencia, CSIncidencia.account_id == CSAccount.id)
+               .group_by(CSAccount.id).order_by(CSAccount.nombre).all())
+
+    account_id = (request.args.get("account_id") or "").strip()
+    seleccionada = None
+    if account_id:
+        seleccionada = db.session.get(CSAccount, account_id)
+    if not seleccionada and cuentas:
+        seleccionada = cuentas[0]
+
+    incidencias, resumen, detalle = [], None, []
+    if seleccionada:
+        incidencias = (CSIncidencia.query
+                       .filter(CSIncidencia.account_id == seleccionada.id)
+                       .order_by(CSIncidencia.fecha_incidencia.desc().nullslast())
+                       .all())
+        resumen = _resumen_incidencias(incidencias)
+        # cruce sucursal × tipo: dónde se repite cada problema
+        from collections import defaultdict, Counter
+        cruce = defaultdict(Counter)
+        for i in incidencias:
+            suc = (i.propiedad_nombre or "").strip() or "Sin sucursal"
+            cruce[suc][i.tipo or "Sin tipo"] += 1
+        detalle = sorted(cruce.items(), key=lambda kv: -sum(kv[1].values()))
+
+    return render_template("cs/cs_incidencias_cliente.html",
+                           cuentas=cuentas, cuenta=seleccionada,
+                           incidencias=incidencias, resumen=resumen,
+                           cruce=detalle, **_ctx())
+
+
+@cs_bp.route("/incidencias/general")
+@require_cs_admin
+def incidencias_general():
+    """Vista interna: dónde duele más, en qué tardamos y qué se vence."""
+    from collections import Counter, defaultdict
+
+    desde = (request.args.get("desde") or "").strip()
+    incidencias = CSIncidencia.query
+    if desde:
+        try:
+            incidencias = incidencias.filter(CSIncidencia.fecha_incidencia >= desde)
+        except Exception:
+            pass
+    incidencias = incidencias.all()
+    resumen = _resumen_incidencias(incidencias)
+
+    cuentas = {str(a.id): a for a in CSAccount.query.all()}
+
+    # Ranking de cuentas: cuántas, cuántas siguen abiertas y cuánto tardamos
+    por_cuenta = defaultdict(lambda: {"total": 0, "abiertas": 0, "vencidas": 0, "dias": []})
+    for i in incidencias:
+        r = por_cuenta[str(i.account_id)]
+        r["total"] += 1
+        if (i.status or "Abierta") != "Resuelta":
+            r["abiertas"] += 1
+        if _incidencia_vencida(i):
+            r["vencidas"] += 1
+        d = _dias_resolucion(i)
+        if d is not None and d >= 0:
+            r["dias"].append(d)
+
+    ranking = []
+    for aid, r in por_cuenta.items():
+        acc = cuentas.get(aid)
+        ranking.append({
+            "cuenta": acc.nombre if acc else "(cuenta borrada)",
+            "account_id": aid,
+            "total": r["total"], "abiertas": r["abiertas"], "vencidas": r["vencidas"],
+            "dias_promedio": round(sum(r["dias"]) / len(r["dias"]), 1) if r["dias"] else None,
+        })
+    ranking.sort(key=lambda x: (-x["total"], x["cuenta"]))
+
+    # Tiempo de resolución por tipo: qué problema nos cuesta más trabajo
+    dias_por_tipo = defaultdict(list)
+    for i in incidencias:
+        d = _dias_resolucion(i)
+        if d is not None and d >= 0:
+            dias_por_tipo[(i.servicio or "?", i.tipo or "Sin tipo")].append(d)
+    tiempos_tipo = sorted(
+        [{"servicio": s, "tipo": t, "n": len(v),
+          "promedio": round(sum(v) / len(v), 1)} for (s, t), v in dias_por_tipo.items()],
+        key=lambda x: -x["promedio"])
+
+    return render_template("cs/cs_incidencias_general.html",
+                           resumen=resumen, ranking=ranking,
+                           tiempos_tipo=tiempos_tipo, desde=desde, **_ctx())
