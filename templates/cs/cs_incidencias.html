@@ -42,8 +42,9 @@
                 <tr>
                     <th>Folio</th>
                     <th>Cuenta</th>
-                    <th>Sucursal</th>
-                    <th>Servicio / Tipo</th>
+                    <th>Propiedad</th>
+                    <th>UN</th>
+                    <th>Tipo de incidencia</th>
                     <th>Responsable</th>
                     <th>Reportada</th>
                     <th>Compromiso</th>
@@ -65,11 +66,11 @@
                        escanear la tabla y ver de un golpe qué sucursal concentra reportes. #}
                     <td>
                         {% if inc.propiedad_nombre %}<div style="font-size:12.5px">{{ inc.propiedad_nombre }}</div>
-                        {% else %}<span class="muted">—</span>{% endif %}
+                        {% else %}<span class="muted" style="font-size:12.5px">sin propiedad</span>{% endif %}
                         {% if inc.zona %}<div class="muted" style="font-size:11px">{{ inc.zona }}</div>{% endif %}
                     </td>
+                    <td><span class="pill info">{{ un_de(inc.servicio) }}</span></td>
                     <td>
-                        <span class="pill info" style="margin-right:4px">{{ inc.servicio }}</span>
                         <span style="font-size:12.5px">{{ inc.tipo }}</span>
                         {% if inc.evidencia_urls %}
                         <div style="display:flex;gap:4px;margin-top:4px">

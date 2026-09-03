@@ -125,7 +125,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
     </p>
     <div class="table-wrap">
         <table>
-            <thead><tr><th>Sucursal</th><th class="n">Reportes</th><th>Qué se ha reportado</th></tr></thead>
+            <thead><tr><th>Propiedad</th><th class="n">Reportes</th><th>Qué se ha reportado</th></tr></thead>
             <tbody>
             {% for sucursal, tipos in cruce %}
                 {% set total_suc = tipos.values()|sum %}
@@ -155,7 +155,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
     <div class="table-wrap">
         <table>
             <thead><tr>
-                <th>Folio</th><th>Sucursal</th><th>Tipo</th>
+                <th># Ticket</th><th>Propiedad</th><th>UN</th><th>Tipo de incidencia</th>
                 <th>Reportada</th><th>Solución</th><th class="c">Status</th>
             </tr></thead>
             <tbody>
@@ -164,12 +164,11 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
                     <td style="font-family:var(--mono);font-size:12px">{{ i.folio or '—' }}</td>
                     <td>
                         {% if i.propiedad_nombre %}{{ i.propiedad_nombre }}
-                        {% else %}<span class="vacio">sin sucursal</span>{% endif %}
+                        {% else %}<span class="vacio">sin propiedad</span>{% endif %}
                         {% if i.zona %}<div class="muted" style="font-size:11px">{{ i.zona }}</div>{% endif %}
                     </td>
-                    <td style="font-size:12.5px">{{ i.tipo }}
-                        <div class="muted" style="font-size:10.5px">{{ i.servicio }}</div>
-                    </td>
+                    <td><span class="pill info">{{ un_de(i.servicio) }}</span></td>
+                    <td style="font-size:12.5px">{{ i.tipo }}</td>
                     <td class="muted" style="font-size:12.5px">
                         {{ i.fecha_incidencia.strftime('%d/%m/%Y') if i.fecha_incidencia else '—' }}</td>
                     <td class="muted" style="font-size:12.5px">

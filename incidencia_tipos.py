@@ -93,3 +93,22 @@ def diagnosticar(incidencias):
         if duenio and duenio != (i.servicio or "").strip():
             malas.append((i, duenio))
     return malas
+
+
+# ── Servicio ↔ unidad de negocio ─────────────────────────────────
+#
+# En la incidencia el campo se llama "servicio" y guarda Aroma o Fumigacion,
+# que son los nombres operativos. Pero el equipo habla de unidades de
+# negocio, y ahí se llaman Aromatex y Pestex. Se muestra la UN.
+
+SERVICIO_A_UN = {
+    "Aroma": "Aromatex",
+    "Fumigacion": "Pestex",
+}
+
+
+def un_de(servicio):
+    """La unidad de negocio de un servicio. Devuelve el servicio tal cual si
+    no está mapeado, para no perder el dato de un registro viejo."""
+    s = (servicio or "").strip()
+    return SERVICIO_A_UN.get(s, s or "—")

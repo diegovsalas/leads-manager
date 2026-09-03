@@ -120,12 +120,14 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
         </p>
         <div class="table-wrap">
             <table>
-                <thead><tr><th>Folio</th><th>Cliente</th><th>Tipo</th><th>Reportada</th><th class="c">Status</th></tr></thead>
+                <thead><tr><th># Ticket</th><th>Cliente</th><th>Propiedad</th><th>UN</th><th>Tipo de incidencia</th><th>Reportada</th><th class="c">Status</th></tr></thead>
                 <tbody>
                 {% for x in sin_sucursal %}
                     <tr>
                         <td style="font-family:var(--mono);font-size:12px">{{ x.inc.folio or '—' }}</td>
                         <td class="primary">{{ x.cuenta }}</td>
+                        <td><span class="muted" style="font-size:12.5px">sin asignar</span></td>
+                        <td><span class="pill info">{{ un_de(x.inc.servicio) }}</span></td>
                         <td style="font-size:12.5px">{{ x.inc.tipo }}</td>
                         <td class="muted" style="font-size:12.5px">
                             {{ x.inc.fecha_incidencia.strftime('%d/%m/%Y') if x.inc.fecha_incidencia else '—' }}</td>
@@ -153,14 +155,18 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
         </p>
         <div class="table-wrap">
             <table>
-                <thead><tr><th>Folio</th><th>Cliente</th><th>Está como</th><th>Debería ser</th><th></th></tr></thead>
+                <thead><tr><th># Ticket</th><th>Cliente</th><th>Propiedad</th><th>Tipo de incidencia</th><th>UN actual</th><th>UN correcta</th><th></th></tr></thead>
                 <tbody>
                 {% for m in mal_clasificadas %}
                     <tr>
                         <td style="font-family:var(--mono);font-size:12px">{{ m.inc.folio or '—' }}</td>
                         <td class="primary">{{ m.cuenta }}</td>
-                        <td><span class="pill warn">{{ m.inc.servicio }}</span> {{ m.inc.tipo }}</td>
-                        <td><span class="pill ok">{{ m.deberia_ser }}</span> {{ m.inc.tipo }}</td>
+                        <td style="font-size:12.5px">
+                            {% if m.inc.propiedad_nombre %}{{ m.inc.propiedad_nombre }}
+                            {% else %}<span class="muted">sin propiedad</span>{% endif %}</td>
+                        <td style="font-size:12.5px">{{ m.inc.tipo }}</td>
+                        <td><span class="pill warn">{{ un_de(m.inc.servicio) }}</span></td>
+                        <td><span class="pill ok">{{ un_de(m.deberia_ser) }}</span></td>
                         <td class="c">
                             <form method="post" action="/cs/incidencias/{{ m.inc.id }}/reclasificar" style="display:inline">
                                 <input type="hidden" name="servicio" value="{{ m.deberia_ser }}">

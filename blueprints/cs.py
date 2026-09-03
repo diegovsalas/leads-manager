@@ -292,6 +292,24 @@ def require_cs_admin(f):
     return wrapper
 
 
+def require_cs_analisis(f):
+    """El análisis de incidencias lo ve dirección y también cualquier KAM.
+
+    FEAT-2026-09-04: antes era solo admin. Un KAM que no puede ver dónde se
+    concentran las incidencias de sus cuentas está trabajando a ciegas —
+    justo lo que estas pantallas vienen a resolver.
+
+    No es lo mismo que dar acceso a todo: sigue siendo lectura, y las
+    acciones que escriben (reclasificar) siguen pidiendo admin.
+    """
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if not (_is_cs_admin() or _is_kam()):
+            return _permission_denied("Solo dirección o KAM")
+        return f(*args, **kwargs)
+    return wrapper
+
+
 def require_cs_full_access(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
@@ -362,7 +380,7 @@ def _parse_adjuntos(form):
 
 def _ctx():
     """Context vars comunes para todos los templates."""
-    from incidencia_tipos import TIPOS_POR_SERVICIO
+    from incidencia_tipos import TIPOS_POR_SERVICIO, un_de
     return {
         "user_nombre": session.get("user_nombre", ""),
         "user_rol": session.get("user_rol", ""),
@@ -370,6 +388,9 @@ def _ctx():
         # El catálogo lo usa el modal de incidencias para filtrar los tipos
         # según el servicio. Viene de aquí para que no haya una segunda copia.
         "INCIDENCIA_TIPOS": TIPOS_POR_SERVICIO,
+        # Aroma -> Aromatex, Fumigacion -> Pestex. El equipo habla de UN,
+        # no del nombre operativo del servicio.
+        "un_de": un_de,
     }
 
 
@@ -4269,7 +4290,7 @@ def reclasificar_incidencia(inc_id):
 
 
 @cs_bp.route("/incidencias")
-@require_cs_admin
+@require_cs_analisis
 def incidencias_view():
     """Todas las incidencias abiertas/en proceso de TODAS las cuentas,
     para gestión proactiva (a diferencia de /cs/mis-pendientes, que solo
@@ -4745,7 +4766,7 @@ def _resumen_incidencias(incidencias):
 
 
 @cs_bp.route("/incidencias/cliente")
-@require_cs_admin
+@require_cs_analisis
 def incidencias_por_cliente():
     """Desglose de una cuenta: qué tipo de incidencia tiene y en qué sucursal."""
     cuentas = (CSAccount.query
@@ -4781,7 +4802,7 @@ def incidencias_por_cliente():
 
 
 @cs_bp.route("/incidencias/general")
-@require_cs_admin
+@require_cs_analisis
 def incidencias_general():
     """Vista interna: dónde duele más, en qué tardamos y qué se vence."""
     from collections import Counter, defaultdict
