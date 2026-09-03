@@ -362,10 +362,14 @@ def _parse_adjuntos(form):
 
 def _ctx():
     """Context vars comunes para todos los templates."""
+    from incidencia_tipos import TIPOS_POR_SERVICIO
     return {
         "user_nombre": session.get("user_nombre", ""),
         "user_rol": session.get("user_rol", ""),
         "is_kam": _is_kam(),
+        # El catálogo lo usa el modal de incidencias para filtrar los tipos
+        # según el servicio. Viene de aquí para que no haya una segunda copia.
+        "INCIDENCIA_TIPOS": TIPOS_POR_SERVICIO,
     }
 
 
@@ -4131,6 +4135,23 @@ def crear_incidencia(account_id):
     if not tipo:
         return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=proyectos")
 
+    # FEAT-2026-09-03: el tipo tiene que pertenecer al servicio.
+    #
+    # El modal de CS mostraba TODOS los tipos agrupados, sin filtrar por el
+    # servicio elegido, así que se podía registrar "Equipo no huele" —una
+    # falla de aroma— como incidencia de Fumigación. Dos entraron así, y en
+    # el análisis aparecían como si fueran una plaga.
+    #
+    # La validación va aquí y no solo en la pantalla: filtrar el select evita
+    # el error de dedo, pero no protege de un POST directo ni de un
+    # formulario nuevo que alguien agregue después.
+    from incidencia_tipos import validar_tipo
+    servicio_in = request.form.get("servicio", "Aroma").strip()
+    ok, motivo = validar_tipo(servicio_in, tipo)
+    if not ok:
+        flash(motivo, "error")
+        return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=proyectos")
+
     propiedad_id = request.form.get("propiedad_id", "").strip() or None
     propiedad_nombre = ""
     if propiedad_id:
@@ -4159,7 +4180,7 @@ def crear_incidencia(account_id):
         account_id=account_id,
         propiedad_id=propiedad_id,
         propiedad_nombre=propiedad_nombre,
-        servicio=request.form.get("servicio", "Aroma"),
+        servicio=servicio_in,
         tipo=tipo,
         detalle=request.form.get("detalle", "").strip(),
         status="Abierta",
@@ -4204,6 +4225,49 @@ def cambiar_status_incidencia(account_id, inc_id):
 # ══════════════════════════════════════════════
 # INCIDENCIAS — Tablero cross-cuenta (gestión proactiva)
 # ══════════════════════════════════════════════
+@cs_bp.route("/incidencias/<uuid:inc_id>/reclasificar", methods=["POST"])
+@require_cs_admin
+def reclasificar_incidencia(inc_id):
+    """Corrige el servicio y el tipo de una incidencia ya registrada.
+
+    FEAT-2026-09-03: no existía forma de editarlos. La única ruta de edición
+    era la de status, así que un registro mal clasificado se quedaba así para
+    siempre, ensuciando el análisis. Pasa por la misma validación que el
+    alta: no se puede "corregir" hacia otra combinación inválida.
+    """
+    from incidencia_tipos import validar_tipo
+
+    inc = db.session.get(CSIncidencia, inc_id)
+    if not inc:
+        return jsonify({"error": "Incidencia no encontrada"}), 404
+
+    servicio = (request.form.get("servicio") or inc.servicio or "").strip()
+    tipo = (request.form.get("tipo") or inc.tipo or "").strip()
+    ok, motivo = validar_tipo(servicio, tipo)
+    if not ok:
+        flash(motivo, "error")
+        return redirect(request.referrer or "/cs/incidencias")
+
+    antes = f"{inc.servicio} · {inc.tipo}"
+    folio = inc.folio or ""
+    inc_id_str = str(inc.id)
+    inc.servicio, inc.tipo = servicio, tipo
+    db.session.commit()
+
+    # El registro de actividad no debe tumbar una corrección ya guardada:
+    # el cambio está hecho, y un fallo aquí solo haría que el usuario vea un
+    # error y lo intente de nuevo sobre un dato que ya está bien.
+    try:
+        from actividad import log_actividad
+        log_actividad("editar", "incidencia", inc_id_str,
+                      f"Reclasificada {folio}: {antes} → {servicio} · {tipo}")
+    except Exception as e:
+        current_app.logger.warning(f"[incidencias] no se pudo registrar la actividad: {e}")
+
+    flash(f"Reclasificada: {antes} → {servicio} · {tipo}", "ok")
+    return redirect(request.referrer or "/cs/incidencias")
+
+
 @cs_bp.route("/incidencias")
 @require_cs_admin
 def incidencias_view():
@@ -4769,6 +4833,18 @@ def incidencias_general():
           "promedio": round(sum(v) / len(v), 1)} for (s, t), v in dias_por_tipo.items()],
         key=lambda x: -x["promedio"])
 
+    # Registros cuyo tipo pertenece a otro servicio. Entraron antes de que
+    # existiera el bloqueo; se muestran para poder corregirlos, no para
+    # esconderlos: mientras estén así, distorsionan el análisis.
+    from incidencia_tipos import diagnosticar, TIPOS_POR_SERVICIO
+    mal_clasificadas = [
+        {"inc": i, "deberia_ser": duenio,
+         "cuenta": cuentas.get(str(i.account_id)).nombre if cuentas.get(str(i.account_id)) else "?"}
+        for i, duenio in diagnosticar(incidencias)
+    ]
+
     return render_template("cs/cs_incidencias_general.html",
                            resumen=resumen, ranking=ranking,
-                           tiempos_tipo=tiempos_tipo, desde=desde, **_ctx())
+                           tiempos_tipo=tiempos_tipo, desde=desde,
+                           mal_clasificadas=mal_clasificadas,
+                           tipos_catalogo=TIPOS_POR_SERVICIO, **_ctx())

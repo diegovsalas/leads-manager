@@ -188,7 +188,9 @@ def nuevo_ticket_form(token):
     account = CSAccount.query.filter_by(ticket_token=token).first()
     if not account:
         return render_template("tickets/not_found.html"), 404
-    return render_template("tickets/form.html", account=account, token=token)
+    from incidencia_tipos import TIPOS_POR_SERVICIO
+    return render_template("tickets/form.html", account=account, token=token,
+                           INCIDENCIA_TIPOS=TIPOS_POR_SERVICIO)
 
 
 @tickets_bp.route("/<token>/propiedades")
@@ -220,6 +222,7 @@ def enviar_ticket(token):
     def _rerender(error):
         return render_template(
             "tickets/form.html", account=account, token=token, error=error,
+            INCIDENCIA_TIPOS=__import__("incidencia_tipos").TIPOS_POR_SERVICIO,
         ), 400
 
     servicio = (request.form.get("servicio") or "").strip()
@@ -232,6 +235,13 @@ def enviar_ticket(token):
 
     if not tipo or not quien_reporta or not contacto_cliente:
         return _rerender("Faltan campos requeridos: tipo de incidencia, nombre y correo.")
+
+    # FEAT-2026-09-03: el tipo debe pertenecer al servicio. El formulario ya
+    # los filtra, pero un POST directo se saltaría ese filtro.
+    from incidencia_tipos import validar_tipo
+    ok, motivo = validar_tipo(servicio, tipo)
+    if not ok:
+        return _rerender(motivo)
 
     if not _es_email_valido(contacto_cliente):
         return _rerender("El correo no parece válido — revisa que esté bien escrito.")

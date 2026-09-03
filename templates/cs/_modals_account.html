@@ -15,37 +15,14 @@
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
                     <div>
                         <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Servicio *</label>
-                        <select name="servicio" required style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
+                        <select name="servicio" id="inc-servicio" required onchange="incFiltrarTipos()" style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
                             <option value="Aroma">Aroma</option>
                             <option value="Fumigacion">Fumigacion</option>
                         </select>
                     </div>
                     <div>
                         <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Tipo de incidencia *</label>
-                        <select name="tipo" required style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px">
-                            <optgroup label="Aroma">
-                                <option value="Equipo no huele">Equipo no huele</option>
-                                <option value="Equipo apagado">Equipo apagado</option>
-                                <option value="Derrame de aroma">Derrame de aroma</option>
-                                <option value="Ruidos en equipo">Ruidos en equipo</option>
-                                <option value="Equipo desprendido">Equipo desprendido</option>
-                                <option value="Robo/Extravio equipo">Robo/Extravio equipo</option>
-                                <option value="Reubicacion equipo">Reubicacion equipo</option>
-                                <option value="Incumplimiento visita">Incumplimiento visita</option>
-                                <option value="Mantenimiento equipo">Mantenimiento equipo</option>
-                            </optgroup>
-                            <optgroup label="Fumigacion">
-                                <option value="Roedores">Roedores</option>
-                                <option value="Cucarachas">Cucarachas</option>
-                                <option value="Moscas/Mosquitos">Moscas/Mosquitos</option>
-                                <option value="Alacranes">Alacranes</option>
-                                <option value="Termitas">Termitas</option>
-                                <option value="Chinches">Chinches</option>
-                                <option value="Aves">Aves</option>
-                                <option value="Otro insecto">Otro insecto</option>
-                                <option value="Garantia fumigacion">Garantia fumigacion</option>
-                            </optgroup>
-                        </select>
+                        <select name="tipo" id="inc-tipo" required style="width:100%;height:34px;border:1px solid #e3e2e0;border-radius:7px;padding:0 10px;font-size:13px"></select>
                     </div>
                 </div>
 
@@ -181,3 +158,25 @@
 </div>
 
 <!-- Modal: Agregar contacto desde account detail -->
+
+{# FEAT-2026-09-03: los tipos se filtran por servicio. Antes se mostraban
+   TODOS agrupados y se podía registrar una falla de aroma como incidencia
+   de fumigación. El catálogo viene del backend para que no exista una
+   segunda copia que pueda divergir. El bloqueo real está en el servidor. #}
+<script>
+const INC_TIPOS = {{ INCIDENCIA_TIPOS | tojson }};
+function incFiltrarTipos(){
+  const sv = document.getElementById('inc-servicio');
+  const tp = document.getElementById('inc-tipo');
+  if(!sv || !tp) return;
+  const previo = tp.value;
+  tp.innerHTML = '';
+  (INC_TIPOS[sv.value] || []).forEach(t => {
+    const o = document.createElement('option');
+    o.value = t; o.textContent = t;
+    if (t === previo) o.selected = true;
+    tp.appendChild(o);
+  });
+}
+document.addEventListener('DOMContentLoaded', incFiltrarTipos);
+</script>

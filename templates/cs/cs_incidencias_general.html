@@ -48,6 +48,43 @@
     </div>
 </div>
 
+
+{# ── Registros mal clasificados ── #}
+{% if mal_clasificadas %}
+<div class="card" style="margin-bottom:14px;border-color:var(--warn)">
+    <h2 style="font-size:15px;font-weight:620;margin:0 0 4px;color:var(--warn)">
+        {{ icon('alert-triangle', 15) }} {{ mal_clasificadas|length }}
+        registro{{ 's' if mal_clasificadas|length != 1 }} mal clasificado{{ 's' if mal_clasificadas|length != 1 }}
+    </h2>
+    <p class="muted" style="font-size:12px;margin:0 0 12px">
+        El tipo pertenece a otro servicio. Entraron antes de que existiera el bloqueo, y mientras
+        sigan así distorsionan los conteos de arriba: una falla de equipo cuenta como plaga.
+    </p>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Folio</th><th>Cuenta</th><th>Está como</th><th>Debería ser</th><th></th></tr></thead>
+            <tbody>
+            {% for m in mal_clasificadas %}
+                <tr>
+                    <td style="font-family:var(--mono);font-size:12px">{{ m.inc.folio or '—' }}</td>
+                    <td class="primary">{{ m.cuenta }}</td>
+                    <td><span class="pill warn">{{ m.inc.servicio }}</span> {{ m.inc.tipo }}</td>
+                    <td><span class="pill ok">{{ m.deberia_ser }}</span> {{ m.inc.tipo }}</td>
+                    <td class="c">
+                        <form method="post" action="/cs/incidencias/{{ m.inc.id }}/reclasificar" style="display:inline">
+                            <input type="hidden" name="servicio" value="{{ m.deberia_ser }}">
+                            <input type="hidden" name="tipo" value="{{ m.inc.tipo }}">
+                            <button class="btn" type="submit" style="font-size:12px;padding:3px 9px">Corregir</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
 {# ── Qué domina, por servicio ── #}
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-bottom:14px">
 {% for servicio, tipos in resumen.por_servicio.items() %}
