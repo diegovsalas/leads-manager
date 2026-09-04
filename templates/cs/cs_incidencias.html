@@ -1,94 +1,23 @@
 {% extends "cs/cs_base.html" %}
 {% from "cs/_icons.html" import icon %}
 {% block title %}Incidencias — CS Avantex
-{# ── Modal de cobro ────────────────────────────────────────────── #}
-<div id="cobro-overlay" onclick="if(event.target===this)cerrarCobro()"
-     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:600;
-            align-items:flex-start;justify-content:center;padding-top:8vh">
-  <div style="background:var(--bg-card);border-radius:var(--r-md);width:440px;max-width:94vw;
-              max-height:84vh;overflow-y:auto;padding:22px 24px;box-shadow:0 8px 28px rgba(0,0,0,.18)">
-    <h3 style="font-size:16px;font-weight:640;margin:0 0 4px">Cobro de la incidencia</h3>
-    <p class="muted" style="font-size:12px;margin:0 0 16px" id="cobro-folio"></p>
-
-    <form id="cobro-form" method="post" enctype="multipart/form-data">
-      <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:5px">¿Se cobra?</label>
-      <div style="display:flex;gap:6px;margin-bottom:14px">
-        {% for op in ['Sin definir','Se cobra','No se cobra'] %}
-        <label style="flex:1;text-align:center;padding:7px 4px;border:1px solid var(--border);
-                      border-radius:var(--r);font-size:12.5px;cursor:pointer" class="cobro-op">
-          <input type="radio" name="cobrable" value="{{ op }}" onchange="cobroToggle()" style="margin-right:4px">{{ op }}
-        </label>
-        {% endfor %}
-      </div>
-
-      <div id="cobro-si" style="display:none">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-          <div>
-            <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Monto (MXN)</label>
-            <input name="monto_cobro" type="number" step="0.01" min="0" placeholder="0.00"
-                   style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);font-size:13px">
-          </div>
-          <div>
-            <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Fecha de factura</label>
-            <input name="factura_fecha" type="date"
-                   style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);font-size:13px">
-          </div>
-        </div>
-        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Número de factura</label>
-        <input name="factura_numero" type="text" placeholder="Ej: A-12345"
-               style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;margin-bottom:10px">
-        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Archivo de la factura</label>
-        <input name="factura" type="file" accept="application/pdf,image/jpeg,image/png"
-               style="width:100%;font-size:12px;margin-bottom:4px">
-        <p class="muted" style="font-size:10.5px;margin:0 0 4px">PDF o imagen, máximo 8 MB. Opcional.</p>
-      </div>
-
-      <div id="cobro-no" style="display:none">
-        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">¿Por qué no se cobra?</label>
-        <textarea name="motivo_no_cobro" rows="3" placeholder="Garantía, cortesía, error nuestro..."
-                  style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);
-                         font-size:13px;resize:vertical"></textarea>
-        <p class="muted" style="font-size:10.5px;margin:4px 0 0">
-          Obligatorio: sin motivo, nadie puede revisar la decisión después.</p>
-      </div>
-
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;
-                  padding-top:14px;border-top:1px solid var(--border)">
-        <button type="button" class="btn" onclick="cerrarCobro()">Cancelar</button>
-        <button type="submit" class="btn primary">Guardar</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<script>
-function abrirCobro(id, actual, folio){
-  const f = document.getElementById('cobro-form');
-  f.action = '/cs/incidencias/' + id + '/cobro';
-  document.getElementById('cobro-folio').textContent = folio ? 'Ticket ' + folio : '';
-  f.querySelectorAll('[name=cobrable]').forEach(r => r.checked = (r.value === actual));
-  cobroToggle();
-  document.getElementById('cobro-overlay').style.display = 'flex';
-}
-function cerrarCobro(){ document.getElementById('cobro-overlay').style.display = 'none'; }
-function cobroToggle(){
-  const v = document.querySelector('[name=cobrable]:checked');
-  const sel = v ? v.value : '';
-  document.getElementById('cobro-si').style.display = (sel === 'Se cobra') ? '' : 'none';
-  document.getElementById('cobro-no').style.display = (sel === 'No se cobra') ? '' : 'none';
-  document.querySelectorAll('.cobro-op').forEach(l => {
-    const marcado = l.querySelector('input').checked;
-    l.style.borderColor = marcado ? 'var(--copper)' : 'var(--border)';
-    l.style.background  = marcado ? 'var(--copper-soft)' : 'transparent';
-  });
-}
-document.addEventListener('keydown', e => { if(e.key === 'Escape') cerrarCobro(); });
-</script>
-
+{% include "cs/_modal_cobro.html" %}
 {% endblock %}
 {% block breadcrumb %}Incidencias{% endblock %}
 
 {% block content %}
+<style>
+/* FEAT-2026-09-04: la columna de acciones queda fija a la derecha. Aunque la
+   tabla crezca y aparezca scroll horizontal, "Resolver" nunca se sale de
+   vista — que es justo lo que pasaba al llegar a once columnas. */
+#tbl-incidencias th:last-child,
+#tbl-incidencias td:last-child{
+    position:sticky; right:0; background:var(--bg-card);
+    box-shadow:-6px 0 8px -6px rgba(0,0,0,.14);
+}
+#tbl-incidencias thead th:last-child{ background:var(--bg-surface-2); }
+</style>
+
 
 <div class="page-head">
     <div>
@@ -175,9 +104,7 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape') cerrarCobro()
                     <th>Propiedad</th>
                     <th>UN</th>
                     <th>Tipo de incidencia</th>
-                    <th>Responsable</th>
-                    <th>Reportada</th>
-                    <th>Compromiso</th>
+                    <th>Fechas</th>
                     <th class="c">Cobro</th>
                     <th class="c">Status</th>
                     <th class="c"></th>
@@ -191,6 +118,7 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape') cerrarCobro()
                     <td class="primary" style="font-family:var(--mono);font-size:12px">{{ inc.folio or '—' }}</td>
                     <td class="primary">
                         {% if acc %}<a href="/cs/account/{{ acc.id }}">{% if acc.client_id %}<span style="font-size:10px;font-weight:700;color:var(--copper);margin-right:4px">{{ acc.client_id }}</span>{% endif %}{{ acc.nombre }}</a>{% else %}<span class="muted">—</span>{% endif %}
+                        {% if inc.responsable %}<div class="muted" style="font-size:10.5px">{{ inc.responsable }}</div>{% endif %}
                     </td>
                     {# FEAT-2026-09-03: la sucursal tenía su dato pero iba enterrada como
                        línea gris dentro de la columna de tipo. Con columna propia se puede
@@ -211,11 +139,17 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape') cerrarCobro()
                         </div>
                         {% endif %}
                     </td>
-                    <td class="muted" style="font-size:12.5px">{{ inc.responsable or '—' }}</td>
-                    <td class="muted" style="font-size:12.5px">{{ inc.fecha_incidencia.strftime('%d/%m/%Y') if inc.fecha_incidencia else '—' }}</td>
-                    <td style="font-size:12.5px;{% if vencida %}color:var(--danger-ink);font-weight:600{% endif %}">
-                        {{ inc.fecha_compromiso.strftime('%d/%m/%Y') if inc.fecha_compromiso else '—' }}
-                        {% if vencida %}<span style="color:var(--danger)">{{ icon('alert-triangle', 13) }}</span>{% endif %}
+                    {# FEAT-2026-09-04: reportada y compromiso en una sola columna.
+                       Con once columnas la tabla se desbordaba y el botón Resolver
+                       quedaba fuera de pantalla. El compromiso solo importa cuando
+                       está por vencer, así que va debajo y en rojo cuando aplica. #}
+                    <td style="font-size:12.5px;white-space:nowrap">
+                        {{ inc.fecha_incidencia.strftime('%d/%m/%Y') if inc.fecha_incidencia else '—' }}
+                        {% if inc.fecha_compromiso %}
+                        <div style="font-size:11px;{% if vencida %}color:var(--danger);font-weight:600{% else %}color:var(--ink-3){% endif %}">
+                            {% if vencida %}{{ icon('alert-triangle', 11) }} {% endif %}vence {{ inc.fecha_compromiso.strftime('%d/%m') }}
+                        </div>
+                        {% endif %}
                     </td>
                     {# FEAT-2026-09-04: si se cobra o no. "Sin definir" se marca en
                        naranja porque es una decisión pendiente, no un estado neutro. #}

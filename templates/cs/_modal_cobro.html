@@ -1,0 +1,85 @@
+{# Modal de cobro de incidencias. Compartido por el registro y la vista
+   por cliente: dos copias del mismo formulario terminarían divergiendo. #}
+{# ── Modal de cobro ────────────────────────────────────────────── #}
+<div id="cobro-overlay" onclick="if(event.target===this)cerrarCobro()"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:600;
+            align-items:flex-start;justify-content:center;padding-top:8vh">
+  <div style="background:var(--bg-card);border-radius:var(--r-md);width:440px;max-width:94vw;
+              max-height:84vh;overflow-y:auto;padding:22px 24px;box-shadow:0 8px 28px rgba(0,0,0,.18)">
+    <h3 style="font-size:16px;font-weight:640;margin:0 0 4px">Cobro de la incidencia</h3>
+    <p class="muted" style="font-size:12px;margin:0 0 16px" id="cobro-folio"></p>
+
+    <form id="cobro-form" method="post" enctype="multipart/form-data">
+      <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:5px">¿Se cobra?</label>
+      <div style="display:flex;gap:6px;margin-bottom:14px">
+        {% for op in ['Sin definir','Se cobra','No se cobra'] %}
+        <label style="flex:1;text-align:center;padding:7px 4px;border:1px solid var(--border);
+                      border-radius:var(--r);font-size:12.5px;cursor:pointer" class="cobro-op">
+          <input type="radio" name="cobrable" value="{{ op }}" onchange="cobroToggle()" style="margin-right:4px">{{ op }}
+        </label>
+        {% endfor %}
+      </div>
+
+      <div id="cobro-si" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div>
+            <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Monto (MXN)</label>
+            <input name="monto_cobro" type="number" step="0.01" min="0" placeholder="0.00"
+                   style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);font-size:13px">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Fecha de factura</label>
+            <input name="factura_fecha" type="date"
+                   style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);font-size:13px">
+          </div>
+        </div>
+        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Número de factura</label>
+        <input name="factura_numero" type="text" placeholder="Ej: A-12345"
+               style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;margin-bottom:10px">
+        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Archivo de la factura</label>
+        <input name="factura" type="file" accept="application/pdf,image/jpeg,image/png"
+               style="width:100%;font-size:12px;margin-bottom:4px">
+        <p class="muted" style="font-size:10.5px;margin:0 0 4px">PDF o imagen, máximo 8 MB. Opcional.</p>
+      </div>
+
+      <div id="cobro-no" style="display:none">
+        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">¿Por qué no se cobra?</label>
+        <textarea name="motivo_no_cobro" rows="3" placeholder="Garantía, cortesía, error nuestro..."
+                  style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);
+                         font-size:13px;resize:vertical"></textarea>
+        <p class="muted" style="font-size:10.5px;margin:4px 0 0">
+          Obligatorio: sin motivo, nadie puede revisar la decisión después.</p>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;
+                  padding-top:14px;border-top:1px solid var(--border)">
+        <button type="button" class="btn" onclick="cerrarCobro()">Cancelar</button>
+        <button type="submit" class="btn primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function abrirCobro(id, actual, folio){
+  const f = document.getElementById('cobro-form');
+  f.action = '/cs/incidencias/' + id + '/cobro';
+  document.getElementById('cobro-folio').textContent = folio ? 'Ticket ' + folio : '';
+  f.querySelectorAll('[name=cobrable]').forEach(r => r.checked = (r.value === actual));
+  cobroToggle();
+  document.getElementById('cobro-overlay').style.display = 'flex';
+}
+function cerrarCobro(){ document.getElementById('cobro-overlay').style.display = 'none'; }
+function cobroToggle(){
+  const v = document.querySelector('[name=cobrable]:checked');
+  const sel = v ? v.value : '';
+  document.getElementById('cobro-si').style.display = (sel === 'Se cobra') ? '' : 'none';
+  document.getElementById('cobro-no').style.display = (sel === 'No se cobra') ? '' : 'none';
+  document.querySelectorAll('.cobro-op').forEach(l => {
+    const marcado = l.querySelector('input').checked;
+    l.style.borderColor = marcado ? 'var(--copper)' : 'var(--border)';
+    l.style.background  = marcado ? 'var(--copper-soft)' : 'transparent';
+  });
+}
+document.addEventListener('keydown', e => { if(e.key === 'Escape') cerrarCobro(); });
+</script>

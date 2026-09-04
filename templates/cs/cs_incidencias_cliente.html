@@ -156,7 +156,8 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
         <table>
             <thead><tr>
                 <th># Ticket</th><th>Propiedad</th><th>UN</th><th>Tipo de incidencia</th>
-                <th>Reportada</th><th>Solución</th><th class="c">Status</th>
+                <th>Reportada</th><th>Solución</th><th class="c">Cobro</th>
+                <th class="c">Status</th><th class="c"></th>
             </tr></thead>
             <tbody>
             {% for i in incidencias %}
@@ -173,9 +174,38 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
                         {{ i.fecha_incidencia.strftime('%d/%m/%Y') if i.fecha_incidencia else '—' }}</td>
                     <td class="muted" style="font-size:12.5px">
                         {{ i.fecha_solucion.strftime('%d/%m/%Y') if i.fecha_solucion else '—' }}</td>
+                    {# FEAT-2026-09-04: se puede actuar desde aquí. Antes esta vista
+                       era de solo lectura y había que ir al registro a resolver o
+                       marcar el cobro, que es donde la gente se perdía. #}
+                    <td class="c" style="white-space:nowrap">
+                        {% set cob = i.cobrable or 'Sin definir' %}
+                        <span class="pill {% if cob == 'Se cobra' %}ok{% elif cob == 'No se cobra' %}info{% else %}warn{% endif %}"
+                              style="cursor:pointer" onclick="abrirCobro('{{ i.id }}', '{{ cob }}', '{{ i.folio or '' }}')">
+                            {{ cob }}</span>
+                        {% if i.monto_cobro %}
+                        <div style="font-size:11px;font-variant-numeric:tabular-nums">${{ '{:,.2f}'.format(i.monto_cobro) }}</div>
+                        {% endif %}
+                        {% if i.factura_url %}
+                        <a href="{{ i.factura_url }}" target="_blank" rel="noopener" style="font-size:10.5px">ver factura</a>
+                        {% endif %}
+                    </td>
                     <td class="c">
                         <span class="pill {% if i.status == 'Resuelta' %}ok{% elif i.status == 'En proceso' %}info{% else %}warn{% endif %}">
                             {{ i.status }}</span>
+                    </td>
+                    <td class="c" style="white-space:nowrap">
+                        {% if i.status != 'Resuelta' %}
+                        {% if i.status == 'Abierta' %}
+                        <form action="/cs/account/{{ cuenta.id }}/incidencias/{{ i.id }}/status" method="POST" style="display:inline">
+                            <input type="hidden" name="status" value="En proceso">
+                            <button type="submit" class="btn" style="height:24px;padding:0 7px;font-size:11px">En proceso</button>
+                        </form>
+                        {% endif %}
+                        <form action="/cs/account/{{ cuenta.id }}/incidencias/{{ i.id }}/status" method="POST" style="display:inline;margin-left:4px">
+                            <input type="hidden" name="status" value="Resuelta">
+                            <button type="submit" class="btn" style="height:24px;padding:0 7px;font-size:11px">Resolver</button>
+                        </form>
+                        {% endif %}
                     </td>
                 </tr>
             {% endfor %}
@@ -185,4 +215,6 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 </div>
 
 {% endif %}
+
+{% include "cs/_modal_cobro.html" %}
 {% endblock %}
