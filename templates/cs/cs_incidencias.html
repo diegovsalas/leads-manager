@@ -1,6 +1,91 @@
 {% extends "cs/cs_base.html" %}
 {% from "cs/_icons.html" import icon %}
-{% block title %}Incidencias — CS Avantex{% endblock %}
+{% block title %}Incidencias — CS Avantex
+{# ── Modal de cobro ────────────────────────────────────────────── #}
+<div id="cobro-overlay" onclick="if(event.target===this)cerrarCobro()"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:600;
+            align-items:flex-start;justify-content:center;padding-top:8vh">
+  <div style="background:var(--bg-card);border-radius:var(--r-md);width:440px;max-width:94vw;
+              max-height:84vh;overflow-y:auto;padding:22px 24px;box-shadow:0 8px 28px rgba(0,0,0,.18)">
+    <h3 style="font-size:16px;font-weight:640;margin:0 0 4px">Cobro de la incidencia</h3>
+    <p class="muted" style="font-size:12px;margin:0 0 16px" id="cobro-folio"></p>
+
+    <form id="cobro-form" method="post" enctype="multipart/form-data">
+      <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:5px">¿Se cobra?</label>
+      <div style="display:flex;gap:6px;margin-bottom:14px">
+        {% for op in ['Sin definir','Se cobra','No se cobra'] %}
+        <label style="flex:1;text-align:center;padding:7px 4px;border:1px solid var(--border);
+                      border-radius:var(--r);font-size:12.5px;cursor:pointer" class="cobro-op">
+          <input type="radio" name="cobrable" value="{{ op }}" onchange="cobroToggle()" style="margin-right:4px">{{ op }}
+        </label>
+        {% endfor %}
+      </div>
+
+      <div id="cobro-si" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div>
+            <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Monto (MXN)</label>
+            <input name="monto_cobro" type="number" step="0.01" min="0" placeholder="0.00"
+                   style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);font-size:13px">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Fecha de factura</label>
+            <input name="factura_fecha" type="date"
+                   style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);font-size:13px">
+          </div>
+        </div>
+        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Número de factura</label>
+        <input name="factura_numero" type="text" placeholder="Ej: A-12345"
+               style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;margin-bottom:10px">
+        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Archivo de la factura</label>
+        <input name="factura" type="file" accept="application/pdf,image/jpeg,image/png"
+               style="width:100%;font-size:12px;margin-bottom:4px">
+        <p class="muted" style="font-size:10.5px;margin:0 0 4px">PDF o imagen, máximo 8 MB. Opcional.</p>
+      </div>
+
+      <div id="cobro-no" style="display:none">
+        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">¿Por qué no se cobra?</label>
+        <textarea name="motivo_no_cobro" rows="3" placeholder="Garantía, cortesía, error nuestro..."
+                  style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);
+                         font-size:13px;resize:vertical"></textarea>
+        <p class="muted" style="font-size:10.5px;margin:4px 0 0">
+          Obligatorio: sin motivo, nadie puede revisar la decisión después.</p>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;
+                  padding-top:14px;border-top:1px solid var(--border)">
+        <button type="button" class="btn" onclick="cerrarCobro()">Cancelar</button>
+        <button type="submit" class="btn primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function abrirCobro(id, actual, folio){
+  const f = document.getElementById('cobro-form');
+  f.action = '/cs/incidencias/' + id + '/cobro';
+  document.getElementById('cobro-folio').textContent = folio ? 'Ticket ' + folio : '';
+  f.querySelectorAll('[name=cobrable]').forEach(r => r.checked = (r.value === actual));
+  cobroToggle();
+  document.getElementById('cobro-overlay').style.display = 'flex';
+}
+function cerrarCobro(){ document.getElementById('cobro-overlay').style.display = 'none'; }
+function cobroToggle(){
+  const v = document.querySelector('[name=cobrable]:checked');
+  const sel = v ? v.value : '';
+  document.getElementById('cobro-si').style.display = (sel === 'Se cobra') ? '' : 'none';
+  document.getElementById('cobro-no').style.display = (sel === 'No se cobra') ? '' : 'none';
+  document.querySelectorAll('.cobro-op').forEach(l => {
+    const marcado = l.querySelector('input').checked;
+    l.style.borderColor = marcado ? 'var(--copper)' : 'var(--border)';
+    l.style.background  = marcado ? 'var(--copper-soft)' : 'transparent';
+  });
+}
+document.addEventListener('keydown', e => { if(e.key === 'Escape') cerrarCobro(); });
+</script>
+
+{% endblock %}
 {% block breadcrumb %}Incidencias{% endblock %}
 
 {% block content %}
@@ -15,6 +100,51 @@
                style="font-size:13px;padding:7px 12px;border:1px solid var(--border);border-radius:var(--r);min-width:220px">
     </div>
 </div>
+
+
+{# FEAT-2026-09-04: filtros por periodo, status y cobro. Sin ellos, revisar
+   un mes concreto obligaba a buscar a mano en toda la lista. #}
+<form method="get" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;
+      background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);
+      padding:12px 14px;margin-bottom:14px">
+    <div>
+        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Desde</label>
+        <input type="date" name="desde" value="{{ f_desde }}"
+               style="font-size:13px;padding:6px 9px;border:1px solid var(--border);border-radius:var(--r)">
+    </div>
+    <div>
+        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Hasta</label>
+        <input type="date" name="hasta" value="{{ f_hasta }}"
+               style="font-size:13px;padding:6px 9px;border:1px solid var(--border);border-radius:var(--r)">
+    </div>
+    <div>
+        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Status</label>
+        <select name="status" style="font-size:13px;padding:6px 9px;border:1px solid var(--border);border-radius:var(--r)">
+            <option value="">Pendientes</option>
+            {% for op in ['Abierta','En proceso','Resuelta'] %}
+            <option value="{{ op }}" {% if f_status == op %}selected{% endif %}>{{ op }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label style="font-size:11px;color:var(--ink-3);display:block;margin-bottom:3px">Cobro</label>
+        <select name="cobro" style="font-size:13px;padding:6px 9px;border:1px solid var(--border);border-radius:var(--r)">
+            <option value="">Todas</option>
+            {% for op in ['Sin definir','Se cobra','No se cobra'] %}
+            <option value="{{ op }}" {% if f_cobro == op %}selected{% endif %}>{{ op }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <button class="btn" type="submit">Filtrar</button>
+    {% if f_desde or f_hasta or f_status or f_cobro %}
+    <a href="/cs/incidencias" class="btn">Limpiar</a>
+    <span style="font-size:12px;color:var(--ink-3);margin-left:auto">
+        {{ incidencias|length }} resultado{{ 's' if incidencias|length != 1 }}</span>
+    {% else %}
+    <span style="font-size:11.5px;color:var(--ink-4);margin-left:auto;max-width:34ch;line-height:1.4">
+        Sin filtro de fecha solo se ven las pendientes. Al acotar un periodo se muestran todas.</span>
+    {% endif %}
+</form>
 
 <div class="grid g-4 mb-4">
     <div class="kpi" style="border-left:3px solid var(--danger)">
@@ -48,6 +178,7 @@
                     <th>Responsable</th>
                     <th>Reportada</th>
                     <th>Compromiso</th>
+                    <th class="c">Cobro</th>
                     <th class="c">Status</th>
                     <th class="c"></th>
                 </tr>
@@ -85,6 +216,23 @@
                     <td style="font-size:12.5px;{% if vencida %}color:var(--danger-ink);font-weight:600{% endif %}">
                         {{ inc.fecha_compromiso.strftime('%d/%m/%Y') if inc.fecha_compromiso else '—' }}
                         {% if vencida %}<span style="color:var(--danger)">{{ icon('alert-triangle', 13) }}</span>{% endif %}
+                    </td>
+                    {# FEAT-2026-09-04: si se cobra o no. "Sin definir" se marca en
+                       naranja porque es una decisión pendiente, no un estado neutro. #}
+                    <td class="c" style="white-space:nowrap">
+                        {% set cob = inc.cobrable or 'Sin definir' %}
+                        <span class="pill {% if cob == 'Se cobra' %}ok{% elif cob == 'No se cobra' %}info{% else %}warn{% endif %}"
+                              style="cursor:pointer" onclick="abrirCobro('{{ inc.id }}', '{{ cob }}', '{{ inc.folio or '' }}')">
+                            {{ cob }}</span>
+                        {% if inc.monto_cobro %}
+                        <div style="font-size:11px;font-variant-numeric:tabular-nums">${{ '{:,.2f}'.format(inc.monto_cobro) }}</div>
+                        {% endif %}
+                        {% if inc.factura_url %}
+                        <a href="{{ inc.factura_url }}" target="_blank" rel="noopener"
+                           style="font-size:10.5px">ver factura</a>
+                        {% elif inc.factura_numero %}
+                        <div class="muted" style="font-size:10.5px">{{ inc.factura_numero }}</div>
+                        {% endif %}
                     </td>
                     <td class="c">
                         <span class="pill {% if inc.status == 'Abierta' %}danger{% elif inc.status == 'En proceso' %}warn{% else %}ok{% endif %}">

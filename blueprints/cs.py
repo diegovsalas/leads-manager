@@ -7,8 +7,11 @@ import csv
 import hashlib
 import io
 import json
+import os
 import secrets
+import uuid
 from datetime import datetime, date, timedelta
+from decimal import Decimal, InvalidOperation
 from functools import wraps
 from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, send_file, flash, current_app
 from sqlalchemy import func
@@ -4246,6 +4249,119 @@ def cambiar_status_incidencia(account_id, inc_id):
 # ══════════════════════════════════════════════
 # INCIDENCIAS — Tablero cross-cuenta (gestión proactiva)
 # ══════════════════════════════════════════════
+_FACTURAS_BUCKET = "incidencia-facturas"
+_FACTURA_MAX_BYTES = 8 * 1024 * 1024
+
+
+def _subir_factura(inc_id, archivo):
+    """Sube el PDF de la factura a Supabase Storage y devuelve su URL.
+
+    Devuelve (url, error). Si falla, error explica por qué: una factura que
+    no se sube sin decir nada es peor que no tener el botón.
+    """
+    if not archivo or not archivo.filename:
+        return None, None
+
+    permitidos = ("application/pdf", "image/jpeg", "image/png")
+    if (archivo.mimetype or "") not in permitidos:
+        return None, "La factura debe ser PDF o imagen (JPG/PNG)."
+
+    datos = archivo.read()
+    if not datos:
+        return None, "El archivo llegó vacío."
+    if len(datos) > _FACTURA_MAX_BYTES:
+        return None, f"El archivo pesa más de {_FACTURA_MAX_BYTES // (1024*1024)} MB."
+
+    try:
+        from supabase import create_client
+        url_base = os.getenv("SUPABASE_URL", "")
+        key = os.getenv("SUPABASE_SERVICE_KEY", "")
+        if not url_base or not key:
+            return None, "El almacenamiento de archivos no está configurado."
+        storage = create_client(url_base, key).storage
+        try:
+            storage.get_bucket(_FACTURAS_BUCKET)
+        except Exception:
+            storage.create_bucket(_FACTURAS_BUCKET, options={"public": True})
+        bucket = storage.from_(_FACTURAS_BUCKET)
+        from werkzeug.utils import secure_filename
+        ruta = f"{inc_id}/{uuid.uuid4().hex}_{secure_filename(archivo.filename)}"
+        bucket.upload(ruta, datos, file_options={"content-type": archivo.mimetype})
+        return bucket.get_public_url(ruta), None
+    except Exception as e:
+        current_app.logger.warning("[incidencias] no se pudo subir la factura: %s", e)
+        return None, "No se pudo subir el archivo. Intenta de nuevo."
+
+
+@cs_bp.route("/incidencias/<uuid:inc_id>/cobro", methods=["POST"])
+@require_cs_admin
+def registrar_cobro_incidencia(inc_id):
+    """Marca si la incidencia se cobra y adjunta la factura.
+
+    FEAT-2026-09-04: hasta ahora una incidencia se resolvía y ahí terminaba,
+    sin registro de si generó cobro. Eso se llevaba fuera del sistema.
+    """
+    inc = db.session.get(CSIncidencia, inc_id)
+    if not inc:
+        return jsonify({"error": "Incidencia no encontrada"}), 404
+
+    volver = request.referrer or "/cs/incidencias"
+
+    cobrable = (request.form.get("cobrable") or "").strip()
+    if cobrable and cobrable not in ("Sin definir", "Se cobra", "No se cobra"):
+        flash("Estado de cobro inválido.", "error")
+        return redirect(volver)
+    if cobrable:
+        inc.cobrable = cobrable
+
+    if inc.cobrable == "No se cobra":
+        # Un "no se cobra" sin razón es una decisión que nadie puede auditar
+        # después. Se pide el motivo y se limpia lo que ya no aplica.
+        motivo = (request.form.get("motivo_no_cobro") or "").strip()
+        if not motivo:
+            flash("Di por qué no se cobra: sin motivo, nadie puede revisar la decisión después.", "error")
+            return redirect(volver)
+        inc.motivo_no_cobro = motivo
+        inc.monto_cobro = None
+
+    if inc.cobrable == "Se cobra":
+        inc.motivo_no_cobro = ""
+        monto = (request.form.get("monto_cobro") or "").strip()
+        if monto:
+            try:
+                inc.monto_cobro = Decimal(monto.replace(",", ""))
+            except (InvalidOperation, ValueError):
+                flash("El monto no es un número válido.", "error")
+                return redirect(volver)
+
+        inc.factura_numero = (request.form.get("factura_numero") or "").strip()
+        f = (request.form.get("factura_fecha") or "").strip()
+        if f:
+            try:
+                inc.factura_fecha = datetime.strptime(f, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+
+        url, err = _subir_factura(inc_id, request.files.get("factura"))
+        if err:
+            flash(err, "error")
+            return redirect(volver)
+        if url:
+            inc.factura_url = url
+
+    db.session.commit()
+    try:
+        from actividad import log_actividad
+        log_actividad("editar", "incidencia", str(inc_id),
+                      f"Cobro {inc.folio or ''}: {inc.cobrable}"
+                      + (f" · ${float(inc.monto_cobro):,.2f}" if inc.monto_cobro else ""))
+    except Exception as e:
+        current_app.logger.warning(f"[incidencias] actividad no registrada: {e}")
+
+    flash(f"Cobro actualizado: {inc.cobrable}", "ok")
+    return redirect(volver)
+
+
 @cs_bp.route("/incidencias/<uuid:inc_id>/reclasificar", methods=["POST"])
 @require_cs_admin
 def reclasificar_incidencia(inc_id):
@@ -4292,15 +4408,50 @@ def reclasificar_incidencia(inc_id):
 @cs_bp.route("/incidencias")
 @require_cs_analisis
 def incidencias_view():
-    """Todas las incidencias abiertas/en proceso de TODAS las cuentas,
-    para gestión proactiva (a diferencia de /cs/mis-pendientes, que solo
-    muestra las de las cuentas del KAM logueado)."""
+    """Todas las incidencias de TODAS las cuentas, para gestión proactiva
+    (a diferencia de /cs/mis-pendientes, que solo muestra las del KAM).
+
+    FEAT-2026-09-04: filtros por fecha, status y cobro. Antes solo mostraba
+    las abiertas, sin forma de acotar el periodo: para revisar un mes había
+    que buscar a mano.
+    """
+    desde = (request.args.get("desde") or "").strip()
+    hasta = (request.args.get("hasta") or "").strip()
+    f_status = (request.args.get("status") or "").strip()
+    f_cobro = (request.args.get("cobro") or "").strip()
+
+    q = (CSIncidencia.query
+         .join(CSAccount, CSIncidencia.account_id == CSAccount.id))
+
+    # Por omisión se ven las pendientes, que es para lo que sirve la pantalla.
+    # En cuanto se filtra por fecha se muestran todas: quien acota un periodo
+    # quiere ver lo que pasó, no solo lo que sigue abierto.
+    if f_status in ("Abierta", "En proceso", "Resuelta"):
+        q = q.filter(CSIncidencia.status == f_status)
+    elif not (desde or hasta):
+        q = q.filter(CSIncidencia.status != "Resuelta")
+
+    for valor, comparador in ((desde, "desde"), (hasta, "hasta")):
+        if not valor:
+            continue
+        try:
+            d = datetime.strptime(valor, "%Y-%m-%d").date()
+            q = q.filter(CSIncidencia.fecha_incidencia >= d) if comparador == "desde" \
+                else q.filter(CSIncidencia.fecha_incidencia <= d)
+        except ValueError:
+            pass
+
+    if f_cobro in ("Sin definir", "Se cobra", "No se cobra"):
+        if f_cobro == "Sin definir":
+            # Los registros viejos tienen NULL, no el texto: cuentan igual.
+            q = q.filter((CSIncidencia.cobrable == "Sin definir")
+                         | (CSIncidencia.cobrable.is_(None)))
+        else:
+            q = q.filter(CSIncidencia.cobrable == f_cobro)
+
     abiertas = _con_evidencia_urls(
-        CSIncidencia.query
-        .join(CSAccount, CSIncidencia.account_id == CSAccount.id)
-        .filter(CSIncidencia.status != "Resuelta")
-        .order_by(CSIncidencia.fecha_compromiso.asc().nullslast(), CSIncidencia.created_at.desc())
-        .all()
+        q.order_by(CSIncidencia.fecha_compromiso.asc().nullslast(),
+                   CSIncidencia.created_at.desc()).all()
     )
     accounts_by_id = {str(a.id): a for a in CSAccount.query.filter(
         CSAccount.id.in_([i.account_id for i in abiertas])
@@ -4326,6 +4477,7 @@ def incidencias_view():
         "cs_incidencias.html",
         incidencias=abiertas, accounts_by_id=accounts_by_id,
         stats=stats, hoy=hoy,
+        f_desde=desde, f_hasta=hasta, f_status=f_status, f_cobro=f_cobro,
         **_ctx(),
     )
 

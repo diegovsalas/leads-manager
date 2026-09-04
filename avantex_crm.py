@@ -330,6 +330,28 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] leads.telefono nullable failed: %s", e)
 
+        # ─── cs_incidencias: campos de cobro (FEAT-2026-09-04) ───
+        try:
+            with db.engine.begin() as conn:
+                cols = {
+                    "cobrable": "VARCHAR(20) DEFAULT 'Sin definir'",
+                    "monto_cobro": "NUMERIC(14,2)",
+                    "motivo_no_cobro": "TEXT DEFAULT ''",
+                    "factura_numero": "VARCHAR(60) DEFAULT ''",
+                    "factura_fecha": "DATE",
+                    "factura_url": "TEXT DEFAULT ''",
+                }
+                for col, tipo in cols.items():
+                    existe = conn.execute(text("""
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'cs_incidencias' AND column_name = :c
+                    """), {"c": col}).first()
+                    if not existe:
+                        app.logger.info("[auto-migrate] adding cs_incidencias.%s...", col)
+                        conn.execute(text(f"ALTER TABLE cs_incidencias ADD COLUMN {col} {tipo}"))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] cs_incidencias cobro failed: %s", e)
+
         # ─── comision_tasas.es_multi_un (FEAT-2026-08-26) ───
         # Las tablas comision_politica y comision_cortes las crea create_all;
         # una columna nueva sobre una tabla que ya existe, no.

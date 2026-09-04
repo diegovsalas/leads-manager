@@ -1067,6 +1067,20 @@ class CSIncidencia(db.Model):
     comentarios_operaciones = db.Column(db.Text, default="")
     evidencia = db.Column(db.Text, default="")
     tiempo_respuesta = db.Column(db.Integer, nullable=True)
+
+    # FEAT-2026-09-04: cobro de la incidencia.
+    #
+    # cobrable es de tres estados a propósito, no un booleano: "sin definir"
+    # no es lo mismo que "no se cobra". Lo primero es una decisión pendiente
+    # que alguien debe tomar; lo segundo es una decisión ya tomada. Con un
+    # booleano las dos se verían igual y las pendientes desaparecerían.
+    cobrable = db.Column(db.String(20), default="Sin definir")   # Sin definir | Se cobra | No se cobra
+    monto_cobro = db.Column(db.Numeric(14, 2), nullable=True)
+    motivo_no_cobro = db.Column(db.Text, default="")
+    factura_numero = db.Column(db.String(60), default="")
+    factura_fecha = db.Column(db.Date, nullable=True)
+    factura_url = db.Column(db.Text, default="")                 # PDF en Supabase Storage
+
     created_by = db.Column(db.String(200), default="")
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
 
