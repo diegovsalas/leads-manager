@@ -66,6 +66,18 @@ def requiere_evidencia(unidad) -> bool:
     return False
 
 
+def _local_dir():
+    """Carpeta de subidas en disco, SOLO para desarrollo local.
+
+    Se activa poniendo CRM_STORAGE_LOCAL_DIR. Producción nunca la define, así
+    que ahí este camino no existe. Sin esto no hay forma de probar el cierre
+    con respaldo en una máquina sin credenciales de Supabase: el gate
+    rebotaría siempre con "almacenamiento no configurado" y el camino feliz
+    quedaría sin verificar hasta llegar a producción.
+    """
+    return (os.getenv("CRM_STORAGE_LOCAL_DIR") or "").strip() or None
+
+
 def _get_storage():
     """Cliente de Supabase Storage, o None si no está configurado."""
     url = os.getenv("SUPABASE_URL")
@@ -102,6 +114,21 @@ def _subir(storage, owner_kind, owner_id, archivo):
         return None, f"«{archivo.filename}» pesa más de {MAX_BYTES // (1024 * 1024)} MB."
 
     ruta = f"{owner_kind}/{owner_id}/{uuid.uuid4().hex}_{secure_filename(archivo.filename)}"
+
+    destino_local = _local_dir()
+    if destino_local:
+        import pathlib
+        try:
+            full = pathlib.Path(destino_local) / ruta
+            full.parent.mkdir(parents=True, exist_ok=True)
+            full.write_bytes(datos)
+            current_app.logger.warning(
+                "[cierre-evidencia] MODO LOCAL: %s guardado en disco, no en Supabase", ruta)
+            return f"/static/dev_evidencias/{ruta}", None
+        except Exception as e:
+            current_app.logger.warning("[cierre-evidencia] fallo al escribir %s: %s", ruta, e)
+            return None, f"No se pudo guardar «{archivo.filename}» en disco."
+
     try:
         bucket = storage.from_(BUCKET)
         bucket.upload(ruta, datos, file_options={"content-type": archivo.mimetype})
@@ -141,9 +168,10 @@ def guardar(owner_kind, owner_id, tipos, files, subido_por=None):
         return [], "Falta el archivo de: " + ", ".join(faltantes) + "."
 
     storage = _get_storage()
-    if not storage:
+    if not storage and not _local_dir():
         return [], "El almacenamiento de archivos no está configurado."
-    _asegura_bucket(storage)
+    if storage:
+        _asegura_bucket(storage)
 
     # El modal siempre manda el set COMPLETO de respaldos, así que esto
     # reemplaza en vez de acumular. Si acumulara, un cierre que falla y se

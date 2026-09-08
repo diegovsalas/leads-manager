@@ -51,3 +51,9 @@ exports/
 
 # Claude Code — configuración local de la herramienta
 .claude/
+
+# Entorno local de pruebas (apunta a Postgres local, no a Supabase)
+.env.local
+
+# Evidencias de cierre guardadas en disco por el entorno local
+static/dev_evidencias/
