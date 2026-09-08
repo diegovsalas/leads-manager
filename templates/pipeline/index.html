@@ -2336,10 +2336,11 @@ fbq('track','PageView');
   <div class="modal">
     <div class="modal-title" style="color:var(--green);">🎉 Cerrar como Ganado</div>
     <input type="hidden" id="mg-lead-id" value=""/>
-    <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">
-      Registra los datos del cierre. Si aún no tienes la factura, puedes cerrar igual y completar después
-      desde el panel del lead.
-    </div>
+    <!-- FEAT-2026-09-08: qué se está cerrando. Sin esto el modal es genérico
+         y el vendedor no puede saber si el bloque de respaldo falta porque su
+         venta no lo exige o porque el lead trae mal la unidad de negocio. -->
+    <div id="mg-contexto" style="display:none;border-left:3px solid var(--copper);padding:6px 10px;margin-bottom:10px;background:var(--bg-sidebar);border-radius:0 5px 5px 0;"></div>
+    <div id="mg-intro" style="font-size:12px;color:var(--text2);margin-bottom:12px;"></div>
     <!-- FEAT-2026-06-25: tipo_venta obligatorio para que cuente en la meta correcta -->
     <div class="form-group" id="mg-tipo-venta-group">
       <label class="form-label">Tipo de venta <span style="color:var(--red);">*</span></label>
@@ -2363,6 +2364,9 @@ fbq('track','PageView');
         respaldos y sube el archivo de cada uno.
       </div>
       <div id="mg-evidencia-tipos" style="display:flex;flex-direction:column;gap:6px;"></div>
+      <div style="font-size:10px;color:var(--text3);margin-top:6px;">
+        PDF, imagen o archivo de Office. Hasta 10 MB cada uno.
+      </div>
       <div id="mg-evidencia-msg" style="font-size:10px;color:var(--red);margin-top:6px;"></div>
     </div>
 
@@ -2424,6 +2428,7 @@ fbq('track','PageView');
   <div class="modal">
     <div class="modal-title">Respaldo de la venta</div>
     <input type="hidden" id="oe-opp-id" value=""/>
+    <div id="oe-contexto" style="display:none;border-left:3px solid var(--copper);padding:6px 10px;margin-bottom:10px;background:var(--bg-sidebar);border-radius:0 5px 5px 0;"></div>
     <div style="font-size:12px;color:var(--text2);margin-bottom:10px;" id="oe-motivo"></div>
     <div id="oe-tipos" style="display:flex;flex-direction:column;gap:6px;"></div>
     <div id="oe-msg" style="font-size:10px;color:var(--red);margin-top:6px;"></div>
@@ -6186,9 +6191,24 @@ let _oeEtapaPendiente='Cerrado Ganado';
 
 function closeOppEvid(){document.getElementById('modal-opp-evid').classList.remove('open');loadOpps();}
 
-function openOppEvid(oppId,motivo){
+async function openOppEvid(oppId,motivo){
   document.getElementById('oe-opp-id').value=oppId;
   document.getElementById('oe-motivo').textContent=motivo||'';
+  // Mismo motivo que en el modal de leads: sin saber que trato es, el
+  // vendedor no puede confirmar que esta cerrando lo que cree.
+  const ctx=document.getElementById('oe-contexto');
+  ctx.style.display='none'; ctx.innerHTML='';
+  try{
+    const r=await fetch(`/api/oportunidades/${oppId}`);
+    if(r.ok){
+      const o=await r.json();
+      const partes=[o.empresa,o.sitio].filter(Boolean).join(' · ');
+      ctx.innerHTML=`<div style="font-size:12px;font-weight:600;color:var(--text);">${o.nombre||''}</div>`
+        + (partes?`<div style="font-size:10px;color:var(--text2);margin-top:2px;">${partes}</div>`:'')
+        + (o.marca_interes?`<div style="margin-top:3px;"><span style="display:inline-block;border:1px solid var(--copper);color:var(--copper);border-radius:10px;padding:0 7px;font-size:10px;">${o.marca_interes}</span></div>`:'');
+      ctx.style.display='block';
+    }
+  }catch{ /* el contexto es ayuda, no requisito: si falla se sigue */ }
   document.getElementById('oe-msg').textContent='';
   document.getElementById('oe-tipos').innerHTML=
     Object.entries(MG_EVID_TIPOS).map(([k,label])=>`
@@ -6285,10 +6305,48 @@ function _mgEvidToggle(chk){
   if(!chk.checked) f.value='';
 }
 
+function _mgMarcasDe(lead){
+  if(!lead) return [];
+  if(lead.marcas_interes&&lead.marcas_interes.length) return lead.marcas_interes;
+  return lead.marca_interes?[lead.marca_interes]:[];
+}
+
+// Que se vea SIEMPRE que se esta cerrando y con que unidad de negocio.
+// Un lead sin UN se marca en rojo: es la captura que hace que el respaldo
+// de Pestex no se pida, y hasta ahora no habia forma de notarlo.
+function _mgSetContexto(lead){
+  const el=document.getElementById('mg-contexto');
+  if(!lead){ el.style.display='none'; el.innerHTML=''; return; }
+  const marcas=_mgMarcasDe(lead);
+  const chips=marcas.length
+    ? marcas.map(m=>{
+        const esPestex=(m||'').toLowerCase().includes('pestex');
+        const color=esPestex?'var(--copper)':'var(--text2)';
+        return `<span style="display:inline-block;border:1px solid ${color};color:${color};border-radius:10px;padding:0 7px;font-size:10px;margin-right:4px;">${m}</span>`;
+      }).join('')
+    : '<span style="color:var(--red);font-size:10px;">⚠ sin unidad de negocio — corrígela antes de cerrar</span>';
+  el.innerHTML=`<div style="font-size:12px;font-weight:600;color:var(--text);">${lead.nombre||'(sin nombre)'}</div>`
+             + `<div style="margin-top:3px;">${chips}</div>`;
+  el.style.display='block';
+}
+
 function _mgSetEvidencia(lead){
   _mgEvidReq=_mgEvidAplica(lead);
   document.getElementById('mg-evidencia-group').style.display=_mgEvidReq?'block':'none';
   if(_mgEvidReq) _mgRenderEvidencia();
+
+  _mgSetContexto(lead);
+
+  // El texto de arriba se contradecia con el gate: prometia "puedes cerrar
+  // igual y completar despues" en ventas donde ya no se puede.
+  const intro=document.getElementById('mg-intro');
+  if(intro){
+    intro.innerHTML=_mgEvidReq
+      ? 'Esta venta es de <b>Pestex</b> y se factura con crédito, así que todavía no hay CFDI. '
+        + 'Para cerrarla necesitas adjuntar el respaldo de abajo. El número de factura se captura después.'
+      : 'Registra los datos del cierre. Si aún no tienes la factura, puedes cerrar igual y '
+        + 'completar después desde el panel del lead.';
+  }
 }
 
 // Sube el respaldo ANTES de cerrar: si el cierre falla por otra razon, la
@@ -6466,6 +6524,7 @@ async function abrirEditarFactura(){
       document.getElementById('mg-numero').value = lead.factura_numero || '';
       document.getElementById('mg-fecha').value = lead.factura_fecha ? lead.factura_fecha.slice(0,10) : new Date().toISOString().split('T')[0];
       document.getElementById('mg-notas').value = lead.factura_notas || '';
+      _mgSetContexto(lead);   // que se vea de que lead es la factura
       // Prellenar tipo_venta si ya estaba seteado en el lead
       if(lead.tipo_venta) _mgSelectTipo(lead.tipo_venta);
     }
