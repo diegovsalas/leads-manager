@@ -86,6 +86,60 @@ def _unit_from_marca(marca):
     return low[:40]
 
 
+def _account_ids_con_venta():
+    """Cuentas que ya cerraron al menos una venta activa.
+
+    Es la definición operativa de «cliente existente», y por lo tanto de
+    upsell: venderle algo más a quien ya nos compra.
+
+    NO se usa Account.is_cliente. Esa bandera solo se prende cuando cierra
+    una OPORTUNIDAD, nunca cuando cierra un lead — y como todo el flujo
+    comercial corre sobre leads, está prácticamente vacía. Filtrar por ella
+    dejaría el tablero en blanco. La venta cerrada sí es un hecho, venga por
+    donde venga.
+    """
+    ids = set()
+    por_opp = (
+        db.session.query(Oportunidad.account_id)
+        .join(Sale, Sale.opportunity_id == Oportunidad.id)
+        .filter(Oportunidad.account_id.isnot(None), Sale.status == "activa")
+        .distinct()
+    )
+    por_lead = (
+        db.session.query(Lead.account_id)
+        .join(Sale, Sale.lead_id == Lead.id)
+        .filter(Lead.account_id.isnot(None), Sale.status == "activa")
+        .distinct()
+    )
+    for consulta in (por_opp, por_lead):
+        ids.update(aid for (aid,) in consulta if aid)
+    return ids
+
+
+def _apply_upsell_scope(query):
+    """?solo_upsell=1 → solo tratos sobre cuentas que ya compraron.
+
+    Con el conjunto vacío el filtro deja el tablero en blanco, que es lo
+    correcto: significa que todavía no hay clientes a quienes expandir.
+    """
+    if not _truthy(request.args.get("solo_upsell")):
+        return query
+    return query.filter(Oportunidad.account_id.in_(_account_ids_con_venta()))
+
+
+def _apply_owner_scope(query):
+    """Un vendedor ve sus upsells; dirección ve todos.
+
+    Quien detecta la expansión es quien atiende la cuenta, así que el
+    tablero tiene que servirle a él y no solo a gerencia.
+    """
+    from blueprints.auth import get_vendedor_filter
+    uid = get_vendedor_filter()
+    if not uid:
+        return query
+    return query.filter(Oportunidad.propietario_id == uid)
+
+
 def _apply_role_un_scope(query):
     """Aplica alcance de UN del rol logueado a oportunidades."""
     from blueprints.auth import effective_un_from_request
@@ -264,6 +318,8 @@ def list_oportunidades():
         q = q.filter(Oportunidad.marca_interes == marca)
     if propietario:
         q = q.filter(Oportunidad.propietario_id == propietario)
+    q = _apply_owner_scope(q)
+    q = _apply_upsell_scope(q)
     if search:
         like = f"%{search}%"
         q = q.filter(or_(
@@ -285,6 +341,41 @@ def get_oportunidad(opp_id):
     return jsonify(op.to_dict())
 
 
+@oportunidades_bp.route("/cuentas-upsell", methods=["GET"])
+def cuentas_upsell():
+    """Cuentas que ya compraron, para el buscador del modal de upsell.
+
+    Existe aparte de /api/accounts/search porque ese devuelve prospectos
+    también: si el vendedor eligiera uno, el trato se crearía y no
+    aparecería en el tablero —queda filtrado por no ser cliente— sin que
+    nada le explique por qué. Mejor no ofrecérselos.
+    """
+    term = (request.args.get("q") or "").strip()
+    if len(term) < 3:
+        return jsonify([])
+    ids = _account_ids_con_venta()
+    if not ids:
+        return jsonify([])
+    like = f"%{term}%"
+    rows = (
+        Account.query
+        .filter(
+            Account.id.in_(ids),
+            or_(Account.nombre.ilike(like),
+                Account.nombre_comercial.ilike(like),
+                Account.rfc.ilike(like),
+                Account.client_id.ilike(like)),
+        )
+        .order_by(Account.nombre)
+        .limit(20)
+        .all()
+    )
+    return jsonify([{
+        "id": str(a.id), "nombre": a.nombre,
+        "client_id": a.client_id or "", "rfc": a.rfc or "",
+    } for a in rows])
+
+
 # ── Kanban view: agrupado por etapa ───────────────────────────────
 
 
@@ -300,6 +391,8 @@ def kanban():
     if propietario:
         q = q.filter(Oportunidad.propietario_id == propietario)
     q = _apply_role_un_scope(q)
+    q = _apply_owner_scope(q)
+    q = _apply_upsell_scope(q)
     rows = q.order_by(Oportunidad.fecha_actualizacion.desc()).all()
 
     grouped = {}
