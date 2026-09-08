@@ -2335,6 +2335,76 @@ class Sale(db.Model):
         }
 
 
+class CierreEvidencia(db.Model):
+    """FEAT-2026-09-08: prueba de que la venta existe, capturada al cerrar.
+
+    Pestex no factura a mes corriente: mucho se vende con crédito a 30 días,
+    así que al momento del cierre todavía no hay factura ni folio. El modal
+    de cierre permitía cerrar igual ("puedes completar después"), lo que
+    dejaba ventas ganadas sin ningún respaldo hasta que llegara el CFDI —
+    o para siempre, si nunca llegaba.
+
+    Esto no reemplaza a la factura: la sustituye COMO PRUEBA en el momento
+    del cierre. El vendedor declara con qué confirma la venta (1 o 2 tipos)
+    y sube el archivo de cada uno. Una fila por archivo.
+
+    Cuelga de un lead o de una oportunidad, nunca de los dos: son las dos
+    puertas por las que se llega a Cerrado Ganado.
+    """
+    __tablename__ = "cierre_evidencias"
+
+    # Los cinco respaldos que dirección acepta como prueba de venta.
+    TIPOS = {
+        "orden_compra":        "Orden de compra",
+        "contrato":            "Contrato",
+        "correo_confirmacion": "Correo de confirmación",
+        "whatsapp":            "Captura de WhatsApp",
+        "cita_operandium":     "Cita en Operandium / iGeo",
+    }
+    MAX_TIPOS = 2
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    lead_id = db.Column(UUID(as_uuid=True), db.ForeignKey("leads.id", ondelete="CASCADE"),
+                        nullable=True, index=True)
+    oportunidad_id = db.Column(UUID(as_uuid=True), db.ForeignKey("oportunidades.id", ondelete="CASCADE"),
+                               nullable=True, index=True)
+    tipo = db.Column(db.String(40), nullable=False)
+    archivo_url = db.Column(db.Text, nullable=False)
+    archivo_nombre = db.Column(db.String(300), default="")
+    subido_por = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    __table_args__ = (
+        # Exactamente un dueño. Sin esto una evidencia huérfana (o colgada de
+        # los dos) pasaría desapercibida y rompería el conteo de la validación.
+        db.CheckConstraint(
+            "(lead_id IS NOT NULL)::int + (oportunidad_id IS NOT NULL)::int = 1",
+            name="cierre_evidencias_un_solo_dueno",
+        ),
+        db.CheckConstraint(
+            "tipo IN ('orden_compra','contrato','correo_confirmacion',"
+            "'whatsapp','cita_operandium')",
+            name="cierre_evidencias_tipo_check",
+        ),
+    )
+
+    @property
+    def tipo_label(self):
+        return self.TIPOS.get(self.tipo, self.tipo)
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "lead_id": str(self.lead_id) if self.lead_id else None,
+            "oportunidad_id": str(self.oportunidad_id) if self.oportunidad_id else None,
+            "tipo": self.tipo,
+            "tipo_label": self.tipo_label,
+            "archivo_url": self.archivo_url,
+            "archivo_nombre": self.archivo_nombre,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class Client(db.Model):
     """Cliente post-venta. Se crea cuando una Sale cierra. Tracks NPS y churn."""
     __tablename__ = "clients"
@@ -2572,6 +2642,15 @@ class Oportunidad(db.Model):
     marca_interes = db.Column(db.String(80), nullable=True, index=True)  # Aromatex/Pestex/Weldex
     estado_cliente = db.Column(db.String(100), nullable=True)
     num_sucursales = db.Column(db.Integer, nullable=True)
+    # FEAT-2026-09-08: sucursal/plaza concreta del trato.
+    #
+    # Un cliente como Quick Learning se vende sucursal por sucursal: N deals
+    # abiertos, misma empresa, misma UN. Antes la sucursal solo vivía dentro
+    # del texto libre de `nombre`, así que el guardia de duplicados no podía
+    # distinguir Satélite de Polanco y rebotaba con 409 a partir del segundo.
+    # Con el sitio como columna, la clave del duplicado pasa a ser
+    # (empresa, UN, sitio) y `allow_duplicate` deja de ser el hábito diario.
+    sitio = db.Column(db.String(200), nullable=True, index=True)
     monthly_amount = db.Column(db.Numeric(14, 2), nullable=True)  # si es subscription
     sale_type = db.Column(db.String(40), nullable=True)  # suscripcion_nueva/servicio_unico/upsell
     notas = db.Column(db.Text, nullable=True)
@@ -2620,6 +2699,7 @@ class Oportunidad(db.Model):
             "marca_interes": self.marca_interes,
             "estado_cliente": self.estado_cliente,
             "num_sucursales": self.num_sucursales,
+            "sitio": self.sitio,
             "monthly_amount": float(self.monthly_amount) if self.monthly_amount else None,
             "sale_type": self.sale_type,
             "notas": self.notas,

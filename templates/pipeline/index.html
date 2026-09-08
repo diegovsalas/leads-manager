@@ -2352,6 +2352,20 @@ fbq('track','PageView');
         Define en qué meta del mes contará este cierre. Obligatorio.
       </div>
     </div>
+
+    <!-- FEAT-2026-09-08: respaldo de la venta. Pestex factura con crédito a
+         30 días, así que al cerrar todavía no hay factura que adjuntar. El
+         vendedor declara con qué confirma la venta y sube el archivo. -->
+    <div class="form-group" id="mg-evidencia-group" style="display:none;border:1px solid var(--border);border-radius:6px;padding:10px;">
+      <label class="form-label">Respaldo de la venta <span style="color:var(--red);">*</span></label>
+      <div style="font-size:10px;color:var(--text3);margin:-2px 0 8px;">
+        Esta venta se factura con crédito, así que aún no hay CFDI. Marca 1 o 2
+        respaldos y sube el archivo de cada uno.
+      </div>
+      <div id="mg-evidencia-tipos" style="display:flex;flex-direction:column;gap:6px;"></div>
+      <div id="mg-evidencia-msg" style="font-size:10px;color:var(--red);margin-top:6px;"></div>
+    </div>
+
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Monto del cierre (MXN)</label>
@@ -2399,6 +2413,23 @@ fbq('track','PageView');
     <div class="modal-actions">
       <button class="btn" onclick="closeGanadoModal()">Cancelar</button>
       <button class="btn" style="background:#16a34a;color:#fff;font-weight:500;padding:6px 12px;" onclick="confirmarGanado()">Confirmar cierre ganado</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: respaldo de venta al cerrar una OPORTUNIDAD (FEAT-2026-09-08).
+     El kanban de oportunidades cierra con drag&drop y no tenia ninguna
+     ventana de cierre; esta aparece solo cuando el backend responde 422. -->
+<div class="modal-overlay" id="modal-opp-evid" onclick="if(event.target===this)closeOppEvid()">
+  <div class="modal">
+    <div class="modal-title">Respaldo de la venta</div>
+    <input type="hidden" id="oe-opp-id" value=""/>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px;" id="oe-motivo"></div>
+    <div id="oe-tipos" style="display:flex;flex-direction:column;gap:6px;"></div>
+    <div id="oe-msg" style="font-size:10px;color:var(--red);margin-top:6px;"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeOppEvid()">Cancelar</button>
+      <button class="btn" style="background:#16a34a;color:#fff;font-weight:500;padding:6px 12px;" onclick="confirmarOppEvid()">Adjuntar y cerrar</button>
     </div>
   </div>
 </div>
@@ -4286,8 +4317,7 @@ async function loadOpps(){
       const oppId=e.dataTransfer.getData('text/opp-id');
       const targetEtapa=items.dataset.etapa;
       if(!oppId)return;
-      try{await fetch(`/api/oportunidades/${oppId}/mover`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({etapa:targetEtapa})});loadOpps();}
-      catch(err){alert('Error: '+err.message);}
+      await moverOpp(oppId,targetEtapa);
     };
 
     for(const op of(col.items||[])){
@@ -4298,6 +4328,7 @@ async function loadOpps(){
       card.innerHTML=`
         <div style="font-weight:600;color:var(--text);line-height:1.3;">${op.nombre}</div>
         ${op.empresa?`<div style="color:var(--text2);font-size:11px;margin-top:2px;">${op.empresa}</div>`:''}
+        ${op.sitio?`<div style="color:var(--text3);font-size:10px;margin-top:1px;">📍 ${op.sitio}</div>`:''}
         <div style="display:flex;justify-content:space-between;margin-top:6px;">
           <div style="font-weight:600;color:${color};">${_fmtMxn(op.valor)}</div>
           <div style="font-size:10px;color:var(--text3);">${op.probabilidad}% · ${_fmtMxn(op.valor_ponderado)}</div>
@@ -6129,6 +6160,158 @@ async function confirmarPerdido(){
 // ─── Cerrado Ganado: modal de factura ───
 function closeGanadoModal(){document.getElementById('modal-ganado').classList.remove('open');}
 
+// ── Cierre de OPORTUNIDAD con respaldo (FEAT-2026-09-08) ────────────
+// El drag&drop era fire-and-forget: no miraba la respuesta, asi que un
+// rechazo del backend se veia como exito hasta que loadOpps() regresaba la
+// tarjeta a su columna sin explicar nada.
+async function moverOpp(oppId,etapa){
+  try{
+    const r=await fetch(`/api/oportunidades/${oppId}/mover`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({etapa})});
+    if(r.status===422){
+      const d=await r.json().catch(()=>({}));
+      if(d.requiere_evidencia){ _oeEtapaPendiente=etapa; openOppEvid(oppId,d.error); return false; }
+    }
+    if(!r.ok){
+      const d=await r.json().catch(()=>({}));
+      showToast('No se movio', d.error||'Error al mover la oportunidad');
+      loadOpps(); return false;
+    }
+    loadOpps(); return true;
+  }catch(err){ showToast('Error',err.message); loadOpps(); return false; }
+}
+
+let _oeEtapaPendiente='Cerrado Ganado';
+
+function closeOppEvid(){document.getElementById('modal-opp-evid').classList.remove('open');loadOpps();}
+
+function openOppEvid(oppId,motivo){
+  document.getElementById('oe-opp-id').value=oppId;
+  document.getElementById('oe-motivo').textContent=motivo||'';
+  document.getElementById('oe-msg').textContent='';
+  document.getElementById('oe-tipos').innerHTML=
+    Object.entries(MG_EVID_TIPOS).map(([k,label])=>`
+      <div style="border:1px solid var(--border);border-radius:5px;padding:6px 8px;">
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;">
+          <input type="checkbox" class="oe-chk" value="${k}" onchange="_oeToggle(this)"/>
+          <span>${label}</span>
+        </label>
+        <input type="file" id="oe-file-${k}" multiple
+               style="display:none;margin-top:6px;font-size:11px;width:100%;"
+               accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.doc,.docx,.xls,.xlsx"/>
+      </div>`).join('');
+  document.getElementById('modal-opp-evid').classList.add('open');
+}
+
+function _oeToggle(chk){
+  const msg=document.getElementById('oe-msg');
+  if([...document.querySelectorAll('.oe-chk:checked')].length>MG_EVID_MAX){
+    chk.checked=false; msg.textContent='Maximo '+MG_EVID_MAX+' respaldos por cierre.'; return;
+  }
+  msg.textContent='';
+  const f=document.getElementById('oe-file-'+chk.value);
+  f.style.display=chk.checked?'block':'none';
+  if(!chk.checked) f.value='';
+}
+
+async function confirmarOppEvid(){
+  const oppId=document.getElementById('oe-opp-id').value;
+  const msg=document.getElementById('oe-msg');
+  const marcados=[...document.querySelectorAll('.oe-chk:checked')];
+  if(!marcados.length){msg.textContent='Marca con que confirmas la venta (1 o 2 respaldos).';return;}
+  const fd=new FormData();
+  for(const chk of marcados){
+    const input=document.getElementById('oe-file-'+chk.value);
+    if(!input||!input.files.length){msg.textContent='Falta el archivo de: '+MG_EVID_TIPOS[chk.value]+'.';return;}
+    fd.append('tipo',chk.value);
+    for(const f of input.files) fd.append('evidencia_'+chk.value,f);
+  }
+  try{
+    const r=await fetch(`/api/oportunidades/${oppId}/evidencia-cierre`,{method:'POST',body:fd});
+    if(!r.ok){const e=await r.json().catch(()=>({}));msg.textContent=e.error||'No se pudo subir el respaldo';return;}
+  }catch(err){ msg.textContent='No se pudo subir el respaldo: '+err.message; return; }
+
+  // Con el respaldo guardado, el mismo movimiento que rebotó ahora pasa.
+  document.getElementById('modal-opp-evid').classList.remove('open');
+  if(await moverOpp(oppId,_oeEtapaPendiente)) showToast('Cerrada','Oportunidad cerrada con respaldo adjunto');
+}
+
+// ── FEAT-2026-09-08: respaldo de la venta (Pestex) ──────────────────
+// Pestex factura con credito a 30 dias: al cerrar todavia no hay CFDI, asi
+// que el vendedor declara con que confirma la venta y sube el archivo.
+const MG_EVID_TIPOS={
+  orden_compra:'Orden de compra',
+  contrato:'Contrato',
+  correo_confirmacion:'Correo de confirmacion',
+  whatsapp:'Captura de WhatsApp',
+  cita_operandium:'Cita en Operandium / iGeo',
+};
+const MG_EVID_MAX=2;
+let _mgEvidReq=false;
+
+function _mgEvidAplica(lead){
+  const marcas=(lead&&lead.marcas_interes&&lead.marcas_interes.length)
+    ? lead.marcas_interes : [lead&&lead.marca_interes];
+  return marcas.some(m=>(m||'').toLowerCase().includes('pestex'));
+}
+
+function _mgEvidMsg(txt){document.getElementById('mg-evidencia-msg').textContent=txt||'';}
+
+function _mgRenderEvidencia(){
+  document.getElementById('mg-evidencia-tipos').innerHTML=
+    Object.entries(MG_EVID_TIPOS).map(([k,label])=>`
+      <div style="border:1px solid var(--border);border-radius:5px;padding:6px 8px;">
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;">
+          <input type="checkbox" class="mg-evid-chk" value="${k}" onchange="_mgEvidToggle(this)"/>
+          <span>${label}</span>
+        </label>
+        <input type="file" id="mg-evid-file-${k}" class="mg-evid-file" multiple
+               style="display:none;margin-top:6px;font-size:11px;width:100%;"
+               accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.doc,.docx,.xls,.xlsx"/>
+      </div>`).join('');
+  _mgEvidMsg('');
+}
+
+function _mgEvidToggle(chk){
+  if([...document.querySelectorAll('.mg-evid-chk:checked')].length>MG_EVID_MAX){
+    chk.checked=false;
+    _mgEvidMsg('Maximo '+MG_EVID_MAX+' respaldos por cierre.');
+    return;
+  }
+  _mgEvidMsg('');
+  const f=document.getElementById('mg-evid-file-'+chk.value);
+  f.style.display=chk.checked?'block':'none';
+  if(!chk.checked) f.value='';
+}
+
+function _mgSetEvidencia(lead){
+  _mgEvidReq=_mgEvidAplica(lead);
+  document.getElementById('mg-evidencia-group').style.display=_mgEvidReq?'block':'none';
+  if(_mgEvidReq) _mgRenderEvidencia();
+}
+
+// Sube el respaldo ANTES de cerrar: si el cierre falla por otra razon, la
+// evidencia ya quedo guardada y el reintento la reemplaza, no la acumula.
+async function _mgSubirEvidencia(leadId){
+  if(!_mgEvidReq) return {ok:true};
+  const marcados=[...document.querySelectorAll('.mg-evid-chk:checked')];
+  if(!marcados.length) return {ok:false,msg:'Marca con que confirmas la venta (1 o 2 respaldos).'};
+  const fd=new FormData();
+  for(const chk of marcados){
+    const input=document.getElementById('mg-evid-file-'+chk.value);
+    if(!input||!input.files.length)
+      return {ok:false,msg:'Falta el archivo de: '+MG_EVID_TIPOS[chk.value]+'.'};
+    fd.append('tipo',chk.value);
+    for(const f of input.files) fd.append('evidencia_'+chk.value,f);
+  }
+  try{
+    const r=await fetch('/api/leads/'+leadId+'/evidencia-cierre',{method:'POST',body:fd});
+    if(!r.ok){const e=await r.json().catch(()=>({}));return {ok:false,msg:e.error||'No se pudo subir el respaldo'};}
+    return {ok:true};
+  }catch(err){ return {ok:false,msg:'No se pudo subir el respaldo: '+err.message}; }
+}
+
 // FEAT-2026-06-25: helper para seleccionar tipo_venta en el modal de Ganado.
 function _mgSelectTipo(val){
   document.getElementById('mg-tipo-venta').value = val||'';
@@ -6270,6 +6453,10 @@ async function abrirEditarFactura(){
   document.getElementById('mg-comision-block').style.display='none';
   document.getElementById('mg-lead-id').value = leadId;
   _mgSelectTipo('');
+  // El respaldo se pide al cerrar, no al corregir la factura de algo ya
+  // cerrado. Se apaga explicitamente para no heredar el estado de un cierre
+  // anterior en la misma sesion.
+  _mgSetEvidencia(null);
   // Cargar valores actuales
   try{
     const r = await fetch('/api/leads/'+leadId);
@@ -6365,10 +6552,12 @@ async function openGanadoModal(leadId){
       // bajar si hubo descuento, y esa diferencia mueve la comisión.
       document.getElementById('mg-lista').value=lead.valor_estimado||'';
       if(lead.tipo_venta) _mgSelectTipo(lead.tipo_venta);
+      _mgSetEvidencia(lead);
     }else{
       document.getElementById('mg-monto').value='';
+      _mgSetEvidencia(null);
     }
-  }catch{ document.getElementById('mg-monto').value=''; }
+  }catch{ document.getElementById('mg-monto').value=''; _mgSetEvidencia(null); }
   _mgPreviewComision();
   document.getElementById('modal-ganado').classList.add('open');
   setTimeout(()=>document.getElementById('mg-monto').focus(),100);
@@ -6388,6 +6577,11 @@ async function confirmarGanado(){
     showToast('Falta','Elige tipo de venta: Recurrente o Eventual');
     return;
   }
+
+  // El respaldo va primero: si falta, no se toca ni la factura ni la etapa.
+  // El backend lo revalida al cerrar — esto solo evita el viaje en balde.
+  const _ev = await _mgSubirEvidencia(leadId);
+  if(!_ev.ok){ _mgEvidMsg(_ev.msg); showToast('Falta', _ev.msg); return; }
 
   // Validación mínima: si pone número de factura, monto y fecha son requeridos
   if(numero && !monto){
@@ -6934,6 +7128,12 @@ window.IS_ADMIN_AI = IS_ADMIN || false;
         <input type="hidden" id="opp-account-id"/>
         <div id="opp-empresa-list" class="nl-empresa-list" style="display:none;"></div>
       </div>
+      <!-- FEAT-2026-09-08: la sucursal es lo que distingue dos tratos de la
+           misma empresa y la misma UN. Vacio = trato a nivel corporativo. -->
+      <div class="nl-row">
+        <label class="nl-label">Sucursal / plaza <span style="color:var(--text3);font-weight:400;font-size:10px;">(si el cliente se vende sucursal por sucursal)</span></label>
+        <input class="nl-input" id="opp-sitio" placeholder="ej: Satelite, Polanco, Planta Monterrey"/>
+      </div>
       <div class="nl-row">
         <label class="nl-label">Estado</label>
         <input class="nl-input" id="opp-estado"/>
@@ -7083,7 +7283,7 @@ async function openOppModal(opp){
   document.getElementById('opp-modal-title').textContent=opp?'Editar oportunidad':'Nueva oportunidad';
   document.getElementById('opp-delete-btn').style.display=opp?'':'none';
   // Reset
-  ['opp-nombre','opp-empresa','opp-account-id','opp-estado','opp-contacto-nombre','opp-contacto-telefono','opp-contacto-email','opp-valor','opp-monthly','opp-fecha-cierre','opp-sucursales','opp-notas','opp-motivo-perdida'].forEach(id=>document.getElementById(id).value='');
+  ['opp-nombre','opp-empresa','opp-account-id','opp-sitio','opp-estado','opp-contacto-nombre','opp-contacto-telefono','opp-contacto-email','opp-valor','opp-monthly','opp-fecha-cierre','opp-sucursales','opp-notas','opp-motivo-perdida'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('opp-empresa-list').style.display='none';
   document.querySelectorAll('#opp-marca-pills .nl-pill').forEach((p,i)=>{p.classList.remove('active');p.onclick=()=>{p.parentElement.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');};});
   document.querySelectorAll('#opp-etapa-pills .nl-pill').forEach((p,i)=>{p.classList.remove('active');p.onclick=()=>{p.parentElement.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');_oppToggleMotivo();};});
@@ -7099,6 +7299,7 @@ async function openOppModal(opp){
     document.getElementById('opp-monthly').value=opp.monthly_amount||'';
     document.getElementById('opp-fecha-cierre').value=opp.fecha_cierre_esperada||'';
     document.getElementById('opp-sucursales').value=opp.num_sucursales||'';
+    document.getElementById('opp-sitio').value=opp.sitio||'';
     document.getElementById('opp-notas').value=opp.notas||'';
     document.getElementById('opp-motivo-perdida').value=opp.motivo_perdida||'';
     if(opp.marca_interes){const p=document.querySelector(`#opp-marca-pills .nl-pill[data-val="${opp.marca_interes}"]`);if(p)p.classList.add('active');}
@@ -7142,6 +7343,7 @@ async function saveOpp(){
     valor, marca_interes:marca, etapa,
     fecha_cierre_esperada:document.getElementById('opp-fecha-cierre').value||null,
     num_sucursales:parseInt(document.getElementById('opp-sucursales').value)||null,
+    sitio:document.getElementById('opp-sitio').value.trim()||null,
     monthly_amount:parseFloat(document.getElementById('opp-monthly').value)||null,
     notas:document.getElementById('opp-notas').value.trim()||null,
     motivo_perdida:document.getElementById('opp-motivo-perdida').value.trim()||null,

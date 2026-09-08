@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, session, current_app, Response
 from sqlalchemy import or_, func
+import cierre_evidencia as CE
 from extensions import db, socketio
 from models import Lead, EtapaPipeline, OrigenLead, Usuario
 from icp_scoring import calcular_icp, INDUSTRIAS, TAMANOS
@@ -17,6 +18,28 @@ leads_bp = Blueprint("leads", __name__)
 
 # Origenes que activan auto-asignacion Round-Robin
 ORIGENES_AUTO_ASSIGN = {"Meta Ads"}
+
+
+def _falta_evidencia(lead, unidad=None):
+    """Mensaje de error si el lead no puede cerrarse como ganado por falta
+    de respaldo, o None si puede.
+
+    FEAT-2026-09-08: Pestex vende con crédito a 30 días — al cerrar todavía
+    no hay factura ni folio. El modal siempre permitió cerrar sin ella
+    ("puedes completar después"), así que la venta quedaba sin respaldo
+    alguno. El respaldo sustituye a la factura COMO PRUEBA en el momento
+    del cierre; la factura sigue esperándose después.
+    """
+    # Un lead multi UN que trae Pestex exige respaldo aunque la unidad dueña
+    # del trato sea otra: el dinero de Pestex se cierra igual.
+    unidades = [unidad or lead.marca_interes] + list(lead.marcas_interes or [])
+    ok, err = CE.validar_para_cierre("lead", lead.id, unidades)
+    return None if ok else err
+
+
+def _resp_falta_evidencia(err):
+    return jsonify({"error": err, "requiere_evidencia": True,
+                    "tipos": CE.TIPOS, "max_tipos": CE.MAX_TIPOS}), 422
 
 
 def _apply_icp(lead):
@@ -620,6 +643,11 @@ def mover_lead(lead_id):
             if nueva_etapa not in orden or actual not in orden:
                 return jsonify({"error": "Transición no permitida"}), 400
 
+    if nueva_etapa == EtapaPipeline.CIERRE_GANADO:
+        err = _falta_evidencia(lead)
+        if err:
+            return _resp_falta_evidencia(err)
+
     etapa_anterior = lead.etapa_pipeline.value
     lead.etapa_pipeline = nueva_etapa
 
@@ -753,6 +781,11 @@ def actualizar_lead(lead_id):
                 return jsonify({"error": f"Lead ya está '{lead.etapa_pipeline.value}' — no puede salir de ahí"}), 400
             if nueva_etapa == EtapaPipeline.CIERRE_GANADO and lead.etapa_pipeline not in etapas_pre_ganado:
                 return jsonify({"error": "Solo se puede Cerrar Ganado desde Presentación/Cotización/Demo/Negociación"}), 400
+        if nueva_etapa == EtapaPipeline.CIERRE_GANADO and lead.etapa_pipeline != nueva_etapa:
+            err = _falta_evidencia(lead)
+            if err:
+                db.session.rollback()
+                return _resp_falta_evidencia(err)
         lead.etapa_pipeline = nueva_etapa
 
     # Recalcular ICP si se modificaron campos relevantes
@@ -1310,6 +1343,13 @@ def cerrar_lead(lead_id):
     if not unidad:
         return jsonify({"error": "Falta la unidad de negocio"}), 400
 
+    # Antes de registrar la venta y congelar la comisión: sin respaldo no hay
+    # cierre. Se valida contra la unidad REAL del cierre, no la del lead, para
+    # que mandar otra unidad en el body no sea la forma de esquivar el gate.
+    err = _falta_evidencia(lead, unidad)
+    if err:
+        return _resp_falta_evidencia(err)
+
     sale_type = data.get("sale_type") or "suscripcion_nueva"
     if sale_type not in ("suscripcion_nueva", "servicio_unico", "upsell"):
         return jsonify({"error": "Tipo de venta inválido"}), 400
@@ -1462,6 +1502,40 @@ EXPORT_PIPE_COLUMNAS = [
     "Prospectar", "Cita", "Cotización y seguimiento", "Cierre",
     "Aplica tabulador", "Notas",
 ]
+
+
+@leads_bp.route("/<uuid:lead_id>/evidencia-cierre", methods=["GET", "POST"])
+def evidencia_cierre_lead(lead_id):
+    """Respaldo de la venta. GET lista lo cargado; POST sube archivos.
+
+    POST es multipart: `tipo` (1..MAX_TIPOS repeticiones) y un campo de
+    archivo `evidencia_<tipo>` por cada tipo marcado. Se sube ANTES de
+    cerrar; el cierre valida contra lo persistido, así que si el cierre
+    falla por otra razón la evidencia no se pierde.
+    """
+    lead = db.session.get(Lead, lead_id)
+    if not lead:
+        return jsonify({"error": "Lead no encontrado"}), 404
+
+    from blueprints.auth import get_vendedor_filter
+    vendedor_id = get_vendedor_filter()
+    if vendedor_id and str(lead.usuario_asignado_id) != str(vendedor_id):
+        return jsonify({"error": "No tienes permisos sobre este lead"}), 403
+
+    if request.method == "GET":
+        return jsonify({
+            "evidencias": [e.to_dict() for e in CE.evidencias_de("lead", lead.id)],
+            "requerida": CE.requiere_evidencia(lead.marca_interes),
+            "tipos": CE.TIPOS, "max_tipos": CE.MAX_TIPOS,
+        })
+
+    creadas, err = CE.guardar("lead", lead.id, request.form.getlist("tipo"),
+                              request.files, subido_por=session.get("usuario_id"))
+    if err:
+        db.session.rollback()
+        return jsonify({"error": err}), 400
+    db.session.commit()
+    return jsonify({"evidencias": [e.to_dict() for e in creadas]}), 201
 
 
 @leads_bp.route("/export.csv", methods=["GET"])

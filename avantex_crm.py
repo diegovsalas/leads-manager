@@ -566,6 +566,62 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] kam_email_responses failed: %s", e)
 
+        # ─── oportunidades.sitio (FEAT-2026-09-08) ───
+        # Sucursal/plaza del trato. Entra a la clave de deals duplicados para
+        # que un cliente que se vende sucursal por sucursal pueda tener N
+        # oportunidades abiertas de la misma UN sin pelearse con el guardia.
+        try:
+            with db.engine.begin() as conn:
+                exists = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'oportunidades' AND column_name = 'sitio'
+                """)).first()
+                if not exists:
+                    app.logger.info("[auto-migrate] adding oportunidades.sitio...")
+                    conn.execute(text("ALTER TABLE oportunidades ADD COLUMN sitio VARCHAR(200)"))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_oportunidades_sitio "
+                    "ON oportunidades (sitio)"
+                ))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] oportunidades.sitio failed: %s", e)
+
+        # ─── cierre_evidencias (FEAT-2026-09-08) ───
+        # La crea create_all, pero los CHECK y los índices no vienen de ahí
+        # en instalaciones donde la tabla ya existía sin ellos.
+        try:
+            with db.engine.begin() as conn:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS cierre_evidencias (
+                        id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        lead_id        UUID REFERENCES leads(id) ON DELETE CASCADE,
+                        oportunidad_id UUID REFERENCES oportunidades(id) ON DELETE CASCADE,
+                        tipo           VARCHAR(40) NOT NULL,
+                        archivo_url    TEXT NOT NULL,
+                        archivo_nombre VARCHAR(300) DEFAULT '',
+                        subido_por     UUID REFERENCES usuarios(id),
+                        created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        CONSTRAINT cierre_evidencias_un_solo_dueno CHECK (
+                            (lead_id IS NOT NULL)::int
+                          + (oportunidad_id IS NOT NULL)::int = 1
+                        ),
+                        CONSTRAINT cierre_evidencias_tipo_check CHECK (
+                            tipo IN ('orden_compra','contrato','correo_confirmacion',
+                                     'whatsapp','cita_operandium')
+                        )
+                    )
+                """))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_cierre_evidencias_lead "
+                    "ON cierre_evidencias (lead_id)"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_cierre_evidencias_opp "
+                    "ON cierre_evidencias (oportunidad_id)"
+                ))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] cierre_evidencias failed: %s", e)
+
 
 def create_app():
     app = Flask(__name__)
