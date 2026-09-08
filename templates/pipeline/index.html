@@ -248,7 +248,17 @@ tbody td{padding:8px 12px;font-size:14px;}
    Le pasó al de "Cerrar como Ganado" al crecer con el bloque de comisión:
    el vendedor veía el formulario pero no podía confirmar. Los modales que
    ya traen su propio max-height en línea siguen mandando sobre esto. */
-.modal{background:var(--bg-card);border-radius:var(--r2);padding:28px 32px;width:460px;box-shadow:var(--shadow-lg);transform:translateY(-8px);transition:transform 120ms;max-height:88vh;overflow-y:auto;}
+.modal{background:var(--bg-card);border-radius:var(--r2);padding:28px 32px;width:460px;max-width:calc(100vw - 24px);box-shadow:var(--shadow-lg);transform:translateY(-8px);transition:transform 120ms;max-height:88vh;overflow-y:auto;}
+/* FEAT-2026-09-08: el modal tenia ancho fijo y se desbordaba en pantallas
+   angostas. Importa ahora porque uno de los respaldos de venta aceptados es
+   una captura de WhatsApp — o sea que se espera que el vendedor cierre desde
+   el telefono, y hasta aqui ese modal no cabia. Solo aplica por debajo de
+   484px; en escritorio nada cambia. */
+@media(max-width:520px){
+  .modal{padding:20px 16px;}
+  .modal-overlay{padding-top:4vh;}
+  .modal .form-row{grid-template-columns:1fr;}
+}
 .modal-overlay.open .modal{transform:translateY(0);}
 .modal-title{font-size:18px;font-weight:700;margin-bottom:20px;}
 .form-group{margin-bottom:14px;}
