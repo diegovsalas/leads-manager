@@ -20,14 +20,41 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 
 .shell{display:grid;grid-template-columns:220px 1fr;height:100vh;transition:grid-template-columns .2s;}
 .shell.collapsed{grid-template-columns:56px 1fr;}
+
+/* FEAT-2026-09-08: sidebar en pantallas angostas.
+   El grid daba 220px al sidebar pasara lo que pasara, asi que en una ventana
+   chica se quedaba ancho sin espacio: las etiquetas se partian en tres
+   lineas y al contenido no le quedaba nada. La clase .collapsed —que ya
+   existia y oculta las etiquetas— solo se aplicaba a mano.
+   Abajo de 820px la columna se fija en el riel de 56px y, al abrir el menu,
+   el sidebar se SUPERPONE en vez de comerse el ancho del contenido. */
+.nav-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:590;}
+@media(max-width:820px){
+  .shell,.shell.collapsed{grid-template-columns:56px 1fr;}
+  .shell.nav-open .sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;min-width:220px;height:100vh;z-index:600;box-shadow:0 0 40px rgba(0,0,0,.35);}
+  .shell.nav-open .nav-backdrop{display:block;}
+}
 .sidebar{background:var(--bg-sidebar);border-right:1px solid transparent;display:flex;flex-direction:column;overflow:hidden;position:sticky;top:0;height:100vh;box-shadow:0px 4px 50px #d9ddfc;transition:all .2s;}
 .collapsed .sidebar{width:56px;min-width:56px;}
 .collapsed .sidebar-brand{padding:12px 0;align-items:center;}
 .collapsed .sidebar-brand small,.collapsed .sidebar-section,.collapsed .slink-badge,.collapsed .sidebar-bottom .meta,.collapsed .ws-status{display:none;}
 .collapsed .sidebar-brand .tag-grupo{display:none;}
 .collapsed .sidebar-brand .wm-row{justify-content:center;}
-.collapsed .sidebar-brand .wm-steel{font-size:12px;}
-.collapsed .sidebar-brand .wm-x{font-size:12px;}
+/* FIX-2026-09-08: el modo colapsado estaba incompleto y por eso se veia roto.
+   El switcher de portal y el filtro de Unidad de Negocio se agregaron despues,
+   con estilos en linea, y nunca recibieron reglas de colapsado: en el riel de
+   56px se desbordaban y "Unidad de Negocio" se partia en tres lineas. Lo mismo
+   la marca, que a 12px no cabe. Esto ya pasaba en escritorio a quien colapsara
+   el menu; el modo angosto solo lo hizo visible.
+   En el riel se ocultan y se llega a ellos abriendo el menu. */
+.portal-switcher{display:flex;}
+.collapsed .portal-switcher,
+.collapsed .un-filter{display:none;}
+.collapsed .sidebar-brand .wm-steel,
+.collapsed .sidebar-brand .wm-x{display:none;}
+.wm-mini{display:none;}
+.collapsed .wm-mini{display:inline;font-size:13px;font-weight:700;color:#fff;letter-spacing:-.3px;}
+.collapsed .sidebar-brand{border-bottom-color:rgba(255,255,255,.12);}
 .collapsed .slink{padding:10px 0;margin:2px 4px;justify-content:center;text-align:center;overflow:hidden;white-space:nowrap;}
 .collapsed .slink .sl-text{display:none;}
 .collapsed .slink kbd{display:none;}
@@ -396,23 +423,26 @@ fbq('track','PageView');
 {% set MOSTRAR_OPORTUNIDADES = false %}
 <div class="shell">
 
+<!-- Cierra el cajon del sidebar al tocar fuera. Invisible salvo en angosto. -->
+<div class="nav-backdrop" onclick="toggleSidebar()"></div>
+
 <!-- ===== SIDEBAR ===== -->
 <aside class="sidebar" style="position:relative;">
   <button class="sidebar-toggle" onclick="toggleSidebar()" title="Contraer/Expandir menú">&#9776;</button>
   <div class="sidebar-brand">
     <div class="tag-grupo">GRUPO</div>
-    <div class="wm-row"><span class="wm-steel">AVANTE</span><span class="wm-x">X</span></div>
+    <div class="wm-row"><span class="wm-steel">AVANTE</span><span class="wm-x">X</span><span class="wm-mini">AX</span></div>
     <small>CRM Pipeline</small>
   </div>
 
   <!-- Switcher de portal (solo para Super Admin) -->
-  <div class="portal-switcher admin-only" style="margin:8px 12px 4px;padding:4px;background:rgba(0,0,0,.18);border-radius:8px;display:flex;gap:2px;">
+  <div class="portal-switcher admin-only" style="margin:8px 12px 4px;padding:4px;background:rgba(0,0,0,.18);border-radius:8px;gap:2px;">
     <button class="portal-btn active" data-portal="operacion" onclick="switchPortal('operacion')" style="flex:1;font-size:11px;padding:6px 4px;border:0;border-radius:6px;color:#fff;background:rgba(255,255,255,.18);font-weight:600;cursor:pointer;">🛠️ Operación</button>
     <button class="portal-btn"        data-portal="admin"     onclick="switchPortal('admin')"     style="flex:1;font-size:11px;padding:6px 4px;border:0;border-radius:6px;color:rgba(255,255,255,.65);background:transparent;font-weight:600;cursor:pointer;">⚙️ Admin</button>
   </div>
 
   <!-- FEAT-2026-06-29: Filtro global por Unidad de Negocio. Persistente. -->
-  <div style="margin:4px 12px 8px;padding:6px 8px;background:rgba(255,255,255,.08);border-radius:8px;border:1px solid rgba(255,255,255,.12);">
+  <div class="un-filter" style="margin:4px 12px 8px;padding:6px 8px;background:rgba(255,255,255,.08);border-radius:8px;border:1px solid rgba(255,255,255,.12);">
     <div style="font-size:9px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;font-weight:600;">Unidad de Negocio</div>
     <select id="un-global-select" onchange="setUN(this.value || 'Todas')" style="width:100%;font-size:12px;padding:4px 6px;border-radius:5px;border:1px solid rgba(255,255,255,.2);background:rgba(0,0,0,.25);color:#fff;font-weight:600;cursor:pointer;">
       <option value="">Todas las UN</option>
@@ -2818,12 +2848,38 @@ fbq('track','PageView');
 </div>
 
 <script>
+const NAV_ANGOSTO=820;
+function _navAngosto(){return window.matchMedia(`(max-width:${NAV_ANGOSTO}px)`).matches;}
+
+// En angosto el sidebar es un riel de iconos y el boton lo abre como cajon.
+// En ancho vuelve a ser el modo de siempre, con la preferencia guardada.
+function _navAplicar(){
+  const shell=document.querySelector('.shell');
+  if(!shell)return;
+  if(_navAngosto()){
+    if(!shell.classList.contains('nav-open')) shell.classList.add('collapsed');
+  }else{
+    shell.classList.remove('nav-open');
+    shell.classList.toggle('collapsed',localStorage.getItem('sidebar-collapsed')==='true');
+  }
+}
+
 function toggleSidebar(){
   const shell=document.querySelector('.shell');
+  if(_navAngosto()){
+    // Cajon, no modo: no se guarda preferencia porque en angosto el riel es
+    // la unica presentacion que deja espacio util al contenido.
+    const abrir=!shell.classList.contains('nav-open');
+    shell.classList.toggle('nav-open',abrir);
+    shell.classList.toggle('collapsed',!abrir);
+    return;
+  }
   shell.classList.toggle('collapsed');
   localStorage.setItem('sidebar-collapsed',shell.classList.contains('collapsed'));
 }
-if(localStorage.getItem('sidebar-collapsed')==='true') document.querySelector('.shell').classList.add('collapsed');
+
+window.addEventListener('resize',_navAplicar);
+_navAplicar();
 
 const socket=io();
 
