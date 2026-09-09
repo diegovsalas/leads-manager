@@ -944,6 +944,7 @@ def create_app():
             except Exception:
                 pass
         from blueprints.auth import is_sistema_role as _is_sistema_role
+        from blueprints.auth import allowed_units_for_role as _alcance_un
         return render_template(
             "pipeline/index.html",
             pipeline=pipeline,
@@ -956,6 +957,11 @@ def create_app():
             # viajaba en el codigo fuente. Ahora solo se interpola si el rol
             # responde por la plataforma.
             es_sistema=_is_sistema_role(),
+            # FEAT-2026-09-09: unidad a la que esta acotado el rol, o "" si ve
+            # todo. El frontend la usa para avisar en las pantallas cuyo
+            # backend TODAVIA no filtra por unidad — que son casi todas las de
+            # dirección. Ver el aviso en templates/pipeline/index.html.
+            un_alcance=", ".join(_alcance_un() or ()),
             usuario_id=session.get("usuario_id", ""),
             mi_especialidad=mi_especialidad,
             meta_pixels=get_pixel_ids(),

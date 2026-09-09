@@ -51,9 +51,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .collapsed .portal-switcher,
 .collapsed .un-filter{display:none;}
 .collapsed .sidebar-brand .wm-steel,
-.collapsed .sidebar-brand .wm-x{display:none;}
+.collapsed .sidebar-brand .wm-x-mark{display:none;}
 .wm-mini{display:none;}
-.collapsed .wm-mini{display:inline;font-size:13px;font-weight:700;color:#fff;letter-spacing:-.3px;}
+.collapsed .wm-mini{display:block;margin:0 auto;}
 .collapsed .sidebar-brand{border-bottom-color:rgba(255,255,255,.12);}
 .collapsed .slink{padding:10px 0;margin:2px 4px;justify-content:center;text-align:center;overflow:hidden;white-space:nowrap;}
 .collapsed .slink .sl-text{display:none;}
@@ -67,9 +67,14 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .collapsed .sidebar-toggle{position:static;margin:8px auto 4px;}
 .content{overflow:hidden;display:flex;flex-direction:column;background:var(--bg);}
 .sidebar-brand{padding:14px 16px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:1px;line-height:1;}
-.sidebar-brand .wm-row{display:flex;align-items:baseline;gap:0;}
+.sidebar-brand .wm-row{display:flex;align-items:center;gap:1px;}
 .sidebar-brand .wm-steel{font-size:15px;font-weight:700;color:#ffffff;letter-spacing:-.3px;}
-.sidebar-brand .wm-x{font-size:15px;font-weight:700;color:#8bb8f8;}
+/* La X del logo. El gris del original pasa a blanco sobre el azul del menu;
+   el azul de marca se conserva porque es lo que identifica el simbolo. */
+.wm-x-mark{width:16px;height:16px;flex-shrink:0;}
+.wm-mini{width:21px;height:21px;flex-shrink:0;}
+.x-gris{fill:#ffffff;}
+.x-azul{fill:#0075b7;}
 .sidebar-brand .tag-grupo{font-size:8px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#8bb8f8;margin-bottom:2px;}
 .sidebar-brand small{font-size:9px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5);margin-top:3px;}
 .sidebar-section{padding:16px 14px 6px;font-size:10px;font-weight:600;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.12em;}
@@ -101,6 +106,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .view.active{display:flex;}
 .page-header{padding:24px 48px 0;flex-shrink:0;}
 .page-emoji{font-size:32px;margin-bottom:4px;color:var(--text2);}
+/* FEAT-2026-09-09: aviso de alcance. Amarillo de advertencia, no rojo:
+   no es un error, es un dato que el usuario debe tener presente. */
+.aviso-alcance{display:flex;gap:9px;align-items:flex-start;margin:0 48px 14px;padding:10px 14px;
+  background:var(--yellow-bg);border-left:3px solid var(--yellow);border-radius:0 6px 6px 0;
+  font-size:12px;color:#7a5b12;line-height:1.45;}
+.aviso-alcance strong{font-weight:650;}
 /* Mismo trazo que el sidebar: el encabezado dejo de ser lo unico a color de la pagina. */
 .page-ico{width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
 .page-title{font-family:var(--font-display);font-size:26px;font-weight:500;color:var(--text);letter-spacing:-.02em;line-height:1.15;}
@@ -447,7 +458,13 @@ fbq('track','PageView');
   <button class="sidebar-toggle" onclick="toggleSidebar()" title="Contraer/Expandir menú">&#9776;</button>
   <div class="sidebar-brand">
     <div class="tag-grupo">GRUPO</div>
-    <div class="wm-row"><span class="wm-steel">AVANTE</span><span class="wm-x">X</span><span class="wm-mini">AX</span></div>
+    {# FEAT-2026-09-09: logo oficial de Grupo Avantex, adaptado al sidebar.
+       El original es gris oscuro sobre blanco; sobre el azul del menu ese gris
+       desaparece, asi que va invertido —wordmark en blanco— y la X conserva su
+       acento azul, que es lo que hace reconocible la marca. La X es vectorial
+       para que aguante el riel de 56px y cualquier densidad de pantalla; el
+       wordmark usa la Poppins que la pagina ya carga. #}
+    <div class="wm-row" role="img" aria-label="Grupo Avantex"><span class="wm-steel">AVANTE</span><svg class="wm-x-mark" viewBox="0 0 24 24" aria-hidden="true"><path class="x-gris" d="M2.5 2h5.4l13.6 20h-5.4z"/><path class="x-azul" d="M16.1 2h5.4L7.9 22H2.5z"/></svg><svg class="wm-mini" viewBox="0 0 24 24" aria-hidden="true"><path class="x-gris" d="M2.5 2h5.4l13.6 20h-5.4z"/><path class="x-azul" d="M16.1 2h5.4L7.9 22H2.5z"/></svg></div>
     <small>CRM Pipeline</small>
   </div>
 
@@ -472,45 +489,55 @@ fbq('track','PageView');
   <nav style="flex:1;overflow-y:auto;padding:4px 0;">
     <!-- ═══ PORTAL OPERACIÓN (vendedor y admin lo ven) ═══ -->
     <div class="portal-section" data-portal="operacion">
-      <div class="sidebar-section">Navegacion</div>
-      <div class="slink active" onclick="showView('dashboard',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="20" x2="6" y2="15"/><line x1="12" y1="20" x2="12" y2="9"/><line x1="18" y1="20" x2="18" y2="4"/></svg> <span class="sl-text">Dashboard</span></div>
-      <div class="slink" onclick="showView('mihoy',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></svg> <span class="sl-text">Mi dia</span> <span class="slink-badge" style="color:var(--red);font-weight:600;" id="mihoy-badge"></span></div>
-      <div class="slink" onclick="showView('pipeline',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg> <span class="sl-text">Pipeline</span></div>
-      <div class="slink" onclick="openLeadModal()" style="background:rgba(255,255,255,.12);color:#fff;font-weight:600;"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> <span class="sl-text">Nuevo Lead</span> <kbd style="float:right;font-size:9px;color:rgba(255,255,255,.5);background:rgba(255,255,255,.1);padding:1px 4px;border-radius:3px;border:1px solid rgba(255,255,255,.2);">⌘N</kbd></div>
-      {% if MOSTRAR_UPSELLS %}<div class="slink" onclick="showView('opps',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg> <span class="sl-text">Upsells</span></div>{% endif %}
-      <div class="slink" onclick="showView('accounts',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8.5 6h.01M15.5 6h.01M8.5 10h.01M15.5 10h.01M8.5 14h.01M15.5 14h.01"/></svg> <span class="sl-text">Empresas</span> <span class="slink-badge" id="sidebar-acc-count"></span></div>
-      <div class="slink" onclick="showView('contacts',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> <span class="sl-text">Contactos</span> <span class="slink-badge" id="sidebar-con-count"></span></div>
-      <div class="slink" onclick="showView('leads',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> <span class="sl-text">Leads</span></div>
-      <div class="slink reportes-only" onclick="showView('revision',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="20" x2="6" y2="15"/><line x1="12" y1="20" x2="12" y2="9"/><line x1="18" y1="20" x2="18" y2="4"/></svg> <span class="sl-text">Revisión Comercial</span></div>
+      {# FEAT-2026-09-09: el menu se agrupa por CADENCIA, no por herramienta.
+         Antes "Navegacion" e "Inteligencia" mezclaban lo que se abre cada
+         manana con lo que se revisa una vez al mes, y ambos pesaban igual.
+         Ahora el orden dice cuando se usa cada cosa. #}
+      <div class="sidebar-section">Hoy</div>
+<div class="slink active" onclick="showView('dashboard',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="20" x2="6" y2="15"/><line x1="12" y1="20" x2="12" y2="9"/><line x1="18" y1="20" x2="18" y2="4"/></svg> <span class="sl-text">Dashboard</span></div>
+<div class="slink" onclick="showView('mihoy',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></svg> <span class="sl-text">Mi dia</span> <span class="slink-badge" style="color:var(--red);font-weight:600;" id="mihoy-badge"></span></div>
+<div class="slink" onclick="showView('pipeline',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg> <span class="sl-text">Pipeline</span></div>
+<div class="slink" onclick="openLeadModal()" style="background:rgba(255,255,255,.12);color:#fff;font-weight:600;"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> <span class="sl-text">Nuevo Lead</span> <kbd style="float:right;font-size:9px;color:rgba(255,255,255,.5);background:rgba(255,255,255,.1);padding:1px 4px;border-radius:3px;border:1px solid rgba(255,255,255,.2);">⌘N</kbd></div>
+
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-section">Cartera</div>
+<div class="slink" onclick="showView('leads',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> <span class="sl-text">Leads</span></div>
+<div class="slink" onclick="showView('accounts',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8.5 6h.01M15.5 6h.01M8.5 10h.01M15.5 10h.01M8.5 14h.01M15.5 14h.01"/></svg> <span class="sl-text">Empresas</span> <span class="slink-badge" id="sidebar-acc-count"></span></div>
+<div class="slink" onclick="showView('contacts',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> <span class="sl-text">Contactos</span> <span class="slink-badge" id="sidebar-con-count"></span></div>
+{% if MOSTRAR_UPSELLS %}<div class="slink" onclick="showView('opps',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg> <span class="sl-text">Upsells</span></div>{% endif %}
+
+      <div class="sidebar-divider reportes-only"></div>
+      <div class="sidebar-section reportes-only">Cierre de mes</div>
+<div class="slink admin-only" onclick="showView('ventas',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg> <span class="sl-text">Ventas</span></div>
+<div class="slink admin-only" onclick="showView('savio',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg> <span class="sl-text">Savio MRR</span></div>
+<div class="slink reportes-only" onclick="showView('revision',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="20" x2="6" y2="15"/><line x1="12" y1="20" x2="12" y2="9"/><line x1="18" y1="20" x2="18" y2="4"/></svg> <span class="sl-text">Revisión Comercial</span></div>
 
       <div class="sidebar-divider admin-only"></div>
-      <div class="sidebar-section admin-only">Inteligencia</div>
-      <div class="slink admin-only" onclick="showView('savio',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg> <span class="sl-text">Savio MRR</span></div>
-      <div class="slink admin-only" onclick="showView('roi',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="20" x2="6" y2="15"/><line x1="12" y1="20" x2="12" y2="9"/><line x1="18" y1="20" x2="18" y2="4"/></svg> <span class="sl-text">Marketing ROI</span></div>
-      <div class="slink admin-only" onclick="showView('scip',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></svg> <span class="sl-text">SCIP Director</span></div>
-      <div class="slink admin-only" onclick="showView('sdrprospect',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16" y2="16"/></svg> <span class="sl-text">SDR Prospector</span></div>
-      <div class="slink admin-only" onclick="showView('sdrdir',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></svg> <span class="sl-text">SDR Directivo</span></div>
-      <div class="slink admin-only" onclick="showView('ventas',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg> <span class="sl-text">Ventas</span></div>
+      <div class="sidebar-section admin-only">Prospeccion</div>
+<div class="slink admin-only" onclick="showView('roi',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="20" x2="6" y2="15"/><line x1="12" y1="20" x2="12" y2="9"/><line x1="18" y1="20" x2="18" y2="4"/></svg> <span class="sl-text">Marketing ROI</span></div>
+<div class="slink admin-only" onclick="showView('scip',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></svg> <span class="sl-text">SCIP Director</span></div>
+<div class="slink admin-only" onclick="showView('sdrprospect',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16" y2="16"/></svg> <span class="sl-text">SDR Prospector</span></div>
+<div class="slink admin-only" onclick="showView('sdrdir',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></svg> <span class="sl-text">SDR Directivo</span></div>
     </div>
 
     <!-- ═══ PORTAL ADMINISTRACIÓN (solo admin lo ve) ═══ -->
     <div class="portal-section" data-portal="admin" style="display:none;">
-      <div class="sidebar-section">Equipo</div>
-      <div class="slink" onclick="showView('vendedores',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> <span class="sl-text">Vendedores</span></div>
-      <div class="slink" onclick="showView('correos',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg> <span class="sl-text">Correos vendedores</span></div>
+      <div class="sidebar-section">Equipo y pagos</div>
+<div class="slink" onclick="showView('vendedores',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> <span class="sl-text">Vendedores</span></div>
+<div class="slink" onclick="showView('correos',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg> <span class="sl-text">Correos vendedores</span></div>
+<div class="slink admin-only" onclick="location.href='/comisiones/'" title="Tabulador de comisiones multi-UN"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg> <span class="sl-text">Comisiones</span></div>
 
       <div class="sidebar-divider"></div>
-      <div class="sidebar-section">Configuración</div>
-      <div class="slink" onclick="showView('campanas',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg> <span class="sl-text">Campañas Meta</span></div>
-      <div class="slink admin-only" onclick="location.href='/comisiones/'" title="Tabulador de comisiones multi-UN"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg> <span class="sl-text">Comisiones</span></div>
-      <div class="slink" onclick="showView('vincular',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> <span class="sl-text">Vincular Savio<svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>CS</span></div>
-      <div class="slink sistema-only" onclick="showView('integraciones',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2M15 8V2"/><path d="M18 8v3a6 6 0 0 1-12 0V8Z"/></svg> <span class="sl-text">Integraciones</span></div>
+      <div class="sidebar-section">Clientes y campañas</div>
+<a href="/cs/" class="slink"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/></svg> <span class="sl-text">CS Dashboard</span></a>
+<div class="slink" onclick="showView('vincular',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> <span class="sl-text">Vincular Savio<svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>CS</span></div>
+<div class="slink" onclick="showView('campanas',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg> <span class="sl-text">Campañas Meta</span></div>
 
-      <div class="sidebar-divider"></div>
-      <div class="sidebar-section">Sistema</div>
-      <a href="/cs/" class="slink"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/></svg> <span class="sl-text">CS Dashboard</span></a>
-      <div class="slink sistema-only" onclick="showView('costos',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg> <span class="sl-text">Costos APIs</span></div>
-      <div class="slink sistema-only" onclick="showView('proyecto',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg> <span class="sl-text">Proyecto</span></div>
+      <div class="sidebar-divider sistema-only"></div>
+      <div class="sidebar-section sistema-only">Sistema</div>
+<div class="slink sistema-only" onclick="showView('integraciones',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2M15 8V2"/><path d="M18 8v3a6 6 0 0 1-12 0V8Z"/></svg> <span class="sl-text">Integraciones</span></div>
+<div class="slink sistema-only" onclick="showView('costos',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg> <span class="sl-text">Costos APIs</span></div>
+<div class="slink sistema-only" onclick="showView('proyecto',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg> <span class="sl-text">Proyecto</span></div>
     </div>
   </nav>
 
@@ -2993,6 +3020,14 @@ const IS_DEVELOPER=ROL_USUARIO==='developer';
 // tienen nada que ver con el gasto de servidores de su unidad.
 // Espejo de SISTEMA_ROLES en blueprints/auth.py, que es quien de verdad manda.
 const SISTEMA_ROLES=new Set(['developer','super_admin']);
+// Unidad a la que está acotado el rol ('' = ve todo el grupo).
+const UN_ALCANCE='{{ un_alcance }}';
+// Vistas cuyo backend TODAVÍA no filtra por unidad de negocio. Un Super Admin
+// Pestex las abre y ve cifras de Aromatex sin que nada se lo diga; el aviso
+// quita el engaño mientras el filtro se implementa de verdad.
+// Comprobado con: los blueprints que aplican alcance son solo auth, dashboard,
+// leads, oportunidades, vendedores y sales_emails.
+const VISTAS_SIN_ALCANCE_UN=new Set(['savio','ventas','scip','sdrprospect','sdrdir','campanas','accounts','contacts','roi']);
 const IS_SISTEMA=SISTEMA_ROLES.has(ROL_USUARIO);
 // FEAT-2026-09-02: IS_ADMIN gobierna las comisiones. Ver reportes es otra
 // cosa: el perfil de análisis comercial los ve sin ver dinero de nómina.
@@ -3139,9 +3174,26 @@ socket.on('nuevo_mensaje',({mensaje})=>{if(leadActivo&&leadActivo.id==mensaje.le
 socket.on('mensaje_global',({lead_nombre,preview})=>{showToast('WhatsApp',lead_nombre+': '+preview);});
 
 // Views
+function _avisoAlcanceUN(name){
+  if(!UN_ALCANCE) return;                          // rol sin alcance: nada que advertir
+  if(!VISTAS_SIN_ALCANCE_UN.has(name)) return;     // esta vista sí filtra bien
+  const cont=document.getElementById('view-'+name);
+  if(!cont || cont.querySelector('.aviso-alcance')) return;
+  const el=document.createElement('div');
+  el.className='aviso-alcance';
+  el.innerHTML='<svg viewBox="0 0 24 24" style="width:15px;height:15px;flex-shrink:0;margin-top:1px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;">'
+    +'<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>'
+    +'<line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+    +'<span>Estás viendo <strong>el grupo completo</strong>. Esta pantalla todavía no filtra por '
+    +UN_ALCANCE+', así que las cifras incluyen otras unidades.</span>';
+  const cab=cont.querySelector('.page-header');
+  if(cab && cab.nextSibling) cont.insertBefore(el, cab.nextSibling); else cont.prepend(el);
+}
+
 function showView(name,el){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name)?.classList.add('active');
+  _avisoAlcanceUN(name);
   if(el){document.querySelectorAll('.sidebar .slink:not([data-marca])').forEach(s=>s.classList.remove('active'));el.classList.add('active');}
   // BUGFIX 24-jun-2026: persistir vista activa en sessionStorage para que
   // tras un location.reload() (ej. después de crear/borrar lead) el usuario
