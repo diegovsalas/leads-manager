@@ -730,6 +730,24 @@ def create_app():
     socketio.init_app(app, cors_allowed_origins="*", async_mode="gevent")
     limiter.init_app(app)
 
+    # ── Chequeo de arranque: el respaldo de cierre necesita Storage ──
+    # FEAT-2026-09-09: sin SUPABASE_SERVICE_KEY, el gate de Pestex rebota TODO
+    # cierre de esa unidad con "el almacenamiento no esta configurado". Es una
+    # falla que solo aparece cuando un vendedor intenta cerrar, o sea tarde y
+    # del lado equivocado. Aqui se grita al arrancar, que es cuando alguien
+    # todavia puede arreglarlo. No se aborta a proposito: dejar la app caida
+    # seria peor que dejar una unidad sin poder cerrar.
+    if not (os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_SERVICE_KEY")):
+        app.logger.warning(
+            "=" * 70 + "\n"
+            "  SUPABASE_URL / SUPABASE_SERVICE_KEY no estan configuradas.\n"
+            "  Consecuencia: NINGUN vendedor podra cerrar un trato de Pestex,\n"
+            "  porque el respaldo de venta no se puede subir. Tambien quedan\n"
+            "  sin funcionar las fotos de tickets y los PDF de facturas.\n"
+            + "=" * 70)
+    else:
+        app.logger.info("Supabase Storage configurado: el respaldo de cierre puede subirse.")
+
     # ── Auto-migrations (idempotente, corre en cada boot) ──
     _run_pending_migrations(app)
 

@@ -24,6 +24,14 @@ services:
         sync: false
       - key: SAVIO_WEBHOOK_SECRET
         sync: false
+      # Supabase Storage. Se usaban ya para las fotos de tickets y los PDF de
+      # facturas de incidencias, pero nunca se declararon aqui. Desde
+      # FEAT-2026-09-08 tambien sostienen el respaldo de cierre de Pestex: sin
+      # ellas, ningun vendedor puede cerrar un trato de esa unidad.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
       - key: GOOGLE_PLACES_API_KEY
         sync: false
       - key: META_ACCESS_TOKEN
