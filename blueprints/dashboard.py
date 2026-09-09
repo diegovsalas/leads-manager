@@ -687,15 +687,23 @@ def _kpis_vendedor(vendedor_usuario_id: str, inicio: date, fin: date) -> dict:
         ("sin_tipo", None),
     ]:
         tipo_base = base.filter(_type_filter(label))
-        tipo_mes = tipo_base.filter(Lead.fecha_creacion >= inicio, Lead.fecha_creacion < fin)
+        # FIX-2026-09-09: el desglose por tipo usaba UNA sola consulta filtrada
+        # por fecha_creacion para las tres cifras. Con los totales ya medidos
+        # por fecha de cierre, el desglose no sumaba con su propio total en la
+        # misma pantalla: peor que estar mal parejo, porque se contradice solo.
+        # Ahora cada cifra usa la fecha que le toca.
+        tipo_creados = tipo_base.filter(   # entraron en el mes
+            Lead.fecha_creacion >= inicio, Lead.fecha_creacion < fin)
+        tipo_cerrados = tipo_base.filter(  # se cerraron en el mes
+            Lead.fecha_cierre >= inicio, Lead.fecha_cierre < fin)
         tipo_activos = tipo_base.filter(Lead.etapa_pipeline.notin_([
             EtapaPipeline.CIERRE_GANADO, EtapaPipeline.CIERRE_PERDIDO,
         ]))
-        tipo_ganados_mes = tipo_mes.filter(Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO).count()
-        tipo_revenue_mes = float(tipo_mes.filter(
+        tipo_ganados_mes = tipo_cerrados.filter(Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO).count()
+        tipo_revenue_mes = float(tipo_cerrados.filter(
             Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO,
         ).with_entities(func.coalesce(func.sum(valor_expr), 0)).scalar() or 0)
-        tipo_leads_mes = tipo_mes.count()
+        tipo_leads_mes = tipo_creados.count()
         split_tipo_venta[key] = {
             "label": label or "Sin tipo",
             "leads_mes": tipo_leads_mes,
@@ -988,8 +996,16 @@ def vendedores_review():
     out = []
     for v in vendedores:
         kpis = _kpis_vendedor(v.id, inicio, fin)
-        # Solo incluir si tiene actividad (leads activos o leads del mes)
-        if kpis["leads_activos"] == 0 and kpis["leads_mes"] == 0:
+        # FIX-2026-09-09: se incluye tambien a quien CERRO en el mes.
+        #
+        # El filtro miraba solo leads activos y leads creados en el mes, asi que
+        # un vendedor que cerro tratos de meses anteriores y no genero leads
+        # nuevos desaparecia de la revision de ese mes. Verificado con datos
+        # reales: Alejandro Gil cerro 4 tratos por $58,599 en septiembre, creo
+        # 0 leads ese mes, y no salia en la junta de septiembre. Justo el caso
+        # del que uno quiere hablar en un 1-on-1.
+        if (kpis["leads_activos"] == 0 and kpis["leads_mes"] == 0
+                and kpis["ganados_mes"] == 0 and kpis["perdidos_mes"] == 0):
             continue
         out.append({
             "vendedor_id": str(v.id),
