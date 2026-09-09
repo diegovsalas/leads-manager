@@ -14,6 +14,13 @@ import meta_campaign_registry
 
 meta_campaigns_bp = Blueprint("meta_campaigns", __name__)
 
+# FEAT-2026-09-09: guardia real. Campanas y presupuesto de Meta Ads.
+# El menu ocultaba el enlace con display:none, pero el endpoint
+# respondia 200 a cualquiera con sesion iniciada. Va como
+# before_request para que una ruta nueva nazca protegida.
+from blueprints.auth import guardia_admin  # noqa: E402
+meta_campaigns_bp.before_request(guardia_admin)
+
 
 def _is_admin():
     return (session.get("user_rol", "") or "").lower().replace(" ", "_") == "super_admin"

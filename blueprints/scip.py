@@ -34,6 +34,13 @@ import scip_alerts
 
 scip_bp = Blueprint("scip", __name__)
 
+# FEAT-2026-09-09: guardia real. Recomendaciones de inversion publicitaria.
+# El menu ocultaba el enlace con display:none, pero el endpoint
+# respondia 200 a cualquiera con sesion iniciada. Va como
+# before_request para que una ruta nueva nazca protegida.
+from blueprints.auth import guardia_admin  # noqa: E402
+scip_bp.before_request(guardia_admin)
+
 
 def _parse_dt(s):
     if not s:

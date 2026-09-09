@@ -17,6 +17,13 @@ import sdr_prospector
 
 sdr_bp = Blueprint("sdr", __name__)
 
+# FEAT-2026-09-09: guardia real. Prospeccion: consume creditos de Apollo y Lusha.
+# El menu ocultaba el enlace con display:none, pero el endpoint
+# respondia 200 a cualquiera con sesion iniciada. Va como
+# before_request para que una ruta nueva nazca protegida.
+from blueprints.auth import guardia_admin  # noqa: E402
+sdr_bp.before_request(guardia_admin)
+
 
 def _norm_name(s: str) -> str:
     return (s or "").lower().strip()

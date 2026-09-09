@@ -23,6 +23,17 @@ ADMIN_ROLES = FULL_ACCESS_ROLES | SCOPED_SUPER_ADMIN_ROLES
 REPORTES_ROLES = ADMIN_ROLES | {"revision_comercial"}
 COMMERCIAL_READ_ROLES = REPORTES_ROLES | {"gerente_comercial_aromatex"}
 
+# FEAT-2026-09-09: infraestructura ≠ dirección comercial.
+#
+# ADMIN_ROLES mete en la misma bolsa al Super Admin global, al Developer y a
+# los cuatro Super Admin con alcance de unidad. Con eso, un Super Admin
+# Pestex veía el gasto de APIs y el tablero de proyecto igual que el
+# Developer — pantallas que no tienen nada que ver con vender su unidad.
+#
+# Sistema = quien responde por la plataforma completa. Los Super Admin con
+# alcance quedan fuera a propósito.
+SISTEMA_ROLES = FULL_ACCESS_ROLES
+
 ROLE_UN_SCOPE = {
     "super_admin_aromatex": ("Aromatex",),
     "super_admin_comercial": ("Aromatex",),
@@ -67,6 +78,33 @@ def is_reportes_role(role=None):
 
 def is_commercial_read_role(role=None):
     return rol_norm(role) in COMMERCIAL_READ_ROLES
+
+
+def is_sistema_role(role=None):
+    """¿Puede ver pantallas de infraestructura (costos, proyecto, integraciones)?"""
+    return rol_norm(role) in SISTEMA_ROLES
+
+
+# ── Guardias a nivel blueprint ──────────────────────────────────────
+# FEAT-2026-09-09: hasta ahora varios módulos de dirección se "protegían"
+# ocultando su enlace en el menú con display:none. Eso es maquillaje: el
+# endpoint quedaba abierto a cualquiera con sesión iniciada. Se verificó que
+# un Vendedor recibía 200 en /api/savio/subscriptions (ingresos del grupo),
+# /api/costs/summary (gasto de infraestructura), /api/scip/...,
+# /api/proyecto/items y /api/meta-campaigns/.
+#
+# Van como before_request del blueprint y no ruta por ruta, para que una
+# ruta nueva nazca protegida en vez de olvidada.
+def guardia_admin():
+    """Datos comerciales de dirección: ingresos, campañas, prospección."""
+    if not is_admin_role():
+        return jsonify({"error": "No autorizado"}), 403
+
+
+def guardia_sistema():
+    """Infraestructura: costos de APIs, proyecto, integraciones."""
+    if not is_sistema_role():
+        return jsonify({"error": "No autorizado"}), 403
 
 
 def allowed_units_for_role(role=None):

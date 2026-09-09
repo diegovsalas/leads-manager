@@ -943,12 +943,19 @@ def create_app():
                     mi_especialidad = list(_u.especialidad_marca)
             except Exception:
                 pass
+        from blueprints.auth import is_sistema_role as _is_sistema_role
         return render_template(
             "pipeline/index.html",
             pipeline=pipeline,
             etapas=list(EtapaPipeline),
             user_nombre=session.get("user_nombre", ""),
             user_rol=session.get("user_rol", ""),
+            # FEAT-2026-09-09: la vista Integraciones imprimia META_VERIFY_TOKEN
+            # dentro del HTML de la pagina — para TODOS, vendedores incluidos.
+            # Ocultar su enlace del menu no servia de nada: el secreto ya
+            # viajaba en el codigo fuente. Ahora solo se interpola si el rol
+            # responde por la plataforma.
+            es_sistema=_is_sistema_role(),
             usuario_id=session.get("usuario_id", ""),
             mi_especialidad=mi_especialidad,
             meta_pixels=get_pixel_ids(),

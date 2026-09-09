@@ -7,6 +7,13 @@ from models import ProyectoItem
 
 proyecto_bp = Blueprint("proyecto", __name__)
 
+# FEAT-2026-09-09: guardia real. Seguimiento interno de la plataforma.
+# El menu ocultaba el enlace con display:none, pero el endpoint
+# respondia 200 a cualquiera con sesion iniciada. Va como
+# before_request para que una ruta nueva nazca protegida.
+from blueprints.auth import guardia_sistema  # noqa: E402
+proyecto_bp.before_request(guardia_sistema)
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/"

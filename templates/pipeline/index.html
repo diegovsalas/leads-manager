@@ -504,13 +504,13 @@ fbq('track','PageView');
       <div class="slink" onclick="showView('campanas',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg> <span class="sl-text">Campañas Meta</span></div>
       <div class="slink admin-only" onclick="location.href='/comisiones/'" title="Tabulador de comisiones multi-UN"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg> <span class="sl-text">Comisiones</span></div>
       <div class="slink" onclick="showView('vincular',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> <span class="sl-text">Vincular Savio<svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>CS</span></div>
-      <div class="slink" onclick="showView('integraciones',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2M15 8V2"/><path d="M18 8v3a6 6 0 0 1-12 0V8Z"/></svg> <span class="sl-text">Integraciones</span></div>
+      <div class="slink sistema-only" onclick="showView('integraciones',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2M15 8V2"/><path d="M18 8v3a6 6 0 0 1-12 0V8Z"/></svg> <span class="sl-text">Integraciones</span></div>
 
       <div class="sidebar-divider"></div>
       <div class="sidebar-section">Sistema</div>
       <a href="/cs/" class="slink"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/></svg> <span class="sl-text">CS Dashboard</span></a>
-      <div class="slink" onclick="showView('costos',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg> <span class="sl-text">Costos APIs</span></div>
-      <div class="slink" onclick="showView('proyecto',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg> <span class="sl-text">Proyecto</span></div>
+      <div class="slink sistema-only" onclick="showView('costos',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg> <span class="sl-text">Costos APIs</span></div>
+      <div class="slink sistema-only" onclick="showView('proyecto',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg> <span class="sl-text">Proyecto</span></div>
     </div>
   </nav>
 
@@ -2987,6 +2987,13 @@ window.MI_ESPECIALIDAD = {{ mi_especialidad|tojson|safe }};
 const ADMIN_ROLES=new Set(['developer','super_admin','super_admin_aromatex','super_admin_pestex','super_admin_comercial','super_admin_nexo']);
 const IS_ADMIN=ADMIN_ROLES.has(ROL_USUARIO);
 const IS_DEVELOPER=ROL_USUARIO==='developer';
+// FEAT-2026-09-09: infraestructura ≠ dirección comercial. Costos de APIs,
+// proyecto e integraciones son de quien responde por la plataforma completa.
+// Los cuatro Super Admin con alcance de unidad quedan fuera a propósito: no
+// tienen nada que ver con el gasto de servidores de su unidad.
+// Espejo de SISTEMA_ROLES en blueprints/auth.py, que es quien de verdad manda.
+const SISTEMA_ROLES=new Set(['developer','super_admin']);
+const IS_SISTEMA=SISTEMA_ROLES.has(ROL_USUARIO);
 // FEAT-2026-09-02: IS_ADMIN gobierna las comisiones. Ver reportes es otra
 // cosa: el perfil de análisis comercial los ve sin ver dinero de nómina.
 const VE_REPORTES=IS_ADMIN||ROL_USUARIO==='revision_comercial';
@@ -6872,6 +6879,9 @@ function applyRoleVisibility(){
   if(!VE_REPORTES){
     document.querySelectorAll('.reportes-only').forEach(el=>el.style.display='none');
   }
+  if(!IS_SISTEMA){
+    document.querySelectorAll('.sistema-only').forEach(el=>el.style.display='none');
+  }
   if(IS_ADMIN)return;
   // Hide elements for vendedor role
   document.querySelectorAll('.admin-only').forEach(el=>el.style.display='none');
@@ -6885,9 +6895,13 @@ function applyDeveloperVisibility(){
 // ── Integraciones ──
 async function loadIntegraciones(){
   // Cloud API status
-  const phoneId='{{ config.WHATSAPP_PHONE_ID or "" }}';
-  const hasToken='{{ "Configurado" if config.WHATSAPP_TOKEN else "No configurado" }}';
-  const verifyToken='{{ config.META_VERIFY_TOKEN or "" }}';
+  // Solo se interpolan para el rol de sistema. Antes viajaban en el HTML de
+  // todos: META_VERIFY_TOKEN es lo que firma el webhook de Meta, y con el a la
+  // vista cualquiera con sesion podia inyectar leads falsos (ver el
+  // RuntimeError de create_app, que explica por que no puede ser publico).
+  const phoneId='{{ (config.WHATSAPP_PHONE_ID if es_sistema else "") or "" }}';
+  const hasToken='{{ "Configurado" if (es_sistema and config.WHATSAPP_TOKEN) else "No configurado" }}';
+  const verifyToken='{{ (config.META_VERIFY_TOKEN if es_sistema else "") or "" }}';
   document.getElementById('int-phone-id').textContent=phoneId||'No configurado';
   document.getElementById('int-wa-token').innerHTML=hasToken==='Configurado'?'<span style="color:var(--green);">Configurado</span>':'<span style="color:var(--red);">No configurado</span>';
   document.getElementById('int-verify').textContent=verifyToken||'No configurado';
