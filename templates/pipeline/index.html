@@ -6,8 +6,20 @@
 <title>CRM Avantex</title>
 <link rel="icon" type="image/x-icon" href="/static/img/favicon.ico"/>
 <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png"/>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+/* FEAT-2026-09-09: Archivo (Google Fonts, licencia OFL) auto-hospedada.
+   Es la fuente variable con el eje de ancho fijado en normal, asi que un solo
+   archivo de 72 KB cubre los pesos 100-900 — menos que las cinco estaticas de
+   Poppins que se pedian al CDN, y sin peticion a un tercero.
+   La licencia va junto al archivo, en static/fonts/OFL.txt. */
+@font-face{
+  font-family:'Archivo';
+  src:url('/static/fonts/archivo-var.woff2') format('woff2-variations');
+  font-weight:100 900;
+  font-style:normal;
+  font-display:swap;
+}
+</style>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <style>
 :root{
@@ -66,8 +78,8 @@
 --purple:#6A86BB;  --purple-bg:#e5ecf8; /* "Eventual" -> acero */
 --pink:#6A86BB;    --pink-bg:#e5ecf8;
 
---font:'Poppins',-apple-system,BlinkMacSystemFont,sans-serif;
---font-display:'Poppins',Georgia,serif;
+--font:'Archivo',-apple-system,BlinkMacSystemFont,sans-serif;
+--font-display:'Archivo',Georgia,serif;
 --mono:"SFMono-Regular",Menlo,Consolas,monospace;
 --r:6px;--r2:8px;
 --shadow:0 1px 2px rgba(12,31,62,.06);

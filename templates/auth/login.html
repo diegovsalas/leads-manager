@@ -5,10 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Login — CRM Avantex</title>
 <link rel="icon" type="image/x-icon" href="/static/img/favicon.ico"/>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+/* FEAT-2026-09-09: Archivo (Google Fonts, licencia OFL) auto-hospedada.
+   Es la fuente variable con el eje de ancho fijado en normal, asi que un solo
+   archivo de 72 KB cubre los pesos 100-900 — menos que las cinco estaticas de
+   Poppins que se pedian al CDN, y sin peticion a un tercero.
+   La licencia va junto al archivo, en static/fonts/OFL.txt. */
+@font-face{
+  font-family:'Archivo';
+  src:url('/static/fonts/archivo-var.woff2') format('woff2-variations');
+  font-weight:100 900;
+  font-style:normal;
+  font-display:swap;
+}
+</style>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-html,body{height:100%;font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;}
+html,body{height:100%;font-family:'Archivo',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;}
 .login-page{display:flex;min-height:100vh;}
 .login-left{flex:1;background:#0C1F3E;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#fff;padding:40px;}
 /* FEAT-2026-09-09: logo oficial en vez del wordmark de texto. Variante
