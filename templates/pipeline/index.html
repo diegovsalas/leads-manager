@@ -10,7 +10,69 @@
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <style>
-:root{--bg:#eff3f8;--bg-sidebar:#3f4994;--bg-hover:rgba(0,0,0,.04);--bg-active:rgba(0,0,0,.06);--bg-card:#fff;--bg-input:#fff;--bg-tag:#e8eaf6;--border:#dfe7ef;--border-light:#e8edf3;--text:#1e293b;--text2:#64748b;--text3:#94a3b8;--accent:#3f4994;--copper:#3f4994;--copper-soft:rgba(63,73,148,.08);--red:#c4412b;--red-bg:#fbe4e4;--orange:#e07c1a;--orange-bg:#faebdd;--green:#2d7a4f;--green-bg:#dbeddb;--blue:#0389cb;--blue-bg:#d3e5ef;--purple:#7c3aed;--purple-bg:#e8deee;--pink:#d44c7c;--pink-bg:#f5e0e9;--yellow:#cb912f;--yellow-bg:#fdecc8;--font:'Poppins',-apple-system,BlinkMacSystemFont,sans-serif;--font-display:'Poppins',Georgia,serif;--mono:"SFMono-Regular",Menlo,Consolas,monospace;--r:6px;--r2:8px;--shadow:0 1px 2px rgba(30,41,59,.05);--shadow-lg:0 4px 12px rgba(30,41,59,.08);}
+:root{
+/* ─────────────────────────────────────────────────────────────────
+   FEAT-2026-09-09: paleta de marca Grupo Avantex.
+
+   Antes habia doce tonos semanticos (rojo, naranja, verde, azul, morado,
+   rosa, amarillo, cada uno con su -bg) mas decenas de hexadecimales sueltos.
+   Nada de eso era color de marca y casi ninguno significaba algo: el morado
+   marcaba "Eventual", el naranja marcaba montos Y advertencias, y el azul
+   cambiaba de tono segun la pantalla.
+
+   Ahora son cuatro colores de marca + tres de estado. Los de estado son
+   irreducibles: "ganado", "perdido" y "por vencer" no se pueden decir en
+   azul. Todo lo demas sale de la marca.
+   ───────────────────────────────────────────────────────────────── */
+
+/* ── Marca ── */
+--marino:#0C1F3E;      /* Azul Marino    — menu, tinta principal */
+--brillante:#0954E6;   /* Azul Brillante — todo lo interactivo */
+--acero:#6A86BB;       /* Azul Acero     — secundario, segunda categoria */
+--gris:#F4F7FB;        /* Gris Claro     — fondo de pagina */
+
+/* ── Superficies ── */
+--bg:#F4F7FB;
+--bg-sidebar:#0C1F3E;
+--bg-sunken:#eef2f9;   /* superficie hundida: cabeceras, chips, columnas */
+--bg-card:#fff;
+--bg-input:#fff;
+--bg-hover:rgba(12,31,62,.045);
+--bg-active:rgba(12,31,62,.07);
+--bg-tag:#e5ecf8;
+--border:#dbe4f0;
+--border-light:#e9eff7;
+
+/* ── Tinta, derivada del marino ── */
+--text:#0C1F3E;
+--text2:#5b6d8c;
+--text3:#93a3bd;
+
+/* ── Acento ── */
+--accent:#0954E6;
+--copper:#0954E6;
+--copper-soft:rgba(9,84,230,.08);
+
+/* ── Estado: los unicos tres tonos fuera de la marca ── */
+--green:#1d7a4c;   --green-bg:#dcf0e5;
+--red:#c0392b;     --red-bg:#fbe6e3;
+--amber:#b26a00;   --amber-bg:#fdf0d9;
+
+/* ── Legado: se mapean a marca o estado para no romper los var() que ya
+      existen. No agregan tonos nuevos. ── */
+--blue:#0954E6;    --blue-bg:#e3ebfd;   /* informativo -> acento */
+--orange:#b26a00;  --orange-bg:#fdf0d9; /* montos y "por vencer" -> ambar */
+--yellow:#b26a00;  --yellow-bg:#fdf0d9; /* advertencia -> ambar */
+--purple:#6A86BB;  --purple-bg:#e5ecf8; /* "Eventual" -> acero */
+--pink:#6A86BB;    --pink-bg:#e5ecf8;
+
+--font:'Poppins',-apple-system,BlinkMacSystemFont,sans-serif;
+--font-display:'Poppins',Georgia,serif;
+--mono:"SFMono-Regular",Menlo,Consolas,monospace;
+--r:6px;--r2:8px;
+--shadow:0 1px 2px rgba(12,31,62,.06);
+--shadow-lg:0 4px 12px rgba(12,31,62,.10);
+}
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;overflow:hidden;-webkit-font-smoothing:antialiased;}
 ::selection{background:rgba(46,170,220,.2);}
@@ -34,7 +96,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
   .shell.nav-open .sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;min-width:220px;height:100vh;z-index:600;box-shadow:0 0 40px rgba(0,0,0,.35);}
   .shell.nav-open .nav-backdrop{display:block;}
 }
-.sidebar{background:var(--bg-sidebar);border-right:1px solid transparent;display:flex;flex-direction:column;overflow:hidden;position:sticky;top:0;height:100vh;box-shadow:0px 4px 50px #d9ddfc;transition:all .2s;}
+.sidebar{background:var(--bg-sidebar);border-right:1px solid transparent;display:flex;flex-direction:column;overflow:hidden;position:sticky;top:0;height:100vh;box-shadow:0px 4px 50px rgba(12,31,62,.16);transition:all .2s;}
 .collapsed .sidebar{width:56px;min-width:56px;}
 .collapsed .sidebar-brand{padding:12px 0;align-items:center;}
 .collapsed .sidebar-brand small,.collapsed .sidebar-section,.collapsed .slink-badge,.collapsed .sidebar-bottom .meta,.collapsed .ws-status{display:none;}
@@ -78,18 +140,18 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .sl-ico{width:17px;height:17px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}
 .slink:hover{background:rgba(255,255,255,.1);color:#fff;}
 .slink.active{background:rgba(255,255,255,.15);color:#fff;font-weight:550;}
-.slink.active::before{content:'';position:absolute;left:0;top:6px;bottom:6px;width:2.5px;border-radius:2px;background:#8bb8f8;}
+.slink.active::before{content:'';position:absolute;left:0;top:6px;bottom:6px;width:2.5px;border-radius:2px;background:var(--acero);}
 .slink[data-marca].active{background:rgba(255,255,255,.15);color:#fff;}
 .slink-badge{margin-left:auto;font-size:11px;color:rgba(255,255,255,.5);font-weight:500;}
 .sidebar-divider{height:1px;background:rgba(255,255,255,.12);margin:8px 14px;}
 .sidebar-bottom{margin-top:auto;padding:10px 12px;border-top:1px solid rgba(255,255,255,.12);display:flex;align-items:center;gap:9px;}
-.sidebar-bottom .avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#0075b7,#8bb8f8);color:#fff;display:grid;place-items:center;font-size:11px;font-weight:600;flex-shrink:0;}
+.sidebar-bottom .avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--brillante),var(--acero));color:#fff;display:grid;place-items:center;font-size:11px;font-weight:600;flex-shrink:0;}
 .sidebar-bottom .meta{flex:1;min-width:0;}
 .sidebar-bottom .meta .name{font-size:12px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sidebar-bottom .meta .role{font-size:10px;color:rgba(255,255,255,.5);}
 .ws-status{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text3);}
 .ws-dot{width:5px;height:5px;border-radius:50%;background:var(--text3);}
-.ws-dot.live{background:#22c55e;}
+.ws-dot.live{background:var(--green);}
 
 .view{display:none;flex:1;overflow:hidden;flex-direction:column;}
 .view.active{display:flex;}
@@ -99,7 +161,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
    no es un error, es un dato que el usuario debe tener presente. */
 .aviso-alcance{display:flex;gap:9px;align-items:flex-start;margin:0 48px 14px;padding:10px 14px;
   background:var(--yellow-bg);border-left:3px solid var(--yellow);border-radius:0 6px 6px 0;
-  font-size:12px;color:#7a5b12;line-height:1.45;}
+  font-size:12px;color:var(--amber);line-height:1.45;}
 .aviso-alcance strong{font-weight:650;}
 /* Mismo trazo que el sidebar: el encabezado dejo de ser lo unico a color de la pagina. */
 .page-ico{width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
@@ -122,8 +184,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .btn{padding:4px 10px;border-radius:var(--r);font-size:13px;font-weight:400;cursor:pointer;border:none;transition:background 80ms;font-family:var(--font);color:var(--text2);background:transparent;display:inline-flex;align-items:center;gap:4px;}
 .btn:hover{background:var(--bg-hover);color:var(--text);}
 .btn-blue{color:var(--accent);background:var(--blue-bg);}
-.btn-filled{background:#0075b7;color:#fff;font-weight:500;padding:6px 12px;border-radius:var(--r);box-shadow:0 1px 3px rgba(0,117,183,.3);}
-.btn-filled:hover{background:#005f96;}
+.btn-filled{background:var(--brillante);color:#fff;font-weight:500;padding:6px 12px;border-radius:var(--r);box-shadow:0 1px 3px rgba(0,117,183,.3);}
+.btn-filled:hover{background:var(--brillante);}
 
 /* Metrics */
 .metrics-row{display:flex;gap:12px;padding:16px 48px 0;flex-shrink:0;}
@@ -154,7 +216,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .funnel-pct{font-size:12px;text-align:right;color:var(--text2);font-family:var(--mono);}
 .funnel-pct strong{display:block;color:var(--text);font-family:var(--font);font-size:11px;font-weight:600;}
 .funnel-side{display:grid;gap:10px;}
-.funnel-side-card{border:1px solid var(--border-light);border-radius:var(--r2);padding:12px;background:#f8fafc;}
+.funnel-side-card{border:1px solid var(--border-light);border-radius:var(--r2);padding:12px;background:var(--bg-sunken);}
 .funnel-side-label{font-size:11px;color:var(--text3);margin-bottom:4px;}
 .funnel-side-value{font-size:20px;font-weight:700;letter-spacing:-.02em;}
 .funnel-side-note{font-size:11px;color:var(--text2);margin-top:2px;}
@@ -189,17 +251,17 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .k-col-valor{font-size:13px;font-weight:600;color:var(--text2);font-family:var(--mono);}
 .k-cards{display:flex;flex-direction:column;gap:6px;overflow-y:auto;flex:1;padding:2px;}
 .k-card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:10px 12px;cursor:pointer;transition:box-shadow 120ms,border-color 120ms,transform 120ms;user-select:none;box-shadow:var(--shadow);}
-.k-card:hover{box-shadow:var(--shadow-lg);border-color:#d0c8be;transform:translateY(-1px);}
+.k-card:hover{box-shadow:var(--shadow-lg);border-color:var(--border);transform:translateY(-1px);}
 .k-card.dragging{opacity:.4;}
 .k-card.is-converted{border-color:var(--green);background:linear-gradient(180deg,rgba(45,122,79,.04),var(--bg-card));}
-.k-card.needs-icp{border-left:3px solid #f59e0b;}
+.k-card.needs-icp{border-left:3px solid var(--amber);}
 .k-card.is-stale{border-left:3px solid var(--orange);}
 .k-card.is-old{border-left:3px solid var(--red);}
 body.hide-converted .k-card.is-converted{display:none;}
 body.show-uncalified-only .k-card:not(.needs-icp){display:none;}
-.k-card-oppo{border-left:4px solid #d97706;background:linear-gradient(180deg,rgba(217,119,6,.06),var(--bg-card));}
-.k-card-oppo:hover{border-color:#b45309;box-shadow:var(--shadow-lg);}
-.k-card-oppo-label{font-size:9px;font-weight:700;color:#b45309;letter-spacing:.6px;}
+.k-card-oppo{border-left:4px solid var(--amber);background:linear-gradient(180deg,rgba(217,119,6,.06),var(--bg-card));}
+.k-card-oppo:hover{border-color:var(--amber);box-shadow:var(--shadow-lg);}
+.k-card-oppo-label{font-size:9px;font-weight:700;color:var(--amber);letter-spacing:.6px;}
 .k-col.drag-over{background:var(--copper-soft);border-radius:14px;}
 .k-card-name{font-size:14px;font-weight:500;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .k-card-phone{font-size:12px;color:var(--text3);font-family:var(--mono);}
@@ -245,17 +307,17 @@ body.show-uncalified-only .k-card:not(.needs-icp){display:none;}
 /* Chat panel */
 .chat-panel{width:340px;flex-shrink:0;border-left:1px solid var(--border);display:none;flex-direction:column;background:#fff;}
 .chat-panel.open{display:flex;}
-.chat-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:#f9f9fb;}
+.chat-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:var(--bg-sunken);}
 .chat-header-info{display:flex;align-items:center;gap:10px;}
 .chat-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0;background:var(--blue-bg);color:var(--blue);}
 .chat-header-name{font-size:13px;font-weight:600;}
 .chat-header-phone{font-size:11px;color:var(--text3);font-family:var(--mono);}
 .chat-close{background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;padding:4px 8px;border-radius:var(--r);}
 .chat-close:hover{color:var(--text);background:var(--bg-hover);}
-.chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:6px;background:#fafafa;}
+.chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:6px;background:var(--bg-sunken);}
 .msg-row{display:flex;}.msg-row.out{justify-content:flex-end;}
 .msg-bubble{max-width:85%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.5;}
-.msg-bubble.in{background:#f0f0f0;color:#37352f;border-bottom-left-radius:4px;}
+.msg-bubble.in{background:var(--bg-sunken);color:var(--text);border-bottom-left-radius:4px;}
 .msg-bubble.out{background:var(--accent);color:#fff;border-bottom-right-radius:4px;}
 .msg-bubble.bot{background:var(--green);color:#fff;border-bottom-right-radius:4px;}
 .msg-time{font-size:10px;margin-top:3px;opacity:.5;text-align:right;}
@@ -326,7 +388,7 @@ tbody td{padding:8px 12px;font-size:14px;}
 .team-card-role{font-size:12px;color:var(--text2);}
 .status-dot{width:6px;height:6px;border-radius:50%;display:inline-block;}
 .crono-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px;}
-.crono-table th{text-align:left;padding:8px 10px;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.3px;border-bottom:2px solid var(--border);background:var(--bg-sidebar);}
+.crono-table th{text-align:left;padding:8px 10px;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.3px;border-bottom:2px solid var(--border);background:var(--bg-sunken);}
 .crono-table td{padding:8px 10px;border-bottom:1px solid var(--border-light);vertical-align:middle;}
 .crono-table tr:hover td{background:var(--bg-hover);}
 .crono-phase{font-weight:600;color:var(--text);white-space:nowrap;}
@@ -576,13 +638,13 @@ fbq('track','PageView');
 
   <!-- Meta vendedor card (solo para vendedores) -->
   <div id="meta-vendedor-card" style="display:none;padding:16px 48px 0;">
-    <div class="dash-card" style="border-left:4px solid #16a34a;">
+    <div class="dash-card" style="border-left:4px solid var(--green);">
       <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:10px;">Tus metas del mes</div>
 
       <!-- META RECURRENTE -->
       <div id="meta-v-rec-row" style="margin-bottom:14px;">
         <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;">
-          <div style="font-size:12px;font-weight:600;color:#b45309;">🔁 Recurrente</div>
+          <div style="font-size:12px;font-weight:600;color:var(--amber);">🔁 Recurrente</div>
           <div style="font-family:var(--mono);font-size:13px;">
             <span style="color:var(--green);font-weight:600;" id="meta-v-rec-actual">$0</span>
             <span style="color:var(--text3);"> / </span>
@@ -591,7 +653,7 @@ fbq('track','PageView');
           </div>
         </div>
         <div style="margin-top:6px;background:var(--border-light);border-radius:99px;height:10px;overflow:hidden;">
-          <div id="meta-v-rec-bar" style="height:100%;border-radius:99px;transition:width 300ms;width:0%;background:#b45309;"></div>
+          <div id="meta-v-rec-bar" style="height:100%;border-radius:99px;transition:width 300ms;width:0%;background:var(--amber);"></div>
         </div>
         <div style="font-size:10px;color:var(--text3);margin-top:3px;text-align:right;" id="meta-v-rec-falta"></div>
       </div>
@@ -599,7 +661,7 @@ fbq('track','PageView');
       <!-- META EVENTUAL -->
       <div id="meta-v-ev-row">
         <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;">
-          <div style="font-size:12px;font-weight:600;color:#6d28d9;">📅 Eventual</div>
+          <div style="font-size:12px;font-weight:600;color:var(--acero);">📅 Eventual</div>
           <div style="font-family:var(--mono);font-size:13px;">
             <span style="color:var(--green);font-weight:600;" id="meta-v-ev-actual">$0</span>
             <span style="color:var(--text3);"> / </span>
@@ -608,7 +670,7 @@ fbq('track','PageView');
           </div>
         </div>
         <div style="margin-top:6px;background:var(--border-light);border-radius:99px;height:10px;overflow:hidden;">
-          <div id="meta-v-ev-bar" style="height:100%;border-radius:99px;transition:width 300ms;width:0%;background:#6d28d9;"></div>
+          <div id="meta-v-ev-bar" style="height:100%;border-radius:99px;transition:width 300ms;width:0%;background:var(--acero);"></div>
         </div>
         <div style="font-size:10px;color:var(--text3);margin-top:3px;text-align:right;" id="meta-v-ev-falta"></div>
       </div>
@@ -825,13 +887,13 @@ fbq('track','PageView');
             <div class="k-card-detail">{{ lead.cantidad_productos }} x ${{ "{:,.0f}".format(lead.precio_unitario) }}</div>
             {% endif %}
             <div class="k-card-tags">
-              {% if lead.marcas_interes and lead.marcas_interes|length > 1 %}{% for m in lead.marcas_interes %}<span class="tag tag-marca">{{ m }}</span>{% endfor %}{% elif lead.marca_interes %}<span class="tag tag-marca">{{ lead.marca_interes }}</span>{% else %}<span class="tag" style="background:#fee2e2;color:#991b1b;font-weight:600;" title="Este lead no tiene UN asignada. Edítalo para clasificarlo.">⚠ Sin UN</span>{% endif %}
-              {% if lead.meta_campaign_info %}<span class="tag" style="background:#e0e7ff;color:#3730a3;font-weight:600;" title="{{ lead.meta_campaign_info.nombre }}">📣 {{ lead.meta_campaign_info.nombre }}</span>{% elif lead.meta_campaign %}<span class="tag" style="background:#f3f4f6;color:#6b7280;font-family:var(--mono);font-size:10px;" title="Campaign ID Meta (no registrada)">📣 {{ lead.meta_campaign[-10:] }}</span>{% endif %}
+              {% if lead.marcas_interes and lead.marcas_interes|length > 1 %}{% for m in lead.marcas_interes %}<span class="tag tag-marca">{{ m }}</span>{% endfor %}{% elif lead.marca_interes %}<span class="tag tag-marca">{{ lead.marca_interes }}</span>{% else %}<span class="tag" style="background:var(--red-bg);color:var(--red);font-weight:600;" title="Este lead no tiene UN asignada. Edítalo para clasificarlo.">⚠ Sin UN</span>{% endif %}
+              {% if lead.meta_campaign_info %}<span class="tag" style="background:var(--blue-bg);color:var(--brillante);font-weight:600;" title="{{ lead.meta_campaign_info.nombre }}">📣 {{ lead.meta_campaign_info.nombre }}</span>{% elif lead.meta_campaign %}<span class="tag" style="background:var(--bg-sunken);color:var(--text2);font-family:var(--mono);font-size:10px;" title="Campaign ID Meta (no registrada)">📣 {{ lead.meta_campaign[-10:] }}</span>{% endif %}
               {% if lead.valor_calculado %}<span class="tag tag-valor">${{ "{:,.0f}".format(lead.valor_calculado) }}</span>{% endif %}
-              {% if lead.tipo_cliente == 'Recurrente' %}<span class="tag" style="background:#dcfce7;color:#16a34a;">Cliente recurrente</span>{% endif %}
-              {% if lead.tipo_cliente == 'Eventual' %}<span class="tag" style="background:#dbeafe;color:#2563eb;">Cliente eventual</span>{% endif %}
-              {% if lead.tipo_venta == 'Recurrente' %}<span class="tag" style="background:#fef3c7;color:#b45309;">🔁 Venta recurrente</span>{% endif %}
-              {% if lead.tipo_venta == 'Eventual' %}<span class="tag" style="background:#ede9fe;color:#6d28d9;">📅 Venta eventual</span>{% endif %}
+              {% if lead.tipo_cliente == 'Recurrente' %}<span class="tag" style="background:var(--green-bg);color:var(--green);">Cliente recurrente</span>{% endif %}
+              {% if lead.tipo_cliente == 'Eventual' %}<span class="tag" style="background:var(--blue-bg);color:var(--brillante);">Cliente eventual</span>{% endif %}
+              {% if lead.tipo_venta == 'Recurrente' %}<span class="tag" style="background:var(--amber-bg);color:var(--amber);">🔁 Venta recurrente</span>{% endif %}
+              {% if lead.tipo_venta == 'Eventual' %}<span class="tag" style="background:var(--purple-bg);color:var(--acero);">📅 Venta eventual</span>{% endif %}
             </div>
             <div class="k-card-foot">
               <span class="tag tag-origen">{{ lead.origen.value if lead.origen else 'Manual' }}</span>
@@ -840,13 +902,13 @@ fbq('track','PageView');
               {% set icp_c = icp_colors.get(lead.icp_nivel, ('var(--bg-tag)', 'var(--text3)')) %}
               <span class="tag" style="background:{{ icp_c[0] }};color:{{ icp_c[1] }};font-weight:600;">ICP {{ lead.icp_nivel }}</span>
               {% endif %}
-              {% if lead.needs_icp %}<span class="tag" style="background:#fef3c7;color:#92400e;font-weight:600;" title="Falta industria o tamaño — calificalo para subir el ICP">⚠ Sin calificar</span>{% endif %}
+              {% if lead.needs_icp %}<span class="tag" style="background:var(--amber-bg);color:var(--amber);font-weight:600;" title="Falta industria o tamaño — calificalo para subir el ICP">⚠ Sin calificar</span>{% endif %}
               {% if lead.usuario_asignado %}<span class="tag tag-vendedor">{{ lead.usuario_asignado.nombre.split(' ')[0] }}</span>{% endif %}
               {% set has_cotizar = etapa.value in ['Cotización', 'Demo', 'Negociación'] %}
               {% set has_opp = etapa.value in ['Cotización', 'Demo', 'Negociación', '2do Contacto', '3er Contacto', '4to Contacto'] %}
               {% if has_cotizar or has_opp %}
               <div class="k-card-actions">
-                {% if has_cotizar %}<span class="tag" style="background:var(--blue-bg);color:var(--accent);cursor:pointer;" onclick="event.stopPropagation();abrirCotizacion('{{ lead.id }}')" title="Generar cotización">&#128196;</span>{% endif %}
+                {% if has_cotizar %}<span class="tag" style="background:var(--blue-bg);color:var(--accent);cursor:pointer;" onclick="event.stopPropagation();abrirCotizacion('{{ lead.id }}')" title="Generar cotización">&#128196;;</span>{% endif %}
                 {% if has_opp and MOSTRAR_OPORTUNIDADES %}<span class="tag" style="background:var(--copper-soft);color:var(--copper);cursor:pointer;font-weight:600;" onclick="event.stopPropagation();convertirLeadAOportunidad('{{ lead.id }}')" title="Convertir a Oportunidad">&#127919;</span>{% endif %}
               </div>
               {% endif %}
@@ -1735,7 +1797,7 @@ fbq('track','PageView');
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;flex:1;min-height:0;">
       <div style="display:flex;flex-direction:column;min-height:0;">
         <div style="font-size:12px;font-weight:600;margin-bottom:6px;">RFCs ya vinculados</div>
-        <div id="vinc-current" style="overflow-y:auto;border:1px solid var(--border);border-radius:var(--r);padding:8px;flex:1;background:var(--bg-sidebar);"></div>
+        <div id="vinc-current" style="overflow-y:auto;border:1px solid var(--border);border-radius:var(--r);padding:8px;flex:1;background:var(--bg-sunken);"></div>
       </div>
       <div style="display:flex;flex-direction:column;min-height:0;">
         <div style="font-size:12px;font-weight:600;margin-bottom:6px;">Buscar en Savio (nombre o RFC)</div>
@@ -2403,7 +2465,7 @@ fbq('track','PageView');
   </div>
   <div class="modal-actions">
     <button class="btn" onclick="closePerdidoModal()">Cancelar</button>
-    <button class="btn" style="background:#dc2626;color:#fff;font-weight:500;padding:6px 12px;" onclick="confirmarPerdido()">Confirmar perdida</button>
+    <button class="btn" style="background:var(--red);color:#fff;font-weight:500;padding:6px 12px;" onclick="confirmarPerdido()">Confirmar perdida</button>
   </div>
 </div></div>
 
@@ -2415,7 +2477,7 @@ fbq('track','PageView');
     <!-- FEAT-2026-09-08: qué se está cerrando. Sin esto el modal es genérico
          y el vendedor no puede saber si el bloque de respaldo falta porque su
          venta no lo exige o porque el lead trae mal la unidad de negocio. -->
-    <div id="mg-contexto" style="display:none;border-left:3px solid var(--copper);padding:6px 10px;margin-bottom:10px;background:var(--bg-sidebar);border-radius:0 5px 5px 0;"></div>
+    <div id="mg-contexto" style="display:none;border-left:3px solid var(--copper);padding:6px 10px;margin-bottom:10px;background:var(--bg-sunken);border-radius:0 5px 5px 0;"></div>
     <div id="mg-intro" style="font-size:12px;color:var(--text2);margin-bottom:12px;"></div>
     <!-- FEAT-2026-06-25: tipo_venta obligatorio para que cuente en la meta correcta -->
     <div class="form-group" id="mg-tipo-venta-group">
@@ -2492,7 +2554,7 @@ fbq('track','PageView');
 
     <div class="modal-actions">
       <button class="btn" onclick="closeGanadoModal()">Cancelar</button>
-      <button class="btn" style="background:#16a34a;color:#fff;font-weight:500;padding:6px 12px;" onclick="confirmarGanado()">Confirmar cierre ganado</button>
+      <button class="btn" style="background:var(--green);color:#fff;font-weight:500;padding:6px 12px;" onclick="confirmarGanado()">Confirmar cierre ganado</button>
     </div>
   </div>
 </div>
@@ -2504,13 +2566,13 @@ fbq('track','PageView');
   <div class="modal">
     <div class="modal-title">Respaldo de la venta</div>
     <input type="hidden" id="oe-opp-id" value=""/>
-    <div id="oe-contexto" style="display:none;border-left:3px solid var(--copper);padding:6px 10px;margin-bottom:10px;background:var(--bg-sidebar);border-radius:0 5px 5px 0;"></div>
+    <div id="oe-contexto" style="display:none;border-left:3px solid var(--copper);padding:6px 10px;margin-bottom:10px;background:var(--bg-sunken);border-radius:0 5px 5px 0;"></div>
     <div style="font-size:12px;color:var(--text2);margin-bottom:10px;" id="oe-motivo"></div>
     <div id="oe-tipos" style="display:flex;flex-direction:column;gap:6px;"></div>
     <div id="oe-msg" style="font-size:10px;color:var(--red);margin-top:6px;"></div>
     <div class="modal-actions">
       <button class="btn" onclick="closeOppEvid()">Cancelar</button>
-      <button class="btn" style="background:#16a34a;color:#fff;font-weight:500;padding:6px 12px;" onclick="confirmarOppEvid()">Adjuntar y cerrar</button>
+      <button class="btn" style="background:var(--green);color:#fff;font-weight:500;padding:6px 12px;" onclick="confirmarOppEvid()">Adjuntar y cerrar</button>
     </div>
   </div>
 </div>
@@ -2584,7 +2646,7 @@ fbq('track','PageView');
       <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border-light);display:flex;gap:6px;flex-wrap:wrap;">
         <button class="btn" onclick="abrirEditarFactura()" style="font-size:11px;padding:4px 10px;">✏️ Editar factura</button>
         <!-- FEAT-2026-06-29: atajo para registrar otra venta al mismo cliente -->
-        <button class="btn" onclick="nuevaVentaMismoCliente()" style="font-size:11px;padding:4px 10px;background:#16a34a;color:#fff;font-weight:600;">➕ Nueva venta al mismo cliente</button>
+        <button class="btn" onclick="nuevaVentaMismoCliente()" style="font-size:11px;padding:4px 10px;background:var(--green);color:#fff;font-weight:600;">➕ Nueva venta al mismo cliente</button>
       </div>
     </div>
     <div class="lp-section" id="lp-pendiente-factura" style="display:none;border-left:3px solid var(--orange);">
@@ -2654,7 +2716,7 @@ fbq('track','PageView');
 <div class="modal-overlay" id="modal-cotizacion" onclick="if(event.target===this)closeCotModal()"><div class="modal" style="width:580px;max-height:90vh;overflow-y:auto;">
   <div class="modal-title">Generar cotización</div>
   <input type="hidden" id="cot-lead-id"/>
-  <div style="font-size:12px;color:var(--text2);margin-bottom:12px;padding:8px;background:var(--bg-sidebar);border-radius:var(--r2);">Confirma los datos antes de generar el PDF. El vendedor puede editar cualquier campo.</div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:12px;padding:8px;background:var(--bg-sunken);border-radius:var(--r2);">Confirma los datos antes de generar el PDF. El vendedor puede editar cualquier campo.</div>
   <div class="form-row"><div class="form-group"><label class="form-label">Cliente</label><input class="form-input" id="cot-nombre" type="text"/></div><div class="form-group"><label class="form-label">Empresa</label><input class="form-input" id="cot-empresa" type="text"/></div></div>
   <div class="form-row"><div class="form-group"><label class="form-label">Teléfono</label><input class="form-input" id="cot-tel" type="text"/></div><div class="form-group"><label class="form-label">Correo (para envío)</label><input class="form-input" id="cot-correo" type="email" placeholder="cliente@empresa.com"/></div></div>
   <div class="form-row"><div class="form-group"><label class="form-label">Unidad de negocio</label><select class="form-select" id="cot-marca"><option>Aromatex</option><option>Aromatex Home</option><option>Pestex</option><option>Weldex</option><option>Nexo</option></select></div><div class="form-group"><label class="form-label">Condiciones de pago</label><select class="form-select" id="cot-pago"><option value="PUE">PUE — Pago en una exhibición</option><option value="PPD 30 días">PPD — 30 días (clientes clave)</option></select></div></div>
@@ -2720,7 +2782,7 @@ fbq('track','PageView');
     </div>
     <div class="form-group">
       <label class="form-label">Autor</label>
-      <input class="form-input" id="idea-autor" type="text" readonly style="background:var(--bg-sidebar);"/>
+      <input class="form-input" id="idea-autor" type="text" readonly style="background:var(--bg-sunken);"/>
     </div>
   </div>
   <div class="modal-actions" style="border-top:none;padding-top:8px;">
@@ -2735,7 +2797,7 @@ fbq('track','PageView');
       </div>
     </div>
     <div id="idea-prompt-area" style="display:none;">
-      <pre id="idea-prompt-text" style="font-size:13px;color:var(--text2);white-space:pre-wrap;line-height:1.6;max-height:300px;overflow-y:auto;font-family:var(--font);background:var(--bg-sidebar);border:1px solid var(--border-light);border-radius:var(--r2);padding:12px;"></pre>
+      <pre id="idea-prompt-text" style="font-size:13px;color:var(--text2);white-space:pre-wrap;line-height:1.6;max-height:300px;overflow-y:auto;font-family:var(--font);background:var(--bg-sunken);border:1px solid var(--border-light);border-radius:var(--r2);padding:12px;"></pre>
     </div>
     <div id="idea-no-prompt" style="font-size:13px;color:var(--text3);padding:12px;text-align:center;border:1px dashed var(--border);border-radius:var(--r2);">
       Sin prompt generado. Haz clic en "Generar prompt" para crear uno con Gemini AI.
@@ -2762,7 +2824,7 @@ fbq('track','PageView');
 <style>
   #ai-fab{
     position:fixed; bottom:22px; right:22px; width:52px; height:52px;
-    border-radius:50%; background:var(--bg-sidebar); color:#fff; border:0;
+    border-radius:50%; background:var(--bg-sunken); color:#fff; border:0;
     cursor:pointer; box-shadow:var(--shadow-lg), 0 0 0 4px rgba(63,73,148,.08);
     font-size:22px; z-index:9998; transition:transform .15s, box-shadow .15s;
     display:flex; align-items:center; justify-content:center;
@@ -2777,7 +2839,7 @@ fbq('track','PageView');
     font-family:var(--font);
   }
   .ai-header{
-    background:var(--bg-sidebar); color:#fff; padding:14px 16px;
+    background:var(--bg-sunken); color:#fff; padding:14px 16px;
     display:flex; justify-content:space-between; align-items:center;
   }
   .ai-header-title{ font-weight:600; font-size:14px; line-height:1.2; letter-spacing:.1px; }
@@ -3117,15 +3179,17 @@ window.addEventListener('DOMContentLoaded', ()=>{
 // rojo, que estan reservados para estado. Un arcoiris sobre datos ordenados.
 //
 // Ahora es un solo tono en escalones de luminosidad, asi el avance se lee en
-// el color. Generadas sobre el azul de marca #3f4994 y validadas (no elegidas
+// el color. Generadas sobre el Azul Brillante de marca (#0954E6) y validadas (no elegidas
 // a ojo): luminosidad monotona, salto >= 0.06 entre pasos y extremo claro
 // >= 2:1 contra el blanco de la tarjeta.
 //
 // Verde y rojo quedan SOLO para los dos desenlaces, que si son estado.
-const RAMPA_ETAPA_8=['#a5b0db','#8f9acc','#7a85bd','#6571ae','#515c9f','#3e4890','#2d3381','#1e1d72'];
-const RAMPA_ETAPA_9=['#a5b0db','#909bcc','#7c88be','#6874af','#5561a0','#434e92','#323a83','#232774','#170f66'];
-const RAMPA_EMBUDO=['#a5afdb','#7e8bc5','#5a66af','#394198'];
-const COLOR_GANADO='#16a34a', COLOR_PERDIDO='#dc2626';
+const RAMPA_ETAPA_8=['#90b1ef','#759ce4','#5a86d9','#4070cd','#2559c1','#0640b4','#033190','#01226c'];
+const RAMPA_ETAPA_9=['#90b1ef','#769ce3','#5d87d7','#4371ca','#2a5bbd','#0f44b0','#033292','#01246f','#00164d'];
+const RAMPA_EMBUDO=['#90b1ef','#608ee6','#3068db','#0543be'];
+// Un solo verde y un solo rojo, los del token. Antes habia cuatro verdes y
+// tres rojos distintos repartidos por el archivo.
+const COLOR_GANADO='var(--green)', COLOR_PERDIDO='var(--red)';
 
 const ETAPA_COLORS={
   'Nuevo Lead':RAMPA_ETAPA_8[0],'1er Contacto':RAMPA_ETAPA_8[1],'2do Contacto':RAMPA_ETAPA_8[2],
@@ -3500,8 +3564,8 @@ async function loadCampanas(){
     for(const c of (d.campaigns||[])){
       const zonasStr=(c.zonas||[]).slice(0,5).join(', ')+((c.zonas||[]).length>5?` +${c.zonas.length-5}`:'');
       const activoBadge=c.activa
-        ? '<span class="tag" style="background:#dcfce7;color:#16a34a;font-size:10px;">activa</span>'
-        : '<span class="tag" style="background:#fef3c7;color:#92400e;font-size:10px;">inactiva</span>';
+        ? '<span class="tag" style="background:var(--green-bg);color:var(--green);font-size:10px;">activa</span>'
+        : '<span class="tag" style="background:var(--amber-bg);color:var(--amber);font-size:10px;">inactiva</span>';
       tb.innerHTML+=`<tr>
         <td style="font-family:var(--mono);font-size:11px;color:var(--text2);">${c.campaign_id}</td>
         <td><strong>${_esc(c.nombre)}</strong></td>
@@ -3603,13 +3667,13 @@ let _revTab = 'vendedores';
 let _revVendedorSel = null;
 
 const ORIGEN_COLORS_REV={
-  'Meta Ads':         {bg:'#dbeafe', fg:'#1d4ed8'},
-  'WhatsApp Organico':{bg:'#dcfce7', fg:'#15803d'},
-  'Web':              {bg:'#fef3c7', fg:'#b45309'},
-  'Prospeccion':      {bg:'#ede9fe', fg:'#6d28d9'},
-  'Upselling':        {bg:'#fce7f3', fg:'#be185d'},
-  'Cross-selling':    {bg:'#cffafe', fg:'#0e7490'},
-  'Sin origen':       {bg:'#f3f4f6', fg:'#6b7280'},
+  'Meta Ads':         {bg:'var(--blue-bg)', fg:'var(--brillante)'},
+  'WhatsApp Organico':{bg:'var(--green-bg)', fg:'var(--green)'},
+  'Web':              {bg:'var(--amber-bg)', fg:'var(--amber)'},
+  'Prospeccion':      {bg:'var(--purple-bg)', fg:'var(--acero)'},
+  'Upselling':        {bg:'var(--pink-bg)', fg:'var(--acero)'},
+  'Cross-selling':    {bg:'var(--blue-bg)', fg:'var(--brillante)'},
+  'Sin origen':       {bg:'var(--bg-sunken)', fg:'var(--text2)'},
 };
 const ETAPA_COLORS_REV={
   'Nuevo Lead':RAMPA_ETAPA_9[0],'1er Contacto':RAMPA_ETAPA_9[1],'2do Contacto':RAMPA_ETAPA_9[2],
@@ -3891,13 +3955,13 @@ async function loadVendedorDetail(vendedorId){
     // Guardamos en window para que el modal lo pueda usar
     window._leadsSinClasificarActuales = _leadsSinClasificar;
     const _warningSinClasificarHtml = _sinClasCount > 0 ? `
-      <div style="margin-top:10px;padding:8px 12px;background:#FEF3C7;border:1px solid #FBBF24;border-radius:6px;display:flex;align-items:center;gap:10px;font-size:12px;">
+      <div style="margin-top:10px;padding:8px 12px;background:var(--amber-bg);border:1px solid var(--amber);border-radius:6px;display:flex;align-items:center;gap:10px;font-size:12px;">
         <span style="font-size:16px;">⚠️</span>
         <div style="flex:1;">
-          <strong style="color:#92400E;">${_sinClasCount} lead${_sinClasCount===1?'':'s'} sin clasificar</strong>
-          <span style="color:#78350F;"> · no cuenta${_sinClasCount===1?'':'n'} en meta Recurrente ni Eventual</span>
+          <strong style="color:var(--amber);">${_sinClasCount} lead${_sinClasCount===1?'':'s'} sin clasificar</strong>
+          <span style="color:var(--amber);"> · no cuenta${_sinClasCount===1?'':'n'} en meta Recurrente ni Eventual</span>
         </div>
-        <button onclick="_abrirSinClasificarModal()" class="btn" style="font-size:11px;padding:4px 10px;background:#F59E0B;color:#fff;border:none;font-weight:600;">
+        <button onclick="_abrirSinClasificarModal()" class="btn" style="font-size:11px;padding:4px 10px;background:var(--amber);color:#fff;border:none;font-weight:600;">
           Ver y clasificar
         </button>
       </div>` : '';
@@ -3937,7 +4001,7 @@ async function loadVendedorDetail(vendedorId){
     for(const f of (d.funnel||[])){
       if(f.count===0)continue;
       const w=(f.count/maxFunnel)*100;
-      const c=ETAPA_COLORS_REV[f.etapa]||'#9ca3af';
+      const c=ETAPA_COLORS_REV[f.etapa]||'var(--text3)';
       html+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;">
         <div style="width:130px;color:var(--ink-1);">${_esc(f.etapa)}</div>
         <div style="flex:1;background:var(--bg-soft);border-radius:4px;height:18px;position:relative;">
@@ -3957,7 +4021,7 @@ async function loadVendedorDetail(vendedorId){
       const ll=(d.leads_por_etapa||{})[etapa];
       if(!ll||!ll.length)continue;
       hasAny=true;
-      const c=ETAPA_COLORS_REV[etapa]||'#9ca3af';
+      const c=ETAPA_COLORS_REV[etapa]||'var(--text3)';
       html+=`<div style="padding:14px 18px;border-bottom:1px solid var(--border-light);">
         <div style="font-size:12px;font-weight:700;color:${c};text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">${_esc(etapa)} · ${ll.length} leads</div>
         <table style="width:100%;font-size:12px;">
@@ -4285,8 +4349,8 @@ async function loadCorreosDeUnVendedor(){
       // FEAT-2026-07-07: badge por dirección + header contextual
       const esIn = (e.direccion||'OUT') === 'IN';
       const dirBadge = esIn
-        ? '<span style="background:#DBEAFE;color:#1E40AF;font-size:9px;font-weight:700;padding:2px 6px;border-radius:99px;text-transform:uppercase;letter-spacing:.03em;">📥 Recibido</span>'
-        : '<span style="background:#DCFCE7;color:#166534;font-size:9px;font-weight:700;padding:2px 6px;border-radius:99px;text-transform:uppercase;letter-spacing:.03em;">📤 Enviado</span>';
+        ? '<span style="background:var(--blue-bg);color:var(--brillante);font-size:9px;font-weight:700;padding:2px 6px;border-radius:99px;text-transform:uppercase;letter-spacing:.03em;">📥 Recibido</span>'
+        : '<span style="background:var(--green-bg);color:var(--green);font-size:9px;font-weight:700;padding:2px 6px;border-radius:99px;text-transform:uppercase;letter-spacing:.03em;">📤 Enviado</span>';
       const headerContexto = esIn
         ? `De: <strong>${_esc(e.from_email||'—')}</strong>`
         : `Para: <strong>${_esc(to)}</strong>${cc}`;
@@ -4367,7 +4431,7 @@ async function loadRoi(){
     tbody.innerHTML+=rowFor('Sin atribuir',d.sin_origen);
   }
   // Totales row
-  tbody.innerHTML+=`<tr style="border-top:2px solid var(--border);font-weight:600;background:var(--bg-sidebar);">
+  tbody.innerHTML+=`<tr style="border-top:2px solid var(--border);font-weight:600;background:var(--bg-sunken);">
     <td>TOTAL</td>
     <td style="text-align:right;">${_fmtNum(t.leads)}</td>
     <td style="text-align:right;">${_fmtNum(t.calificados)}</td>
@@ -4461,7 +4525,7 @@ async function loadOpps(){
     const color=_OPPS_ETAPA_COLOR[col.etapa]||'var(--text2)';
     const colEl=document.createElement('div');
     colEl.className='opps-col';colEl.dataset.etapa=col.etapa;
-    colEl.style.cssText='flex:0 0 280px;background:var(--bg-sidebar);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px;border-top:3px solid '+color+';';
+    colEl.style.cssText='flex:0 0 280px;background:var(--bg-sunken);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px;border-top:3px solid '+color+';';
     colEl.innerHTML=`
       <div style="display:flex;justify-content:space-between;align-items:baseline;padding:0 4px 6px;">
         <div style="font-weight:600;font-size:12px;color:${color};">${col.etapa}</div>
@@ -4473,9 +4537,9 @@ async function loadOpps(){
     items.style.cssText='display:flex;flex-direction:column;gap:6px;min-height:40px;';
     items.dataset.etapa=col.etapa;
     items.ondragover=e=>{e.preventDefault();items.parentElement.style.background='var(--copper-soft)';};
-    items.ondragleave=()=>{items.parentElement.style.background='var(--bg-sidebar)';};
+    items.ondragleave=()=>{items.parentElement.style.background='var(--bg-sunken)';};
     items.ondrop=async e=>{
-      e.preventDefault();items.parentElement.style.background='var(--bg-sidebar)';
+      e.preventDefault();items.parentElement.style.background='var(--bg-sunken)';
       const oppId=e.dataTransfer.getData('text/opp-id');
       const targetEtapa=items.dataset.etapa;
       if(!oppId)return;
@@ -4618,7 +4682,7 @@ async function runScipAnalyze(){
     const a=d.analysis||{};
     const actionColor={scale_up:'var(--green)',pause:'var(--red)',duplicate_to:'var(--blue)',refresh_creative:'var(--orange)',keep:'var(--text2)',redirect_budget:'var(--yellow)'}[a.suggested_action]||'var(--text)';
     result.innerHTML=`
-      <div style="padding:14px;background:var(--bg-sidebar);border-radius:8px;margin-bottom:12px;">
+      <div style="padding:14px;background:var(--bg-sunken);border-radius:8px;margin-bottom:12px;">
         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;">Acción sugerida</div>
         <div style="font-size:20px;font-weight:600;color:${actionColor};margin-top:2px;">${a.suggested_action||'?'}</div>
         <div style="font-size:11px;color:var(--text2);margin-top:4px;">Confianza: ${a.confidence||'?'}%</div>
@@ -4984,13 +5048,13 @@ async function loadDashboard(){
     document.getElementById('m-total').textContent=embudo.leads_totales;
     // Breakdown por origen como mini-chips (Meta Ads, Web, WhatsApp, Prospección, Upselling, Cross-selling, Sin origen)
     const ORIGEN_COLOR={
-      'Meta Ads':         {bg:'#dbeafe', fg:'#1d4ed8'},
-      'WhatsApp Organico':{bg:'#dcfce7', fg:'#15803d'},
-      'Web':              {bg:'#fef3c7', fg:'#b45309'},
-      'Prospeccion':      {bg:'#ede9fe', fg:'#6d28d9'},
-      'Upselling':        {bg:'#fce7f3', fg:'#be185d'},
-      'Cross-selling':    {bg:'#cffafe', fg:'#0e7490'},
-      'Sin origen':       {bg:'#f3f4f6', fg:'#6b7280'},
+      'Meta Ads':         {bg:'var(--blue-bg)', fg:'var(--brillante)'},
+      'WhatsApp Organico':{bg:'var(--green-bg)', fg:'var(--green)'},
+      'Web':              {bg:'var(--amber-bg)', fg:'var(--amber)'},
+      'Prospeccion':      {bg:'var(--purple-bg)', fg:'var(--acero)'},
+      'Upselling':        {bg:'var(--pink-bg)', fg:'var(--acero)'},
+      'Cross-selling':    {bg:'var(--blue-bg)', fg:'var(--brillante)'},
+      'Sin origen':       {bg:'var(--bg-sunken)', fg:'var(--text2)'},
     };
     const subEl=document.getElementById('m-total-sub');
     subEl.innerHTML='';
@@ -5024,7 +5088,7 @@ async function loadDashboard(){
     etapas.forEach(e=>{
       const d=pipeVals[e]||{cantidad:0,valor:0};
       const h=Math.max((d.valor/maxV)*130,d.cantidad>0?16:4);
-      const color=DASH_COLORS[e]||ETAPA_COLORS[e]||'#787774';
+      const color=DASH_COLORS[e]||ETAPA_COLORS[e]||'var(--text2)';
       pb.innerHTML+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
         <div style="font-size:12px;font-weight:600;">${fmt$(d.valor)}</div>
         <div style="font-size:11px;color:var(--text2);">${d.cantidad}</div>
@@ -5196,7 +5260,7 @@ async function loadProyecto(){
       _ideas[i.id]=i;
       const hasPrompt=!!i.prompt_dev;
       const promptBadge=hasPrompt
-        ?`<span style="font-size:11px;color:var(--accent);margin-left:auto;">&#128196; Prompt listo</span>`
+        ?`<span style="font-size:11px;color:var(--accent);margin-left:auto;">&#128196;; Prompt listo</span>`
         :`<span style="font-size:11px;color:var(--text3);margin-left:auto;">Sin prompt</span>`;
       ig.innerHTML+=`<div class="idea-card" data-id="${i.id}" onclick="openIdeaDetail('${i.id}')">
         <div class="idea-card-title">${i.titulo}</div>
@@ -5417,7 +5481,7 @@ function _renderMhList(containerId,leads,emptyMsg){
   const c=document.getElementById(containerId);
   if(!leads.length){c.innerHTML=`<div class="mh-empty">${emptyMsg}</div>`;return;}
   c.innerHTML=leads.map(l=>{
-    const etapaColor=ETAPA_COLORS[l.etapa_pipeline]||'#787774';
+    const etapaColor=ETAPA_COLORS[l.etapa_pipeline]||'var(--text2)';
     const valor=l.valor_estimado?fmt$(l.valor_estimado):'';
     const icp=l.icp_nivel?`<span class="tag tag-icp-${l.icp_nivel}">ICP ${l.icp_nivel}</span>`:'';
     const marca=l.marca_interes?`<span class="tag tag-marca">${l.marca_interes}</span>`:'';
@@ -5466,7 +5530,7 @@ async function abrirLeadPanel(id){
     }else{badge.style.display='none';}
 
     // General
-    const etapaColor=ETAPA_COLORS[l.etapa_pipeline]||'#787774';
+    const etapaColor=ETAPA_COLORS[l.etapa_pipeline]||'var(--text2)';
     document.getElementById('lp-etapa').innerHTML=`<span class="tag" style="background:${etapaColor}22;color:${etapaColor};">${l.etapa_pipeline}</span>`;
     document.getElementById('lp-origen').textContent=l.origen||'Manual';
     document.getElementById('lp-marca').innerHTML=(l.marcas_interes&&l.marcas_interes.length)
@@ -5852,8 +5916,8 @@ const CRONO_INFO={
   15:{t:'Fase 15 — Cotizaciones automáticas (PDF)',d:'Generación de cotizaciones PDF desde el Kanban con formato corporativo (datos fiscales LIMPIFEX, RFC LIM150325PV7, banco BBVA). El vendedor confirma datos antes de generar. Se envía por correo al cliente via Resend.\n\n<strong>Pendiente:</strong> 1) Alejandro Gil: catálogo Aromatex. 2) Alan Aziz: catálogo Pestex. 3) Weldex: pendiente responsable. Descuentos por volumen solo autorizan Alejandro Gil o Alan Aziz.',r:'Diego V.',s:'Iniciar hoy',f:'12-15 Abr'},
   17:{t:'Fase 17 — Google SSO + Seguridad',d:'Implementar login con Google OAuth 2.0 para que el equipo acceda con su cuenta @grupoavantex.com sin contraseña manual. Reforzar seguridad de sesiones y tokens CSRF.',r:'Diego V.',s:'Pendiente',f:'15-17 Abr'},
   16:{t:'Fase 16 — Reportes avanzados + Export',d:'Dashboard con reportes de conversión por vendedor, por unidad de negocio y por periodo. Exportar datos a Excel/CSV. Comparativa de rendimiento del equipo comercial.',r:'Alejandro G. / Andrea R.',s:'Pendiente',f:'16-19 Abr'},
-  10:{t:'Fase 10 — WhatsApp Cloud API',d:'Integración completa con WhatsApp Business: enviar y recibir mensajes desde el CRM, detección automática de respuestas del lead (detiene cadencia). Requiere WHATSAPP_TOKEN y WHATSAPP_PHONE_ID.\n\n<strong style="color:#eb5757;">⚠️ BLOQUEADA:</strong> Sin acceso a Meta Business. Escalar lo antes posible.',r:'Diego V. / Andrea R.',s:'Bloqueada',f:'18-21 Abr'},
-  11:{t:'Fase 11 — Meta Ads Webhooks',d:'Recibir leads automáticamente desde formularios de Facebook/Instagram Ads. El lead se crea en el CRM y se asigna por Round-Robin al vendedor con especialidad en la marca.\n\n<strong style="color:#eb5757;">⚠️ BLOQUEADA:</strong> Requiere configurar webhook URL en Meta Business Suite.',r:'Diego V. / Andrea R.',s:'Bloqueada',f:'19-22 Abr'},
+  10:{t:'Fase 10 — WhatsApp Cloud API',d:'Integración completa con WhatsApp Business: enviar y recibir mensajes desde el CRM, detección automática de respuestas del lead (detiene cadencia). Requiere WHATSAPP_TOKEN y WHATSAPP_PHONE_ID.\n\n<strong style="color:var(--red);">⚠️ BLOQUEADA:</strong> Sin acceso a Meta Business. Escalar lo antes posible.',r:'Diego V. / Andrea R.',s:'Bloqueada',f:'18-21 Abr'},
+  11:{t:'Fase 11 — Meta Ads Webhooks',d:'Recibir leads automáticamente desde formularios de Facebook/Instagram Ads. El lead se crea en el CRM y se asigna por Round-Robin al vendedor con especialidad en la marca.\n\n<strong style="color:var(--red);">⚠️ BLOQUEADA:</strong> Requiere configurar webhook URL en Meta Business Suite.',r:'Diego V. / Andrea R.',s:'Bloqueada',f:'19-22 Abr'},
   12:{t:'Fase 12 — Chat en vivo (UI bidireccional)',d:'Interfaz de chat dentro del CRM para que los vendedores conversen con leads en tiempo real vía WhatsApp. Historial completo de mensajes, indicadores de lectura y notificaciones.',r:'Andrea R. / Diego V.',s:'Pendiente',f:'21-24 Abr'},
   18:{t:'Fase 18 — Notificaciones push + Email',d:'Alertas automáticas al vendedor cuando: llega un lead nuevo, un lead responde, se vence un seguimiento, o se alcanza una meta. Por email (Resend) y notificación en el CRM.',r:'Alejandro G. / Andrea R.',s:'Pendiente',f:'22-25 Abr'},
   13:{t:'Fase 13 — Bot WhatsApp interno (MVP)',d:'Bot para que los vendedores gestionen leads directamente desde WhatsApp: consultar pipeline, registrar contacto, ver próximos seguimientos. Versión mínima viable con comandos básicos.',r:'Diego V.',s:'Pendiente',f:'24-27 Abr'},
@@ -5906,16 +5970,16 @@ function toggleVerBajas(on){
 }
 
 const ROL_CHIPS = {
-  'Developer':   {bg:'#111827', fg:'#ffffff', label:'Developer'},
-  'Super Admin': {bg:'#fce7f3', fg:'#be185d', label:'Super Admin'},
-  'Super Admin Aromatex': {bg:'#ede9fe', fg:'#6d28d9', label:'SA Aromatex'},
-  'Super Admin Pestex':   {bg:'#dcfce7', fg:'#166534', label:'SA Pestex'},
-  'Super Admin Comercial':{bg:'#e0f2fe', fg:'#075985', label:'SA Comercial'},
-  'Super Admin Nexo':     {bg:'#fee2e2', fg:'#991b1b', label:'SA Nexo'},
-  'Gerente Comercial Aromatex': {bg:'#fef3c7', fg:'#92400e', label:'Gerente Aromatex'},
-  'KAM':         {bg:'#dbeafe', fg:'#1d4ed8', label:'KAM'},
-  'Vendedor':    {bg:'#dcfce7', fg:'#15803d', label:'Vendedor'},
-  '_sinlogin':   {bg:'#fef3c7', fg:'#92400e', label:'Sin login'},
+  'Developer':   {bg:'var(--text)', fg:'#ffffff', label:'Developer'},
+  'Super Admin': {bg:'var(--pink-bg)', fg:'var(--acero)', label:'Super Admin'},
+  'Super Admin Aromatex': {bg:'var(--purple-bg)', fg:'var(--acero)', label:'SA Aromatex'},
+  'Super Admin Pestex':   {bg:'var(--green-bg)', fg:'var(--green)', label:'SA Pestex'},
+  'Super Admin Comercial':{bg:'var(--blue-bg)', fg:'var(--brillante)', label:'SA Comercial'},
+  'Super Admin Nexo':     {bg:'var(--red-bg)', fg:'var(--red)', label:'SA Nexo'},
+  'Gerente Comercial Aromatex': {bg:'var(--amber-bg)', fg:'var(--amber)', label:'Gerente Aromatex'},
+  'KAM':         {bg:'var(--blue-bg)', fg:'var(--brillante)', label:'KAM'},
+  'Vendedor':    {bg:'var(--green-bg)', fg:'var(--green)', label:'Vendedor'},
+  '_sinlogin':   {bg:'var(--amber-bg)', fg:'var(--amber)', label:'Sin login'},
 };
 
 function switchVendedoresTab(tab){
@@ -6029,8 +6093,8 @@ function renderVendedoresTabla(){
     const m=_metasMap[v.id]||{};
     const mRec=m.meta_recurrente_mxn||0, vRec=m.ventas_recurrente||0, pRec=m.pct_recurrente||0;
     const mEv =m.meta_eventual_mxn  ||0, vEv =m.ventas_eventual  ||0, pEv =m.pct_eventual  ||0;
-    const colorRec = pRec>=80?'#16a34a':pRec>=50?'#d97706':'#dc2626';
-    const colorEv  = pEv >=80?'#16a34a':pEv >=50?'#d97706':'#dc2626';
+    const colorRec = pRec>=80?'var(--green)':pRec>=50?'var(--amber)':'var(--red)';
+    const colorEv  = pEv >=80?'var(--green)':pEv >=50?'var(--amber)':'var(--red)';
 
     // Metas/ventas solo aplican a Vendedores reales
     const showMetrics = rol === 'Vendedor';
@@ -6052,7 +6116,7 @@ function renderVendedoresTabla(){
 
     const baja = _esBaja(v);
     const bajaChip = baja
-      ? ` <span style="background:#fee2e2;color:#991b1b;font-size:9px;font-weight:700;padding:2px 6px;border-radius:99px;text-transform:uppercase;letter-spacing:.3px;vertical-align:middle;">Baja</span>`
+      ? ` <span style="background:var(--red-bg);color:var(--red);font-size:9px;font-weight:700;padding:2px 6px;border-radius:99px;text-transform:uppercase;letter-spacing:.3px;vertical-align:middle;">Baja</span>`
       : '';
     const loginBadge = v.login
       ? `<div style="font-size:10px;color:var(--text3);">📧 ${_esc(v.login.correo)}</div>`
@@ -6072,7 +6136,7 @@ function renderVendedoresTabla(){
 
     // Atenuamos con color de fondo y no con opacity, para que los botones
     // de la fila sigan siendo legibles y accionables.
-    tb.innerHTML+=`<tr${baja?' style="background:#f8fafc;"':''}>
+    tb.innerHTML+=`<tr${baja?' style="background:var(--bg-sunken);"':''}>
       <td class="td-name"><strong${baja?' style="color:var(--text2);font-weight:500;"':''}>${_esc(v.nombre)}</strong>${bajaChip}${loginBadge}</td>
       <td><span style="background:${chip.bg};color:${chip.fg};font-size:10px;font-weight:700;padding:3px 8px;border-radius:99px;text-transform:uppercase;letter-spacing:.3px;">${chip.label}</span></td>
       <td style="font-size:12px;">${marcas}</td>
@@ -6142,10 +6206,10 @@ async function loadMetaVendedor(){
       target.textContent = fmt$(metaVal);
       actual.textContent = fmt$(ventas);
       pctEl.textContent  = pct+'%';
-      pctEl.style.color  = pct>=80?'#16a34a':pct>=50?'#d97706':'#dc2626';
+      pctEl.style.color  = pct>=80?'var(--green)':pct>=50?'var(--amber)':'var(--red)';
       bar.style.width    = Math.min(pct,100)+'%';
       // Mantengo el color base por tipo, solo intensifico verde si pasa de 100%
-      if(pct>=100){ bar.style.background='#16a34a'; }
+      if(pct>=100){ bar.style.background='var(--green)'; }
       const f = metaVal - ventas;
       falta.textContent = f>0 ? 'Faltan '+fmt$(f) : 'Meta alcanzada!';
     }
@@ -6730,7 +6794,7 @@ async function nuevaVentaMismoCliente(){
       if(banner){
         banner.className = 'nl-banner ok';
         banner.style.flexDirection = 'row';
-        banner.innerHTML = `<span style="color:#16a34a;font-weight:600;">✓ Nueva venta para <strong>${lead.nombre||lead.empresa_nombre||'el mismo cliente'}</strong> · NO modifica el lead anterior</span>`;
+        banner.innerHTML = `<span style="color:var(--green);font-weight:600;">✓ Nueva venta para <strong>${lead.nombre||lead.empresa_nombre||'el mismo cliente'}</strong> · NO modifica el lead anterior</span>`;
         banner.style.display = 'flex';
       }
       // Focus en lo que el vendedor SÍ tiene que llenar nuevo
@@ -7135,18 +7199,18 @@ window.IS_ADMIN_AI = IS_ADMIN || false;
 @keyframes nl-pop{from{opacity:0;transform:translateY(-8px) scale(.98);}to{opacity:1;transform:translateY(0) scale(1);}}
 .nl-header{padding:16px 20px 12px;border-bottom:1px solid var(--border-light);display:flex;justify-content:space-between;align-items:center;}
 .nl-header h3{font-size:18px;font-weight:600;margin:0;}
-.nl-header .nl-kbd{font-size:10px;color:var(--text3);background:var(--bg-sidebar);padding:2px 6px;border-radius:4px;border:1px solid var(--border);font-family:var(--mono);}
+.nl-header .nl-kbd{font-size:10px;color:var(--text3);background:var(--bg-sunken);padding:2px 6px;border-radius:4px;border:1px solid var(--border);font-family:var(--mono);}
 .nl-body{padding:14px 20px;overflow-y:auto;flex:1;}
 .nl-row{margin-bottom:10px;}
 .nl-row.two{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .nl-label{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;display:block;}
 .nl-input{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:var(--font);background:var(--bg-input);color:var(--text);outline:none;transition:border-color .12s;}
-.nl-input:focus{border-color:#0075b7;box-shadow:0 0 0 3px rgba(0,117,183,.12);}
+.nl-input:focus{border-color:var(--brillante);box-shadow:0 0 0 3px rgba(0,117,183,.12);}
 .nl-input.error{border-color:var(--red);}
 .nl-pills{display:flex;gap:6px;flex-wrap:wrap;}
 .nl-pill{padding:6px 12px;border:1px solid var(--border);border-radius:99px;font-size:12px;cursor:pointer;background:var(--bg-card);transition:all .12s;user-select:none;}
 .nl-pill:hover{background:var(--bg-hover);}
-.nl-pill.active{background:#0075b7;color:#fff;border-color:#0075b7;}
+.nl-pill.active{background:var(--brillante);color:#fff;border-color:var(--brillante);}
 .nl-banner{padding:9px 12px;border-radius:6px;font-size:12px;display:flex;align-items:center;gap:8px;margin-top:6px;}
 .nl-banner.warn{background:var(--orange-bg);color:var(--orange);border:1px solid var(--orange);}
 .nl-banner.info{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue);}
@@ -7160,14 +7224,14 @@ window.IS_ADMIN_AI = IS_ADMIN || false;
 .nl-icp.B{background:var(--blue-bg);color:var(--blue);}
 .nl-icp.C{background:var(--yellow-bg);color:var(--yellow);}
 .nl-icp.D{background:var(--red-bg);color:var(--red);}
-.nl-foot{padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:8px;align-items:center;background:var(--bg-sidebar);}
+.nl-foot{padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:8px;align-items:center;background:var(--bg-sunken);}
 .nl-assign{font-size:11px;color:var(--text2);}
 .nl-assign strong{color:var(--text);}
 .nl-btns{display:flex;gap:6px;}
 .nl-btn{padding:7px 12px;border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;background:var(--bg-card);font-family:var(--font);}
 .nl-btn:hover{background:var(--bg-hover);}
-.nl-btn.primary{background:#0075b7;color:#fff;border-color:#0075b7;}
-.nl-btn.primary:hover{background:#005f96;}
+.nl-btn.primary{background:var(--brillante);color:#fff;border-color:var(--brillante);}
+.nl-btn.primary:hover{background:var(--brillante);}
 .nl-btn:disabled{opacity:.5;cursor:not-allowed;}
 .nl-btn .nl-kbd{margin-left:6px;font-size:9px;opacity:.85;font-family:var(--mono);}
 .nl-empresa-list{position:absolute;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;box-shadow:var(--shadow-lg);max-height:160px;overflow-y:auto;z-index:10;width:100%;margin-top:2px;}
@@ -7827,7 +7891,7 @@ async function openAccountDetail(accountId){
   const d=await _api(`/api/accounts/${accountId}`);
   if(!d){_nlToast('No se pudo cargar',true);return;}
   const html=`
-    <div style="padding:14px;background:var(--bg-sidebar);border-radius:8px;margin-bottom:12px;">
+    <div style="padding:14px;background:var(--bg-sunken);border-radius:8px;margin-bottom:12px;">
       <div style="font-weight:600;font-size:18px;">${d.nombre}</div>
       ${d.nombre_comercial?`<div style="color:var(--text2);">${d.nombre_comercial}</div>`:''}
       <div style="display:flex;gap:14px;margin-top:8px;font-size:12px;">
@@ -8238,7 +8302,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div style="font-weight:600;margin-bottom:4px;">⚠ Este cliente ya tiene ${d.leads.length} lead(s) registrado(s):</div>
             <div style="max-height:140px;overflow:auto;width:100%;background:rgba(255,255,255,.4);border-radius:4px;padding:4px 8px;">${filas}</div>
             <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
-              <button type="button" id="nl-dup-confirm-repeat" style="font-size:11px;padding:4px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;">✓ Sí, es OTRA venta al mismo cliente</button>
+              <button type="button" id="nl-dup-confirm-repeat" style="font-size:11px;padding:4px 10px;background:var(--green);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;">✓ Sí, es OTRA venta al mismo cliente</button>
               <span style="font-size:10px;color:var(--text3);">Si te equivocaste, edita el teléfono.</span>
             </div>
           `;
@@ -8247,7 +8311,7 @@ document.addEventListener('DOMContentLoaded',()=>{
           document.getElementById('nl-dup-confirm-repeat').onclick = ()=>{
             window._nlRepeatConfirmed = true;
             banner.className='nl-banner ok';
-            banner.innerHTML = `<span style="color:#16a34a;font-weight:600;">✓ Registrando NUEVA venta para este cliente (${d.leads.length} lead(s) previo(s))</span>`;
+            banner.innerHTML = `<span style="color:var(--green);font-weight:600;">✓ Registrando NUEVA venta para este cliente (${d.leads.length} lead(s) previo(s))</span>`;
             banner.style.flexDirection='row';
           };
         }else{
