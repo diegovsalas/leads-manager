@@ -38,8 +38,6 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .collapsed .sidebar{width:56px;min-width:56px;}
 .collapsed .sidebar-brand{padding:12px 0;align-items:center;}
 .collapsed .sidebar-brand small,.collapsed .sidebar-section,.collapsed .slink-badge,.collapsed .sidebar-bottom .meta,.collapsed .ws-status{display:none;}
-.collapsed .sidebar-brand .tag-grupo{display:none;}
-.collapsed .sidebar-brand .wm-row{justify-content:center;}
 /* FIX-2026-09-08: el modo colapsado estaba incompleto y por eso se veia roto.
    El switcher de portal y el filtro de Unidad de Negocio se agregaron despues,
    con estilos en linea, y nunca recibieron reglas de colapsado: en el riel de
@@ -50,10 +48,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .portal-switcher{display:flex;}
 .collapsed .portal-switcher,
 .collapsed .un-filter{display:none;}
-.collapsed .sidebar-brand .wm-steel,
-.collapsed .sidebar-brand .wm-x-mark{display:none;}
-.wm-mini{display:none;}
-.collapsed .wm-mini{display:block;margin:0 auto;}
+.collapsed .ax-logo-full{display:none;}
+.collapsed .ax-logo-mini{display:block;margin:0 auto;}
 .collapsed .sidebar-brand{border-bottom-color:rgba(255,255,255,.12);}
 .collapsed .slink{padding:10px 0;margin:2px 4px;justify-content:center;text-align:center;overflow:hidden;white-space:nowrap;}
 .collapsed .slink .sl-text{display:none;}
@@ -67,15 +63,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .collapsed .sidebar-toggle{position:static;margin:8px auto 4px;}
 .content{overflow:hidden;display:flex;flex-direction:column;background:var(--bg);}
 .sidebar-brand{padding:14px 16px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:1px;line-height:1;}
-.sidebar-brand .wm-row{display:flex;align-items:center;gap:1px;}
-.sidebar-brand .wm-steel{font-size:15px;font-weight:700;color:#ffffff;letter-spacing:-.3px;}
-/* La X del logo. El gris del original pasa a blanco sobre el azul del menu;
-   el azul de marca se conserva porque es lo que identifica el simbolo. */
-.wm-x-mark{width:16px;height:16px;flex-shrink:0;}
-.wm-mini{width:21px;height:21px;flex-shrink:0;}
-.x-gris{fill:#ffffff;}
-.x-azul{fill:#0075b7;}
-.sidebar-brand .tag-grupo{font-size:8px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#8bb8f8;margin-bottom:2px;}
+.ax-logo-full{display:block;width:128px;height:auto;}
+.ax-logo-mini{display:none;width:22px;height:auto;}
 .sidebar-brand small{font-size:9px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5);margin-top:3px;}
 .sidebar-section{padding:16px 14px 6px;font-size:10px;font-weight:600;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.12em;}
 .slink{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:var(--r);cursor:pointer;color:rgba(255,255,255,.8);transition:all 120ms;font-size:13px;font-weight:450;margin:1px 6px;line-height:1.5;user-select:none;text-decoration:none;position:relative;}
@@ -456,15 +445,15 @@ fbq('track','PageView');
 <!-- ===== SIDEBAR ===== -->
 <aside class="sidebar" style="position:relative;">
   <button class="sidebar-toggle" onclick="toggleSidebar()" title="Contraer/Expandir menú">&#9776;</button>
+  {# FEAT-2026-09-09: logo oficial de Grupo Avantex (SVG vectorial).
+     Se usa la variante invertida porque el original es gris oscuro y sobre el
+     azul del menu desaparece. El lockup ya trae la palabra GRUPO, asi que el
+     div .tag-grupo que la repetia se elimino. En el riel de 56px queda la X
+     sola, que es el simbolo de la marca. 4 KB contra los 6.4 MB del logo.png
+     anterior, que ademas era el del producto Leads Manager, no el del grupo. #}
   <div class="sidebar-brand">
-    <div class="tag-grupo">GRUPO</div>
-    {# FEAT-2026-09-09: logo oficial de Grupo Avantex, adaptado al sidebar.
-       El original es gris oscuro sobre blanco; sobre el azul del menu ese gris
-       desaparece, asi que va invertido —wordmark en blanco— y la X conserva su
-       acento azul, que es lo que hace reconocible la marca. La X es vectorial
-       para que aguante el riel de 56px y cualquier densidad de pantalla; el
-       wordmark usa la Poppins que la pagina ya carga. #}
-    <div class="wm-row" role="img" aria-label="Grupo Avantex"><span class="wm-steel">AVANTE</span><svg class="wm-x-mark" viewBox="0 0 24 24" aria-hidden="true"><path class="x-gris" d="M2.5 2h5.4l13.6 20h-5.4z"/><path class="x-azul" d="M16.1 2h5.4L7.9 22H2.5z"/></svg><svg class="wm-mini" viewBox="0 0 24 24" aria-hidden="true"><path class="x-gris" d="M2.5 2h5.4l13.6 20h-5.4z"/><path class="x-azul" d="M16.1 2h5.4L7.9 22H2.5z"/></svg></div>
+    <img class="ax-logo-full" src="/static/img/avantex-logo-blanco.svg" alt="Grupo Avantex"/>
+    <img class="ax-logo-mini" src="/static/img/avantex-x-blanco.svg" alt=""/>
     <small>CRM Pipeline</small>
   </div>
 
