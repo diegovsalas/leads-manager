@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 """
-Copia de PRODUCCIÓN a la base LOCAL solo lo necesario para comparar montos
-de cierre mensual: vendedores, leads cerrados y sus ventas.
+Copia de PRODUCCIÓN a la base LOCAL lo necesario para revisar el pipe y los
+montos de cierre: vendedores, sus metas, los leads y las ventas.
 
   producción → SOLO LECTURA (sesión READ ONLY: el servidor rechaza escrituras)
-  local      → se reemplazan leads y sales; los usuarios de login se conservan
+  local      → se reemplazan leads, sales y metas; los logins se conservan
 
-No copia cuentas, contactos, incidencias, facturas, correos ni nada de CS.
-Los FKs a tablas que no se copian (account_id, contact_id) se dejan en NULL:
-para comparar montos por mes no hacen falta y arrastrarlos obligaría a copiar
-media base.
+Por omisión trae TODOS los leads, abiertos y cerrados, para que el pipe activo
+de Revisión Comercial tenga datos. Con --solo-cierres trae únicamente los
+cerrados, que es más rápido si solo se van a comparar montos por mes.
+
+No copia cuentas, contactos, incidencias, facturas, correos ni nada de CS. Los
+FKs a tablas que no se copian (account_id, contact_id) se dejan en NULL: para
+revisar pipe y montos no hacen falta, y arrastrarlos obligaría a copiar media
+base.
 
 Uso:
-    python3 traer_cierres_a_local.py
+    python3 traer_datos_a_local.py                 # todo el pipe
+    python3 traer_datos_a_local.py --solo-cierres  # solo lo cerrado
 
 Lee la URL de producción de .env y la local de .env.local. Aborta si las dos
 apuntan al mismo lado.
@@ -37,6 +42,11 @@ COLS_LEADS = ["id", "telefono", "email", "nombre", "origen", "marca_interes",
 COLS_SALES = ["id", "lead_id", "user_id", "unit", "sale_type", "sale_category",
               "monthly_amount", "total_amount", "commission_amount",
               "commission_status", "status", "closed_at", "created_at"]
+# Sin las metas, el avance por vendedor de Revision Comercial sale contra cero.
+COLS_METAS = ["id", "usuario_id", "mes", "meta_mxn", "meta_recurrente_mxn",
+              "meta_eventual_mxn", "created_at"]
+
+SOLO_CIERRES = "--solo-cierres" in sys.argv
 
 
 def _url(archivo, etiqueta):
@@ -70,13 +80,17 @@ def main():
     kp = cp.cursor()
 
     usuarios = _traer(kp, "usuarios", COLS_USUARIOS)
-    leads = _traer(kp, "leads", COLS_LEADS,
-                   "WHERE etapa_pipeline IN ('Cerrado Ganado','Cerrado Perdido')")
+    donde = ("WHERE etapa_pipeline IN ('Cerrado Ganado','Cerrado Perdido')"
+             if SOLO_CIERRES else "")
+    leads = _traer(kp, "leads", COLS_LEADS, donde)
     ids = {l[0] for l in leads}
     ventas = [v for v in _traer(kp, "sales", COLS_SALES) if v[1] is None or v[1] in ids]
+    metas = _traer(kp, "metas_vendedor", COLS_METAS)
     kp.close(); cp.close()
+    abiertos = sum(1 for l in leads if l[7] not in ("Cerrado Ganado", "Cerrado Perdido"))
     print(f"leído de producción: {len(usuarios)} vendedores, {len(leads)} leads "
-          f"cerrados, {len(ventas)} ventas")
+          f"({abiertos} abiertos, {len(leads)-abiertos} cerrados), "
+          f"{len(ventas)} ventas, {len(metas)} metas")
 
     cl = psycopg2.connect(local); kl = cl.cursor()
     # Se borra lo que hay para que la comparación no mezcle datos de prueba.
@@ -85,7 +99,10 @@ def main():
     kl.execute("DELETE FROM lead_atribuciones")
     kl.execute("DELETE FROM sales")
     kl.execute("DELETE FROM cierre_evidencias")
+    kl.execute("DELETE FROM cotizaciones")
+    kl.execute("DELETE FROM mensajes_whatsapp")
     kl.execute("DELETE FROM leads")
+    kl.execute("DELETE FROM metas_vendedor")
 
     def _upsert(tabla, cols, filas, conflicto="(id) DO NOTHING"):
         if not filas:
@@ -97,18 +114,24 @@ def main():
     _upsert("usuarios", COLS_USUARIOS, usuarios)
     _upsert("leads", COLS_LEADS, leads)
     _upsert("sales", COLS_SALES, ventas)
+    _upsert("metas_vendedor", COLS_METAS, metas)
     cl.commit()
 
     kl.execute("SELECT count(*) FROM leads"); n_l = kl.fetchone()[0]
     kl.execute("SELECT count(*) FROM sales"); n_s = kl.fetchone()[0]
-    kl.execute("SELECT count(*) FROM leads WHERE fecha_cierre IS NULL")
+    kl.execute("SELECT count(*) FROM metas_vendedor"); n_m = kl.fetchone()[0]
+    kl.execute("""SELECT count(*) FROM leads
+                  WHERE etapa_pipeline IN ('Cerrado Ganado','Cerrado Perdido')
+                    AND fecha_cierre IS NULL""")
     sin_fecha = kl.fetchone()[0]
     kl.close(); cl.close()
 
-    print(f"escrito en local:    {n_l} leads, {n_s} ventas")
+    print(f"escrito en local:    {n_l} leads, {n_s} ventas, {n_m} metas")
     if sin_fecha:
         print(f"\n  ⚠  {sin_fecha} lead(s) cerrados sin fecha_cierre en producción.")
-    print("\nListo. Ahora:  python3 comparar_cierres_por_mes.py --vendedores")
+    print("\nListo. Ahora:")
+    print("   python3 comparar_cierres_por_mes.py --vendedores")
+    print("   ./run_local.sh   → Revisión Comercial ya con pipe activo")
 
 
 if __name__ == "__main__":
