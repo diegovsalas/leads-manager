@@ -273,13 +273,20 @@ body.show-uncalified-only .k-card:not(.needs-icp){display:none;}
 .k-card-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;}
 .k-card-foot{display:flex;align-items:center;justify-content:space-between;margin-top:6px;}
 .tag{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:500;display:inline-block;}
-.tag-marca{background:var(--yellow-bg);color:var(--yellow);}
-.tag-valor{background:var(--green-bg);color:var(--green);}
+/* FEAT-2026-09-09: las etiquetas dejan de usar colores de estado.
+   La unidad de negocio es una CATEGORIA, no una advertencia: iba en ambar,
+   que esta reservado para "algo va mal". Ahora es neutra como vendedor y
+   origen. El valor iba en verde: el dinero no es un estado de exito, es una
+   cifra, y va en tinta.
+   El ICP si tiene orden (A > B > C), asi que toma la rampa ordinal en vez de
+   verde/azul/ambar, que era un arcoiris sobre una escala. */
+.tag-marca{background:var(--bg-tag);color:var(--text2);}
+.tag-valor{background:var(--bg-tag);color:var(--text);font-weight:600;}
 .tag-vendedor{background:var(--bg-tag);color:var(--text2);}
 .tag-origen{background:var(--bg-tag);color:var(--text2);}
-.tag-icp-A{background:var(--green-bg);color:var(--green);font-weight:600;}
-.tag-icp-B{background:var(--blue-bg);color:var(--blue);font-weight:600;}
-.tag-icp-C{background:var(--yellow-bg);color:var(--yellow);font-weight:600;}
+.tag-icp-A{background:var(--blue-bg);color:#0543be;font-weight:600;}
+.tag-icp-B{background:var(--blue-bg);color:#3068db;font-weight:600;}
+.tag-icp-C{background:var(--blue-bg);color:#608ee6;font-weight:600;}
 .tag-icp-D{background:var(--bg-tag);color:var(--text3);font-weight:600;}
 
 /* Lead detail panel */
@@ -714,30 +721,30 @@ fbq('track','PageView');
     <div class="page-desc">Leads que necesitan tu atencion hoy</div>
   </div>
   <div style="padding:16px 48px 0;display:flex;gap:12px;" id="mihoy-stats">
-    <div class="metric-card" style="border-left:3px solid var(--red);"><div class="metric-label">Sin contactar</div><div class="metric-value" style="color:var(--red);" id="mh-sin">0</div></div>
-    <div class="metric-card" style="border-left:3px solid var(--orange);"><div class="metric-label">Por vencer cadencia</div><div class="metric-value" style="color:var(--orange);" id="mh-vencer">0</div></div>
-    <div class="metric-card" style="border-left:3px solid var(--green);"><div class="metric-label">Respondieron</div><div class="metric-value" style="color:var(--green);" id="mh-resp">0</div></div>
-    <div class="metric-card" style="border-left:3px solid var(--blue);"><div class="metric-label">En negociacion</div><div class="metric-value" style="color:var(--blue);" id="mh-neg">0</div></div>
+    <div class="metric-card" id="mh-sin-card" style="border-left:3px solid #90b1ef;"><div class="metric-label">Sin contactar</div><div class="metric-value" id="mh-sin">0</div></div>
+    <div class="metric-card" id="mh-vencer-card" style="border-left:3px solid #608ee6;"><div class="metric-label">Por vencer cadencia</div><div class="metric-value" id="mh-vencer">0</div></div>
+    <div class="metric-card" id="mh-resp-card" style="border-left:3px solid #3068db;"><div class="metric-label">Respondieron</div><div class="metric-value" id="mh-resp">0</div></div>
+    <div class="metric-card" id="mh-neg-card" style="border-left:3px solid #0543be;"><div class="metric-label">En negociacion</div><div class="metric-value" id="mh-neg">0</div></div>
   </div>
 
   <div style="padding:16px 48px;">
     <div id="mh-sin-section" style="margin-bottom:24px;">
-      <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--red);display:flex;align-items:center;gap:8px;">&#128680; Sin contactar <span style="font-size:12px;font-weight:400;color:var(--text3);">— Leads nuevos esperando primer contacto</span></div>
+      <div id="mh-sin-head" style="font-size:16px;font-weight:700;margin-bottom:8px;color:#90b1ef;display:flex;align-items:center;gap:8px;"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:17px;height:17px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Sin contactar <span style="font-size:12px;font-weight:400;color:var(--text3);">— Leads nuevos esperando primer contacto</span></div>
       <div id="mh-sin-list"></div>
     </div>
 
     <div id="mh-vencer-section" style="margin-bottom:24px;">
-      <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--orange);display:flex;align-items:center;gap:8px;">&#9200; Por vencer cadencia <span style="font-size:12px;font-weight:400;color:var(--text3);">— No respondieron, proximos a avanzar automaticamente</span></div>
+      <div id="mh-vencer-head" style="font-size:16px;font-weight:700;margin-bottom:8px;color:#608ee6;display:flex;align-items:center;gap:8px;"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:17px;height:17px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg> Por vencer cadencia <span style="font-size:12px;font-weight:400;color:var(--text3);">— No respondieron, proximos a avanzar automaticamente</span></div>
       <div id="mh-vencer-list"></div>
     </div>
 
     <div id="mh-resp-section" style="margin-bottom:24px;">
-      <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--green);display:flex;align-items:center;gap:8px;">&#9989; Respondieron <span style="font-size:12px;font-weight:400;color:var(--text3);">— Necesitan seguimiento manual</span></div>
+      <div id="mh-resp-head" style="font-size:16px;font-weight:700;margin-bottom:8px;color:#3068db;display:flex;align-items:center;gap:8px;"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:17px;height:17px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><path d="m22 4-11 11-3-3"/><path d="M21 12a9 9 0 1 1-5-8"/></svg> Respondieron <span style="font-size:12px;font-weight:400;color:var(--text3);">— Necesitan seguimiento manual</span></div>
       <div id="mh-resp-list"></div>
     </div>
 
     <div id="mh-neg-section" style="margin-bottom:24px;">
-      <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--blue);display:flex;align-items:center;gap:8px;">&#128176; En negociacion <span style="font-size:12px;font-weight:400;color:var(--text3);">— Cotizacion, Demo o Negociacion activa</span></div>
+      <div id="mh-neg-head" style="font-size:16px;font-weight:700;margin-bottom:8px;color:#0543be;display:flex;align-items:center;gap:8px;"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:17px;height:17px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg> En negociacion <span style="font-size:12px;font-weight:400;color:var(--text3);">— Cotizacion, Demo o Negociacion activa</span></div>
       <div id="mh-neg-list"></div>
     </div>
   </div>
@@ -767,7 +774,7 @@ fbq('track','PageView');
         Ocultar convertidos
       </label>
       <span style="font-size:13px;color:var(--text2);">Pipe total:</span>
-      <span style="font-size:14px;font-weight:600;color:var(--green);" id="pipe-total">$0</span>
+      <span style="font-size:14px;font-weight:600;color:var(--text);" id="pipe-total">$0</span>
       <button class="btn" onclick="descargarPipeCSV()" title="Descarga el pipe visible en CSV, con la etapa de cada lead y quién hizo cada etapa del tabulador">&#11015; CSV</button>
       <button class="btn btn-filled" onclick="openLeadModal()">+ Nuevo lead</button>
     </div>
@@ -842,7 +849,7 @@ fbq('track','PageView');
             {% if op.empresa %}<div style="font-size:11px;color:var(--text2);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ op.empresa }}</div>{% endif %}
             <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;gap:6px;">
               <span style="font-size:10px;color:var(--text2);">{{ op.etapa.value if op.etapa else '' }} · {{ op.probabilidad or 0 }}%</span>
-              <span style="font-size:13px;font-weight:600;color:var(--green);font-family:var(--mono);">${{ "{:,.0f}".format(op.valor or 0) }}</span>
+              <span style="font-size:13px;font-weight:600;color:var(--text);font-family:var(--mono);">${{ "{:,.0f}".format(op.valor or 0) }}</span>
             </div>
             <div class="k-card-meta-row">
               <span>{% if op.fecha_cierre_esperada %}cierra {{ op.fecha_cierre_esperada }}{% else %}sin fecha cierre{% endif %}</span>
@@ -898,7 +905,8 @@ fbq('track','PageView');
             <div class="k-card-foot">
               <span class="tag tag-origen">{{ lead.origen.value if lead.origen else 'Manual' }}</span>
               {% if lead.icp_nivel %}
-              {% set icp_colors = {'A': ('var(--green-bg)', 'var(--green)'), 'B': ('var(--blue-bg)', 'var(--blue)'), 'C': ('var(--yellow-bg)', 'var(--yellow)'), 'D': ('var(--bg-tag)', 'var(--text3)')} %}
+              {# ICP es una escala ordenada (A>B>C>D): rampa ordinal, no un color por letra #}
+              {% set icp_colors = {'A': ('var(--blue-bg)', '#0543be'), 'B': ('var(--blue-bg)', '#3068db'), 'C': ('var(--blue-bg)', '#608ee6'), 'D': ('var(--bg-tag)', 'var(--text3)')} %}
               {% set icp_c = icp_colors.get(lead.icp_nivel, ('var(--bg-tag)', 'var(--text3)')) %}
               <span class="tag" style="background:{{ icp_c[0] }};color:{{ icp_c[1] }};font-weight:600;">ICP {{ lead.icp_nivel }}</span>
               {% endif %}
@@ -960,7 +968,7 @@ fbq('track','PageView');
         </td>
         <td>{% if lead.marcas_interes and lead.marcas_interes|length > 1 %}{% for m in lead.marcas_interes %}<span class="tag tag-marca">{{ m }}</span>{% endfor %}{% elif lead.marca_interes %}<span class="tag tag-marca">{{ lead.marca_interes }}</span>{% else %}-{% endif %}</td>
         <td style="font-size:12px;color:var(--text2);">{% if lead.cantidad_productos %}{{ lead.cantidad_productos }} x ${{ "{:,.0f}".format(lead.precio_unitario) }}{% else %}-{% endif %}</td>
-        <td>{% if lead.valor_calculado %}<span style="font-weight:600;color:var(--green);">${{ "{:,.0f}".format(lead.valor_calculado) }}</span>{% else %}-{% endif %}</td>
+        <td>{% if lead.valor_calculado %}<span style="font-weight:600;color:var(--text);">${{ "{:,.0f}".format(lead.valor_calculado) }}</span>{% else %}-{% endif %}</td>
         <td><span class="tag" style="background:{{ pipeline[etapa.value].color }}22;color:{{ pipeline[etapa.value].color }};">{{ etapa.value }}</span></td>
         <td style="color:var(--text2);">{{ lead.usuario_asignado.nombre if lead.usuario_asignado else '-' }}</td>
         <td><span class="tag tag-origen">{{ lead.origen.value if lead.origen else 'Manual' }}</span></td>
@@ -1492,7 +1500,7 @@ fbq('track','PageView');
   </div>
   <div style="padding:20px 48px;display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
     <div class="dash-card"><div class="dash-card-title">Comisiones pendientes</div><div style="font-size:22px;font-weight:600;color:var(--orange);" id="ventas-com-pendiente">—</div></div>
-    <div class="dash-card"><div class="dash-card-title">Comisiones pagadas</div><div style="font-size:22px;font-weight:600;color:var(--green);" id="ventas-com-pagada">—</div></div>
+    <div class="dash-card"><div class="dash-card-title">Comisiones pagadas</div><div style="font-size:22px;font-weight:600;color:var(--text);" id="ventas-com-pagada">—</div></div>
     <div class="dash-card"><div class="dash-card-title">MRR contratado</div><div style="font-size:22px;font-weight:600;" id="ventas-mrr">—</div></div>
   </div>
   <div style="padding:0 48px 20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
@@ -2315,7 +2323,7 @@ fbq('track','PageView');
   <div class="form-row"><div class="form-group"><label class="form-label">Unidad de negocio</label><select class="form-select" id="f-marca"><option value="">Sin especificar</option><option>Aromatex Home</option><option>Aromatex</option><option>Pestex</option><option>Weldex</option><option>Nexo</option></select></div><div class="form-group"><label class="form-label">Origen</label><select class="form-select" id="f-origen" onchange="toggleVendedorSelect()"><option value="Web" selected>Web</option><option value="WhatsApp Organico">WhatsApp Organico</option><option value="Prospeccion">Prospeccion</option><option value="Meta Ads">Meta Ads (auto-asigna)</option></select></div></div>
   <div class="form-group" id="f-vendedor-group"><label class="form-label">Asignar a vendedor</label><select class="form-select" id="f-vendedor"><option value="">Sin asignar</option></select></div>
   <div class="form-row"><div class="form-group"><label class="form-label">Cantidad</label><input class="form-input" id="f-cantidad" type="number" placeholder="10" oninput="calcValor()"/></div><div class="form-group"><label class="form-label">Precio unitario</label><input class="form-input" id="f-precio" type="number" placeholder="1790" oninput="calcValor()"/></div></div>
-  <div class="form-group"><label class="form-label">Valor total</label><input class="form-input" id="f-valor" type="number" placeholder="Se calcula" style="font-weight:600;color:var(--green);"/></div>
+  <div class="form-group"><label class="form-label">Valor total</label><input class="form-input" id="f-valor" type="number" placeholder="Se calcula" style="font-weight:600;color:var(--text);"/></div>
   <div style="border-top:1px solid var(--border-light);margin-top:8px;padding-top:12px;">
     <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;">ICP — Perfil del cliente</div>
     <div class="form-row"><div class="form-group"><label class="form-label">Industria</label><select class="form-select" id="f-industria"><option value="">Sin definir</option></select></div><div class="form-group"><label class="form-label">Tamano empresa</label><select class="form-select" id="f-tamano"><option value="">Sin definir</option><option>Enterprise</option><option>Mediana</option><option>Pequeña</option><option>Micro</option></select></div></div>
@@ -2634,12 +2642,12 @@ fbq('track','PageView');
       <div class="lp-section-title">Valor comercial</div>
       <div class="lp-field"><span class="lp-field-label">Cantidad</span><span class="lp-field-value" id="lp-cantidad"></span></div>
       <div class="lp-field"><span class="lp-field-label">Precio unitario</span><span class="lp-field-value" id="lp-precio"></span></div>
-      <div class="lp-field"><span class="lp-field-label">Valor estimado</span><span class="lp-field-value" style="font-size:16px;color:var(--green);" id="lp-valor"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Valor estimado</span><span class="lp-field-value" style="font-size:16px;color:var(--text);" id="lp-valor"></span></div>
     </div>
 
     <div class="lp-section" id="lp-factura-section" style="display:none;border-left:3px solid var(--green);">
       <div class="lp-section-title">🎉 Cierre / Facturación</div>
-      <div class="lp-field"><span class="lp-field-label">Monto</span><span class="lp-field-value" id="lp-factura-monto" style="font-size:18px;color:var(--green);font-weight:600;"></span></div>
+      <div class="lp-field"><span class="lp-field-label">Monto</span><span class="lp-field-value" id="lp-factura-monto" style="font-size:18px;color:var(--text);font-weight:600;"></span></div>
       <div class="lp-field"><span class="lp-field-label">Número de factura</span><span class="lp-field-value" id="lp-factura-numero" style="font-family:var(--mono);"></span></div>
       <div class="lp-field"><span class="lp-field-label">Fecha</span><span class="lp-field-value" id="lp-factura-fecha"></span></div>
       <div class="lp-field"><span class="lp-field-label">Notas</span><span class="lp-field-value" id="lp-factura-notas" style="font-size:12px;color:var(--text2);"></span></div>
@@ -3294,7 +3302,7 @@ async function loadSavio(){
   document.getElementById('savio-clientes').textContent=_fmtNum(d.total_active_clients);
   const tbody=document.getElementById('savio-mrr-tbody');tbody.innerHTML='';
   for(const[unit,des]of Object.entries(d.desglose_por_un||{})){
-    tbody.innerHTML+=`<tr><td><strong>${unit}</strong></td><td style="text-align:right;">${_fmtMxn(des.mrr_total)}</td><td style="text-align:right;color:var(--green);">${_fmtMxn(des.mrr_nuevos)}</td><td style="text-align:right;color:var(--blue);">${_fmtMxn(des.mrr_upsell)}</td><td style="text-align:right;color:var(--text2);">${_fmtMxn(des.mrr_existente)}</td></tr>`;
+    tbody.innerHTML+=`<tr><td><strong>${unit}</strong></td><td style="text-align:right;">${_fmtMxn(des.mrr_total)}</td><td style="text-align:right;color:var(--text);">${_fmtMxn(des.mrr_nuevos)}</td><td style="text-align:right;color:var(--blue);">${_fmtMxn(des.mrr_upsell)}</td><td style="text-align:right;color:var(--text2);">${_fmtMxn(des.mrr_existente)}</td></tr>`;
   }
   if(!tbody.innerHTML)tbody.innerHTML='<tr><td colspan="5" style="color:var(--text2);text-align:center;padding:12px;">Sin datos en este rango</td></tr>';
   const fac=d.total_facturado_del_mes||{};
@@ -3446,7 +3454,7 @@ async function loadVincular(){
         <div>${_fmtMxn(a.facturacion_q1)}</div>
         <div style="font-size:11px;color:var(--text2);" title="Facturado en ${mesLbl}">${_fmtMxn(a.facturacion_mes)}</div>
       </td>
-      <td style="text-align:right;color:var(--green);">
+      <td style="text-align:right;color:var(--text);">
         <div>${_fmtMxn(a.pagado_q1)}</div>
         <div style="font-size:11px;opacity:.8;" title="Pagado en ${mesLbl}">${_fmtMxn(a.pagado_mes)}</div>
       </td>
@@ -3794,9 +3802,9 @@ async function loadRevisionTabla(){
     // KPIs arriba
     document.getElementById('rev-tabla-kpis').innerHTML=`
       <div class="kpi" style="flex:1;"><div class="metric-label">Leads totales</div><div class="metric-value">${d.total}</div></div>
-      <div class="kpi" style="flex:1;"><div class="metric-label">Ganados</div><div class="metric-value" style="color:var(--green);">${d.total_ganados}</div></div>
+      <div class="kpi" style="flex:1;"><div class="metric-label">Ganados</div><div class="metric-value" style="color:var(--text);">${d.total_ganados}</div></div>
       <div class="kpi" style="flex:1;"><div class="metric-label">Tasa global</div><div class="metric-value">${d.tasa_global}%</div></div>
-      <div class="kpi" style="flex:1;"><div class="metric-label">Revenue</div><div class="metric-value" style="color:var(--green);">${_fmtMxn(d.total_revenue)}</div></div>
+      <div class="kpi" style="flex:1;"><div class="metric-label">Revenue</div><div class="metric-value" style="color:var(--text);">${_fmtMxn(d.total_revenue)}</div></div>
       <div class="kpi" style="flex:1;"><div class="metric-label">Pipe activo</div><div class="metric-value" style="color:var(--orange);">${_fmtMxn(d.total_pipe_activo)}</div></div>`;
 
     const tb=document.getElementById('rev-tabla-tbody');tb.innerHTML='';
@@ -3815,7 +3823,7 @@ async function loadRevisionTabla(){
         <td style="text-align:right;color:var(--green);font-weight:600;">${f.ganados}</td>
         <td style="text-align:right;color:var(--red);">${f.perdidos}</td>
         <td style="text-align:right;font-weight:700;color:${tasaColor};">${f.tasa_cierre}%</td>
-        <td style="text-align:right;color:var(--green);">${_fmtMxn(f.revenue)}</td>
+        <td style="text-align:right;color:var(--text);">${_fmtMxn(f.revenue)}</td>
         <td style="text-align:right;color:var(--orange);font-weight:600;">${_fmtMxn(f.pipe_activo)}<div style="font-size:10px;color:var(--text3);font-weight:400;">${f.pipe_count} leads</div></td>
       </tr>`;
     }
@@ -3847,7 +3855,7 @@ async function loadRevisionVendedores(){
         <div style="display:flex;gap:10px;margin-top:8px;font-size:11px;">
           <div><div style="color:var(--text3);font-size:9px;">PIPE</div><div style="font-weight:700;color:var(--orange);">${_fmtMxn(v.pipe_activo)}</div></div>
           <div><div style="color:var(--text3);font-size:9px;">ACTIVOS</div><div style="font-weight:700;">${v.leads_activos}</div></div>
-          <div><div style="color:var(--text3);font-size:9px;">GANADOS</div><div style="font-weight:700;color:var(--green);">${v.ganados_mes}</div></div>
+          <div><div style="color:var(--text3);font-size:9px;">GANADOS</div><div style="font-weight:700;color:var(--text);">${v.ganados_mes}</div></div>
         </div>
       </div>`;
     }
@@ -3975,8 +3983,8 @@ async function loadVendedorDetail(vendedorId){
         <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;padding:16px 18px;">
           <div><div style="font-size:10px;color:var(--text3);">PIPE ACTIVO</div><div style="font-size:22px;font-weight:700;color:var(--orange);">${_fmtMxn(k.pipe_activo)}</div></div>
           <div><div style="font-size:10px;color:var(--text3);">LEADS ACTIVOS</div><div style="font-size:22px;font-weight:700;">${k.leads_activos}</div></div>
-          <div><div style="font-size:10px;color:var(--text3);">GANADOS MES</div><div style="font-size:22px;font-weight:700;color:var(--green);">${k.ganados_mes}</div></div>
-          <div><div style="font-size:10px;color:var(--text3);">REVENUE MES</div><div style="font-size:22px;font-weight:700;color:var(--green);">${_fmtMxn(k.revenue_mes)}</div></div>
+          <div><div style="font-size:10px;color:var(--text3);">GANADOS MES</div><div style="font-size:22px;font-weight:700;color:var(--text);">${k.ganados_mes}</div></div>
+          <div><div style="font-size:10px;color:var(--text3);">REVENUE MES</div><div style="font-size:22px;font-weight:700;color:var(--text);">${_fmtMxn(k.revenue_mes)}</div></div>
           <div><div style="font-size:10px;color:var(--text3);">% CIERRE</div><div style="font-size:22px;font-weight:700;color:${k.tasa_cierre>=20?'var(--green)':k.tasa_cierre>=10?'var(--orange)':'var(--red)'};">${k.tasa_cierre}%</div></div>
         </div>
         <div style="padding:0 18px 16px;">
@@ -4066,9 +4074,9 @@ async function loadRevisionOrigen(){
     // KPIs arriba
     document.getElementById('rev-origen-kpis').innerHTML=`
       <div class="kpi" style="flex:1;"><div class="metric-label">Leads totales</div><div class="metric-value">${d.total}</div></div>
-      <div class="kpi" style="flex:1;"><div class="metric-label">Ganados</div><div class="metric-value" style="color:var(--green);">${d.total_ganados}</div></div>
+      <div class="kpi" style="flex:1;"><div class="metric-label">Ganados</div><div class="metric-value" style="color:var(--text);">${d.total_ganados}</div></div>
       <div class="kpi" style="flex:1;"><div class="metric-label">Tasa global</div><div class="metric-value">${d.tasa_global}%</div></div>
-      <div class="kpi" style="flex:1;"><div class="metric-label">Revenue</div><div class="metric-value" style="color:var(--green);">${_fmtMxn(d.total_revenue)}</div></div>
+      <div class="kpi" style="flex:1;"><div class="metric-label">Revenue</div><div class="metric-value" style="color:var(--text);">${_fmtMxn(d.total_revenue)}</div></div>
       <div class="kpi" style="flex:1;"><div class="metric-label">Pipe activo</div><div class="metric-value" style="color:var(--orange);">${_fmtMxn(d.total_pipe_activo)}</div></div>`;
 
     const tb=document.getElementById('rev-origen-tbody');tb.innerHTML='';
@@ -4084,7 +4092,7 @@ async function loadRevisionOrigen(){
         <td style="text-align:right;color:var(--green);font-weight:600;">${f.ganados}</td>
         <td style="text-align:right;color:var(--red);">${f.perdidos}</td>
         <td style="text-align:right;font-weight:700;color:${tasaColor};">${f.tasa_cierre}%</td>
-        <td style="text-align:right;color:var(--green);">${_fmtMxn(f.revenue)}</td>
+        <td style="text-align:right;color:var(--text);">${_fmtMxn(f.revenue)}</td>
         <td style="text-align:right;color:var(--orange);">${_fmtMxn(f.pipe_activo)}</td>
       </tr>`;
     }
@@ -4414,7 +4422,7 @@ async function loadRoi(){
       <td style="text-align:right;">${_fmtNum(b.leads)}</td>
       <td style="text-align:right;">${_fmtNum(b.calificados)}</td>
       <td style="text-align:right;">${_fmtNum(b.cotizados)}</td>
-      <td style="text-align:right;color:var(--green);">${_fmtNum(b.ganados)}</td>
+      <td style="text-align:right;color:var(--text);">${_fmtNum(b.ganados)}</td>
       <td style="text-align:right;font-weight:600;">${b.tasa_cierre?b.tasa_cierre+'%':'—'}</td>
       <td style="text-align:right;color:var(--orange);">${b.spend?_fmtMxn(b.spend):'$0'}</td>
       <td style="text-align:right;">${cplTxt}</td>
@@ -4436,7 +4444,7 @@ async function loadRoi(){
     <td style="text-align:right;">${_fmtNum(t.leads)}</td>
     <td style="text-align:right;">${_fmtNum(t.calificados)}</td>
     <td style="text-align:right;">${_fmtNum(t.cotizados)}</td>
-    <td style="text-align:right;color:var(--green);">${_fmtNum(t.ganados)}</td>
+    <td style="text-align:right;color:var(--text);">${_fmtNum(t.ganados)}</td>
     <td style="text-align:right;">${t.tasa_cierre?t.tasa_cierre+'%':'—'}</td>
     <td style="text-align:right;color:var(--orange);">${_fmtMxn(t.spend)}</td>
     <td style="text-align:right;">${t.cpl?_fmtMxn(t.cpl):'—'}</td>
@@ -5465,6 +5473,17 @@ async function loadMiHoy(){
     document.getElementById('mh-resp').textContent=s.respondieron;
     document.getElementById('mh-neg').textContent=s.en_negociacion;
 
+    // FEAT-2026-09-09: el ambar de "Por vencer" solo aparece si hay algo por
+    // vencer. Antes las cuatro secciones iban en rojo, naranja, verde y azul
+    // fijos, asi que con todo en cero la pantalla gritaba cuatro alarmas sobre
+    // nada. De las cuatro, esta es la unica con consecuencia real —el lead
+    // avanza solo si nadie lo toca— asi que es la unica que se pinta de estado.
+    const _hayVence = (s.por_vencer||0) > 0;
+    const _tarj = document.getElementById('mh-vencer-card');
+    const _enc  = document.getElementById('mh-vencer-head');
+    if(_tarj) _tarj.style.borderLeftColor = _hayVence ? 'var(--amber)' : '#608ee6';
+    if(_enc)  _enc.style.color            = _hayVence ? 'var(--amber)' : '#608ee6';
+
     // Badge
     const badge=document.getElementById('mihoy-badge');
     if(s.total_accion>0){badge.textContent=s.total_accion;}else{badge.textContent='';}
@@ -5493,7 +5512,7 @@ function _renderMhList(containerId,leads,emptyMsg){
       <div class="mh-lead-info">
         <span class="tag" style="background:${etapaColor}22;color:${etapaColor};">${l.etapa_pipeline}</span>
         ${marca}${icp}${vendedor}
-        ${valor?`<span style="font-weight:600;color:var(--green);font-size:13px;">${valor}</span>`:''}
+        ${valor?`<span style="font-weight:600;color:var(--text);font-size:13px;">${valor}</span>`:''}
       </div>
       ${tiempo?`<span style="font-size:11px;color:var(--text3);white-space:nowrap;">${tiempo}</span>`:''}
     </div>`;
