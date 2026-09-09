@@ -51,14 +51,17 @@ nombres = {getattr(b, "name", None) or b.get("name") for b in buckets}
 for n in sorted(x for x in nombres if x):
     print(f"  · {n}")
 
+# Nombres reales, tomados del codigo — no inventados:
+#   cierre_evidencia.py:BUCKET, tickets.py:_FOTOS_BUCKET, cs.py:_FACTURAS_BUCKET
 ESPERADOS = {
-    "cierre-evidencias": "respaldo de cierre de Pestex",
-    "tickets-fotos":     "fotos del portal de tickets",
-    "facturas":          "PDF de facturas de incidencias",
+    "cierre-evidencias":   "respaldo de cierre de Pestex",
+    "ticket-evidencia":    "fotos del portal de tickets",
+    "incidencia-facturas": "PDF de facturas de incidencias",
+    "crm-backups":         "respaldos de la base",
 }
 faltan = {b: q for b, q in ESPERADOS.items() if b not in nombres}
 if faltan:
-    print("\nBuckets que la app crea sola la primera vez que los usa:")
+    print("\nNo existen todavia (la app los crea al primer uso exitoso):")
     for b, q in faltan.items():
         print(f"  · {b}  ({q})")
     print("\nNo hace falta crearlos a mano; con la llave correcta se crean solos.")
