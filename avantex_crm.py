@@ -566,6 +566,56 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] kam_email_responses failed: %s", e)
 
+        # ─── leads.fecha_cierre (FIX-2026-09-09) ───
+        # Metas y Dashboard medían el mes con fecha_creacion —cuándo ENTRÓ el
+        # lead— en vez de cuándo se cerró. Un trato que entra en julio y cierra
+        # en septiembre se contaba en julio. Comisiones no tenía el problema
+        # porque usa Sale.closed_at; esto le da a Lead la misma fecha.
+        #
+        # El relleno hacia atrás va en orden de confiabilidad:
+        #   1. Sale.closed_at   — la misma fecha con la que se pagó comisión
+        #   2. factura_fecha    — si se capturó factura pero no hay venta
+        #   3. fecha_actualizacion — último recurso: un lead cerrado casi nunca
+        #      se vuelve a tocar, así que suele ser la fecha del cierre
+        try:
+            with db.engine.begin() as conn:
+                existe = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'leads' AND column_name = 'fecha_cierre'
+                """)).first()
+                if not existe:
+                    app.logger.info("[auto-migrate] adding leads.fecha_cierre...")
+                    conn.execute(text("ALTER TABLE leads ADD COLUMN fecha_cierre TIMESTAMPTZ"))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_leads_fecha_cierre ON leads (fecha_cierre)"))
+
+                r = conn.execute(text("""
+                    UPDATE leads l SET fecha_cierre = s.closed_at
+                    FROM sales s
+                    WHERE s.lead_id = l.id AND l.fecha_cierre IS NULL
+                      AND s.closed_at IS NOT NULL
+                """))
+                por_venta = r.rowcount or 0
+                r = conn.execute(text("""
+                    UPDATE leads SET fecha_cierre = factura_fecha
+                    WHERE fecha_cierre IS NULL AND factura_fecha IS NOT NULL
+                      AND etapa_pipeline IN ('Cerrado Ganado','Cerrado Perdido')
+                """))
+                por_factura = r.rowcount or 0
+                r = conn.execute(text("""
+                    UPDATE leads SET fecha_cierre = fecha_actualizacion
+                    WHERE fecha_cierre IS NULL
+                      AND etapa_pipeline IN ('Cerrado Ganado','Cerrado Perdido')
+                """))
+                por_update = r.rowcount or 0
+                if por_venta or por_factura or por_update:
+                    app.logger.info(
+                        "[auto-migrate] fecha_cierre rellenada: %d por venta, "
+                        "%d por factura, %d por fecha_actualizacion",
+                        por_venta, por_factura, por_update)
+        except Exception as e:
+            app.logger.warning("[auto-migrate] leads.fecha_cierre failed: %s", e)
+
         # ─── oportunidades.sitio (FEAT-2026-09-08) ───
         # Sucursal/plaza del trato. Entra a la clave de deals duplicados para
         # que un cliente que se vende sucursal por sucursal pueda tener N

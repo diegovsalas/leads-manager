@@ -231,7 +231,8 @@ def embudo():
         Lead.factura_monto,
         Lead.cantidad_productos * Lead.precio_unitario, Lead.valor_estimado, 0,
     )), 0)).filter(
-        Lead.fecha_creacion >= inicio_mes, Lead.fecha_creacion < fin_mes,
+        # FIX-2026-09-09: por fecha_cierre, no fecha_creacion.
+        Lead.fecha_cierre >= inicio_mes, Lead.fecha_cierre < fin_mes,
         Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO,
     )
     vid = get_vendedor_filter()
@@ -650,12 +651,15 @@ def _kpis_vendedor(vendedor_usuario_id: str, inicio: date, fin: date) -> dict:
     leads_mes = base.filter(
         Lead.fecha_creacion >= inicio, Lead.fecha_creacion < fin,
     ).count()
+    # FIX-2026-09-09: ganados y perdidos se cuentan por fecha_cierre. Antes
+    # iban por fecha_creacion, o sea por el mes en que ENTRO el lead: un trato
+    # que entraba en julio y cerraba en septiembre contaba en julio.
     ganados_mes = base.filter(
-        Lead.fecha_creacion >= inicio, Lead.fecha_creacion < fin,
+        Lead.fecha_cierre >= inicio, Lead.fecha_cierre < fin,
         Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO,
     ).count()
     perdidos_mes = base.filter(
-        Lead.fecha_creacion >= inicio, Lead.fecha_creacion < fin,
+        Lead.fecha_cierre >= inicio, Lead.fecha_cierre < fin,
         Lead.etapa_pipeline == EtapaPipeline.CIERRE_PERDIDO,
     ).count()
 
@@ -668,7 +672,8 @@ def _kpis_vendedor(vendedor_usuario_id: str, inicio: date, fin: date) -> dict:
 
     # Revenue ganado del mes
     revenue_mes = float(base.filter(
-        Lead.fecha_creacion >= inicio, Lead.fecha_creacion < fin,
+        # FIX-2026-09-09: por fecha_cierre, no fecha_creacion.
+        Lead.fecha_cierre >= inicio, Lead.fecha_cierre < fin,
         Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO,
     ).with_entities(func.coalesce(func.sum(valor_expr), 0)).scalar() or 0)
 

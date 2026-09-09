@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy.orm.base import NO_VALUE
 from sqlalchemy.dialects.postgresql import UUID, ARRAY, JSONB
 from extensions import db
 
@@ -259,6 +260,18 @@ class Lead(db.Model):
     factura_notas  = db.Column(db.Text, nullable=True)         # forma de pago, condiciones, etc.
     factura_registrada_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
+    # FIX-2026-09-09: fecha en que el lead se cerró (ganado o perdido).
+    #
+    # No existía, y por eso Metas y Dashboard medían el mes con
+    # fecha_creacion: la fecha en que ENTRÓ el lead, no en que se vendió. Un
+    # trato que entra en julio y cierra en septiembre se contaba en julio, así
+    # que el avance mensual que veía el vendedor no era el suyo. Comisiones no
+    # tenía el problema porque usa Sale.closed_at.
+    #
+    # Se llena en las tres puertas de cierre y se rellenó hacia atrás desde
+    # Sale.closed_at, que es la misma fecha que usa el cálculo de comisiones.
+    fecha_cierre = db.Column(db.DateTime(timezone=True), nullable=True, index=True)
+
     # Metadatos Meta Ads
     meta_lead_id = db.Column(db.String(100), unique=True, nullable=True)
     meta_form_id = db.Column(db.String(100), nullable=True)
@@ -370,6 +383,7 @@ class Lead(db.Model):
             "meta_campaign_unit": meta_campaign_unit,
             "usuario_asignado": vendedor,
             "fecha_creacion": self.fecha_creacion.isoformat(),
+            "fecha_cierre": self.fecha_cierre.isoformat() if self.fecha_cierre else None,
             "fecha_actualizacion": self.fecha_actualizacion.isoformat(),
             "ultimo_mensaje": ultimo_msg.to_dict() if ultimo_msg else None,
         }
@@ -378,6 +392,24 @@ class Lead(db.Model):
 # ──────────────────────────────────────────────
 # Tabla: mensajes_whatsapp (historial viejo)
 # ──────────────────────────────────────────────
+@db.event.listens_for(Lead.etapa_pipeline, "set")
+def _sella_fecha_cierre(target, value, oldvalue, initiator):
+    """Sella fecha_cierre cuando el lead entra a una etapa cerrada.
+
+    Va como listener del atributo y no dentro de cada endpoint porque hay
+    CUATRO puertas al cierre —/mover, PUT, /cerrar y el arrastre desde una
+    Oportunidad ganada— y una quinta que se agregue mañana nacería sin fecha.
+    Aquí es imposible olvidarla.
+
+    Solo sella la PRIMERA vez: reabrir y volver a cerrar no reescribe la fecha
+    original, que es la que ya se usó para pagar comisión.
+    """
+    cerradas = (EtapaPipeline.CIERRE_GANADO, EtapaPipeline.CIERRE_PERDIDO)
+    era_cerrada = oldvalue in cerradas if oldvalue not in (None, NO_VALUE) else False
+    if value in cerradas and not era_cerrada and not getattr(target, "fecha_cierre", None):
+        target.fecha_cierre = _utcnow()
+
+
 class MensajeWhatsapp(db.Model):
     __tablename__ = "mensajes_whatsapp"
 

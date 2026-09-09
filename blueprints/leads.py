@@ -1434,6 +1434,10 @@ def cerrar_lead(lead_id):
 
     etapa_anterior = lead.etapa_pipeline.value
     lead.etapa_pipeline = EtapaPipeline.CIERRE_GANADO
+    # El listener del modelo sella fecha_cierre con "ahora", pero aquí el
+    # vendedor pudo capturar otra fecha: la venta y el lead tienen que contar
+    # en el mismo mes, o Metas y Comisiones vuelven a discrepar.
+    lead.fecha_cierre = sale.closed_at
 
     # FIX-2026-08-24: la respuesta se arma ANTES del commit.
     #

@@ -39,8 +39,13 @@ def _calcular_ventas(usuario_id, mes, tipo_venta=None):
     ).filter(
         Lead.usuario_asignado_id == usuario_id,
         Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO,
-        Lead.fecha_creacion >= inicio,
-        Lead.fecha_creacion < fin,
+        # FIX-2026-09-09: el avance de la meta se mide por la fecha en que se
+        # CERRO la venta, no por la fecha en que entro el lead. Con lo anterior
+        # un vendedor que cerraba en septiembre tratos de julio veia su meta
+        # casi vacia, y el numero no cuadraba con el de comisiones —que si usa
+        # la fecha de cierre (Sale.closed_at)—.
+        Lead.fecha_cierre >= inicio,
+        Lead.fecha_cierre < fin,
     )
     if tipo_venta:
         q = q.filter(Lead.tipo_venta == tipo_venta)
