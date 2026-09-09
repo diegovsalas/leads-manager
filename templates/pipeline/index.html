@@ -100,7 +100,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .view{display:none;flex:1;overflow:hidden;flex-direction:column;}
 .view.active{display:flex;}
 .page-header{padding:24px 48px 0;flex-shrink:0;}
-.page-emoji{font-size:32px;margin-bottom:4px;}
+.page-emoji{font-size:32px;margin-bottom:4px;color:var(--text2);}
+/* Mismo trazo que el sidebar: el encabezado dejo de ser lo unico a color de la pagina. */
+.page-ico{width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
 .page-title{font-family:var(--font-display);font-size:26px;font-weight:500;color:var(--text);letter-spacing:-.02em;line-height:1.15;}
 .page-desc{font-size:13px;color:var(--text2);margin-top:4px;}
 
@@ -529,7 +531,7 @@ fbq('track','PageView');
 
 <!-- ===== DASHBOARD ===== -->
 <div class="view active" id="view-dashboard" style="overflow-y:auto;">
-  <div class="page-header"><div class="page-emoji">&#128202;</div><div class="page-title">Dashboard</div><div class="page-desc" id="dash-date"></div></div>
+  <div class="page-header"><div class="page-emoji"><svg class="page-ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="20" x2="6" y2="15"/><line x1="12" y1="20" x2="12" y2="9"/><line x1="18" y1="20" x2="18" y2="4"/></svg></div><div class="page-title">Dashboard</div><div class="page-desc" id="dash-date"></div></div>
   <div id="filter-banner" style="display:none;padding:8px 48px 0;">
     <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:var(--yellow-bg);border-radius:var(--r2);font-size:13px;color:var(--yellow);">
       <span>Filtrando por: <strong id="filter-banner-text"></strong></span>
@@ -545,11 +547,15 @@ fbq('track','PageView');
       <button class="btn btn-filled" onclick="openLeadModal()">+ Nuevo lead</button>
     </div>
   </div>
+  <!-- FEAT-2026-09-09: los valores van en tinta, no de colores. Iban naranja,
+       verde y rojo sin que el color significara nada — y el rojo de "Gasto ads"
+       leia como alarma cuando gastar $0 no lo es. El color se reserva para las
+       marcas de las graficas y para estado real. -->
   <div class="metrics-row">
     <div class="metric-card"><div class="metric-label">Leads totales</div><div class="metric-value" id="m-total">0</div><div class="metric-sub" id="m-total-sub" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;"></div></div>
-    <div class="metric-card"><div class="metric-label">Pipe activo</div><div class="metric-value" style="color:var(--orange)" id="m-pipe">$0</div><div class="metric-sub" id="m-pipe-sub"></div></div>
-    <div class="metric-card"><div class="metric-label">Cierres ganados</div><div class="metric-value" style="color:var(--green)" id="m-ganados">0</div><div class="metric-sub" id="m-revenue"></div></div>
-    <div class="metric-card admin-only"><div class="metric-label">Gasto ads</div><div class="metric-value" style="color:var(--red)" id="m-gasto">$0</div><div class="metric-sub" id="m-cpl"></div></div>
+    <div class="metric-card"><div class="metric-label">Pipe activo</div><div class="metric-value" id="m-pipe">$0</div><div class="metric-sub" id="m-pipe-sub"></div></div>
+    <div class="metric-card"><div class="metric-label">Cierres ganados</div><div class="metric-value" id="m-ganados">0</div><div class="metric-sub" id="m-revenue"></div></div>
+    <div class="metric-card admin-only"><div class="metric-label">Gasto ads</div><div class="metric-value" id="m-gasto">$0</div><div class="metric-sub" id="m-cpl"></div></div>
   </div>
 
   <!-- Meta vendedor card (solo para vendedores) -->
@@ -614,9 +620,9 @@ fbq('track','PageView');
       <div id="funnel-bars"></div>
       <div id="funnel-visual" style="display:none;"></div>
       <div class="kpi-row">
-        <span class="kpi">CPL: <strong id="f-cpl" style="color:var(--blue);">$0</strong></span>
-        <span class="kpi">CPA: <strong id="f-cpa" style="color:var(--orange);">$0</strong></span>
-        <span class="kpi">ROI: <strong id="f-roi" style="color:var(--green);">0x</strong></span>
+        <span class="kpi">CPL: <strong id="f-cpl">$0</strong></span>
+        <span class="kpi">CPA: <strong id="f-cpa">$0</strong></span>
+        <span class="kpi">ROI: <strong id="f-roi">0x</strong></span>
       </div>
     </div>
   </div>
@@ -625,7 +631,7 @@ fbq('track','PageView');
 <!-- ===== MI DIA ===== -->
 <div class="view" id="view-mihoy" style="overflow-y:auto;">
   <div class="page-header">
-    <div class="page-emoji">&#127919;</div>
+    <div class="page-emoji"><svg class="page-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></svg></div>
     <div class="page-title">Mi dia</div>
     <div class="page-desc">Leads que necesitan tu atencion hoy</div>
   </div>
@@ -1290,7 +1296,7 @@ fbq('track','PageView');
 <!-- ===== SAVIO MRR ===== -->
 <div class="view" id="view-savio" style="overflow-y:auto;">
   <div class="page-header">
-    <div class="page-emoji">&#128176;</div>
+    <div class="page-emoji"><svg class="page-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg></div>
     <div class="page-title">Savio</div>
     <div class="page-desc">MRR pre-IVA por unidad + clientes activos + facturacion del mes</div>
   </div>
@@ -1329,7 +1335,7 @@ fbq('track','PageView');
 <!-- ===== SDR PROSPECTOR ===== -->
 <div class="view" id="view-sdrprospect" style="overflow-y:auto;">
   <div class="page-header">
-    <div class="page-emoji">&#128269;</div>
+    <div class="page-emoji"><svg class="page-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16" y2="16"/></svg></div>
     <div class="page-title">SDR Prospector</div>
     <div class="page-desc">Buscar prospectos en Meta Ads + Google Maps + Instagram, asignar como Lead</div>
   </div>
@@ -1354,7 +1360,7 @@ fbq('track','PageView');
 <!-- ===== SDR DIRECTIVO ===== -->
 <div class="view" id="view-sdrdir" style="overflow-y:auto;">
   <div class="page-header">
-    <div class="page-emoji">&#127919;</div>
+    <div class="page-emoji"><svg class="page-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></svg></div>
     <div class="page-title">SDR Directivo</div>
     <div class="page-desc">Outreach a tomadores de decision con Apollo + Lusha + Lemlist</div>
   </div>
@@ -1402,7 +1408,7 @@ fbq('track','PageView');
 <!-- ===== VENTAS ===== -->
 <div class="view" id="view-ventas" style="overflow-y:auto;">
   <div class="page-header">
-    <div class="page-emoji">&#128200;</div>
+    <div class="page-emoji"><svg class="page-ico" viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></div>
     <div class="page-title">Ventas y comisiones</div>
     <div class="page-desc">Cierres de venta y status de comisiones</div>
   </div>
@@ -1468,7 +1474,7 @@ fbq('track','PageView');
 <!-- ===== EMPRESAS ===== -->
 <div class="view" id="view-accounts" style="overflow-y:auto;">
   <div class="page-header">
-    <div class="page-emoji">&#127970;</div>
+    <div class="page-emoji"><svg class="page-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8.5 6h.01M15.5 6h.01M8.5 10h.01M15.5 10h.01M8.5 14h.01M15.5 14h.01"/></svg></div>
     <div class="page-title">Empresas</div>
     <div class="page-desc">Una empresa puede tener N leads y N oportunidades. Sin duplicados.</div>
   </div>
@@ -1501,7 +1507,7 @@ fbq('track','PageView');
 <!-- ===== CONTACTOS ===== -->
 <div class="view" id="view-contacts" style="overflow-y:auto;">
   <div class="page-header">
-    <div class="page-emoji">&#128101;</div>
+    <div class="page-emoji"><svg class="page-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
     <div class="page-title">Contactos</div>
     <div class="page-desc">Personas vinculadas a empresas — directorio global</div>
   </div>
@@ -1672,7 +1678,7 @@ fbq('track','PageView');
 <!-- ===== VINCULAR SAVIO -> CS ===== -->
 <div class="view" id="view-vincular" style="overflow-y:auto;">
   <div class="page-header">
-    <div class="page-emoji">&#128279;</div>
+    <div class="page-emoji"><svg class="page-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
     <div class="page-title">Vincular Savio &rarr; CS</div>
     <div class="page-desc">Asocia las razones sociales de Savio con cada cuenta CS y sincroniza facturacion automaticamente</div>
   </div>
@@ -1731,7 +1737,7 @@ fbq('track','PageView');
 <!-- ===== MARKETING ROI ===== -->
 <div class="view" id="view-roi" style="overflow-y:auto;">
   <div class="page-header">
-    <div class="page-emoji">&#128202;</div>
+    <div class="page-emoji"><svg class="page-ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="20" x2="6" y2="15"/><line x1="12" y1="20" x2="12" y2="9"/><line x1="18" y1="20" x2="18" y2="4"/></svg></div>
     <div class="page-title">Marketing ROI</div>
     <div class="page-desc">Embudo + spend por canal: CPL, CAC, ROI segmentado</div>
   </div>
@@ -1836,7 +1842,7 @@ fbq('track','PageView');
 <!-- ===== REVISIÓN COMERCIAL ===== -->
 <div class="view" id="view-revision" style="overflow-y:auto;">
   <div class="page-header">
-    <div class="page-emoji">&#128202;</div>
+    <div class="page-emoji"><svg class="page-ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="20" x2="6" y2="15"/><line x1="12" y1="20" x2="12" y2="9"/><line x1="18" y1="20" x2="18" y2="4"/></svg></div>
     <div class="page-title">Revisión Comercial</div>
     <div class="page-desc">Vista de gerente para junta 1-on-1 con vendedores. Click un vendedor → ves su pipe, sus leads agrupados por etapa, días estancado y valor por deal.</div>
   </div>
@@ -1918,7 +1924,7 @@ fbq('track','PageView');
 <!-- ===== CAMPAÑAS META (registry editable) ===== -->
 <div class="view" id="view-campanas" style="overflow-y:auto;">
   <div class="page-header">
-    <div class="page-emoji">&#128226;</div>
+    <div class="page-emoji"><svg class="page-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg></div>
     <div class="page-title">Campañas Meta</div>
     <div class="page-desc">Registry de campañas activas con asignación dirigida: marca, zona, vendedor y unidad. Los leads que entren con un campaign_id registrado se enrutan automáticamente.</div>
   </div>
@@ -2017,7 +2023,7 @@ fbq('track','PageView');
 <!-- ===== CORREOS VENDEDORES ===== -->
 <div class="view" id="view-correos" style="overflow-y:auto;">
   <div class="page-header">
-    <div class="page-emoji">&#128231;</div>
+    <div class="page-emoji"><svg class="page-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg></div>
     <div class="page-title">Correos vendedores</div>
     <div class="page-desc">Monitoreo y envio de correos de vendedores a destinatarios externos. Click en cualquier correo para abrir el hilo en Gmail.</div>
   </div>
@@ -2112,7 +2118,7 @@ fbq('track','PageView');
 <!-- ===== SCIP DIRECTOR ===== -->
 <div class="view" id="view-scip" style="overflow-y:auto;">
   <div class="page-header">
-    <div class="page-emoji">&#127919;</div>
+    <div class="page-emoji"><svg class="page-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></svg></div>
     <div class="page-title">SCIP Director</div>
     <div class="page-desc">Campañas Meta + Google con análisis IA, alertas y atribución a vendedor</div>
   </div>
@@ -2187,7 +2193,7 @@ fbq('track','PageView');
 <!-- ===== COSTOS APIs ===== -->
 <div class="view" id="view-costos" style="overflow-y:auto;">
   <div class="page-header">
-    <div class="page-emoji">&#128181;</div>
+    <div class="page-emoji"><svg class="page-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg></div>
     <div class="page-title">Costos de APIs externas</div>
     <div class="page-desc">Spend en Apollo, Lusha, Google Places, Claude, etc.</div>
   </div>
@@ -3073,7 +3079,28 @@ window.addEventListener('DOMContentLoaded', ()=>{
     if(saved==='admin') switchPortal('admin');
   }catch{}
 });
-const ETAPA_COLORS={'Nuevo Lead':'#6366f1','1er Contacto':'#9333ea','2do Contacto':'#9333ea','3er Contacto':'#9333ea','4to Contacto':'#9333ea','Cotizaci\u00f3n':'#2563eb','Demo':'#0891b2','Negociaci\u00f3n':'#d97706','Cerrado Ganado':'#16a34a','Cerrado Perdido':'#dc2626'};
+// ── Color de las etapas del pipe (FEAT-2026-09-09) ──────────────────
+// Las etapas son una SECUENCIA, no categorias: cambiarles el orden cambia
+// el significado. Iban pintadas con tonos sueltos —indigo, morado, azul,
+// cian, ambar— que no decian nada del avance, y ademas gastaban verde y
+// rojo, que estan reservados para estado. Un arcoiris sobre datos ordenados.
+//
+// Ahora es un solo tono en escalones de luminosidad, asi el avance se lee en
+// el color. Generadas sobre el azul de marca #3f4994 y validadas (no elegidas
+// a ojo): luminosidad monotona, salto >= 0.06 entre pasos y extremo claro
+// >= 2:1 contra el blanco de la tarjeta.
+//
+// Verde y rojo quedan SOLO para los dos desenlaces, que si son estado.
+const RAMPA_ETAPA_8=['#a5b0db','#8f9acc','#7a85bd','#6571ae','#515c9f','#3e4890','#2d3381','#1e1d72'];
+const RAMPA_ETAPA_9=['#a5b0db','#909bcc','#7c88be','#6874af','#5561a0','#434e92','#323a83','#232774','#170f66'];
+const RAMPA_EMBUDO=['#a5afdb','#7e8bc5','#5a66af','#394198'];
+const COLOR_GANADO='#16a34a', COLOR_PERDIDO='#dc2626';
+
+const ETAPA_COLORS={
+  'Nuevo Lead':RAMPA_ETAPA_8[0],'1er Contacto':RAMPA_ETAPA_8[1],'2do Contacto':RAMPA_ETAPA_8[2],
+  '3er Contacto':RAMPA_ETAPA_8[3],'4to Contacto':RAMPA_ETAPA_8[4],'Cotizaci\u00f3n':RAMPA_ETAPA_8[5],
+  'Demo':RAMPA_ETAPA_8[6],'Negociaci\u00f3n':RAMPA_ETAPA_8[7],
+  'Cerrado Ganado':COLOR_GANADO,'Cerrado Perdido':COLOR_PERDIDO};
 function fmt$(n){return '$'+Number(n).toLocaleString('es-MX',{minimumFractionDigits:0});}
 const DASH_MONTHS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
@@ -3537,10 +3564,10 @@ const ORIGEN_COLORS_REV={
   'Sin origen':       {bg:'#f3f4f6', fg:'#6b7280'},
 };
 const ETAPA_COLORS_REV={
-  'Nuevo Lead':'#6366f1','1er Contacto':'#9333ea','2do Contacto':'#9333ea',
-  '3er Contacto':'#9333ea','4to Contacto':'#9333ea','Presentación':'#ea580c',
-  'Cotización':'#2563eb','Demo':'#0891b2','Negociación':'#d97706',
-  'Cerrado Ganado':'#16a34a','Cerrado Perdido':'#dc2626',
+  'Nuevo Lead':RAMPA_ETAPA_9[0],'1er Contacto':RAMPA_ETAPA_9[1],'2do Contacto':RAMPA_ETAPA_9[2],
+  '3er Contacto':RAMPA_ETAPA_9[3],'4to Contacto':RAMPA_ETAPA_9[4],'Presentación':RAMPA_ETAPA_9[5],
+  'Cotización':RAMPA_ETAPA_9[6],'Demo':RAMPA_ETAPA_9[7],'Negociación':RAMPA_ETAPA_9[8],
+  'Cerrado Ganado':COLOR_GANADO,'Cerrado Perdido':COLOR_PERDIDO,
 };
 
 function switchRevisionTab(name){
@@ -4357,12 +4384,12 @@ async function saveGasto(){
 
 // ── Oportunidades Kanban ──
 const _OPPS_ETAPA_COLOR = {
-  'Calificación':   'var(--text2)',
-  'Análisis':       'var(--blue)',
-  'Propuesta':      'var(--purple)',
-  'Negociación':    'var(--orange)',
-  'Cerrado Ganado': 'var(--green)',
-  'Cerrado Perdido':'var(--red)',
+  'Calificación':   RAMPA_EMBUDO[0],
+  'Análisis':       RAMPA_EMBUDO[1],
+  'Propuesta':      RAMPA_EMBUDO[2],
+  'Negociación':    RAMPA_EMBUDO[3],
+  'Cerrado Ganado': COLOR_GANADO,
+  'Cerrado Perdido':COLOR_PERDIDO,
 };
 
 async function loadOpps(){
@@ -4944,7 +4971,7 @@ async function loadDashboard(){
     const pb=document.getElementById('pipe-bars');pb.innerHTML='';
     const etapas=['Nuevo Lead','1er Contacto','2do Contacto','3er Contacto','4to Contacto','Cotizaci\u00f3n','Demo','Negociaci\u00f3n','Cerrado Ganado','Cerrado Perdido'];
     // Colores para pipe bars del dashboard
-    const DASH_COLORS={'Nuevo Lead':'#6366f1','1er Contacto':'#9333ea','2do Contacto':'#9333ea','3er Contacto':'#9333ea','4to Contacto':'#9333ea','Cotizaci\u00f3n':'#2563eb','Demo':'#0891b2','Negociaci\u00f3n':'#d97706','Cerrado Ganado':'#16a34a','Cerrado Perdido':'#dc2626'};
+    const DASH_COLORS=ETAPA_COLORS;   // una sola definicion; antes eran dos copias que podian divergir
     const maxV=Math.max(...etapas.map(e=>(pipeVals[e]||{}).valor||0),1);
     etapas.forEach(e=>{
       const d=pipeVals[e]||{cantidad:0,valor:0};
@@ -4959,11 +4986,13 @@ async function loadDashboard(){
     });
 
     // Funnel bars
+    // Un embudo es una secuencia: el color va de claro a oscuro conforme se
+    // avanza, no cuatro tonos sueltos que sugieren categorias distintas.
     const steps=[
-      {label:'Leads',count:embudo.leads_totales,color:'#2eaadc',bg:'#d3e5ef'},
-      {label:'Calificados',count:embudo.calificados,color:'#9065b0',bg:'#e8deee'},
-      {label:'Cotizados',count:embudo.cotizados,color:'#e07c1a',bg:'#faebdd'},
-      {label:'Ganados',count:embudo.ganados,color:'#0f7b6c',bg:'#dbeddb'},
+      {label:'Leads',count:embudo.leads_totales,color:RAMPA_EMBUDO[0]},
+      {label:'Calificados',count:embudo.calificados,color:RAMPA_EMBUDO[1]},
+      {label:'Cotizados',count:embudo.cotizados,color:RAMPA_EMBUDO[2]},
+      {label:'Ganados',count:embudo.ganados,color:RAMPA_EMBUDO[3]},
     ];
     const fb=document.getElementById('funnel-bars');fb.innerHTML='';
     const total=embudo.leads_totales||1;
@@ -4990,17 +5019,17 @@ async function loadDashboard(){
       <div class="funnel-side">
         <div class="funnel-side-card">
           <div class="funnel-side-label">Tasa de cierre</div>
-          <div class="funnel-side-value" style="color:var(--green);">${closeRate}%</div>
+          <div class="funnel-side-value">${closeRate}%</div>
           <div class="funnel-side-note">${_fmtNum(embudo.ganados)} ganados de ${_fmtNum(embudo.leads_totales)} leads</div>
         </div>
         <div class="funnel-side-card">
           <div class="funnel-side-label">Calificacion</div>
-          <div class="funnel-side-value" style="color:var(--blue);">${qualifiedRate}%</div>
+          <div class="funnel-side-value">${qualifiedRate}%</div>
           <div class="funnel-side-note">${_fmtNum(embudo.calificados)} leads avanzaron del primer contacto</div>
         </div>
         <div class="funnel-side-card">
           <div class="funnel-side-label">Salida perdida</div>
-          <div class="funnel-side-value" style="color:var(--red);">${_fmtNum(embudo.perdidos)}</div>
+          <div class="funnel-side-value">${_fmtNum(embudo.perdidos)}</div>
           <div class="funnel-side-note">${lostPct}% del total del periodo</div>
         </div>
       </div>
