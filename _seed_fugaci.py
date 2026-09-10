@@ -13,10 +13,14 @@ import os
 import sys
 from decimal import Decimal, InvalidOperation
 
-os.environ.setdefault(
-    "DATABASE_URL",
-    "postgresql://postgres.cyntwgxryfbrboehcdex:Brs99791avantex@aws-1-us-east-1.pooler.supabase.com:5432/postgres",
-)
+# SECURITY-2026-09-09: la cadena de conexion a produccion estaba aqui en
+# texto plano, con usuario y contrasena, versionada en git. Cualquiera con
+# acceso al repo tenia la base del negocio. Ahora se lee del entorno.
+if not os.getenv("DATABASE_URL"):
+    raise SystemExit(
+        "Falta DATABASE_URL. Corre:  set -a; source .env; set +a  "
+        "(o .env.local para trabajar contra la base local)."
+    )
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from avantex_crm import create_app

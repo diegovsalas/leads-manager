@@ -3,11 +3,20 @@
 Migra datos de Vittaly (cs_bootstrap.json) a las tablas CS en Supabase.
 Run once: python3 seed_cs.py
 """
+import os
 import json
 import psycopg2
 import uuid
 
-DB_URL = "postgresql://postgres.cyntwgxryfbrboehcdex:Brs99791avantex@aws-1-us-east-1.pooler.supabase.com:5432/postgres"
+# SECURITY-2026-09-09: la cadena de conexion a produccion estaba aqui en
+# texto plano, con usuario y contrasena, versionada en git. Cualquiera con
+# acceso al repo tenia la base del negocio. Ahora se lee del entorno.
+DB_URL = os.getenv("DATABASE_URL", "")
+if not DB_URL:
+    raise SystemExit(
+        "Falta DATABASE_URL. Corre:  set -a; source .env; set +a  "
+        "(o .env.local para trabajar contra la base local)."
+    )
 
 # Mapeo KAM nombre → correo en users_crm
 KAM_EMAILS = {

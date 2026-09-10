@@ -3,10 +3,19 @@
 Agrega rol KAM al enum y crea los 4 usuarios KAM.
 Run once: python3 seed_kams.py
 """
+import os
 import psycopg2
 from werkzeug.security import generate_password_hash
 
-DB_URL = "postgresql://postgres.cyntwgxryfbrboehcdex:Brs99791avantex@aws-1-us-east-1.pooler.supabase.com:5432/postgres"
+# SECURITY-2026-09-09: la cadena de conexion a produccion estaba aqui en
+# texto plano, con usuario y contrasena, versionada en git. Cualquiera con
+# acceso al repo tenia la base del negocio. Ahora se lee del entorno.
+DB_URL = os.getenv("DATABASE_URL", "")
+if not DB_URL:
+    raise SystemExit(
+        "Falta DATABASE_URL. Corre:  set -a; source .env; set +a  "
+        "(o .env.local para trabajar contra la base local)."
+    )
 
 conn = psycopg2.connect(DB_URL)
 conn.autocommit = True
