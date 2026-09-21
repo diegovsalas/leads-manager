@@ -1,9 +1,14 @@
 """
-Monitor de correos salientes de vendedores (Gmail Workspace).
+Monitor de correos de vendedores (Gmail Workspace).
 
-Lee correos enviados (in:sent) por cada vendedor con gmail_address registrado
-en `usuarios`, filtrando para que el destinatario NO sea @grupoavantex.com
-(solo correos a clientes/prospectos externos), y los persiste en sales_emails.
+Lee correos recibidos (in:inbox) por cada vendedor con gmail_address registrado
+en `usuarios`, filtrando para que el remitente NO sea @grupoavantex.com (solo
+correos que llegan de clientes/prospectos externos), y los persiste en
+sales_emails con direccion='IN'.
+
+2026-09-21: los correos SALIENTES ya no se capturan ni se guardan. El CRM dejó
+de mostrar el historial de enviados, así que persistirlos no tenía sentido.
+Ver CAPTURE_OUT abajo si algún día hay que revertirlo.
 
 Auth: Service Account con domain-wide delegation. La cuenta de servicio
 impersona cada vendedor para acceder a su Gmail (read-only).
@@ -40,6 +45,11 @@ RETENTION_DAYS = int(os.getenv("GMAIL_RETENTION_DAYS", "365"))
 # Ventana de backfill inicial cuando un vendedor se agrega por primera vez.
 # Solo aplica UNA vez por vendedor (después se marca gmail_backfilled_at).
 BACKFILL_DAYS = int(os.getenv("GMAIL_BACKFILL_DAYS", "30"))
+
+# 2026-09-21: el CRM dejó de guardar el historial de correos SALIENTES. No se
+# capturan, no se persisten y no se muestran en ningún lado. Se deja el flag
+# por si algún día hay que reactivarlo (GMAIL_CAPTURE_OUT=true).
+CAPTURE_OUT = os.getenv("GMAIL_CAPTURE_OUT", "false").strip().lower() in ("1", "true", "yes")
 
 
 def _load_credentials_json() -> Optional[dict]:
@@ -341,7 +351,7 @@ def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN,
     # IN  (recibidos): trackea con gmail_backfilled_in_at (nueva)
     # Un vendedor puede ya tener backfill de OUT (funcionaba antes) pero
     # necesitar backfill inicial de IN porque acabamos de soportarlo.
-    is_initial_out = getattr(vendedor, "gmail_backfilled_at", None) is None
+    is_initial_out = CAPTURE_OUT and getattr(vendedor, "gmail_backfilled_at", None) is None
     is_initial_in  = getattr(vendedor, "gmail_backfilled_in_at", None) is None
     if is_initial_out or is_initial_in:
         stats["initial_backfill"] = True
@@ -351,8 +361,9 @@ def poll_vendor(vendedor: Usuario, lookback_min: int = LOOKBACK_MIN,
         log.info(f"[gmail] backfill inicial para {vendedor.nombre} ({vendedor.gmail_address}): "
                  f"{BACKFILL_DAYS} días · {'+'.join(which)}")
 
-    # FEAT-2026-07-07: hacer poll en AMBAS direcciones (enviados + recibidos)
-    for direccion in ("OUT", "IN"):
+    # FEAT-2026-07-07: poll en ambas direcciones (enviados + recibidos).
+    # 2026-09-21: OUT queda fuera salvo que CAPTURE_OUT lo reactive.
+    for direccion in (("OUT", "IN") if CAPTURE_OUT else ("IN",)):
         # Cada dirección puede tener su propio backfill si nunca se ha hecho
         needs_backfill = is_initial_out if direccion == "OUT" else is_initial_in
         effective_lookback = BACKFILL_DAYS * 24 * 60 if needs_backfill else lookback_min
@@ -482,11 +493,21 @@ def poll_all(lookback_min: int = LOOKBACK_MIN, backfill_bodies: bool = True,
 
 
 def purge_old(days: int = RETENTION_DAYS) -> dict:
-    """Borra registros con sent_at más viejos que `days`."""
+    """Borra registros con sent_at más viejos que `days`.
+
+    2026-09-21: además barre los correos SALIENTES que queden en la tabla
+    (residuo histórico o fila colada por un refresh), porque el CRM ya no
+    guarda el historial de enviados.
+    """
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     deleted = SalesEmail.query.filter(SalesEmail.sent_at < cutoff).delete(synchronize_session=False)
+    purgados_out = 0
+    if not CAPTURE_OUT:
+        purgados_out = SalesEmail.query.filter(
+            SalesEmail.direccion == "OUT"
+        ).delete(synchronize_session=False)
     db.session.commit()
-    return {"deleted": deleted, "cutoff": cutoff.isoformat()}
+    return {"deleted": deleted, "purgados_out": purgados_out, "cutoff": cutoff.isoformat()}
 
 
 # ──────────────────────────────────────────────

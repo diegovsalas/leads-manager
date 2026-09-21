@@ -20,6 +20,9 @@ sales_emails_bp = Blueprint("sales_emails", __name__)
 # apagado para todos hasta nuevo aviso, incluso Developer.
 EMAIL_SEND_ENABLED = False
 EMAIL_INBOX_ENABLED = False
+# 2026-09-21: el historial de correos ENVIADOS deja de mostrarse en el CRM.
+# No se listan, no se cuentan y no se pueden abrir, para ningún rol.
+EMAIL_OUTBOX_ENABLED = False
 
 
 def _require_admin():
@@ -32,6 +35,23 @@ def _require_developer(action="esta función"):
     if not is_developer_role():
         return jsonify({"error": f"Solo Developer puede usar {action}"}), 403
     return None
+
+
+def _direcciones_visibles():
+    """Direcciones de correo que el usuario logueado puede consultar.
+
+    OUT (enviados): nunca, mientras EMAIL_OUTBOX_ENABLED siga apagado.
+    IN  (recibidos): solo Developer y solo con EMAIL_INBOX_ENABLED.
+
+    Si devuelve [], las queries con .in_([]) no regresan ninguna fila, que es
+    exactamente el comportamiento buscado.
+    """
+    dirs = []
+    if EMAIL_OUTBOX_ENABLED:
+        dirs.append("OUT")
+    if EMAIL_INBOX_ENABLED and is_developer_role():
+        dirs.append("IN")
+    return dirs
 
 
 def _require_feature_enabled(enabled, action):
@@ -111,13 +131,14 @@ def stats():
     )
 
     # Counts agrupados por vendedor (3 ventanas) en queries separadas
+    dirs_visibles = _direcciones_visibles()
+
     def count_since(since):
         q = db.session.query(SalesEmail.vendedor_id, func.count(SalesEmail.id)).filter(
             SalesEmail.sent_at >= since,
             SalesEmail.vendedor_id.in_(ids_visibles),
+            SalesEmail.direccion.in_(dirs_visibles),
         )
-        if not EMAIL_INBOX_ENABLED or not is_developer_role():
-            q = q.filter(SalesEmail.direccion == "OUT")
         rows = q.group_by(SalesEmail.vendedor_id).all()
         return {str(r[0]): int(r[1]) for r in rows}
 
@@ -125,12 +146,11 @@ def stats():
     counts_7d = count_since(semana_inicio)
     counts_30d = count_since(mes_inicio)
 
-    # Último envío por vendedor
+    # Último correo visible por vendedor
     last_q = db.session.query(SalesEmail.vendedor_id, func.max(SalesEmail.sent_at)).filter(
         SalesEmail.vendedor_id.in_(ids_visibles),
+        SalesEmail.direccion.in_(dirs_visibles),
     )
-    if not EMAIL_INBOX_ENABLED or not is_developer_role():
-        last_q = last_q.filter(SalesEmail.direccion == "OUT")
     last_rows = last_q.group_by(SalesEmail.vendedor_id).all()
     last_map = {str(r[0]): r[1] for r in last_rows}
 
@@ -176,9 +196,12 @@ def listar():
     days = int(request.args.get("days") or 7)
     limit = min(int(request.args.get("limit") or 100), 500)
     # FEAT-2026-07-07: filtro por dirección (IN/OUT/all)
+    # 2026-09-21: el filtro del cliente solo puede estrechar lo que ya es
+    # visible; nunca puede pedir una dirección apagada (p.ej. OUT).
     direccion = (request.args.get("direccion") or "").upper().strip()
-    if not EMAIL_INBOX_ENABLED or not is_developer_role():
-        direccion = "OUT"
+    dirs_visibles = _direcciones_visibles()
+    if direccion in ("IN", "OUT"):
+        dirs_visibles = [d for d in dirs_visibles if d == direccion]
 
     since = datetime.now(timezone.utc) - timedelta(days=days)
     # FEAT-2026-07-08: privacidad — si el vendedor tiene owner restringido,
@@ -190,8 +213,7 @@ def listar():
     q = q.filter(SalesEmail.vendedor_id.in_(ids_visibles))
     if vendedor_id:
         q = q.filter(SalesEmail.vendedor_id == vendedor_id)
-    if direccion in ("IN", "OUT"):
-        q = q.filter(SalesEmail.direccion == direccion)
+    q = q.filter(SalesEmail.direccion.in_(dirs_visibles))
     rows = q.order_by(desc(SalesEmail.sent_at)).limit(limit).all()
     # Contadores por dirección para pintar tabs
     from sqlalchemy import case
@@ -200,8 +222,7 @@ def listar():
     q_counts = q_counts.filter(SalesEmail.vendedor_id.in_(ids_visibles))
     if vendedor_id:
         q_counts = q_counts.filter(SalesEmail.vendedor_id == vendedor_id)
-    if not EMAIL_INBOX_ENABLED or not is_developer_role():
-        q_counts = q_counts.filter(SalesEmail.direccion == "OUT")
+    q_counts = q_counts.filter(SalesEmail.direccion.in_(_direcciones_visibles()))
     row = q_counts.with_entities(
         func.sum(case((SalesEmail.direccion == "IN", 1), else_=0)),
         func.sum(case((SalesEmail.direccion == "OUT", 1), else_=0)),
@@ -227,11 +248,8 @@ def get_email(email_id):
     # FEAT-2026-07-08: privacidad por vendedor
     if not _puede_ver_vendedor(email.vendedor_id):
         return jsonify({"error": "No autorizado para ver los correos de este vendedor"}), 403
-    if email.direccion == "IN":
-        err = _require_feature_enabled(EMAIL_INBOX_ENABLED, "Ver correos recibidos")
-        if err: return err
-        if not is_developer_role():
-            return jsonify({"error": "Solo Developer puede ver correos recibidos"}), 403
+    if (email.direccion or "OUT") not in _direcciones_visibles():
+        return jsonify({"error": "No autorizado para ver este correo"}), 403
     return jsonify(email.to_dict(include_body=True))
 
 
@@ -434,7 +452,9 @@ def refresh_all():
             stats["errors"] += 1
             continue
 
-        parsed = gmail_monitor._parse_gmail_message(msg)
+        # Conserva la dirección de la fila: _parse_gmail_message default a
+        # "OUT" y sin esto el refresh reetiquetaba como enviados los recibidos.
+        parsed = gmail_monitor._parse_gmail_message(msg, direccion=(row.direccion or "IN"))
         if not parsed:
             stats["skipped"] += 1
             continue
@@ -476,11 +496,8 @@ def download_attachment(email_id, idx):
     # FEAT-2026-07-08: privacidad por vendedor
     if not _puede_ver_vendedor(email.vendedor_id):
         return jsonify({"error": "No autorizado para descargar este adjunto"}), 403
-    if email.direccion == "IN":
-        err = _require_feature_enabled(EMAIL_INBOX_ENABLED, "Descargar adjuntos de correos recibidos")
-        if err: return err
-        if not is_developer_role():
-            return jsonify({"error": "Solo Developer puede descargar adjuntos de correos recibidos"}), 403
+    if (email.direccion or "OUT") not in _direcciones_visibles():
+        return jsonify({"error": "No autorizado para descargar este adjunto"}), 403
     atts = email.attachments or []
     if idx < 0 or idx >= len(atts):
         return jsonify({"error": "Adjunto no encontrado"}), 404
@@ -562,8 +579,14 @@ def diagnose_vendor():
       - Solo manda a internos (filtrados por el monitoreo)
       - El filtro de exclusión @grupoavantex.com está mal
     Uso: GET /api/sales-emails/diagnose?email=angelicauribe@grupoavantex.com
+
+    2026-09-21: apagado junto con el resto del historial de enviados. Aunque
+    no lee la BD, la respuesta incluye destinatario y asunto del último correo
+    enviado, que es justo lo que dejó de mostrarse en el CRM.
     """
     err = _require_admin()
+    if err: return err
+    err = _require_feature_enabled(EMAIL_OUTBOX_ENABLED, "El diagnóstico de correos enviados")
     if err: return err
     email = (request.args.get("email") or "").strip()
     if not email:
