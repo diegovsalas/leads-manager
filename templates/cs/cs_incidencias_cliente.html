@@ -194,17 +194,23 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
                             {{ i.status }}</span>
                     </td>
                     <td class="c" style="white-space:nowrap">
-                        {% if i.status != 'Resuelta' %}
+                        {% if i.status != 'Resuelta' and puede_editar %}
                         {% if i.status == 'Abierta' %}
                         <form action="/cs/account/{{ cuenta.id }}/incidencias/{{ i.id }}/status" method="POST" style="display:inline">
                             <input type="hidden" name="status" value="En proceso">
+                            <input type="hidden" name="next" value="{{ request.full_path }}">
                             <button type="submit" class="btn" style="height:24px;padding:0 7px;font-size:11px">En proceso</button>
                         </form>
                         {% endif %}
                         <form action="/cs/account/{{ cuenta.id }}/incidencias/{{ i.id }}/status" method="POST" style="display:inline;margin-left:4px">
                             <input type="hidden" name="status" value="Resuelta">
+                            <input type="hidden" name="next" value="{{ request.full_path }}">
                             <button type="submit" class="btn" style="height:24px;padding:0 7px;font-size:11px">Resolver</button>
                         </form>
+                        {% elif i.status != 'Resuelta' %}
+                        <span class="muted" style="font-size:10.5px" title="Solo el KAM de la cuenta puede cambiar el estatus">
+                            {% if cuenta.kam %}la atiende {{ cuenta.kam.nombre }}{% else %}cuenta sin KAM{% endif %}
+                        </span>
                         {% endif %}
                     </td>
                 </tr>

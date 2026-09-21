@@ -174,17 +174,23 @@
                         </span>
                     </td>
                     <td class="c" style="white-space:nowrap">
-                        {% if acc %}
+                        {% if acc and acc.id|string in cuentas_editables %}
                         {% if inc.status == 'Abierta' %}
                         <form action="/cs/account/{{ acc.id }}/incidencias/{{ inc.id }}/status" method="POST" style="display:inline">
                             <input type="hidden" name="status" value="En proceso">
+                            <input type="hidden" name="next" value="{{ request.full_path }}">
                             <button type="submit" class="btn ghost" style="height:24px;padding:0 6px;font-size:11px">En proceso</button>
                         </form>
                         {% endif %}
                         <form action="/cs/account/{{ acc.id }}/incidencias/{{ inc.id }}/status" method="POST" style="display:inline;margin-left:4px">
                             <input type="hidden" name="status" value="Resuelta">
+                            <input type="hidden" name="next" value="{{ request.full_path }}">
                             <button type="submit" class="btn ghost" style="height:24px;padding:0 6px;font-size:11px">Resolver</button>
                         </form>
+                        {% elif acc %}
+                        <span class="muted" style="font-size:10.5px" title="Solo el KAM de la cuenta puede cambiar el estatus">
+                            {% if acc.kam %}la atiende {{ acc.kam.nombre }}{% else %}cuenta sin KAM{% endif %}
+                        </span>
                         {% endif %}
                     </td>
                 </tr>

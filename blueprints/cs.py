@@ -265,6 +265,28 @@ def _can_edit_account(account):
     return False
 
 
+def _cuentas_editables_ids(accounts):
+    """IDs (como texto) de las cuentas donde el usuario logueado sí puede escribir.
+
+    Sirve para no pintar botones que el backend va a rechazar. Un KAM ve las
+    incidencias de todas las cuentas (require_cs_analisis), pero solo puede
+    tocar las suyas: sin esto la tabla ofrece acciones que rebotan con 403.
+    """
+    return {str(a.id) for a in accounts if _can_edit_account(a)}
+
+
+def _destino_seguro(default_url):
+    """Ruta a la que volver tras guardar, tomada del campo `next` del form.
+
+    Solo se aceptan rutas internas relativas. Sin esa validación el botón se
+    volvería un redirector abierto hacia cualquier dominio.
+    """
+    destino = (request.form.get("next") or "").strip()
+    if destino.startswith("/") and not destino.startswith("//"):
+        return destino
+    return default_url
+
+
 def _require_cs_admin(json_response=None):
     if not _is_cs_admin():
         return _permission_denied("Solo admin CS", json_response=json_response)
@@ -4243,7 +4265,8 @@ def cambiar_status_incidencia(account_id, inc_id):
         if comentario:
             inc.comentarios_operaciones = comentario
         db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=proyectos")
+    return redirect(_destino_seguro(
+        url_for("cs.account_detail", account_id=account_id) + "?tab=proyectos"))
 
 
 # ══════════════════════════════════════════════
@@ -4476,6 +4499,7 @@ def incidencias_view():
     return render_template(
         "cs_incidencias.html",
         incidencias=abiertas, accounts_by_id=accounts_by_id,
+        cuentas_editables=_cuentas_editables_ids(accounts_by_id.values()),
         stats=stats, hoy=hoy,
         f_desde=desde, f_hasta=hasta, f_status=f_status, f_cobro=f_cobro,
         **_ctx(),
@@ -4950,6 +4974,7 @@ def incidencias_por_cliente():
     return render_template("cs/cs_incidencias_cliente.html",
                            cuentas=cuentas, cuenta=seleccionada,
                            incidencias=incidencias, resumen=resumen,
+                           puede_editar=_can_edit_account(seleccionada),
                            cruce=detalle, **_ctx())
 
 
