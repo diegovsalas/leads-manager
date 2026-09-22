@@ -22,82 +22,82 @@
 [data-theme="light"] {
   /* Superficies. Canvas blanco puro; la separación es por borde y tono,
      nunca por elevación. */
-  --bg-app:        #FFFFFF;
+  --bg-app:        #F4F7FB;
   --bg-surface:    #FFFFFF;
   --bg-card:       #FFFFFF;
-  --bg-surface-2:  #FBFBFA;
-  --bg-sunken:     #F6F6F4;
-  --bg-hover:      #F6F6F4;
-  --bg-tag:        #F6F6F4;
+  --bg-surface-2:  #F8FAFD;
+  --bg-sunken:     #EEF2F9;
+  --bg-hover:      #EDF1F8;
+  --bg-tag:        #E5ECF8;
   --bg-overlay:    #FFFFFF;
 
   /* Bordes */
-  --border:        #E9E9E6;
-  --border-strong: #DCDCD8;
-  --border-subtle: #F0F0EE;
+  --border:        #DBE4F0;
+  --border-strong: #C5D3E8;
+  --border-subtle: #E9EFF7;
 
   /* Texto — ink-4 es decorativo/deshabilitado, no apto para lectura */
-  --ink-1:         #1F1F1E;
-  --ink-2:         #575654;
-  --ink-3:         #767572;
-  --ink-4:         #757471;   /* 4.65:1 — se usa para texto en 4 vistas */
+  --ink-1:         #0C1F3E;
+  --ink-2:         #5B6D8C;
+  --ink-3:         #637594;
+  --ink-4:         #627493;   /* 4.65:1 — se usa para texto en 4 vistas */
   --ink-inverse:   #FFFFFF;
 
   /* Acento primario: azul. Todo lo interactivo. En avantex_cs.css este
      rol lo tiene --copper, así que se conserva el nombre. */
-  --copper:        #2F6FE0;
-  --copper-hover:  #1D4FA8;
-  --copper-soft:   #EEF3FD;
-  --copper-ink:    #1D4FA8;
-  --accent:        #2F6FE0;
+  --copper:        #0954E6;
+  --copper-hover:  #0743B8;
+  --copper-soft:   #E8EFFD;
+  --copper-ink:    #0743B8;
+  --accent:        #0954E6;
 
   /* Acento secundario: teal. Series de gráficas y datos destacados.
      Nunca en controles, para no competir con la interactividad. */
-  --accent-alt:      #147D74;
-  --accent-alt-soft: #E8F4F2;
+  --accent-alt:      #6A86BB;
+  --accent-alt-soft: #E5ECF8;
 
   /* Semánticos — solo estado, jamás énfasis */
-  --ok:            #2E7D53;
-  --ok-soft:       #EAF4EE;
-  --ok-ink:        #256444;
-  --warn:          #9A6B10;
-  --warn-soft:     #FBF2E1;
-  --warn-ink:      #7A5410;
+  --ok:            #1D7A4C;
+  --ok-soft:       #DCF0E5;
+  --ok-ink:        #14603A;
+  --warn:          #B26A00;
+  --warn-soft:     #FDF0D9;
+  --warn-ink:      #8A5200;
   --danger:        #C0392B;
-  --danger-soft:   #FBEDEB;
+  --danger-soft:   #FBE6E3;
   --danger-ink:    #9A2E22;
-  --info:          #2F6FE0;
-  --olive:         #147D74;
-  --olive-soft:    #E8F4F2;
-  --olive-ink:     #0E5C55;
+  --info:          #0954E6;
+  --olive:         #6A86BB;
+  --olive-soft:    #E5ECF8;
+  --olive-ink:     #4A6396;
 
   /* Marca (solo la firma del sidebar) */
-  --brand-steel:   #1F1F1E;
-  --brand-cyan:    #2F6FE0;
+  --brand-steel:   #0C1F3E;
+  --brand-cyan:    #0954E6;
   --brand-cyan-deep:#1D4FA8;
 
   /* Sidebar claro: deja de ser un bloque índigo oscuro */
-  --side-bg:               #FBFBFA;
-  --side-border:           #E9E9E6;
-  --side-section:          #767572;
-  --side-brand:            #1F1F1E;
-  --side-item:             #575654;
-  --side-item-hover-bg:    #F0F0EE;
-  --side-item-active-bg:   #EEF3FD;
-  --side-item-active-ink:  #1D4FA8;
-  --side-item-active-bar:  #2F6FE0;
+  --side-bg:               #0C1F3E;
+  --side-border:           rgba(255,255,255,.12);
+  --side-section:          rgba(255,255,255,.5);
+  --side-brand:            #FFFFFF;
+  --side-item:             rgba(255,255,255,.8);
+  --side-item-hover-bg:    rgba(255,255,255,.1);
+  --side-item-active-bg:   rgba(255,255,255,.15);
+  --side-item-active-ink:  #FFFFFF;
+  --side-item-active-bar:  #6A86BB;
 
   /* Sombras: casi inexistentes. Solo flota lo que de verdad flota. */
-  --shadow-xs: none;
-  --shadow-sm: none;
-  --shadow-md: 0 1px 2px rgba(15,15,15,.05);
-  --shadow-lg: 0 4px 12px rgba(15,15,15,.08), 0 1px 2px rgba(15,15,15,.04);
+  --shadow-xs: 0 1px 2px rgba(12,31,62,.06);
+  --shadow-sm: 0 1px 2px rgba(12,31,62,.06);
+  --shadow-md: 0 1px 2px rgba(12,31,62,.08);
+  --shadow-lg: 0 4px 12px rgba(12,31,62,.10);
 
   /* Radios — solo tres escalones */
   --r-xs: 4px;
   --r-sm: 4px;
   --r-md: 6px;
-  --r-lg: 8px;
+  --r-lg: 12px;
 
   /* Alturas fijas: no se improvisan por vista */
   --h-topbar:   48px;
@@ -120,23 +120,23 @@
    así que el bloque de media debe existir aparte del selector de tema. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg-app:        #191919;
-    --bg-surface:    #202020;
-    --bg-card:       #202020;
-    --bg-surface-2:  #242424;
-    --bg-sunken:     #161616;
-    --bg-hover:      #262626;
-    --bg-tag:        #262626;
-    --bg-overlay:    #252525;
+    --bg-app:        #0B1420;
+    --bg-surface:    #111E31;
+    --bg-card:       #111E31;
+    --bg-surface-2:  #16243A;
+    --bg-sunken:     #0A1220;
+    --bg-hover:      #1A2A42;
+    --bg-tag:        #1A2A42;
+    --bg-overlay:    #16243A;
 
-    --border:        #2E2E2E;
-    --border-strong: #3D3D3D;
-    --border-subtle: #242424;
+    --border:        #22334D;
+    --border-strong: #2E4260;
+    --border-subtle: #1A2840;
 
-    --ink-1:         #E9E9E7;
-    --ink-2:         #A8A7A3;
-    --ink-3:         #83827E;
-    --ink-4:         #8C8B87;   /* 5.1:1 sobre #191919 */
+    --ink-1:         #E6ECF5;
+    --ink-2:         #A9B6CC;
+    --ink-3:         #8496B3;
+    --ink-4:         #8B9CB8;   /* 5.1:1 sobre #191919 */
     --ink-inverse:   #191919;
 
     --copper:        #5B93F0;
@@ -145,8 +145,8 @@
     --copper-ink:    #8CB4F5;
     --accent:        #5B93F0;
 
-    --accent-alt:      #35A99C;
-    --accent-alt-soft: #122A28;
+    --accent-alt:      #8AA2D4;
+    --accent-alt-soft: #1A2A42;
 
     --ok:            #4E9E71;
     --ok-soft:       #16271D;
@@ -158,22 +158,22 @@
     --danger-soft:   #2C1817;
     --danger-ink:    #E88A82;
     --info:          #5B93F0;
-    --olive:         #35A99C;
-    --olive-soft:    #122A28;
-    --olive-ink:     #5AC4B8;
+    --olive:         #8AA2D4;
+    --olive-soft:    #1A2A42;
+    --olive-ink:     #A9BDE4;
 
-    --brand-steel:   #E9E9E7;
+    --brand-steel:   #E6ECF5;
     --brand-cyan:    #5B93F0;
     --brand-cyan-deep:#8CB4F5;
 
-    --side-bg:               #1C1C1C;
-    --side-border:           #2E2E2E;
-    --side-section:          #83827E;
-    --side-brand:            #E9E9E7;
-    --side-item:             #A8A7A3;
-    --side-item-hover-bg:    #262626;
-    --side-item-active-bg:   #17233A;
-    --side-item-active-ink:  #8CB4F5;
+    --side-bg:               #081426;
+    --side-border:           rgba(255,255,255,.10);
+    --side-section:          rgba(255,255,255,.45);
+    --side-brand:            #FFFFFF;
+    --side-item:             rgba(255,255,255,.75);
+    --side-item-hover-bg:    rgba(255,255,255,.08);
+    --side-item-active-bg:   rgba(255,255,255,.14);
+    --side-item-active-ink:  #FFFFFF;
     --side-item-active-bar:  #5B93F0;
 
     --shadow-xs: none;
@@ -186,23 +186,23 @@
 }
 
 [data-theme="dark"] {
-  --bg-app:        #191919;
-  --bg-surface:    #202020;
-  --bg-card:       #202020;
-  --bg-surface-2:  #242424;
-  --bg-sunken:     #161616;
-  --bg-hover:      #262626;
-  --bg-tag:        #262626;
-  --bg-overlay:    #252525;
+  --bg-app:        #0B1420;
+  --bg-surface:    #111E31;
+  --bg-card:       #111E31;
+  --bg-surface-2:  #16243A;
+  --bg-sunken:     #0A1220;
+  --bg-hover:      #1A2A42;
+  --bg-tag:        #1A2A42;
+  --bg-overlay:    #16243A;
 
-  --border:        #2E2E2E;
-  --border-strong: #3D3D3D;
-  --border-subtle: #242424;
+  --border:        #22334D;
+  --border-strong: #2E4260;
+  --border-subtle: #1A2840;
 
-  --ink-1:         #E9E9E7;
-  --ink-2:         #A8A7A3;
-  --ink-3:         #83827E;
-  --ink-4:         #8C8B87;
+  --ink-1:         #E6ECF5;
+  --ink-2:         #A9B6CC;
+  --ink-3:         #8496B3;
+  --ink-4:         #8B9CB8;
   --ink-inverse:   #191919;
 
   --copper:        #5B93F0;
@@ -211,8 +211,8 @@
   --copper-ink:    #8CB4F5;
   --accent:        #5B93F0;
 
-  --accent-alt:      #35A99C;
-  --accent-alt-soft: #122A28;
+  --accent-alt:      #8AA2D4;
+  --accent-alt-soft: #1A2A42;
 
   --ok:            #4E9E71;
   --ok-soft:       #16271D;
@@ -224,22 +224,22 @@
   --danger-soft:   #2C1817;
   --danger-ink:    #E88A82;
   --info:          #5B93F0;
-  --olive:         #35A99C;
-  --olive-soft:    #122A28;
-  --olive-ink:     #5AC4B8;
+  --olive:         #8AA2D4;
+  --olive-soft:    #1A2A42;
+  --olive-ink:     #A9BDE4;
 
-  --brand-steel:   #E9E9E7;
+  --brand-steel:   #E6ECF5;
   --brand-cyan:    #5B93F0;
   --brand-cyan-deep:#8CB4F5;
 
-  --side-bg:               #1C1C1C;
-  --side-border:           #2E2E2E;
-  --side-section:          #83827E;
-  --side-brand:            #E9E9E7;
-  --side-item:             #A8A7A3;
-  --side-item-hover-bg:    #262626;
-  --side-item-active-bg:   #17233A;
-  --side-item-active-ink:  #8CB4F5;
+  --side-bg:               #081426;
+  --side-border:           rgba(255,255,255,.10);
+  --side-section:          rgba(255,255,255,.45);
+  --side-brand:            #FFFFFF;
+  --side-item:             rgba(255,255,255,.75);
+  --side-item-hover-bg:    rgba(255,255,255,.08);
+  --side-item-active-bg:   rgba(255,255,255,.14);
+  --side-item-active-ink:  #FFFFFF;
   --side-item-active-bar:  #5B93F0;
 
   --shadow-xs: none;
@@ -289,22 +289,23 @@ body {
   gap: 10px;
 }
 .page-head h1 {
-  font-family: var(--font-sans);
-  font-size: 18px;
-  font-weight: 640;
-  letter-spacing: -.017em;
-  line-height: 1.3;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 560;
+  letter-spacing: -.02em;
+  line-height: 1.18;
 }
 .page-head .sub { font-size: 12.5px; color: var(--ink-3); margin: 2px 0 0; }
 
-/* Tarjetas: borde, no sombra */
+/* Tarjetas: como en el pipeline — radio amplio y una sombra apenas visible.
+   La densidad no cambia; lo que cambia es la separación del fondo azulado. */
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  box-shadow: none;
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-xs);
 }
-.card:hover { box-shadow: none; }
+.card:hover { box-shadow: var(--shadow-xs); }
 
 /* Controles */
 .iconbtn {
@@ -368,23 +369,60 @@ body {
 }
 
 /* Sidebar: avantex_cs.css fija estos colores en oklch literal, fuera del
-   sistema de tokens. Se redirigen aquí para que sigan al tema. */
+   sistema de tokens. Se redirigen aquí para que sigan al tema.
+
+   2026-09-22: el sidebar pasó a marino (como el del pipeline), así que su
+   texto NO puede seguir usando los tokens de tinta —--ink-1 es el mismo
+   azul del fondo y quedaría invisible—. Todo lo de aquí dentro se pinta
+   con la familia --side-*, que sí está pensada contra ese fondo. */
 .side-brand .wm-steel,
 [data-theme="dark"] .side-brand .wm-steel { color: var(--side-brand); }
 .side-brand .wm-x,
-[data-theme="dark"] .side-brand .wm-x { color: var(--copper); }
-.side-brand .tag-grupo, .side-brand small { color: var(--ink-3); }
+[data-theme="dark"] .side-brand .wm-x { color: var(--side-item-active-bar); }
+.side-brand .tag-grupo,
+.side-brand small { color: var(--side-section); }
 .side-section,
 [data-theme="dark"] .side-section { color: var(--side-section); }
+.side-link,
+.side-nav .side-link { color: var(--side-item); }
+.side-link:hover,
+[data-theme="dark"] .side-link:hover { color: var(--side-brand); }
+.side-link.active { color: var(--side-item-active-ink); box-shadow: none; }
 .side-user .meta .name,
-[data-theme="dark"] .side-user .meta .name { color: var(--ink-1); }
+[data-theme="dark"] .side-user .meta .name { color: var(--side-brand); }
 .side-user .meta .role,
-[data-theme="dark"] .side-user .meta .role { color: var(--ink-3); }
+[data-theme="dark"] .side-user .meta .role { color: var(--side-section); }
 .side-user .avatar {
   background: var(--copper-soft); color: var(--copper-ink);
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
 }
-.side-user .exit { color: var(--ink-3); }
+.side-user .exit { color: var(--side-item); }
+.side-user .exit:hover { background: var(--side-item-hover-bg); color: var(--side-brand); }
+
+/* Etiquetas de KPI: avantex_cs.css las pone en versalitas de 10.5px con
+   tracking .11em. El pipeline las escribe en caja normal a 13px, y es la
+   diferencia tipográfica que más se notaba entre las dos pantallas. */
+.kpi .label {
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink-2);
+}
+.kpi { padding: 18px 20px 20px; }
+.kpi .value { font-size: 29px; font-weight: 600; margin-top: 6px; }
+.kpi .foot { margin-top: 8px; }
+
+/* KPI destacado: avantex_cs.css lo tiñe con un radial ámbar (oklch 55) que
+   venía de la paleta cálida anterior. En la paleta azul desentonaba, así que
+   se reemplaza por el mismo azul del acento. */
+.kpi.primary {
+  background: radial-gradient(120% 120% at 100% 0%, var(--copper-soft) 0%, transparent 58%), var(--bg-card);
+}
+[data-theme="dark"] .kpi.primary,
+:root:not([data-theme="light"]) .kpi.primary {
+  background: radial-gradient(120% 120% at 100% 0%, var(--copper-soft) 0%, transparent 58%), var(--bg-card);
+}
 
 /* Avatares: avantex_cs.css los pinta con un gradiente y texto blanco, que
    baja a ~3:1 en el extremo cálido. El sistema no usa gradientes: se
