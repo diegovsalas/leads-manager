@@ -1630,6 +1630,11 @@ def crear_cliente():
         unidades_contratadas=unidades_val,
         mrr=mrr, sucursales=sucursales,
         es_cuenta_nueva=True,  # marca onboarding
+        # FEAT-2026-09-25: el portal de tickets nace habilitado. Antes el token
+        # se generaba a mano por cuenta y casi nadie lo hacia: de 173 clientes,
+        # 2 tenian portal. Generarlo aqui no publica nada —el enlace solo sirve
+        # si alguien lo comparte— pero evita volver a acumular clientes sin el.
+        ticket_token=_genera_ticket_token(),
     )
     db.session.add(acc)
     try:

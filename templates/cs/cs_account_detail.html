@@ -17,7 +17,22 @@
 
 <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
     <a href="/cs/clientes" class="text-xs text-brand-600 hover:underline inline-flex items-center gap-1">{{ icon('arrow-left', 13) }} Todas las cuentas</a>
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2 flex-wrap">
+        {# FEAT-2026-09-25: enlace del portal de tickets del cliente.
+           El token existia en la base desde antes, pero ninguna pantalla lo
+           mostraba: el KAM no tenia forma de hacerselo llegar al cliente, asi
+           que el portal estaba habilitado en 2 cuentas de 173. #}
+        {% if account.ticket_token %}
+        {% set portal_url = url_for('tickets.centro_tickets', token=account.ticket_token, _external=True) %}
+        <div class="flex items-center gap-1.5 border border-gray-300 rounded-md pl-2.5 pr-1 py-1 bg-white"
+             title="Portal de tickets de {{ account.nombre }}. Cualquiera con este enlace puede ver sus tickets y levantar nuevos; compartelo solo con el cliente.">
+            <span class="text-xs text-gray-500">Portal</span>
+            <a href="{{ portal_url }}" target="_blank" rel="noopener"
+               class="text-xs text-brand-600 hover:underline max-w-[190px] truncate">{{ portal_url|replace('https://','') }}</a>
+            <button type="button" onclick="copiarPortal(this, '{{ portal_url }}')"
+                    class="text-xs px-2 py-0.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">Copiar</button>
+        </div>
+        {% endif %}
         <label for="cv-periodo" class="text-xs text-gray-500">Periodo</label>
         <select id="cv-periodo" onchange="window.location='/cs/account/{{ account.id }}?periodo='+this.value+'&tab='+cvTabActiva()"
                 class="text-xs border border-gray-300 rounded-md px-2.5 py-1.5 bg-white">
@@ -126,6 +141,26 @@
 
 
 {% block scripts %}
+<script>
+// Copiar el enlace del portal. clipboard.writeText solo existe en contextos
+// seguros; en HTTP plano (o navegador viejo) se cae al metodo del textarea
+// para no dejar el boton sin hacer nada.
+function copiarPortal(btn, url){
+  const ok = () => { const t = btn.textContent; btn.textContent = 'Copiado';
+                     setTimeout(() => { btn.textContent = t; }, 1600); };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(url).then(ok).catch(() => fallback());
+  } else { fallback(); }
+  function fallback(){
+    const ta = document.createElement('textarea');
+    ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); ok(); }
+    catch (e) { window.prompt('Copia el enlace:', url); }
+    document.body.removeChild(ta);
+  }
+}
+</script>
 <style>
 /* ── Client View ──────────────────────────────────────────── */
 .cv-banner { margin-bottom: 16px; }
