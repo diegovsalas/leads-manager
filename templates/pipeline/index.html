@@ -1952,10 +1952,36 @@ fbq('track','PageView');
       <button id="rev-tab-vendedores" class="btn btn-filled" onclick="switchRevisionTab('vendedores')" style="font-size:13px;border-radius:0;">1-on-1</button>
       <button id="rev-tab-tabla"      class="btn"           onclick="switchRevisionTab('tabla')"      style="font-size:13px;border-radius:0;">Tabla Vendedores</button>
       <button id="rev-tab-origen"     class="btn"           onclick="switchRevisionTab('origen')"     style="font-size:13px;border-radius:0;">Por Origen</button>
+      <button id="rev-tab-meta"       class="btn"           onclick="switchRevisionTab('meta')"       style="font-size:13px;border-radius:0;">Ventas vs Meta</button>
     </div>
     <input type="month" id="rev-mes" onchange="loadRevision()" style="font-size:13px;padding:5px 10px;border:1px solid var(--border);border-radius:6px;"/>
     <button class="btn" onclick="descargarReporteVentas()" style="font-size:13px;">Descargar ventas CSV</button>
     <span id="rev-status" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
+  </div>
+
+  <!-- ── Tab: Ventas vs Meta ── -->
+  <div id="rev-pane-meta" style="padding:20px 48px;display:none;">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+      <div style="display:flex;gap:0;border-radius:8px;overflow:hidden;border:1px solid var(--border);">
+        <button id="vm-agr-un"   class="btn btn-filled" onclick="setVentasMetaAgrupado(true)"  style="font-size:12px;border-radius:0;">Por unidad</button>
+        <button id="vm-agr-todo" class="btn"            onclick="setVentasMetaAgrupado(false)" style="font-size:12px;border-radius:0;">Todos juntos</button>
+      </div>
+      <span id="vm-status" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
+    </div>
+    <div id="vm-kpis" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px;"></div>
+    <div class="dash-card">
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th style="min-width:230px;">Vendedor</th>
+          <th>Tipo</th>
+          <th style="text-align:right;">Real ventas</th>
+          <th style="text-align:right;">Meta</th>
+          <th style="text-align:right;">%</th>
+          <th style="width:150px;"></th>
+        </tr></thead>
+        <tbody id="vm-tbody"></tbody>
+      </table></div>
+    </div>
   </div>
 
   <!-- ── Tab: Por Vendedor ── -->
@@ -3615,9 +3641,14 @@ function switchRevisionTab(name){
   document.getElementById('rev-tab-vendedores').className = name==='vendedores'?'btn btn-filled':'btn';
   document.getElementById('rev-tab-tabla').className      = name==='tabla'?'btn btn-filled':'btn';
   document.getElementById('rev-tab-origen').className     = name==='origen'?'btn btn-filled':'btn';
+  document.getElementById('rev-tab-meta').className       = name==='meta'?'btn btn-filled':'btn';
   document.getElementById('rev-pane-vendedores').style.display = name==='vendedores'?'flex':'none';
   document.getElementById('rev-pane-tabla').style.display      = name==='tabla'?'block':'none';
   document.getElementById('rev-pane-origen').style.display     = name==='origen'?'block':'none';
+  document.getElementById('rev-pane-meta').style.display       = name==='meta'?'block':'none';
+  // Cada pestaña escribe su propio estado; sin esto quedaba el de la anterior
+  // arriba a la derecha, anunciando otro mes que el que se está viendo.
+  const _revSt=document.getElementById('rev-status'); if(_revSt) _revSt.textContent='';
   loadRevision();
 }
 
@@ -3717,6 +3748,7 @@ async function loadRevision(){
   }
   else if(_revTab==='tabla'){await loadRevisionTabla();}
   else if(_revTab==='origen'){await loadRevisionOrigen();}
+  else if(_revTab==='meta'){await loadVentasVsMeta();}
 }
 
 // Desglose recurrente/eventual en el tooltip: la tabla ya trae trece
@@ -3736,6 +3768,103 @@ function _colorMeta(f){
   if(f.pct_meta>=100) return 'var(--green)';
   if(f.pct_meta>=70)  return 'var(--orange)';
   return 'var(--red)';
+}
+
+// ── Ventas vs Meta ──────────────────────────────────────────────────
+// Agrupa por unidad de negocio o muestra al equipo junto. El vendedor entra
+// completo a UNA unidad: las metas se guardan por vendedor y mes, no por
+// unidad, así que repartirlo dejaría real y meta sobre poblaciones distintas.
+let _vmAgrupado = true;
+
+function setVentasMetaAgrupado(v){
+  _vmAgrupado = v;
+  document.getElementById('vm-agr-un').className   = v?'btn btn-filled':'btn';
+  document.getElementById('vm-agr-todo').className = v?'btn':'btn btn-filled';
+  loadVentasVsMeta();
+}
+
+function _vmBarra(pct, color){
+  const ancho = Math.max(0, Math.min(pct, 100));
+  return `<div style="height:6px;background:var(--bg-sunken);border-radius:99px;overflow:hidden;">
+      <div style="height:100%;width:${ancho}%;background:${color};border-radius:99px;"></div>
+    </div>`;
+}
+function _vmColor(pct, tieneMeta){
+  if(!tieneMeta) return 'var(--text3)';
+  if(pct>=100) return 'var(--green)';
+  if(pct>=70)  return 'var(--orange)';
+  return 'var(--red)';
+}
+function _vmPct(o){ return o.meta? o.pct+'%' : '—'; }
+
+async function loadVentasVsMeta(){
+  const status=document.getElementById('vm-status');
+  status.textContent='Cargando...';
+  try{
+    const q = _revMesParam() + (_revMesParam()?'&':'?') + 'agrupar=' + (_vmAgrupado?'un':'ninguno');
+    const r = await fetch('/api/dashboard/ventas-vs-meta'+q);
+    if(r.status===403){status.textContent='Sin permisos';return;}
+    const d = await r.json();
+    const t = d.total||{};
+
+    const tarjeta = (titulo, o) => `
+      <div class="dash-card" style="padding:16px 18px;">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;">${titulo}</div>
+        <div style="display:flex;align-items:baseline;gap:10px;margin:6px 0 4px;">
+          <div style="font-size:26px;font-weight:700;">${_fmtMxn(o.real||0)}</div>
+          <div style="font-size:15px;font-weight:700;color:${_vmColor(o.pct, o.meta)};">${_vmPct(o)}</div>
+        </div>
+        ${_vmBarra(o.pct||0, _vmColor(o.pct, o.meta))}
+        <div style="font-size:11px;color:var(--text3);margin-top:5px;">${o.meta? 'Meta '+_fmtMxn(o.meta) : 'sin meta cargada'}</div>
+      </div>`;
+    document.getElementById('vm-kpis').innerHTML =
+        tarjeta('Total de ventas', t)
+      + tarjeta('Recurrente', t.recurrente||{})
+      + tarjeta('Eventual',   t.eventual||{});
+
+    const tb=document.getElementById('vm-tbody'); tb.innerHTML='';
+    for(const g of (d.grupos||[])){
+      if(d.agrupado){
+        tb.innerHTML += `<tr style="background:var(--bg-sunken);">
+          <td colspan="2" style="font-weight:700;">${_esc(g.nombre)}
+            <span style="font-weight:400;color:var(--text3);font-size:11px;"> · ${g.vendedores.length} vendedor${g.vendedores.length===1?'':'es'}</span></td>
+          <td style="text-align:right;font-weight:700;">${_fmtMxn(g.real)}</td>
+          <td style="text-align:right;font-weight:700;">${g.meta?_fmtMxn(g.meta):'—'}</td>
+          <td style="text-align:right;font-weight:700;color:${_vmColor(g.pct,g.meta)};">${_vmPct(g)}</td>
+          <td>${_vmBarra(g.pct, _vmColor(g.pct,g.meta))}</td>
+        </tr>`;
+      }
+      for(const v of g.vendedores){
+        tb.innerHTML += `<tr>
+          <td style="font-weight:600;padding-left:${d.agrupado?'22px':'8px'};">${_esc(v.vendedor)}</td>
+          <td style="color:var(--text3);font-size:11px;">Total</td>
+          <td style="text-align:right;font-weight:600;">${_fmtMxn(v.real)}</td>
+          <td style="text-align:right;${v.tiene_meta?'':'color:var(--text3);'}">${v.tiene_meta?_fmtMxn(v.meta):'sin meta'}</td>
+          <td style="text-align:right;font-weight:700;color:${_vmColor(v.pct,v.meta)};">${_vmPct(v)}</td>
+          <td>${_vmBarra(v.pct, _vmColor(v.pct,v.meta))}</td>
+        </tr>`;
+        for(const [clave,label] of [['recurrente','Recurrente'],['eventual','Eventual']]){
+          const o=v[clave]||{};
+          if(!o.real && !o.meta) continue;
+          const pct = o.meta? Math.round(o.real/o.meta*1000)/10 : 0;
+          tb.innerHTML += `<tr style="font-size:12px;color:var(--text2);">
+            <td style="padding-left:${d.agrupado?'38px':'24px'};"></td>
+            <td>${label}</td>
+            <td style="text-align:right;">${_fmtMxn(o.real||0)}</td>
+            <td style="text-align:right;">${o.meta?_fmtMxn(o.meta):'—'}</td>
+            <td style="text-align:right;color:${_vmColor(pct,o.meta)};">${o.meta?pct+'%':'—'}</td>
+            <td>${o.meta?_vmBarra(pct,_vmColor(pct,o.meta)):''}</td>
+          </tr>`;
+        }
+      }
+    }
+    if(!tb.innerHTML)
+      tb.innerHTML='<tr><td colspan="6" style="color:var(--text2);text-align:center;padding:16px;">Sin ventas ni metas en este mes</td></tr>';
+
+    const sinMeta = d.vendedores_sin_meta||0;
+    status.textContent = `${d.grupos.length} ${d.agrupado?'unidades':'grupo'} · mes ${d.mes}`
+      + (sinMeta? ` · ${sinMeta} sin meta cargada`:'');
+  }catch(e){ status.textContent='Error: '+e.message; }
 }
 
 async function loadRevisionTabla(){

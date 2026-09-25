@@ -798,6 +798,169 @@ def _kpis_vendedor(vendedor_usuario_id: str, inicio: date, fin: date) -> dict:
     }
 
 
+def _un_principal_por_vendedor(vendedores, inicio, fin):
+    """UN a la que se carga cada vendedor al agrupar.
+
+    FEAT-2026-09-25: las metas se guardan por vendedor y mes, no por unidad,
+    así que para agrupar hay que decidir a qué grupo pertenece cada quien.
+
+    1. Si su especialidad_marca resuelve a UNA sola UN, esa manda. Es lo
+       declarado y no se mueve mes a mes.
+    2. Si cubre varias, gana aquella donde más vendió en el periodo.
+    3. Si no tiene marca declarada, se deduce del mismo modo por ventas.
+       Es el caso de quien vende en dos unidades sin especialidad fijada.
+    4. Sin marca y sin ventas: "Sin unidad", visible aparte en vez de
+       repartido a dedo.
+
+    El vendedor entra COMPLETO a un solo grupo —sus ventas y toda su meta—
+    para que real y meta se comparen sobre la misma población. Repartirlo
+    exigiría una meta por unidad, que hoy no existe.
+    """
+    from un_filter import normalizar_un
+
+    ids = [str(v.id) for v in vendedores]
+    ventas_un = {}
+    if ids:
+        filas = (
+            Lead.query
+            .filter(
+                Lead.usuario_asignado_id.in_(ids),
+                Lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO,
+                Lead.fecha_cierre >= inicio, Lead.fecha_cierre < fin,
+            )
+            .with_entities(
+                Lead.usuario_asignado_id, Lead.marca_interes,
+                func.coalesce(func.sum(func.coalesce(
+                    Lead.factura_monto,
+                    Lead.cantidad_productos * Lead.precio_unitario,
+                    Lead.valor_estimado, 0,
+                )), 0),
+            )
+            .group_by(Lead.usuario_asignado_id, Lead.marca_interes).all()
+        )
+        for vid, marca, monto in filas:
+            un = normalizar_un(marca)
+            if not un:
+                continue
+            ventas_un.setdefault(str(vid), {})
+            ventas_un[str(vid)][un] = ventas_un[str(vid)].get(un, 0) + float(monto or 0)
+
+    salida = {}
+    for v in vendedores:
+        vid = str(v.id)
+        declaradas = []
+        for marca in (v.especialidad_marca or []):
+            un = normalizar_un(marca)
+            if un and un not in declaradas:
+                declaradas.append(un)
+        porventas = ventas_un.get(vid, {})
+
+        if len(declaradas) == 1:
+            salida[vid] = declaradas[0]
+        elif len(declaradas) > 1:
+            candidatas = {u: porventas.get(u, 0) for u in declaradas}
+            salida[vid] = max(candidatas, key=lambda u: candidatas[u]) if any(
+                candidatas.values()) else declaradas[0]
+        elif porventas:
+            salida[vid] = max(porventas, key=lambda u: porventas[u])
+        else:
+            salida[vid] = "Sin unidad"
+    return salida
+
+
+@dashboard_bp.route("/ventas-vs-meta", methods=["GET"])
+@require_role(["reportes"])
+def ventas_vs_meta():
+    """Ventas reales contra meta, por vendedor y tipo, agrupables por unidad.
+
+    ?mes=YYYY-MM     periodo (por omisión, el mes en curso)
+    ?un=Pestex       filtra a una sola unidad
+    ?agrupar=un      agrupa por unidad de negocio; cualquier otro valor
+                     devuelve un solo grupo con todo el equipo junto.
+
+    El avance sale de _metas_por_vendedor, que a su vez usa el cálculo de
+    metas.py: por fecha de cierre, igual que Metas y Comisiones.
+    """
+    from models import Usuario
+    from un_filter import usuario_pertenece_a_un
+
+    inicio, fin = _get_date_range(request.args.get("mes"))
+    mes = inicio.strftime("%Y-%m")
+    un_filtro = effective_un_from_request(request.args.get("un"))
+    agrupar = (request.args.get("agrupar") or "un").strip().lower() == "un"
+
+    vendedores = (Usuario.query.filter(Usuario.en_turno.is_(True))
+                  .order_by(Usuario.nombre.asc()).all())
+    if un_filtro:
+        vendedores = [v for v in vendedores
+                      if usuario_pertenece_a_un(v.especialidad_marca, un_filtro)]
+
+    metas = _metas_por_vendedor([v.id for v in vendedores], mes)
+    un_de = _un_principal_por_vendedor(vendedores, inicio, fin)
+
+    def _fila(v):
+        vid = str(v.id)
+        m = metas.get(vid, {})
+        return {
+            "vendedor_id": vid,
+            "vendedor": v.nombre,
+            "un": un_de.get(vid, "Sin unidad"),
+            "real": m.get("avance_mxn", 0.0),
+            "meta": m.get("meta_mxn", 0.0),
+            "pct": m.get("pct_meta", 0),
+            "tiene_meta": m.get("tiene_meta", False),
+            "recurrente": {"real": m.get("avance_recurrente", 0.0),
+                           "meta": m.get("meta_recurrente_mxn", 0.0)},
+            "eventual":   {"real": m.get("avance_eventual", 0.0),
+                           "meta": m.get("meta_eventual_mxn", 0.0)},
+        }
+
+    filas = [_fila(v) for v in vendedores]
+    # Quien no vendió ni tiene meta no aporta nada a una tabla de avance.
+    filas = [f for f in filas if f["real"] or f["meta"]]
+
+    def _pct(real, meta):
+        return round(real / meta * 100, 1) if meta else 0
+
+    def _resumir(fs, nombre):
+        rec_r = sum(f["recurrente"]["real"] for f in fs)
+        rec_m = sum(f["recurrente"]["meta"] for f in fs)
+        ev_r  = sum(f["eventual"]["real"] for f in fs)
+        ev_m  = sum(f["eventual"]["meta"] for f in fs)
+        real  = sum(f["real"] for f in fs)
+        meta  = sum(f["meta"] for f in fs)
+        return {
+            "nombre": nombre,
+            "real": real, "meta": meta, "pct": _pct(real, meta),
+            "recurrente": {"real": rec_r, "meta": rec_m, "pct": _pct(rec_r, rec_m)},
+            "eventual":   {"real": ev_r,  "meta": ev_m,  "pct": _pct(ev_r, ev_m)},
+            "vendedores": sorted(fs, key=lambda f: -f["real"]),
+        }
+
+    if agrupar:
+        por_un = {}
+        for f in filas:
+            por_un.setdefault(f["un"], []).append(f)
+        # "Sin unidad" al final: es un pendiente de captura, no una unidad.
+        grupos = [_resumir(fs, un) for un, fs in por_un.items() if un != "Sin unidad"]
+        grupos.sort(key=lambda g: -g["real"])
+        if "Sin unidad" in por_un:
+            grupos.append(_resumir(por_un["Sin unidad"], "Sin unidad"))
+    else:
+        grupos = [_resumir(filas, "Todo el equipo")] if filas else []
+
+    total = _resumir(filas, "Total")
+    total.pop("vendedores", None)
+    return jsonify({
+        "mes": mes,
+        "un_filtro": un_filtro,
+        "agrupado": agrupar,
+        "grupos": grupos,
+        "total": total,
+        "vendedores_sin_meta": sum(1 for f in filas if not f["tiene_meta"]),
+    })
+
+
 @dashboard_bp.route("/vendedores-tabla", methods=["GET"])
 @require_role(["reportes"])
 def vendedores_tabla():
