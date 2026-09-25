@@ -691,6 +691,15 @@ def create_app():
     db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/avantex_crm")
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql://", 1)
+    # FIX-2026-09-25: fijar el driver en la URL, no dejarlo al criterio de
+    # SQLAlchemy. En 2.0 el DBAPI por omision de "postgresql://" era psycopg2;
+    # en 2.1 paso a ser psycopg (v3), que no esta en requirements. El deploy
+    # de hoy trajo SQLAlchemy 2.1.1 y el arranque murio con
+    # "ModuleNotFoundError: No module named 'psycopg'" — sin que nadie hubiera
+    # tocado nada relacionado. Siendo explicitos, la version de SQLAlchemy
+    # deja de decidir con que driver nos conectamos.
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
     app.config["SQLALCHEMY_DATABASE_URI"] = db_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 

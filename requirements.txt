@@ -1,5 +1,11 @@
 flask>=3.0
 flask-sqlalchemy>=3.1
+# FIX-2026-09-25: SQLAlchemy 2.1 cambio el DBAPI por omision de postgresql://
+# de psycopg2 a psycopg (v3). El arranque en Render murio con
+# ModuleNotFoundError. La URL ya fija el driver (ver avantex_crm.py), pero se
+# acota tambien la version: 2.1 trae mas cambios de fondo que no se han
+# probado contra este esquema. Subir de version debe ser deliberado.
+sqlalchemy>=2.0,<2.1
 flask-socketio>=5.3
 flask-limiter>=3.5
 psycopg2-binary>=2.9
