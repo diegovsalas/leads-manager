@@ -1987,7 +1987,10 @@ fbq('track','PageView');
           <th style="text-align:right;color:var(--green);">Ganados</th>
           <th style="text-align:right;color:var(--red);">Perdidos</th>
           <th style="text-align:right;">% Cierre</th>
-          <th style="text-align:right;">Revenue mes</th>
+          <th style="text-align:right;">Meta mes</th>
+          <th style="text-align:right;">Avance<br><span style="font-size:9px;font-weight:400;color:var(--text3);">cerrado en el mes</span></th>
+          <th style="text-align:right;">% Meta</th>
+          <th style="text-align:right;">Revenue mes<br><span style="font-size:9px;font-weight:400;color:var(--text3);">leads creados</span></th>
           <th style="text-align:right;">Pipe activo<br><span style="font-size:9px;font-weight:400;color:var(--text3);">snapshot ahora</span></th>
         </tr></thead>
         <tbody id="rev-tabla-tbody"></tbody>
@@ -3706,6 +3709,25 @@ async function loadRevision(){
   else if(_revTab==='origen'){await loadRevisionOrigen();}
 }
 
+// Desglose recurrente/eventual en el tooltip: la tabla ya trae trece
+// columnas y cuatro más la vuelven ilegible en una junta.
+function _tituloMeta(f){
+  if(!f.tiene_meta && !(f.avance_mxn||0)) return 'Sin meta cargada para este mes';
+  const p = [];
+  if(f.meta_recurrente_mxn||f.avance_recurrente)
+    p.push(`Recurrente: ${_fmtMxn(f.avance_recurrente||0)} de ${_fmtMxn(f.meta_recurrente_mxn||0)}`);
+  if(f.meta_eventual_mxn||f.avance_eventual)
+    p.push(`Eventual: ${_fmtMxn(f.avance_eventual||0)} de ${_fmtMxn(f.meta_eventual_mxn||0)}`);
+  p.push('El avance se mide por fecha de cierre, igual que Metas y Comisiones.');
+  return p.join('\n');
+}
+function _colorMeta(f){
+  if(!f.tiene_meta) return 'var(--text3)';
+  if(f.pct_meta>=100) return 'var(--green)';
+  if(f.pct_meta>=70)  return 'var(--orange)';
+  return 'var(--red)';
+}
+
 async function loadRevisionTabla(){
   const status=document.getElementById('rev-status');
   status.textContent='Cargando...';
@@ -3719,7 +3741,8 @@ async function loadRevisionTabla(){
       <div class="kpi" style="flex:1;"><div class="metric-label">Ganados</div><div class="metric-value" style="color:var(--text);">${d.total_ganados}</div></div>
       <div class="kpi" style="flex:1;"><div class="metric-label">Tasa global</div><div class="metric-value">${d.tasa_global}%</div></div>
       <div class="kpi" style="flex:1;"><div class="metric-label">Revenue</div><div class="metric-value" style="color:var(--text);">${_fmtMxn(d.total_revenue)}</div></div>
-      <div class="kpi" style="flex:1;"><div class="metric-label">Pipe activo</div><div class="metric-value" style="color:var(--orange);">${_fmtMxn(d.total_pipe_activo)}</div></div>`;
+      <div class="kpi" style="flex:1;"><div class="metric-label">Pipe activo</div><div class="metric-value" style="color:var(--orange);">${_fmtMxn(d.total_pipe_activo)}</div></div>
+      <div class="kpi" style="flex:1;" title="Avance medido por fecha de cierre, igual que Metas y Comisiones."><div class="metric-label">Meta equipo</div><div class="metric-value" style="color:${d.total_meta?(d.pct_meta_global>=100?'var(--green)':d.pct_meta_global>=70?'var(--orange)':'var(--red)'):'var(--text3)'};">${d.total_meta?d.pct_meta_global+'%':'sin metas'}</div><div style="font-size:10px;color:var(--text3);">${d.total_meta?_fmtMxn(d.total_avance)+' de '+_fmtMxn(d.total_meta):'ninguna cargada este mes'}</div></div>`;
 
     const tb=document.getElementById('rev-tabla-tbody');tb.innerHTML='';
     for(const f of (d.filas||[])){
@@ -3737,12 +3760,19 @@ async function loadRevisionTabla(){
         <td style="text-align:right;color:var(--green);font-weight:600;">${f.ganados}</td>
         <td style="text-align:right;color:var(--red);">${f.perdidos}</td>
         <td style="text-align:right;font-weight:700;color:${tasaColor};">${f.tasa_cierre}%</td>
+        <td style="text-align:right;${f.tiene_meta?'':'color:var(--text3);'}" title="${_tituloMeta(f)}">${f.tiene_meta?_fmtMxn(f.meta_mxn):'sin meta'}</td>
+        <td style="text-align:right;color:var(--text);" title="${_tituloMeta(f)}">${_fmtMxn(f.avance_mxn||0)}</td>
+        <td style="text-align:right;font-weight:700;color:${_colorMeta(f)};">${f.tiene_meta?f.pct_meta+'%':'—'}</td>
         <td style="text-align:right;color:var(--text);">${_fmtMxn(f.revenue)}</td>
         <td style="text-align:right;color:var(--orange);font-weight:600;">${_fmtMxn(f.pipe_activo)}<div style="font-size:10px;color:var(--text3);font-weight:400;">${f.pipe_count} leads</div></td>
       </tr>`;
     }
-    if(!tb.innerHTML)tb.innerHTML='<tr><td colspan="10" style="color:var(--text2);text-align:center;padding:14px;">Sin vendedores con actividad este mes</td></tr>';
-    status.textContent=`${(d.filas||[]).length} vendedores · mes ${d.mes}`;
+    if(!tb.innerHTML)tb.innerHTML='<tr><td colspan="13" style="color:var(--text2);text-align:center;padding:14px;">Sin vendedores con actividad este mes</td></tr>';
+    // Avisar cuando el vacío viene de que nadie cargó la meta, no de que no
+    // se vendió: una columna en blanco se lee como falla del sistema.
+    const sinMeta = d.vendedores_sin_meta||0;
+    status.textContent=`${(d.filas||[]).length} vendedores · mes ${d.mes}`
+      + (sinMeta? ` · ${sinMeta} sin meta cargada`:'');
   }catch(e){status.textContent='Error: '+e.message;}
 }
 
@@ -3770,6 +3800,7 @@ async function loadRevisionVendedores(){
           <div><div style="color:var(--text3);font-size:9px;">PIPE</div><div style="font-weight:700;color:var(--orange);">${_fmtMxn(v.pipe_activo)}</div></div>
           <div><div style="color:var(--text3);font-size:9px;">ACTIVOS</div><div style="font-weight:700;">${v.leads_activos}</div></div>
           <div><div style="color:var(--text3);font-size:9px;">GANADOS</div><div style="font-weight:700;color:var(--text);">${v.ganados_mes}</div></div>
+          <div title="${_tituloMeta(v)}"><div style="color:var(--text3);font-size:9px;">META</div><div style="font-weight:700;color:${_colorMeta(v)};">${v.tiene_meta?v.pct_meta+'%':'—'}</div></div>
         </div>
       </div>`;
     }

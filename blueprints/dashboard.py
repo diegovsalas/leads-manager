@@ -45,6 +45,59 @@ def _get_date_range(mes_param):
     return inicio, fin
 
 
+def _metas_por_vendedor(vendedor_ids, mes):
+    """Meta y avance del mes para un conjunto de vendedores.
+
+    FEAT-2026-09-25: la revisión comercial solo mostraba tasa de cierre; la
+    meta de cada vendedor vivía en otra pantalla y no se cruzaba nunca.
+
+    El avance se calcula con _calcular_ventas de blueprints/metas.py a
+    propósito, en vez de reusar el revenue que ya arma esta tabla. No son lo
+    mismo: aquí el mes se define por fecha_creacion del lead y allá por
+    fecha_cierre (ver el FIX-2026-09-09 en metas.py). Medido sobre agosto,
+    a una vendedora le daba 69,944 por un criterio y 123,290 por el otro.
+    Dividir la meta entre el revenue de esta tabla habría producido un
+    porcentaje que contradice a Metas y a Comisiones.
+    """
+    from models import MetaVendedor
+    from blueprints.metas import _calcular_ventas, _calc_pct
+
+    ids = [str(v) for v in vendedor_ids]
+    if not ids:
+        return {}
+
+    filas = MetaVendedor.query.filter(
+        MetaVendedor.usuario_id.in_(ids), MetaVendedor.mes == mes
+    ).all()
+    por_id = {str(m.usuario_id): m for m in filas}
+
+    salida = {}
+    for vid in ids:
+        m = por_id.get(vid)
+        meta_rec = float(m.meta_recurrente_mxn) if m and m.meta_recurrente_mxn else 0.0
+        meta_ev  = float(m.meta_eventual_mxn)   if m and m.meta_eventual_mxn   else 0.0
+        meta_leg = float(m.meta_mxn)            if m and m.meta_mxn            else 0.0
+        # meta_mxn es el total combinado legacy: si está, manda; si no, se suma.
+        meta_total = meta_leg or (meta_rec + meta_ev)
+
+        avance_rec = _calcular_ventas(vid, mes, tipo_venta="Recurrente")
+        avance_ev  = _calcular_ventas(vid, mes, tipo_venta="Eventual")
+        # El total no es rec+ev: hay leads sin tipo_venta y también contarían.
+        avance_total = _calcular_ventas(vid, mes, tipo_venta=None)
+
+        salida[vid] = {
+            "meta_mxn":             meta_total,
+            "meta_recurrente_mxn":  meta_rec,
+            "meta_eventual_mxn":    meta_ev,
+            "avance_mxn":           avance_total,
+            "avance_recurrente":    avance_rec,
+            "avance_eventual":      avance_ev,
+            "pct_meta":             _calc_pct(avance_total, meta_total),
+            "tiene_meta":           bool(meta_total),
+        }
+    return salida
+
+
 def _month_label(inicio):
     meses = [
         "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -810,18 +863,35 @@ def vendedores_tabla():
     pipe_valor_map = {str(r[0]): float(r[1] or 0) for r in pipe_rows if r[0]}
     pipe_count_map = {str(r[0]): int(r[2]) for r in pipe_rows if r[0]}
 
-    # Nombres de vendedores
+    # Nombres de vendedores.
+    # FEAT-2026-09-25: antes solo entraban los que tuvieron leads creados o pipe
+    # abierto. Quien cerró un rezagado sin leads nuevos quedaba fuera de la
+    # tabla aunque tuviera meta —le pasó a una vendedora en agosto, con 12,600
+    # cerrados y ninguna fila—. Ahora entran también todos los que están en
+    # turno, que es la misma población que ya lista la pestaña 1-on-1.
+    from un_filter import usuario_pertenece_a_un
     vendedor_ids = set(total_map) | set(pipe_valor_map)
+    en_turno = Usuario.query.filter(Usuario.en_turno.is_(True)).all()
+    if marca:
+        en_turno = [v for v in en_turno
+                    if usuario_pertenece_a_un(v.especialidad_marca, marca)]
+    vendedor_ids |= {str(v.id) for v in en_turno}
     vendedores = {
         str(v.id): v for v in Usuario.query.filter(Usuario.id.in_(vendedor_ids)).all()
     } if vendedor_ids else {}
+
+    metas_map = _metas_por_vendedor(vendedores.keys(), inicio_mes.strftime("%Y-%m"))
 
     filas = []
     for vid, v in vendedores.items():
         total = total_map.get(vid, 0)
         ganados = ganados_map.get(vid, 0)
         perdidos = perdidos_map.get(vid, 0)
-        if total == 0 and pipe_count_map.get(vid, 0) == 0:
+        meta = metas_map.get(vid, {})
+        # Se conserva la fila si hay algo que revisar: leads, pipe, meta o
+        # ventas cerradas en el mes.
+        if (total == 0 and pipe_count_map.get(vid, 0) == 0
+                and not meta.get("meta_mxn") and not meta.get("avance_mxn")):
             continue
         filas.append({
             "vendedor_id":   vid,
@@ -838,11 +908,14 @@ def vendedores_tabla():
             "pipe_count":    pipe_count_map.get(vid, 0),
             "tasa_cierre":   round(ganados / total * 100, 1) if total > 0 else 0,
             "tasa_calificacion": round(calif_map.get(vid, 0) / total * 100, 1) if total > 0 else 0,
+            **meta,
         })
     filas.sort(key=lambda f: -f["pipe_activo"])
 
     total_all = sum(f["total"] for f in filas)
     ganados_all = sum(f["ganados"] for f in filas)
+    meta_all   = sum(f.get("meta_mxn", 0) or 0 for f in filas)
+    avance_all = sum(f.get("avance_mxn", 0) or 0 for f in filas)
     return jsonify({
         "mes":               inicio_mes.strftime("%Y-%m"),
         "marca_filter":      marca,
@@ -852,6 +925,10 @@ def vendedores_tabla():
         "total_revenue":     sum(f["revenue"] for f in filas),
         "total_pipe_activo": sum(f["pipe_activo"] for f in filas),
         "tasa_global":       round(ganados_all / total_all * 100, 1) if total_all > 0 else 0,
+        "total_meta":        meta_all,
+        "total_avance":      avance_all,
+        "pct_meta_global":   round(avance_all / meta_all * 100, 1) if meta_all > 0 else 0,
+        "vendedores_sin_meta": sum(1 for f in filas if not f.get("tiene_meta")),
     })
 
 
@@ -993,9 +1070,12 @@ def vendedores_review():
                       if usuario_pertenece_a_un(v.especialidad_marca, un)]
     else:
         vendedores = vendedores_all
+    metas_map = _metas_por_vendedor([v.id for v in vendedores],
+                                     inicio.strftime("%Y-%m"))
     out = []
     for v in vendedores:
         kpis = _kpis_vendedor(v.id, inicio, fin)
+        meta = metas_map.get(str(v.id), {})
         # FIX-2026-09-09: se incluye tambien a quien CERRO en el mes.
         #
         # El filtro miraba solo leads activos y leads creados en el mes, asi que
@@ -1004,14 +1084,19 @@ def vendedores_review():
         # reales: Alejandro Gil cerro 4 tratos por $58,599 en septiembre, creo
         # 0 leads ese mes, y no salia en la junta de septiembre. Justo el caso
         # del que uno quiere hablar en un 1-on-1.
+        # FEAT-2026-09-25: tener meta del mes también basta para aparecer.
+        # Si se le fijó una meta, es alguien de quien hay que hablar en la
+        # junta, aunque el mes venga sin movimiento.
         if (kpis["leads_activos"] == 0 and kpis["leads_mes"] == 0
-                and kpis["ganados_mes"] == 0 and kpis["perdidos_mes"] == 0):
+                and kpis["ganados_mes"] == 0 and kpis["perdidos_mes"] == 0
+                and not meta.get("meta_mxn")):
             continue
         out.append({
             "vendedor_id": str(v.id),
             "nombre":      v.nombre,
             "marcas":      list(v.especialidad_marca or []),
             **kpis,
+            **meta,
         })
     out.sort(key=lambda x: -x["pipe_activo"])
     return jsonify({"mes": inicio.strftime("%Y-%m"), "vendedores": out})
@@ -1034,6 +1119,7 @@ def vendedor_review(vendedor_id):
     if not v:
         return jsonify({"error": "Vendedor no encontrado"}), 404
     kpis = _kpis_vendedor(v.id, inicio, fin)
+    meta_vendedor = _metas_por_vendedor([v.id], inicio.strftime("%Y-%m")).get(str(v.id), {})
 
     # Funnel: counts + valor en cada etapa (snapshot leads activos + cierres del mes)
     etapas_orden = [
@@ -1111,6 +1197,7 @@ def vendedor_review(vendedor_id):
         "vendedor_nombre":   v.nombre,
         "marcas":            list(v.especialidad_marca or []),
         "kpis":              kpis,
+        "meta":              meta_vendedor,
         "funnel":            funnel,
         "leads_por_etapa":   leads_por_etapa,
     })
