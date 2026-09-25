@@ -220,7 +220,14 @@ def pipeline_valores():
 
 @dashboard_bp.route("/meses", methods=["GET"])
 def meses_disponibles():
-    """Meses para filtros del dashboard, desde el primer registro hasta hoy."""
+    """Meses para filtros del dashboard, desde el primer registro hasta hoy.
+
+    ?futuros=N agrega N meses hacia adelante. Lo pide el selector de metas:
+    la captura se corta en el mes actual, así que no había forma de dejar
+    cargadas las metas de octubre estando en septiembre —había que esperar
+    al día 1—. El dashboard no lo pasa, porque meses sin datos solo serían
+    filtros vacíos.
+    """
     first_lead = db.session.query(func.min(Lead.fecha_creacion)).scalar()
     first_gasto = db.session.query(func.min(GastoPublicidad.fecha)).scalar()
     candidates = []
@@ -229,9 +236,19 @@ def meses_disponibles():
             candidates.append(d.date() if hasattr(d, "date") else d)
     start = min(candidates) if candidates else date.today()
     today = date.today()
+
+    try:
+        futuros = max(0, min(int(request.args.get("futuros") or 0), 12))
+    except ValueError:
+        futuros = 0
+    fin = today.replace(day=1)
+    for _ in range(futuros):
+        fin = (fin.replace(year=fin.year + 1, month=1) if fin.month == 12
+               else fin.replace(month=fin.month + 1))
+
     months = [
         {"value": m.strftime("%Y-%m"), "label": _month_label(m)}
-        for m in _iter_months(start.replace(day=1), today.replace(day=1))
+        for m in _iter_months(start.replace(day=1), fin)
     ]
     months.reverse()
     return jsonify(months)

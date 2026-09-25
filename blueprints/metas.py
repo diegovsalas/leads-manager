@@ -156,6 +156,79 @@ def crear_o_actualizar_meta():
         }), 500
 
 
+def _mes_anterior(mes):
+    """'2026-10' -> '2026-09'."""
+    year, month = (int(x) for x in mes.split("-"))
+    return f"{year - 1}-12" if month == 1 else f"{year}-{month - 1:02d}"
+
+
+@metas_bp.route("/copiar", methods=["POST"])
+@require_role(["super_admin"])
+def copiar_metas():
+    """Copia las metas de un mes al siguiente.
+
+    FEAT-2026-09-25: capturar doce vendedores por dos tipos, cada mes y a
+    mano, es la razón práctica de que los meses salgan vacíos: septiembre
+    2026 tenía 1 meta de 12 vendedores en turno, agosto 6. Copiar y ajustar
+    lo que cambie es el flujo real.
+
+    Body: { mes_destino, mes_origen?, sobrescribir? }
+      mes_origen   — por omisión, el mes anterior a mes_destino.
+      sobrescribir — false por omisión. Una meta ya capturada para el mes
+                     destino se respeta: se copia para no volver a teclear,
+                     no para pisar lo que alguien ya decidió.
+    """
+    data = request.get_json(silent=True) or {}
+    mes_destino = (data.get("mes_destino") or _mes_actual()).strip()
+    mes_origen = (data.get("mes_origen") or _mes_anterior(mes_destino)).strip()
+    sobrescribir = bool(data.get("sobrescribir"))
+
+    if mes_origen == mes_destino:
+        return jsonify({"error": "El mes de origen y el de destino son el mismo"}), 400
+
+    origen = {str(m.usuario_id): m
+              for m in MetaVendedor.query.filter_by(mes=mes_origen).all()}
+    if not origen:
+        return jsonify({
+            "error": f"No hay metas capturadas en {mes_origen}, no hay nada que copiar",
+            "mes_origen": mes_origen,
+        }), 404
+
+    # Solo el equipo activo: copiar la meta de alguien que ya no está en turno
+    # ensucia el % del equipo con una meta que nadie va a perseguir.
+    en_turno = {str(v.id) for v in Usuario.query.filter(Usuario.en_turno.is_(True)).all()}
+    ya_existen = {str(m.usuario_id): m
+                  for m in MetaVendedor.query.filter_by(mes=mes_destino).all()}
+
+    copiadas, omitidas, fuera_de_turno = 0, 0, 0
+    for uid, m in origen.items():
+        if uid not in en_turno:
+            fuera_de_turno += 1
+            continue
+        destino = ya_existen.get(uid)
+        if destino and not sobrescribir:
+            omitidas += 1
+            continue
+        if destino is None:
+            destino = MetaVendedor(usuario_id=uid, mes=mes_destino,
+                                   created_by=session.get("user_id"))
+            db.session.add(destino)
+        destino.meta_mxn = m.meta_mxn
+        destino.meta_recurrente_mxn = m.meta_recurrente_mxn
+        destino.meta_eventual_mxn = m.meta_eventual_mxn
+        copiadas += 1
+
+    db.session.commit()
+    return jsonify({
+        "ok": True,
+        "mes_origen": mes_origen,
+        "mes_destino": mes_destino,
+        "copiadas": copiadas,
+        "omitidas_por_existir": omitidas,
+        "omitidas_fuera_de_turno": fuera_de_turno,
+    })
+
+
 @metas_bp.route("/mi-progreso", methods=["GET"])
 def mi_progreso():
     """Vendedor: sus DOS metas (Recurrente / Eventual) + ventas + % del mes actual."""

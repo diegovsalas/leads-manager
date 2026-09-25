@@ -1319,6 +1319,9 @@ fbq('track','PageView');
              Antes hardcoded hasta abril → no se veía mayo/junio/julio. -->
         <option value="">Mes actual</option>
       </select>
+      <button class="btn admin-only" id="btn-copiar-metas" onclick="copiarMetasMesAnterior(this)"
+              title="Trae las metas del mes anterior para los vendedores en turno. No pisa las que ya tengan meta en este mes."
+              style="font-size:12px;">Copiar metas del mes anterior</button>
       <button class="btn btn-filled" onclick="openVendedorModal()">+ Agregar</button>
     </div>
   </div>
@@ -4670,9 +4673,14 @@ async function loadDashboardMonths(){
   const currentMetasValue = selMetas ? selMetas.value : '';
   let months=[];
   try{
-    const r=await fetch('/api/dashboard/meses');
+    // futuros=3 es para el selector de METAS: permite dejar cargadas las del
+    // mes que viene sin esperar al día 1. El del dashboard se queda solo con
+    // los meses ya transcurridos, porque uno futuro sería un filtro vacío.
+    const r=await fetch('/api/dashboard/meses?futuros=3');
     if(r.ok)months=await r.json();
   }catch(e){}
+  const _mesHoy = new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0');
+  const monthsPasados = months.filter(m=>m.value<=_mesHoy);
   if(!months.length){
     const start=new Date(2026,0,1);
     const now=new Date();
@@ -4681,7 +4689,9 @@ async function loadDashboardMonths(){
       months.push({value,label:DASH_MONTHS[d.getMonth()]+' '+d.getFullYear()});
     }
   }
-  const opts = '<option value="">Mes actual</option>' + months.map(m=>`<option value="${m.value}">${m.label}</option>`).join('');
+  const _mkOpts = arr => '<option value="">Mes actual</option>' + arr.map(m=>`<option value="${m.value}">${m.label}</option>`).join('');
+  const opts = _mkOpts(monthsPasados.length?monthsPasados:months);
+  const optsMetas = _mkOpts(months);
   // FIX-2026-07-06: poblar también el selector de mes en la vista Vendedores
   // (metas-mes), antes tenía opciones hardcoded solo hasta abril 2026.
   if(sel){
@@ -4689,7 +4699,7 @@ async function loadDashboardMonths(){
     if(currentValue && months.some(m=>m.value===currentValue)) sel.value = currentValue;
   }
   if(selMetas){
-    selMetas.innerHTML = opts;
+    selMetas.innerHTML = optsMetas;   // este sí incluye los meses por venir
     if(currentMetasValue && months.some(m=>m.value===currentMetasValue)) selMetas.value = currentMetasValue;
   }
 }
@@ -5820,6 +5830,36 @@ function renderVendedoresTabla(){
       <td>${accionesCell}</td>
     </tr>`;
   });
+}
+
+// Capturar doce vendedores por dos tipos cada mes a mano es la razon de que
+// los meses salgan vacios. Esto precarga y luego se ajusta lo que cambie.
+async function copiarMetasMesAnterior(btn){
+  const mes = document.getElementById('metas-mes')?.value
+    || (new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'));
+  if(!confirm('Se copiaran las metas del mes anterior a '+mes+'.\n\n'
+    +'Solo para vendedores en turno. A quien ya tenga meta en '+mes+' no se le toca.'))
+    return;
+  const txt = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Copiando...';
+  try{
+    const r = await fetch('/api/metas/copiar',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({mes_destino: mes}),
+    });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || ('HTTP '+r.status));
+    const extra = [];
+    if(d.omitidas_por_existir) extra.push(d.omitidas_por_existir+' ya tenian meta');
+    if(d.omitidas_fuera_de_turno) extra.push(d.omitidas_fuera_de_turno+' fuera de turno');
+    showToast('Metas copiadas',
+      `${d.copiadas} desde ${d.mes_origen}` + (extra.length? ' · '+extra.join(' · '):''));
+    loadVendedores();
+  }catch(e){
+    showToast('No se pudieron copiar', e.message);
+  }finally{
+    btn.disabled = false; btn.textContent = txt;
+  }
 }
 
 async function saveMeta(usuarioId, field, val){
