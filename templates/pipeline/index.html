@@ -3707,7 +3707,14 @@ async function loadRevision(){
     const now=new Date();
     mesInput.value = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   }
-  if(_revTab==='vendedores'){await loadRevisionVendedores();}
+  if(_revTab==='vendedores'){
+    await loadRevisionVendedores();
+    // BUGFIX 25-sep-2026: al cambiar de mes solo se recargaba la LISTA. El
+    // panel de la derecha se quedaba con los numeros del mes anterior, asi
+    // que el selector decia "agosto" y la tarjeta seguia mostrando los
+    // $28,500 y el 150% de septiembre. Se recarga junto con la lista.
+    if(_revVendedorSel) await loadVendedorDetail(_revVendedorSel);
+  }
   else if(_revTab==='tabla'){await loadRevisionTabla();}
   else if(_revTab==='origen'){await loadRevisionOrigen();}
 }
@@ -3928,12 +3935,14 @@ async function loadVendedorDetail(vendedorId){
           <h3 style="margin:0;font-size:18px;">${_esc(d.vendedor_nombre)}</h3>
           <span style="font-size:11px;color:var(--text3);">${(d.marcas||[]).join(' · ')}</span>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;padding:16px 18px;">
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:14px;padding:16px 18px;">
           <div><div style="font-size:10px;color:var(--text3);">PIPE ACTIVO</div><div style="font-size:22px;font-weight:700;color:var(--orange);">${_fmtMxn(k.pipe_activo)}</div></div>
           <div><div style="font-size:10px;color:var(--text3);">LEADS ACTIVOS</div><div style="font-size:22px;font-weight:700;">${k.leads_activos}</div></div>
           <div><div style="font-size:10px;color:var(--text3);">GANADOS MES</div><div style="font-size:22px;font-weight:700;color:var(--text);">${k.ganados_mes}</div></div>
           <div><div style="font-size:10px;color:var(--text3);">REVENUE MES</div><div style="font-size:22px;font-weight:700;color:var(--text);">${_fmtMxn(k.revenue_mes)}</div></div>
           <div><div style="font-size:10px;color:var(--text3);">% CIERRE</div><div style="font-size:22px;font-weight:700;color:${k.tasa_cierre>=20?'var(--green)':k.tasa_cierre>=10?'var(--orange)':'var(--red)'};">${k.tasa_cierre}%</div></div>
+          <div title="${_tituloMeta(d.meta||{})}"><div style="font-size:10px;color:var(--text3);">META MES</div><div style="font-size:22px;font-weight:700;color:${(d.meta&&d.meta.tiene_meta)?'var(--text)':'var(--text3)'};">${(d.meta&&d.meta.tiene_meta)?_fmtMxn(d.meta.meta_mxn):'sin meta'}</div></div>
+          <div title="${_tituloMeta(d.meta||{})}"><div style="font-size:10px;color:var(--text3);">% META</div><div style="font-size:22px;font-weight:700;color:${_colorMeta(d.meta||{})};">${(d.meta&&d.meta.tiene_meta)?d.meta.pct_meta+'%':'—'}</div></div>
         </div>
         <div style="padding:0 18px 16px;">
           <div style="display:grid;grid-template-columns:130px repeat(5,1fr);gap:10px;color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.04em;">
