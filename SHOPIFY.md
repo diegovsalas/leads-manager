@@ -67,6 +67,7 @@ document.querySelector('form[action*="/contact"]')?.addEventListener('submit', f
       telefono: d.get('contact[phone]'),
       mensaje:  d.get('contact[body]'),
       website:  d.get('website'),
+      marca:    'Weldex',   // obligatorio: sin esto el lead se rechaza
     }),
   }).catch(() => {});   // si el CRM falla, el formulario de Shopify sigue su curso
 });
@@ -84,15 +85,23 @@ peticiones desde los dominios de `SHOPIFY_FORM_ORIGINS`.
 El mismo endpoint atiende cualquier formulario, no solo el de Shopify. Se llega
 por `/webhook/form` — `/webhook/shopify/form` sigue funcionando y es un alias.
 
-**La unidad la manda el formulario**, en un campo `marca`:
+**La unidad la declara el formulario**, en un campo `marca`. Es obligatorio:
 
 ```json
 { "nombre": "...", "email": "...", "whatsapp": "...", "marca": "Aromatex", ... }
 ```
 
-Sin ese campo entra como **Weldex**, que es lo correcto para Weldu. Una marca
-que no exista se ignora y cae al mismo valor por omisión, para que un dato
-cualquiera no invente unidades.
+Valores aceptados: `Aromatex`, `Pestex`, `Weldex`, `Nexo` — y sus alias, como
+`Aromatex Home`. Cualquier otra cosa, o su ausencia, devuelve **400** y el lead
+no se crea.
+
+No hay valor por omisión a propósito. Antes caía a Weldex cuando faltaba, y eso
+convierte un formulario mal configurado en leads silenciosamente mal
+clasificados: llegan a los vendedores de otra unidad, cuentan en sus metas y en
+sus comisiones, y nadie se entera. Es preferible rechazar y que se note.
+
+El formulario de Weldu manda `"marca": "Weldex"`, porque así está registrado
+Weldu en el CRM — las dos campañas de Meta de Weldu enrutan a esa unidad.
 
 ### Campos que no son nombre, correo ni teléfono
 

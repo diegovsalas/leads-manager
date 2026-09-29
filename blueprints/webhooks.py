@@ -1069,12 +1069,21 @@ def shopify_form():
                      or data.get("phone") or "").strip(),
     }
 
-    # La unidad la dice el formulario. Sin esto, el cuestionario de aromas
-    # —que es de Aromatex— entraria como Weldex y lo recibirian los
-    # vendedores equivocados. Se valida contra las UN reales para que un
-    # valor cualquiera no se cuele como marca.
+    # La unidad la declara el formulario, sin valor por omision.
+    #
+    # Antes caia a Weldex cuando faltaba. Eso convierte un formulario mal
+    # configurado en leads silenciosamente mal clasificados: llegan a los
+    # vendedores de otra unidad, cuentan en sus metas y en sus comisiones, y
+    # nadie se entera. Es preferible rechazar y que se note.
     from un_filter import normalizar_un
-    marca = normalizar_un(data.get("marca") or data.get("unidad") or "") or SHOPIFY_MARCA
+    marca = normalizar_un(data.get("marca") or data.get("unidad") or "")
+    if not marca:
+        pedida = (data.get("marca") or data.get("unidad") or "").strip()
+        logger.warning("[form] rechazado: marca ausente o no valida (%r)", pedida)
+        return _cors(jsonify({
+            "error": "Falta el campo 'marca' o no es una unidad valida.",
+            "validas": ["Aromatex", "Pestex", "Weldex", "Nexo"],
+        })), 400
 
     extra = {"marca_interes": marca}
     for campo, columna in _FORM_A_COLUMNA.items():
