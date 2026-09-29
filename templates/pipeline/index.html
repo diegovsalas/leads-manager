@@ -2541,6 +2541,13 @@ fbq('track','PageView');
     <div style="flex:1;min-width:0;">
       <div style="font-size:18px;font-weight:700;" id="lp-nombre"></div>
       <div style="font-size:12px;color:var(--text3);font-family:var(--mono);" id="lp-telefono"></div>
+      <!-- FIX-2026-09-29: el correo no se mostraba en ningun lado de la ficha.
+           Con telefono no se notaba, pero los leads que entran por formulario
+           o por Shopify suelen traer SOLO correo: el vendedor abria la tarjeta
+           y no tenia por donde contactarlos. -->
+      <div style="font-size:12px;" id="lp-email-row">
+        <a id="lp-email" href="#" style="color:var(--accent);text-decoration:none;"></a>
+      </div>
     </div>
     <div id="lp-icp-badge" style="font-size:13px;font-weight:600;padding:3px 10px;border-radius:99px;"></div>
     <button class="btn" onclick="closeLeadPanel()" style="font-size:18px;flex-shrink:0;">&times;</button>
@@ -5337,6 +5344,9 @@ async function abrirLeadPanel(id){
     document.getElementById('lp-lead-id-display').textContent='ID: '+l.id.substring(0,8)+'...';
     document.getElementById('lp-nombre').textContent=l.nombre||'Sin nombre';
     document.getElementById('lp-telefono').textContent=l.telefono||'';
+    const _em=document.getElementById('lp-email'), _emRow=document.getElementById('lp-email-row');
+    if(l.email){ _em.textContent=l.email; _em.href='mailto:'+l.email; _emRow.style.display=''; }
+    else { _em.textContent=''; _em.removeAttribute('href'); _emRow.style.display='none'; }
 
     // ICP badge
     const badge=document.getElementById('lp-icp-badge');
