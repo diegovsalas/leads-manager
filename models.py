@@ -278,6 +278,14 @@ class Lead(db.Model):
     meta_ad_id = db.Column(db.String(100), nullable=True)
     meta_campaign = db.Column(db.String(200), nullable=True)
 
+    # FEAT-2026-09-29: identificadores de Shopify (tienda Weldu -> UN Weldex).
+    # Tres y no uno porque un mismo lead los va acumulando: primero abandona
+    # un checkout, luego se da de alta como cliente y al final compra. Con un
+    # solo campo, el segundo evento pisaria al primero y se perderia el rastro.
+    shopify_customer_id = db.Column(db.String(64), nullable=True, index=True)
+    shopify_checkout_id = db.Column(db.String(64), nullable=True, index=True)
+    shopify_order_id    = db.Column(db.String(64), nullable=True, index=True)
+
     # Bot presales
     bot_step = db.Column(db.String(30), nullable=True)  # waiting_name, waiting_empresa, waiting_sucursales, waiting_servicio, transferred, None
 

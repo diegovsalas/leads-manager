@@ -186,6 +186,11 @@ def asignar_lead_comercial(datos_lead: dict) -> Lead:
     lead = Lead(
         telefono=datos_lead["telefono"],
         nombre=datos_lead.get("nombre"),
+        # FIX-2026-09-29: el email se perdia. La lista de campos es fija y no
+        # lo incluia, asi que cualquier origen que lo trajera —Shopify, y los
+        # formularios de Meta que piden correo— creaba el lead sin el. Ademas
+        # rompia la deduplicacion, que busca por email antes de dar de alta.
+        email=datos_lead.get("email"),
         origen=origen_enum,
         marca_interes=marca,
         estado_cliente=estado,
@@ -200,6 +205,9 @@ def asignar_lead_comercial(datos_lead: dict) -> Lead:
         meta_form_id=datos_lead.get("meta_form_id"),
         meta_ad_id=datos_lead.get("meta_ad_id"),
         meta_campaign=datos_lead.get("meta_campaign"),
+        shopify_customer_id=datos_lead.get("shopify_customer_id"),
+        shopify_checkout_id=datos_lead.get("shopify_checkout_id"),
+        shopify_order_id=datos_lead.get("shopify_order_id"),
     )
 
     vendedor.ultimo_lead_asignado = datetime.now(timezone.utc)

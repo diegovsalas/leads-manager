@@ -37,9 +37,13 @@ def _falta_evidencia(lead, unidad=None):
     return None if ok else err
 
 
+def _payload_falta_evidencia(err):
+    return {"error": err, "requiere_evidencia": True,
+            "tipos": CE.TIPOS, "max_tipos": CE.MAX_TIPOS}
+
+
 def _resp_falta_evidencia(err):
-    return jsonify({"error": err, "requiere_evidencia": True,
-                    "tipos": CE.TIPOS, "max_tipos": CE.MAX_TIPOS}), 422
+    return jsonify(_payload_falta_evidencia(err)), 422
 
 
 def _apply_icp(lead):
@@ -1310,19 +1314,8 @@ def recalcular_venta_de_lead(lead):
 
 @leads_bp.route("/<uuid:lead_id>/cerrar", methods=["POST"])
 def cerrar_lead(lead_id):
-    """Cierra el lead como ganado: registra la venta, congela el reparto de
-    comisión y mueve la etapa. Todo en una sola transacción.
-
-    El reparto se congela a propósito: si mañana cambian los pesos del
-    tabulador, lo ya cerrado no se mueve.
-    """
-    from decimal import Decimal
-    from datetime import datetime, timezone
-    import comisiones as C
-    from blueprints.auth import get_vendedor_filter
-    from blueprints.sales import _calc_commission, _parse_dt
-    from models import Sale
-
+    """Ruta HTTP: resuelve el lead, valida permisos y delega en el core."""
+    from blueprints.auth import get_vendedor_filter, is_admin_role
     lead = db.session.get(Lead, lead_id)
     if not lead:
         return jsonify({"error": "Lead no encontrado"}), 404
@@ -1332,34 +1325,59 @@ def cerrar_lead(lead_id):
     if vendedor_id and str(lead.usuario_asignado_id) != str(vendedor_id):
         return jsonify({"error": "No tienes permisos sobre este lead"}), 403
 
+    out, status = cerrar_lead_core(
+        lead, request.get_json() or {},
+        quien_cierra=session.get("usuario_id"),
+        ve_comisiones=is_admin_role(),
+    )
+    return jsonify(out), status
+
+
+def cerrar_lead_core(lead, data, quien_cierra=None, ve_comisiones=False):
+    """Cierra el lead como ganado: registra la venta, congela el reparto de
+    comisión y mueve la etapa. Todo en una sola transacción.
+
+    El reparto se congela a propósito: si mañana cambian los pesos del
+    tabulador, lo ya cerrado no se mueve.
+
+    FEAT-2026-09-29: extraido de la ruta para que el webhook de Shopify cierre
+    por el MISMO camino. Duplicarlo habria dejado dos matematicas de comision
+    conviviendo, y la que se equivocara pagaria de menos o de mas.
+    Devuelve (payload, status) sin jsonify, para servir a los dos llamadores.
+    """
+    from decimal import Decimal
+    from datetime import datetime, timezone
+    import comisiones as C
+    from blueprints.sales import _calc_commission, _parse_dt
+    from models import Sale
+
     # Una venta por lead. Si ya existe se devuelve, no se duplica.
     ya = Sale.query.filter_by(lead_id=lead.id).first()
     if ya:
-        return jsonify({"error": "Este lead ya tiene una venta registrada",
-                        "sale_id": str(ya.id)}), 409
+        return {"error": "Este lead ya tiene una venta registrada",
+                "sale_id": str(ya.id)}, 409
 
-    data = request.get_json() or {}
     unidad = (data.get("unidad") or lead.marca_interes or "").strip()
     if not unidad:
-        return jsonify({"error": "Falta la unidad de negocio"}), 400
+        return {"error": "Falta la unidad de negocio"}, 400
 
     # Antes de registrar la venta y congelar la comisión: sin respaldo no hay
     # cierre. Se valida contra la unidad REAL del cierre, no la del lead, para
     # que mandar otra unidad en el body no sea la forma de esquivar el gate.
     err = _falta_evidencia(lead, unidad)
     if err:
-        return _resp_falta_evidencia(err)
+        return _payload_falta_evidencia(err), 422
 
     sale_type = data.get("sale_type") or "suscripcion_nueva"
     if sale_type not in ("suscripcion_nueva", "servicio_unico", "upsell"):
-        return jsonify({"error": "Tipo de venta inválido"}), 400
+        return {"error": "Tipo de venta inválido"}, 400
 
     try:
         lista   = float(data.get("mensualidad_lista") or lead.valor_estimado or 0)
         cerrada = float(data.get("mensualidad_cerrada") or lista)
         total   = float(data.get("total_amount") or 0)
     except (TypeError, ValueError):
-        return jsonify({"error": "Montos inválidos"}), 400
+        return {"error": "Montos inválidos"}, 400
 
     # FIX-2026-08-25: cerrar NUNCA puede fallar por falta de monto.
     #
@@ -1376,11 +1394,11 @@ def cerrar_lead(lead_id):
     com_type = data.get("commission_type") or ORIGEN_A_COMISION.get(
         lead.origen.value if lead.origen else "", "lead_otorgado")
     if com_type not in ("autogenerado", "lead_otorgado"):
-        return jsonify({"error": "Tipo de comisión inválido"}), 400
+        return {"error": "Tipo de comisión inválido"}, 400
 
     # Quien cierra hizo la etapa de cierre. Se registra ANTES de calcular,
     # porque cambia quiénes participan y por lo tanto el reparto.
-    quien_cierra = session.get("usuario_id") or lead.usuario_asignado_id
+    quien_cierra = quien_cierra or lead.usuario_asignado_id
     try:
         C.registrar_avance(lead, EtapaPipeline.CIERRE_GANADO.value, quien_cierra)
         db.session.flush()
@@ -1399,7 +1417,7 @@ def cerrar_lead(lead_id):
                            multi_un=C.lead_es_multi_un(lead))
         if resultado.get("error"):
             db.session.rollback()
-            return jsonify({"error": resultado["error"]}), 400
+            return {"error": resultado["error"]}, 400
         rate = None
         amount = float(resultado["comision_total"])
     else:
@@ -1452,9 +1470,6 @@ def cerrar_lead(lead_id):
     # Se decide aquí y no en la pantalla: esconder el bloque con CSS dejaría
     # las cifras viajando en la respuesta, visibles en la pestaña de red del
     # navegador. Lo que no se debe ver, no se manda.
-    from blueprints.auth import is_admin_role
-    ve_comisiones = is_admin_role()
-
     out = {"ok": True, "sale_id": str(sale.id)}
     if ve_comisiones:
         out.update({"esquema": "tabulador" if aplica else "normal",
@@ -1484,7 +1499,7 @@ def cerrar_lead(lead_id):
     except Exception:
         pass
 
-    return jsonify(out), 201
+    return out, 201
 
 
 # ══════════════════════════════════════════════

@@ -42,6 +42,17 @@ services:
         sync: false
       - key: LEMLIST_API_KEY
         sync: false
+      # Shopify (tienda Weldu -> UN Weldex). Sin SHOPIFY_WEBHOOK_SECRET el
+      # endpoint responde 503 a proposito: mejor rechazar que tragarse
+      # payloads sin poder verificar de quien vienen.
+      - key: SHOPIFY_WEBHOOK_SECRET
+        sync: false
+      - key: SHOPIFY_SHOP_DOMAIN
+        value: www.welduapp.com
+      - key: SHOPIFY_MARCA
+        value: Weldex
+      - key: SHOPIFY_FORM_ORIGINS
+        value: https://www.welduapp.com,https://welduapp.com
       - key: DOMAIN
         value: https://leads-manager-avantex.onrender.com
       - key: AIRCALL_API_ID

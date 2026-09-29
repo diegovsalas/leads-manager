@@ -98,6 +98,25 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] leads.tipo_venta failed (retry on next boot): %s", e)
 
+        # ─── leads.shopify_* (FEAT-2026-09-29) ───
+        try:
+            with db.engine.begin() as conn:
+                for col in ("shopify_customer_id", "shopify_checkout_id",
+                            "shopify_order_id"):
+                    exists = conn.execute(text("""
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'leads' AND column_name = :c
+                    """), {"c": col}).first()
+                    if not exists:
+                        app.logger.info("[auto-migrate] adding leads.%s...", col)
+                        conn.execute(text(f"ALTER TABLE leads ADD COLUMN {col} VARCHAR(64)"))
+                        conn.execute(text(
+                            f"CREATE INDEX IF NOT EXISTS ix_leads_{col} ON leads ({col})"
+                        ))
+                        app.logger.info("[auto-migrate] leads.%s added.", col)
+        except Exception as e:
+            app.logger.warning("[auto-migrate] leads.shopify_* failed (retry on next boot): %s", e)
+
         # ─── EtapaPipeline enum: agregar 'Presentación' ───
         try:
             # ALTER TYPE ADD VALUE no soporta IF NOT EXISTS en algunas versiones —

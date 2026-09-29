@@ -4,7 +4,7 @@ import hmac
 import logging
 import os
 from flask import Blueprint, request, jsonify, current_app
-from extensions import db, socketio
+from extensions import db, socketio, limiter
 from models import Lead, MensajeWhatsapp, DireccionMensaje, EtapaPipeline, OrigenLead
 
 logger = logging.getLogger(__name__)
@@ -658,3 +658,365 @@ def _extraer_contenido(msg: dict, tipo: str) -> str:
         "sticker":  lambda m: "[Sticker]",
     }
     return extractores.get(tipo, lambda m: "[Mensaje no soportado]")(msg)
+
+
+# ══════════════════════════════════════════════
+# WEBHOOKS DE SHOPIFY — tienda Weldu (welduapp.com)
+#
+# FEAT-2026-09-29. La tienda es de la UN Weldex, que ya existe en el CRM con
+# sus vendedores y su tabulador de comisiones.
+#
+# Shopify firma distinto que Meta: el HMAC-SHA256 va en base64, no en hex, y
+# se calcula sobre el cuerpo crudo. Usar request.get_json() antes de validar
+# rompe la firma, porque el JSON reserializado no es byte a byte el original.
+# ══════════════════════════════════════════════
+
+SHOPIFY_MARCA = os.getenv("SHOPIFY_MARCA", "Weldex")
+
+# Correos de alta claramente automatizados. Ya hay basura de este tipo dada de
+# alta en la tienda (ej. "123HannahOunengxfmevbqq.dpn@inscrlab.com"), y sin
+# filtro entraria al pipe de los dos vendedores de Weldex.
+_SHOPIFY_DOMINIOS_SPAM = (
+    "inscrlab.com", "mailinator.com", "tempmail", "guerrillamail",
+    "10minutemail", "yopmail.com", "trashmail",
+)
+
+
+def _verify_shopify_hmac(secret: str, raw_body: bytes, header: str) -> bool:
+    """Valida X-Shopify-Hmac-Sha256 (HMAC-SHA256 en base64 del cuerpo crudo)."""
+    if not header:
+        return False
+    import base64
+    digest = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).digest()
+    esperado = base64.b64encode(digest).decode("utf-8")
+    return hmac.compare_digest(esperado, header)
+
+
+def _shopify_guard():
+    """Valida firma y tienda. Devuelve (payload, None) o (None, respuesta)."""
+    secret = os.getenv("SHOPIFY_WEBHOOK_SECRET", "").strip()
+    if not secret:
+        logger.error("SHOPIFY_WEBHOOK_SECRET no configurada — rechazando webhook.")
+        return None, (jsonify({"error": "Webhook no configurado"}), 503)
+
+    raw = request.get_data()
+    if not _verify_shopify_hmac(secret, raw, request.headers.get("X-Shopify-Hmac-Sha256", "")):
+        logger.warning("Webhook de Shopify con firma invalida — rechazado.")
+        return None, (jsonify({"error": "Firma invalida"}), 401)
+
+    # Que la firma sea valida no dice de que tienda viene: si mañana hay otra
+    # tienda con el mismo secreto, sus clientes entrarian como Weldex.
+    dominio_ok = os.getenv("SHOPIFY_SHOP_DOMAIN", "").strip().lower()
+    dominio = (request.headers.get("X-Shopify-Shop-Domain") or "").strip().lower()
+    if dominio_ok and dominio and dominio != dominio_ok:
+        logger.warning("Webhook de Shopify de otra tienda (%s) — ignorado.", dominio)
+        return None, (jsonify({"status": "ignorado"}), 200)
+
+    payload = request.get_json(silent=True)
+    if payload is None:
+        return None, (jsonify({"error": "Payload invalido"}), 400)
+    return payload, None
+
+
+def _shopify_datos_contacto(cliente: dict) -> dict:
+    """Normaliza nombre, email y telefono de un customer/checkout/order."""
+    nombre = " ".join(
+        p for p in ((cliente.get("first_name") or "").strip(),
+                    (cliente.get("last_name") or "").strip()) if p
+    ).strip()
+    email = (cliente.get("email") or "").strip().lower()
+    telefono = (cliente.get("phone") or "").strip()
+    return {"nombre": nombre, "email": email, "telefono": telefono}
+
+
+def _shopify_es_spam(email: str) -> bool:
+    if not email:
+        return False
+    low = email.lower()
+    return any(d in low for d in _SHOPIFY_DOMINIOS_SPAM)
+
+
+def _shopify_buscar_lead(shopify_id_campo: str, shopify_id: str,
+                         email: str, telefono: str):
+    """Busca un lead ya existente: primero por el id de Shopify, luego por
+    telefono y por email. El mismo cliente llega por varios eventos y no
+    queremos una tarjeta por evento."""
+    if shopify_id:
+        lead = Lead.query.filter(getattr(Lead, shopify_id_campo) == str(shopify_id)).first()
+        if lead:
+            return lead
+    if telefono:
+        lead = Lead.query.filter_by(telefono=telefono).first()
+        if lead:
+            return lead
+    if email:
+        lead = Lead.query.filter_by(email=email).first()
+        if lead:
+            return lead
+    return None
+
+
+def _shopify_alta_lead(datos: dict, extra: dict, nota: str):
+    """Crea el lead si trae datos suficientes, asignandolo por Round-Robin.
+
+    Regla acordada: un correo suelto no basta. La tienda da de alta un cliente
+    por cada suscripcion al boletin, y la mayoria llega sin nombre ni telefono;
+    meterlos todos al pipe de los dos vendedores de Weldex seria ruido, no
+    prospectos. Se exige al menos nombre o telefono.
+    """
+    nombre, email, telefono = datos["nombre"], datos["email"], datos["telefono"]
+
+    if _shopify_es_spam(email):
+        logger.info("[shopify] alta descartada por correo de spam: %s", email)
+        return None
+    if not nombre and not telefono:
+        logger.info("[shopify] alta descartada, solo correo sin nombre ni telefono: %s", email)
+        return None
+
+    base = {
+        "nombre":        nombre or (email.split("@")[0] if email else "Sin nombre"),
+        "telefono":      telefono or None,
+        "email":         email or None,
+        "origen":        OrigenLead.WEB.value,
+        "marca_interes": SHOPIFY_MARCA,
+        "notas":         nota,
+        **extra,
+    }
+
+    from asignacion import asignar_lead_comercial
+    try:
+        lead = asignar_lead_comercial(base)
+        logger.info("[shopify] lead %s asignado a %s", lead.id,
+                    lead.usuario_asignado.nombre if lead.usuario_asignado else "nadie")
+    except ValueError:
+        # Sin vendedores en turno para la UN: se crea igual, sin dueño. Perder
+        # el prospecto seria peor que dejarlo sin asignar.
+        base.pop("origen", None)
+        base.pop("estado", None)
+        lead = Lead(origen=OrigenLead.WEB,
+                    etapa_pipeline=EtapaPipeline.NUEVO_LEAD, **base)
+        db.session.add(lead)
+        db.session.commit()
+        logger.warning("[shopify] lead %s creado SIN asignar (no hay vendedores de %s)",
+                       lead.id, SHOPIFY_MARCA)
+    socketio.emit("nuevo_lead", lead.to_dict())
+    return lead
+
+
+def _shopify_customer(payload: dict, actualizar: bool):
+    """customers/create y customers/update."""
+    cid = str(payload.get("id") or "")
+    datos = _shopify_datos_contacto(payload)
+    lead = _shopify_buscar_lead("shopify_customer_id", cid, datos["email"], datos["telefono"])
+
+    if lead:
+        # Enriquecer sin pisar: si el vendedor ya corrigio un dato a mano, el
+        # webhook no debe deshacerlo. Solo se rellenan huecos.
+        if not lead.shopify_customer_id and cid:
+            lead.shopify_customer_id = cid
+        if not lead.email and datos["email"]:
+            lead.email = datos["email"]
+        if not lead.telefono and datos["telefono"]:
+            lead.telefono = datos["telefono"]
+        if datos["nombre"] and (not lead.nombre or lead.nombre == "Sin nombre"):
+            lead.nombre = datos["nombre"]
+        db.session.commit()
+        return {"accion": "actualizado", "lead_id": str(lead.id)}
+
+    if actualizar:
+        # Un update de alguien que nunca paso el filtro de alta no deberia
+        # colarlo por la puerta de atras; se evalua con la misma regla.
+        pass
+
+    nota = f"Alta en la tienda Weldu (Shopify customer {cid})."
+    if payload.get("accepts_marketing") or payload.get("email_marketing_consent"):
+        nota += " Acepto marketing."
+    lead = _shopify_alta_lead(datos, {"shopify_customer_id": cid or None}, nota)
+    return {"accion": "creado" if lead else "descartado",
+            "lead_id": str(lead.id) if lead else None}
+
+
+def _shopify_checkout(payload: dict):
+    """checkouts/create y checkouts/update — carrito de alta intencion."""
+    chid = str(payload.get("id") or "")
+    cliente = payload.get("customer") or {}
+    datos = _shopify_datos_contacto(cliente)
+    # El checkout trae email y telefono propios aunque no haya customer.
+    datos["email"] = datos["email"] or (payload.get("email") or "").strip().lower()
+    datos["telefono"] = datos["telefono"] or (payload.get("phone") or "").strip()
+
+    lead = _shopify_buscar_lead("shopify_checkout_id", chid, datos["email"], datos["telefono"])
+    if lead:
+        if not lead.shopify_checkout_id and chid:
+            lead.shopify_checkout_id = chid
+            db.session.commit()
+        return {"accion": "ya_existia", "lead_id": str(lead.id)}
+
+    total = payload.get("total_price") or 0
+    nota = (f"Carrito sin terminar en Weldu por ${total} "
+            f"(Shopify checkout {chid}). Prospecto de alta intencion.")
+    lead = _shopify_alta_lead(datos, {"shopify_checkout_id": chid or None}, nota)
+    return {"accion": "creado" if lead else "descartado",
+            "lead_id": str(lead.id) if lead else None}
+
+
+def _shopify_order(payload: dict):
+    """orders/create — la venta se concreto en la tienda.
+
+    Cierra el lead como ganado por el monto de la orden, usando el MISMO
+    cerrar_lead_core que la pantalla. Se clasifica servicio_unico/eventual
+    porque el catalogo de Weldu son visitas de diagnostico, compras de una
+    sola vez, no suscripciones: el default del core (suscripcion_nueva /
+    recurrente) calcularia la comision sobre otra base.
+    """
+    oid = str(payload.get("id") or "")
+    cliente = payload.get("customer") or {}
+    datos = _shopify_datos_contacto(cliente)
+    datos["email"] = datos["email"] or (payload.get("email") or "").strip().lower()
+    datos["telefono"] = datos["telefono"] or (payload.get("phone") or "").strip()
+
+    if oid and Lead.query.filter_by(shopify_order_id=oid).first():
+        return {"accion": "orden_ya_procesada"}
+
+    try:
+        monto = float(payload.get("total_price") or 0)
+    except (TypeError, ValueError):
+        monto = 0.0
+    folio = payload.get("name") or oid
+
+    lead = _shopify_buscar_lead("shopify_customer_id", str(cliente.get("id") or ""),
+                                datos["email"], datos["telefono"])
+    if not lead:
+        # Quien compra deja nombre y datos de envio, asi que pasa el filtro de
+        # alta aunque el suscriptor del boletin no lo hiciera.
+        lead = _shopify_alta_lead(
+            datos, {"shopify_order_id": oid or None},
+            f"Compra en Weldu {folio} por ${monto:,.2f}.")
+        if not lead:
+            logger.warning("[shopify] orden %s sin datos suficientes para crear lead", folio)
+            return {"accion": "descartado"}
+
+    lead.shopify_order_id = oid or None
+    nota_orden = f"Orden {folio} de Weldu por ${monto:,.2f}."
+    lead.notas = f"{lead.notas}\n{nota_orden}".strip() if lead.notas else nota_orden
+    if monto and not lead.valor_estimado:
+        lead.valor_estimado = monto
+    db.session.commit()
+
+    if lead.etapa_pipeline == EtapaPipeline.CIERRE_GANADO:
+        return {"accion": "lead_ya_cerrado", "lead_id": str(lead.id)}
+
+    from blueprints.leads import cerrar_lead_core
+    out, status = cerrar_lead_core(lead, {
+        "unidad":              lead.marca_interes or SHOPIFY_MARCA,
+        "sale_type":           "servicio_unico",
+        "sale_category":       "eventual",
+        "mensualidad_cerrada": monto,
+        "total_amount":        monto,
+    }, quien_cierra=str(lead.usuario_asignado_id) if lead.usuario_asignado_id else None)
+
+    if status >= 400:
+        # No se tumba el webhook: la orden ya quedo anotada en el lead y
+        # Shopify reintentaria en vano. Queda el registro para cerrarlo a mano.
+        logger.warning("[shopify] orden %s no pudo cerrarse (%s): %s",
+                       folio, status, out.get("error"))
+        return {"accion": "anotado_sin_cerrar", "lead_id": str(lead.id),
+                "motivo": out.get("error")}
+    return {"accion": "cerrado_ganado", "lead_id": str(lead.id),
+            "sale_id": out.get("sale_id")}
+
+
+@webhooks_bp.route("/shopify", methods=["POST"])
+def recibir_shopify():
+    """Punto unico para todos los topics. Shopify dice cual en X-Shopify-Topic.
+
+    Siempre responde 200 salvo firma invalida: un 500 hace que Shopify
+    reintente 19 veces y termine desactivando el webhook. Los errores se
+    registran y se responden como procesados.
+    """
+    payload, error = _shopify_guard()
+    if error:
+        return error
+
+    topic = (request.headers.get("X-Shopify-Topic") or "").strip().lower()
+    logger.info("[shopify] topic=%s id=%s", topic, payload.get("id"))
+
+    try:
+        if topic == "customers/create":
+            resultado = _shopify_customer(payload, actualizar=False)
+        elif topic == "customers/update":
+            resultado = _shopify_customer(payload, actualizar=True)
+        elif topic in ("checkouts/create", "checkouts/update"):
+            resultado = _shopify_checkout(payload)
+        elif topic == "orders/create":
+            resultado = _shopify_order(payload)
+        else:
+            logger.info("[shopify] topic no manejado: %s", topic)
+            return jsonify({"status": "ignorado", "topic": topic}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.exception("[shopify] error procesando %s: %s", topic, e)
+        return jsonify({"status": "error_registrado"}), 200
+
+    return jsonify({"status": "ok", "topic": topic, **resultado}), 200
+
+
+# ── Formulario de contacto del tema ────────────────────────────────
+#
+# Shopify no dispara webhook cuando alguien envia el formulario de contacto,
+# asi que el tema publica aqui por JavaScript. Este endpoint es PUBLICO a
+# proposito: la alternativa era poner una API key en el codigo del tema, que
+# es codigo fuente visible para cualquiera —quien la leyera podria crear
+# leads a voluntad, y usarla contra el resto de la API—. Se protege con
+# limite por IP, campo trampa y validacion de origen.
+
+_SHOPIFY_ORIGENES = tuple(
+    o.strip() for o in os.getenv(
+        "SHOPIFY_FORM_ORIGINS",
+        "https://www.welduapp.com,https://welduapp.com",
+    ).split(",") if o.strip()
+)
+
+
+def _cors(resp):
+    origen = request.headers.get("Origin", "")
+    if origen in _SHOPIFY_ORIGENES:
+        resp.headers["Access-Control-Allow-Origin"] = origen
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        resp.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        resp.headers["Vary"] = "Origin"
+    return resp
+
+
+@webhooks_bp.route("/shopify/form", methods=["OPTIONS"])
+def shopify_form_preflight():
+    return _cors(jsonify({"ok": True}))
+
+
+@webhooks_bp.route("/shopify/form", methods=["POST"])
+@limiter.limit("10 per hour")
+def shopify_form():
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+
+    # Campo trampa: invisible para una persona, irresistible para un bot.
+    if (data.get("website") or data.get("_gotcha") or "").strip():
+        logger.info("[shopify-form] descartado por campo trampa")
+        return _cors(jsonify({"status": "ok"}))
+
+    datos = {
+        "nombre":   (data.get("nombre") or data.get("name") or "").strip(),
+        "email":    (data.get("email") or "").strip().lower(),
+        "telefono": (data.get("telefono") or data.get("phone") or "").strip(),
+    }
+    mensaje = (data.get("mensaje") or data.get("body") or "").strip()
+
+    nota = "Formulario de contacto de welduapp.com."
+    if mensaje:
+        nota += f"\nMensaje: {mensaje[:1000]}"
+
+    lead = _shopify_alta_lead(datos, {}, nota)
+    if not lead:
+        # Se responde ok igual: el visitante no tiene por que enterarse de
+        # como filtramos, y un error le haria reintentar.
+        return _cors(jsonify({"status": "ok"}))
+    return _cors(jsonify({"status": "ok", "lead_id": str(lead.id)}))
