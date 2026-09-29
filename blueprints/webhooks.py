@@ -988,11 +988,70 @@ def _cors(resp):
     return resp
 
 
+# Campos que tienen columna propia en leads; el resto va a las notas.
+_FORM_A_COLUMNA = {
+    "empresa":   "empresa_nombre",
+    "industria": "tipo_industria",
+}
+# Campos de plomeria que no aportan nada al vendedor dentro de las notas.
+_FORM_IGNORAR = {
+    "nombre", "name", "email", "correo", "telefono", "phone", "whatsapp",
+    "mensaje", "body", "website", "_gotcha", "marca", "unidad",
+    "payload_json", "fecha",
+}
+
+
+def _form_notas(data: dict, encabezado: str) -> str:
+    """Vuelca en las notas todo lo que el formulario pregunto y el CRM no
+    tiene donde guardar.
+
+    Se hace generico a proposito: el cuestionario de aromas trae 25 campos y
+    solo 5 tienen columna. Si mañana agregan una pregunta, aparece sola en
+    las notas en vez de perderse en silencio, que es lo que pasaba antes.
+    """
+    lineas = [encabezado]
+    mensaje = (data.get("mensaje") or data.get("body") or "").strip()
+    if mensaje:
+        lineas.append(f"Mensaje: {mensaje[:1000]}")
+
+    # El resultado del diagnostico va arriba: es lo que el vendedor necesita
+    # en los primeros cinco segundos. Lo demas es el porque, y va despues.
+    # Lo que no este en la lista se agrega al final, asi una pregunta nueva
+    # aparece igual en vez de perderse.
+    orden = ["arquetipo", "compatibilidad", "intensidad_recomendada",
+             "intensidad_deseada", "aroma_1", "aroma_2", "aroma_3", "aroma_4",
+             "aroma_5", "proveedor_actual_competencia", "usa_aromatizacion",
+             "sucursales", "espacios", "emociones", "personalidad", "objetivo",
+             "permanencia", "clientes"]
+    claves = sorted(data.keys(),
+                    key=lambda c: (orden.index(str(c).strip().lower())
+                                   if str(c).strip().lower() in orden else len(orden)))
+
+    extras = []
+    for clave in claves:
+        valor = data[clave]
+        k = str(clave).strip().lower()
+        if k in _FORM_IGNORAR or k in _FORM_A_COLUMNA:
+            continue
+        texto = str(valor).strip() if valor is not None else ""
+        if not texto or texto.lower() in ("none", "null", "[]", "{}"):
+            continue
+        etiqueta = k.replace("_", " ").capitalize()
+        extras.append(f"  {etiqueta}: {texto[:300]}")
+    if extras:
+        lineas.append("")
+        lineas.append("Respuestas del formulario:")
+        lineas.extend(extras)
+    return "\n".join(lineas)
+
+
+@webhooks_bp.route("/form", methods=["OPTIONS"])
 @webhooks_bp.route("/shopify/form", methods=["OPTIONS"])
-def shopify_form_preflight():
+def form_preflight():
     return _cors(jsonify({"ok": True}))
 
 
+@webhooks_bp.route("/form", methods=["POST"])
 @webhooks_bp.route("/shopify/form", methods=["POST"])
 @limiter.limit("10 per hour")
 def shopify_form():
@@ -1000,21 +1059,31 @@ def shopify_form():
 
     # Campo trampa: invisible para una persona, irresistible para un bot.
     if (data.get("website") or data.get("_gotcha") or "").strip():
-        logger.info("[shopify-form] descartado por campo trampa")
+        logger.info("[form] descartado por campo trampa")
         return _cors(jsonify({"status": "ok"}))
 
     datos = {
         "nombre":   (data.get("nombre") or data.get("name") or "").strip(),
-        "email":    (data.get("email") or "").strip().lower(),
-        "telefono": (data.get("telefono") or data.get("phone") or "").strip(),
+        "email":    (data.get("email") or data.get("correo") or "").strip().lower(),
+        "telefono": (data.get("telefono") or data.get("whatsapp")
+                     or data.get("phone") or "").strip(),
     }
-    mensaje = (data.get("mensaje") or data.get("body") or "").strip()
 
-    nota = "Formulario de contacto de welduapp.com."
-    if mensaje:
-        nota += f"\nMensaje: {mensaje[:1000]}"
+    # La unidad la dice el formulario. Sin esto, el cuestionario de aromas
+    # —que es de Aromatex— entraria como Weldex y lo recibirian los
+    # vendedores equivocados. Se valida contra las UN reales para que un
+    # valor cualquiera no se cuele como marca.
+    from un_filter import normalizar_un
+    marca = normalizar_un(data.get("marca") or data.get("unidad") or "") or SHOPIFY_MARCA
 
-    lead = _shopify_alta_lead(datos, {}, nota)
+    extra = {"marca_interes": marca}
+    for campo, columna in _FORM_A_COLUMNA.items():
+        valor = (data.get(campo) or "").strip() if data.get(campo) else ""
+        if valor:
+            extra[columna] = valor[:190]
+
+    nota = _form_notas(data, f"Formulario web ({marca}).")
+    lead = _shopify_alta_lead(datos, extra, nota)
     if not lead:
         # Se responde ok igual: el visitante no tiene por que enterarse de
         # como filtramos, y un error le haria reintentar.

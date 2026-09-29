@@ -79,6 +79,53 @@ voluntad y para usar el resto de la API. En su lugar el endpoint está abierto
 pero acotado: límite de 10 envíos por hora por IP, campo trampa, y solo acepta
 peticiones desde los dominios de `SHOPIFY_FORM_ORIGINS`.
 
+## 4. Otros formularios web (no solo Weldu)
+
+El mismo endpoint atiende cualquier formulario, no solo el de Shopify. Se llega
+por `/webhook/form` — `/webhook/shopify/form` sigue funcionando y es un alias.
+
+**La unidad la manda el formulario**, en un campo `marca`:
+
+```json
+{ "nombre": "...", "email": "...", "whatsapp": "...", "marca": "Aromatex", ... }
+```
+
+Sin ese campo entra como **Weldex**, que es lo correcto para Weldu. Una marca
+que no exista se ignora y cae al mismo valor por omisión, para que un dato
+cualquiera no invente unidades.
+
+### Campos que no son nombre, correo ni teléfono
+
+Tres tienen columna propia:
+
+| Del formulario | Columna |
+|---|---|
+| `empresa` | `empresa_nombre` |
+| `industria` | `tipo_industria` |
+| `whatsapp` o `telefono` | `telefono` |
+
+**Todo lo demás se vuelca en las notas del lead**, con su etiqueta, para que el
+vendedor lo vea al abrir la tarjeta. Es genérico: si mañana agregan una
+pregunta, aparece sola en las notas en vez de perderse en silencio.
+
+Ejemplo con el cuestionario de aromas de Aromatex (25 campos, 5 con columna):
+
+```
+Formulario web (Aromatex).
+
+Respuestas del formulario:
+  Arquetipo: El Refugio
+  Compatibilidad: 87%
+  Intensidad recomendada: Media-baja
+  Aroma 1: Vainilla tostada
+  ...
+```
+
+El resultado del diagnóstico va arriba a propósito: es lo que el vendedor
+necesita en los primeros cinco segundos. Las respuestas que lo justifican van
+después. `payload_json` y `fecha` se omiten — el primero duplica lo que ya está
+desglosado y la segunda la pone el CRM.
+
 ---
 
 ## Qué entra y qué no

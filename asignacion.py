@@ -195,6 +195,7 @@ def asignar_lead_comercial(datos_lead: dict) -> Lead:
         marca_interes=marca,
         estado_cliente=estado,
         empresa_nombre=datos_lead.get("empresa_nombre"),
+        tipo_industria=datos_lead.get("tipo_industria"),
         etapa_pipeline=EtapaPipeline.NUEVO_LEAD,
         valor_estimado=datos_lead.get("valor_estimado"),
         cantidad_productos=datos_lead.get("cantidad_productos"),
