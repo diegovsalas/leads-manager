@@ -4,6 +4,11 @@ Las 13 tareas periódicas del CRM se pueden correr de dos formas. **Solo una
 a la vez** — con las dos activas, cada tarea correría duplicada: dos
 sincronizaciones de Savio, dos tandas de correos.
 
+Las dos leen la misma lista, el diccionario `TAREAS` de `tareas.py`. Ahí está
+qué hace cada tarea, cada cuánto, qué variables de entorno necesita y si está
+pausada. Cambiar de modo cambia **quién dispara** las tareas, no cuáles: si
+una está pausada o le falta su configuración, lo está en los dos modos.
+
 ## Modo actual: scheduler interno
 
 Es como funciona hoy. Un APScheduler dentro del proceso web dispara todo.
@@ -40,7 +45,7 @@ respalda nada — sin error, simplemente no ocurre.
 | `meta-leads` | cada 5 min | Trae los leads nuevos de Meta Lead Ads |
 | `linkedin-leads` | cada 5 min | Trae los leads nuevos de LinkedIn |
 | `gmail-poll` | cada 5 min | Lee los correos nuevos de los vendedores |
-| `cadencia` | cada 15 min | Seguimiento de leads sin respuesta |
+| `cadencia` | — | **Pausada**, ver abajo. No la programes |
 | `savio-horario` | cada hora | Facturas y pagos de Savio |
 | `kam-respuestas` | cada hora | Respuestas de clientes a los KAM |
 | `savio-6h` | cada 6 horas | Suscripciones, clientes y MRR |
@@ -48,11 +53,29 @@ respalda nada — sin error, simplemente no ocurre.
 | `backup` | 3:00 CST | Respaldo de la base |
 | `gmail-purge` | 4:00 CST | Borra correos viejos |
 | `zoho-citas` | 4:30 CST | Citas de Zoho Analytics |
-| `sdr-engine` | 5:00 CST | Lote diario del SDR directivo |
+| `sdr-engine` | diaria | Lote diario del SDR directivo, todas las unidades |
 | `savio-reconcilia` | semanal | Barrido completo, por si el incremental saltó algo |
 
 Las horas son de México (UTC−6). La mayoría de programadores piden UTC:
 súmale 6 horas.
+
+En el modo interno, `sdr-engine` corre una vez por unidad, a la hora que cada
+una tiene en `sdr_dir_engine_config`. Por HTTP es una sola llamada que las
+recorre todas, así que basta programarla una vez al día.
+
+### Tareas pausadas
+
+`cadencia` avanza las etapas de los leads sin respuesta y, al cuarto contacto,
+los cierra como perdidos. Está **pausada a propósito** hasta que estén listos
+los mappings `campaign→marca/zona`.
+
+La pausa vive en el registro, así que vale para los dos modos: el endpoint
+responde `omitida` y no ejecuta nada. Si la programas de todos modos, no pasa
+nada — es una llamada sin efecto.
+
+Para probarla a mano antes de reactivarla, agrégale `&forzar=1`. Eso salta la
+pausa, pero nunca la falta de configuración: sin sus variables, una tarea se
+omite igual. Reactivarla de verdad es poner `activa=True` en `tareas.py`.
 
 Para ver el estado sin ejecutar nada:
 
@@ -81,7 +104,8 @@ apagado la corta.
 ## Respuestas del endpoint
 
 - `200 {"ok": true, ...}` — corrió bien
-- `200 {"omitida": true}` — esa integración no está configurada; no es error
+- `200 {"omitida": true}` — no corrió, y no es error. El campo `motivo` dice
+  si fue por una pausa deliberada o porque falta alguna variable de entorno
 - `403` — secreto ausente o inválido
 - `404` — no existe esa tarea
 - `500` — la tarea falló. **A propósito**: así el programador externo lo

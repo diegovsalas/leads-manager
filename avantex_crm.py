@@ -1135,236 +1135,106 @@ def create_app():
 
 
 def _start_scheduler(app):
-    """Inicia APScheduler para cadencia (15 min) y notificaciones (9am CST diario)."""
+    """Arma el APScheduler interno a partir del registro de tareas.py.
+
+    Aquí no hay una segunda lista de tareas. Cada job sale de TAREAS, con la
+    misma puerta de entorno y la misma pausa que aplica el endpoint HTTP,
+    para que cambiar SCHEDULER_EN_PROCESO cambie quién dispara las tareas y
+    no cuáles. Antes eran dos listas y ya habían divergido; el detalle está
+    en el encabezado de tareas.py.
+
+    Lo único que vive solo en este modo son las dos cosas atadas a que el
+    proceso esté vivo: el sync ligero de Savio al arrancar, y el cron por
+    unidad del SDR, que saca su hora de la base.
+    """
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
+        from tareas import TAREAS
 
-        def _run_cadencia():
-            with app.app_context():
-                from cadencia import check_cadencia
-                check_cadencia()
-
-        def _run_notificaciones():
-            with app.app_context():
-                try:
-                    from notificaciones import enviar_notificaciones_diarias
-                    enviar_notificaciones_diarias()
-                except Exception as e:
-                    app.logger.warning(f"notificaciones diarias: {e}")
-
-        def _run_backup():
-            with app.app_context():
-                try:
-                    from backups import ejecutar_backup
-                    ejecutar_backup()
-                except Exception as e:
-                    app.logger.warning(f"backup diario: {e}")
-
-        def _run_savio_invoices_payments():
-            with app.app_context():
-                import savio_sync
-                try:
-                    savio_sync.sync_invoices()
-                    savio_sync.sync_payments()
-                    # Bridge Savio → CSInvoice cada hora para que el dashboard CS
-                    # vea pagos/facturas nuevas sin esperar al job de 6h.
-                    savio_sync.sync_savio_to_cs_invoices()
-                except Exception as e:
-                    app.logger.warning(f"savio hourly: {e}")
-
-        def _run_savio_customers_subs():
-            with app.app_context():
-                import savio_sync
-                try:
-                    savio_sync.sync_subscriptions()
-                    savio_sync.sync_customers()
-                    savio_sync.bridge_savio_to_cs_mrr()
-                except Exception as e:
-                    app.logger.warning(f"savio 6h: {e}")
-
-        def _run_savio_boot():
-            """Sync ligero inicial 60s post-boot. Solo customers (rápido).
-            invoices+payments salen del job horario; subscriptions del 6h."""
-            with app.app_context():
-                import savio_sync
-                try:
-                    savio_sync.sync_customers()
-                except Exception as e:
-                    app.logger.warning(f"savio boot sync: {e}")
-
-        def _run_savio_reconciliation():
-            """FEAT-2026-07-22: reconciliación semanal — barrido completo del
-            año (bypassa el watermark incremental) para detectar cualquier
-            registro que el sync incremental haya podido saltarse. El sync
-            horario normal (_run_savio_invoices_payments) ya es incremental;
-            este es solo el respaldo de reconciliación, no el mecanismo
-            principal. Pedido explícito de Savio por volumen de llamadas."""
-            with app.app_context():
-                import savio_sync
-                try:
-                    savio_sync.sync_invoices(days=savio_sync.DEFAULT_SYNC_WINDOW_DAYS)
-                    savio_sync.sync_payments(days=savio_sync.DEFAULT_SYNC_WINDOW_DAYS)
-                    app.logger.info("Savio reconciliación semanal completa")
-                except Exception as e:
-                    app.logger.warning(f"savio reconciliacion semanal: {e}")
-
-        def _run_sdr_engine_for_unit(unit: str):
-            with app.app_context():
-                import sdr_directivo_engine as engine
-                try:
-                    engine.engine_run_daily_batch(unit=unit)
-                except Exception as e:
-                    app.logger.warning(f"sdr engine ({unit}): {e}")
+        def _envuelve(nombre, tarea):
+            """Cada job corre en su propio contexto de app, y un fallo suyo
+            no debe tumbar al scheduler ni a las demás tareas."""
+            def correr():
+                with app.app_context():
+                    try:
+                        resultado = tarea.fn()
+                        app.logger.info(f"[tarea] {nombre} → {resultado}")
+                    except Exception as e:
+                        app.logger.warning(f"[tarea] {nombre}: {e}")
+            return correr
 
         scheduler = BackgroundScheduler(daemon=True)
-        # Cadencia automática PAUSADA mientras se afina la automatización de campañas.
-        # Reactivar descomentando la línea siguiente cuando los mappings campaign→marca/zona estén listos.
-        # scheduler.add_job(_run_cadencia, "interval", minutes=15, id="cadencia_followup")
-        # Notificaciones diarias a las 9:00 AM CST (UTC-6 = 15:00 UTC)
-        scheduler.add_job(
-            _run_notificaciones, "cron",
-            hour=15, minute=0,  # 15:00 UTC = 9:00 AM CST
-            id="notificaciones_diarias",
-        )
-        # Backup diario a las 3:00 AM CST (09:00 UTC)
-        scheduler.add_job(
-            _run_backup, "cron",
-            hour=9, minute=0,  # 09:00 UTC = 3:00 AM CST
-            id="backup_diario",
-        )
-        # Savio: solo si la API key está configurada
-        if os.getenv("SAVIO_API_KEY"):
-            from datetime import datetime, timedelta
-            scheduler.add_job(
-                _run_savio_boot, "date",
-                run_date=datetime.now() + timedelta(seconds=60),
-                id="savio_boot_sync",
-            )
-            scheduler.add_job(_run_savio_invoices_payments, "interval", hours=1, id="savio_hourly")
-            scheduler.add_job(_run_savio_customers_subs, "interval", hours=6, id="savio_6h")
-            # Reconciliación semanal (domingo 3:30am CST = 09:30 UTC, fuera de horario laboral)
-            scheduler.add_job(
-                _run_savio_reconciliation, "cron",
-                day_of_week="sun", hour=9, minute=30, id="savio_weekly_reconciliation",
-            )
-            app.logger.info("Savio scheduler activo (boot+30s, hourly inv+pay incremental, 6h cust+subs, reconciliación semanal domingo)")
-        else:
-            app.logger.info("SAVIO_API_KEY no configurada — scheduler Savio desactivado")
+        armadas, sin_armar = [], []
 
-        # SDR Directivo Engine: cron diario por unidad. Lee cron_hour/cron_minute
-        # de sdr_dir_engine_config en cada boot. Solo arma jobs para unidades con config.
+        for nombre, tarea in TAREAS.items():
+            if tarea.trigger is None:
+                continue  # la arma este módulo aparte, más abajo
+            if not tarea.activa:
+                sin_armar.append(f"{nombre} (pausada: {tarea.motivo_pausa})")
+                continue
+            faltan = tarea.faltantes()
+            if faltan:
+                sin_armar.append(f"{nombre} (falta {', '.join(faltan)})")
+                continue
+            tipo, cuando = tarea.trigger
+            scheduler.add_job(_envuelve(nombre, tarea), tipo, id=nombre,
+                              replace_existing=True, **cuando)
+            armadas.append(nombre)
+
+        # ── Lo que solo existe mientras el proceso está vivo ─────────
+
+        # Sync ligero de Savio 60s después del boot: solo customers, que es
+        # el rápido. Facturas y pagos salen del job horario; subscriptions
+        # del de 6 horas.
+        if os.getenv("SAVIO_API_KEY"):
+            def _savio_boot():
+                with app.app_context():
+                    try:
+                        import savio_sync
+                        savio_sync.sync_customers()
+                    except Exception as e:
+                        app.logger.warning(f"savio boot sync: {e}")
+
+            from datetime import datetime, timedelta
+            scheduler.add_job(_savio_boot, "date",
+                              run_date=datetime.now() + timedelta(seconds=60),
+                              id="savio_boot_sync", replace_existing=True)
+            armadas.append("savio-boot")
+
+        # SDR directivo: un cron por unidad, con la hora que cada una tiene
+        # en sdr_dir_engine_config. Por eso no cabe en el registro como un
+        # trigger fijo. El engine ya se salta las unidades deshabilitadas.
+        def _sdr_de(unidad):
+            def correr():
+                with app.app_context():
+                    try:
+                        import sdr_directivo_engine as engine
+                        engine.engine_run_daily_batch(unit=unidad)
+                    except Exception as e:
+                        app.logger.warning(f"sdr engine ({unidad}): {e}")
+            return correr
+
         try:
             with app.app_context():
                 from models import SdrDirEngineConfig
                 for cfg in SdrDirEngineConfig.query.all():
+                    hora, minuto = cfg.cron_hour or 9, cfg.cron_minute or 0
                     scheduler.add_job(
-                        _run_sdr_engine_for_unit, "cron",
-                        hour=cfg.cron_hour or 9,
-                        minute=cfg.cron_minute or 0,
-                        args=[cfg.unit],
-                        id=f"sdr_engine_{cfg.unit}",
-                        replace_existing=True,
+                        _sdr_de(cfg.unit), "cron",
+                        hour=hora, minute=minuto,
+                        id=f"sdr_engine_{cfg.unit}", replace_existing=True,
                     )
-                    app.logger.info(
-                        f"SDR engine cron registrado: {cfg.unit} @ "
-                        f"{cfg.cron_hour:02d}:{cfg.cron_minute:02d} UTC"
-                    )
+                    armadas.append(f"sdr-engine:{cfg.unit}@{hora:02d}:{minuto:02d}Z")
         except Exception as e:
-            app.logger.warning(f"SDR engine scheduler setup: {e}")
-
-        # Gmail monitoring de vendedores (cada 5 min) + purge histórico diario.
-        # Solo se activa si GMAIL_SERVICE_ACCOUNT_JSON está set en env.
-        if os.getenv("GMAIL_SERVICE_ACCOUNT_JSON"):
-            def _run_gmail_poll():
-                with app.app_context():
-                    try:
-                        import gmail_monitor
-                        result = gmail_monitor.poll_all()
-                        if result.get("total_saved", 0) > 0:
-                            app.logger.info(f"Gmail polling: {result.get('total_saved')} correos nuevos")
-                    except Exception as e:
-                        app.logger.warning(f"gmail polling: {e}")
-
-            def _run_gmail_purge():
-                with app.app_context():
-                    try:
-                        import gmail_monitor
-                        gmail_monitor.purge_old()
-                    except Exception as e:
-                        app.logger.warning(f"gmail purge: {e}")
-
-            def _run_kam_response_poll():
-                with app.app_context():
-                    try:
-                        import gmail_monitor
-                        result = gmail_monitor.poll_kam_responses()
-                        saved = result.get("total_saved", 0)
-                        updated = result.get("total_updated", 0)
-                        if saved + updated > 0:
-                            app.logger.info(f"KAM email responses: {saved} nuevos, {updated} actualizados")
-                    except Exception as e:
-                        app.logger.warning(f"kam response polling: {e}")
-
-            scheduler.add_job(_run_gmail_poll,       "interval", minutes=5,  id="gmail_poll")
-            scheduler.add_job(_run_kam_response_poll, "interval", minutes=60, id="kam_response_poll")
-            # Purge diario a las 4am CST (10am UTC) — fuera de horario laboral
-            scheduler.add_job(_run_gmail_purge, "cron", hour=10, minute=0, id="gmail_purge")
-            app.logger.info("Gmail monitoring activo (poll 5 min + purge diario + KAM responses cada hora)")
-
-        # FEAT-2026-07-03: Zoho Analytics → cs_appointments ETL (diario 4:30am CST)
-        # Solo si están configuradas las 8 env vars necesarias.
-        _zoho_vars = ("ZOHO_CLIENT_ID","ZOHO_CLIENT_SECRET","ZOHO_REFRESH_TOKEN",
-                      "ZOHO_USER_EMAIL","ZOHO_WORKSPACE","ZOHO_TABLE",
-                      "SUPABASE_URL","SUPABASE_SERVICE_KEY")
-        if all(os.getenv(k) for k in _zoho_vars):
-            def _run_zoho_appointments_etl():
-                with app.app_context():
-                    try:
-                        import zoho_appointments_etl as etl
-                        result = etl.run()
-                        app.logger.info(f"Zoho ETL: {result}")
-                    except Exception as e:
-                        app.logger.warning(f"zoho appointments etl: {e}")
-
-            scheduler.add_job(_run_zoho_appointments_etl, "cron",
-                              hour=10, minute=30, id="zoho_appts_etl")  # 4:30am CST
-            app.logger.info("Zoho Analytics ETL activo (diario 4:30am CST)")
-        else:
-            _faltan = [k for k in _zoho_vars if not os.getenv(k)]
-            app.logger.info(f"Zoho ETL desactivado — faltan env vars: {_faltan}")
-
-        # Meta Lead Ads polling (cada 5 min) — alternativa al webhook mientras la App no está publicada
-        if os.getenv("META_PAGE_TOKEN"):
-            def _run_meta_polling():
-                with app.app_context():
-                    try:
-                        from meta_lead_polling import poll_and_create_leads
-                        result = poll_and_create_leads()
-                        if result.get("leads_created", 0) > 0:
-                            app.logger.info(f"Meta polling: {result}")
-                    except Exception as e:
-                        app.logger.warning(f"meta polling: {e}")
-
-            scheduler.add_job(_run_meta_polling, "interval", minutes=5, id="meta_lead_polling")
-            app.logger.info("Meta Lead Ads polling activo (cada 5 min)")
-
-        # LinkedIn Lead Gen Forms polling (cada 5 min)
-        if os.getenv("LINKEDIN_ACCESS_TOKEN"):
-            def _run_linkedin_polling():
-                with app.app_context():
-                    try:
-                        from linkedin_lead_polling import poll_and_create_leads
-                        result = poll_and_create_leads()
-                        if result.get("leads_created", 0) > 0:
-                            app.logger.info(f"LinkedIn polling: {result}")
-                    except Exception as e:
-                        app.logger.warning(f"linkedin polling: {e}")
-
-            scheduler.add_job(_run_linkedin_polling, "interval", minutes=5, id="linkedin_lead_polling")
-            app.logger.info("LinkedIn Lead Gen polling activo (cada 5 min)")
+            sin_armar.append(f"sdr-engine (no se pudo leer la config: {e})")
 
         scheduler.start()
-        app.logger.info("Scheduler iniciado: cadencia PAUSADA + notificaciones (9am) + backup (3am)")
+        app.logger.info(f"Scheduler interno: {len(armadas)} jobs — {', '.join(armadas)}")
+        if sin_armar:
+            # Se registra a propósito: una integración apagada por una
+            # variable que falta es exactamente lo que nadie nota hasta que
+            # alguien pregunta por qué no llegaron los leads.
+            app.logger.info(f"Scheduler interno, sin armar — {'; '.join(sin_armar)}")
     except Exception as e:
         app.logger.warning(f"No se pudo iniciar scheduler: {e}")
 

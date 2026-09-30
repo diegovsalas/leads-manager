@@ -951,10 +951,20 @@ def eliminar_lead(lead_id):
 def mis_leads_hoy():
     """
     Retorna los leads del vendedor logueado que necesitan acción hoy:
+    - Para hoy (el vendedor fijó `proximo_contacto` y ya venció)
     - Sin contactar (etapa Nuevo Lead)
     - Próximos a vencer cadencia (no respondieron, en etapas de contacto)
     - Respondieron (necesitan seguimiento manual)
     - En negociación activa (Cotización, Demo, Negociación)
+
+    Cada sección viene cortada a `limite` filas (10 por omisión; 0 = todas) y
+    `resumen` trae el total real de cada una, contado en la base. La vista
+    muestra la primera tanda y ofrece "ver las restantes".
+
+    El corte existe porque las cuatro consultas terminaban en .all(): un
+    vendedor se llevaba ~23 filas, pero los roles de lectura comercial no
+    filtran por vendedor y se llevaban las del equipo entero —391 al medirlo,
+    unas 23 pantallas de scroll— en cada carga de la pantalla.
     """
     from datetime import datetime, timezone, timedelta
     from blueprints.auth import get_vendedor_filter
@@ -964,47 +974,85 @@ def mis_leads_hoy():
     if vendedor_id:
         base_q = base_q.filter_by(usuario_asignado_id=vendedor_id)
 
+    # Solo el 0 exacto significa "todas". Un valor negativo es basura de
+    # entrada, no una peticion de volcar el equipo entero.
+    try:
+        limite = int(request.args.get("limite", 10))
+    except (TypeError, ValueError):
+        limite = 10
+    if limite < 0:
+        limite = 10
+    limite = min(limite, 500)
+
+    def _corta(q):
+        """El total se cuenta en la base, no sobre la lista ya cortada: es lo
+        que decide el badge del menú y el botón de "ver más"."""
+        total = q.count()
+        filas = q.limit(limite).all() if limite else q.all()
+        return filas, total
+
     ahora = datetime.now(timezone.utc)
     hace_24h = ahora - timedelta(hours=24)
     hace_48h = ahora - timedelta(hours=48)
 
-    # 1. Sin contactar (Nuevo Lead)
-    sin_contactar = base_q.filter_by(
+    # 0. Para hoy: el vendedor se puso una fecha y ya llegó.
+    #
+    #    Es la única sección que responde literalmente al título de la
+    #    pantalla. El campo existía desde siempre y el manual del vendedor ya
+    #    prometía que "aparecerá en tu Mi día cuando llegue" —pero nadie lo
+    #    consultaba aquí—. Los más atrasados primero: un compromiso vencido
+    #    hace una semana pesa más que el de esta mañana.
+    para_hoy, n_hoy = _corta(base_q.filter(
+        Lead.proximo_contacto <= ahora,
+        Lead.etapa_pipeline.notin_([EtapaPipeline.CIERRE_GANADO, EtapaPipeline.CIERRE_PERDIDO]),
+    ).order_by(Lead.proximo_contacto.asc()))
+
+    # 1. Sin contactar (Nuevo Lead). Los más nuevos primero: son los que
+    #    todavía se pueden atender a tiempo.
+    sin_contactar, n_sin = _corta(base_q.filter_by(
         etapa_pipeline=EtapaPipeline.NUEVO_LEAD,
-    ).order_by(Lead.fecha_creacion.desc()).all()
+    ).order_by(Lead.fecha_creacion.desc()))
 
     # 2. Próximos a vencer cadencia (en contacto, no respondieron, último contacto > 20h)
     etapas_contacto = [EtapaPipeline.CONTACTO_1, EtapaPipeline.CONTACTO_2,
                        EtapaPipeline.CONTACTO_3, EtapaPipeline.CONTACTO_4]
-    por_vencer = base_q.filter(
+    por_vencer, n_vencer = _corta(base_q.filter(
         Lead.etapa_pipeline.in_(etapas_contacto),
         Lead.respondio_ultimo_contacto == False,
         Lead.fecha_ultimo_contacto <= hace_24h,
-    ).order_by(Lead.fecha_ultimo_contacto.asc()).all()
+    ).order_by(Lead.fecha_ultimo_contacto.asc()))
 
-    # 3. Respondieron (necesitan seguimiento)
-    respondieron = base_q.filter(
+    # 3. Respondieron (necesitan seguimiento). Lo más reciente primero.
+    respondieron, n_resp = _corta(base_q.filter(
         Lead.respondio_ultimo_contacto == True,
         Lead.etapa_pipeline.notin_([EtapaPipeline.CIERRE_GANADO, EtapaPipeline.CIERRE_PERDIDO]),
-    ).order_by(Lead.fecha_actualizacion.desc()).all()
+    ).order_by(Lead.fecha_actualizacion.desc()))
 
-    # 4. En negociación activa
+    # 4. En negociación activa. Del más estancado al más fresco: ordenado al
+    #    revés, un trato parado tres semanas quedaba al final de la lista, que
+    #    es justo el que hay que empujar. El recién movido no necesita nada.
     etapas_negociacion = [EtapaPipeline.COTIZACION, EtapaPipeline.DEMO, EtapaPipeline.NEGOCIACION]
-    en_negociacion = base_q.filter(
+    en_negociacion, n_neg = _corta(base_q.filter(
         Lead.etapa_pipeline.in_(etapas_negociacion),
-    ).order_by(Lead.fecha_actualizacion.desc()).all()
+    ).order_by(Lead.fecha_actualizacion.asc()))
 
     return jsonify({
+        "para_hoy": [l.to_dict() for l in para_hoy],
         "sin_contactar": [l.to_dict() for l in sin_contactar],
         "por_vencer": [l.to_dict() for l in por_vencer],
         "respondieron": [l.to_dict() for l in respondieron],
         "en_negociacion": [l.to_dict() for l in en_negociacion],
+        "limite": limite,
         "resumen": {
-            "sin_contactar": len(sin_contactar),
-            "por_vencer": len(por_vencer),
-            "respondieron": len(respondieron),
-            "en_negociacion": len(en_negociacion),
-            "total_accion": len(sin_contactar) + len(por_vencer) + len(respondieron),
+            "para_hoy": n_hoy,
+            "sin_contactar": n_sin,
+            "por_vencer": n_vencer,
+            "respondieron": n_resp,
+            "en_negociacion": n_neg,
+            # Suma simple, como era. Un lead con cita vencida puede estar
+            # también en "por vencer" y contarse dos veces: el badge es un
+            # "cuánto hay que atender", no un censo de leads distintos.
+            "total_accion": n_hoy + n_sin + n_vencer + n_resp,
         },
     })
 

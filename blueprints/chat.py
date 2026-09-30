@@ -116,6 +116,21 @@ def enviar_mensaje(lead_id):
         direccion       = DireccionMensaje.SALIENTE_VENDEDOR,
         contenido       = contenido,
     )
+
+    # Este mensaje ES un contacto, y la cadencia tiene que enterarse.
+    #
+    # Los dos webhooks de entrada ya marcan lo suyo cuando el lead escribe
+    # (respondio=True, fecha=ahora), pero la salida del vendedor no movía
+    # nada: el lead seguía contando con la fecha del contacto anterior, así
+    # que reaparecía en "Por vencer" aunque acabaran de escribirle, y si
+    # había respondido antes se quedaba en "Respondieron" para siempre.
+    #
+    # Al salir un mensaje nuestro, el reloj se reinicia: este es el último
+    # contacto, y el lead todavía no ha respondido A ESTE.
+    from datetime import datetime, timezone as tz
+    lead.respondio_ultimo_contacto = False
+    lead.fecha_ultimo_contacto = datetime.now(tz.utc)
+
     db.session.add(nuevo_mensaje)
     db.session.commit()
 

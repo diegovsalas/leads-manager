@@ -323,6 +323,8 @@ body.show-uncalified-only .k-card:not(.needs-icp){display:none;}
 .mh-lead-phone{font-size:12px;color:var(--text3);font-family:var(--mono);min-width:100px;}
 .mh-lead-info{flex:1;display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
 .mh-empty{font-size:13px;color:var(--text3);padding:12px;text-align:center;border:1px dashed var(--border-light);border-radius:var(--r2);}
+.mh-mas{font-size:12px;color:var(--text2);padding:8px 12px;text-align:center;border:1px dashed var(--border-light);border-radius:var(--r2);cursor:pointer;user-select:none;margin-top:2px;}
+.mh-mas:hover{color:var(--text);border-color:var(--border);background:var(--bg-hover);}
 
 /* Chat panel */
 .chat-panel{width:340px;flex-shrink:0;border-left:1px solid var(--border);display:none;flex-direction:column;background:#fff;}
@@ -733,13 +735,21 @@ fbq('track','PageView');
     <div class="page-desc">Leads que necesitan tu atencion hoy</div>
   </div>
   <div style="padding:16px 48px 0;display:flex;gap:12px;" id="mihoy-stats">
+    <div class="metric-card" id="mh-hoy-card" style="border-left:3px solid var(--accent);"><div class="metric-label">Para hoy</div><div class="metric-value" id="mh-hoy">0</div></div>
     <div class="metric-card" id="mh-sin-card" style="border-left:3px solid #90b1ef;"><div class="metric-label">Sin contactar</div><div class="metric-value" id="mh-sin">0</div></div>
     <div class="metric-card" id="mh-vencer-card" style="border-left:3px solid #608ee6;"><div class="metric-label">Por vencer cadencia</div><div class="metric-value" id="mh-vencer">0</div></div>
     <div class="metric-card" id="mh-resp-card" style="border-left:3px solid #3068db;"><div class="metric-label">Respondieron</div><div class="metric-value" id="mh-resp">0</div></div>
     <div class="metric-card" id="mh-neg-card" style="border-left:3px solid #0543be;"><div class="metric-label">En negociacion</div><div class="metric-value" id="mh-neg">0</div></div>
   </div>
 
-  <div style="padding:16px 48px;">
+  <div style="padding:16px 48px;" id="mh-secciones">
+    <div id="mh-todo-al-dia" class="mh-empty" style="display:none;">Nada pendiente hoy. Todo al dia.</div>
+
+    <div id="mh-hoy-section" style="margin-bottom:24px;">
+      <div id="mh-hoy-head" style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--accent);display:flex;align-items:center;gap:8px;"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:17px;height:17px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></svg> Para hoy <span style="font-size:12px;font-weight:400;color:var(--text3);">&mdash; Les pusiste fecha de proximo contacto y ya llego</span></div>
+      <div id="mh-hoy-list"></div>
+    </div>
+
     <div id="mh-sin-section" style="margin-bottom:24px;">
       <div id="mh-sin-head" style="font-size:16px;font-weight:700;margin-bottom:8px;color:#90b1ef;display:flex;align-items:center;gap:8px;"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:17px;height:17px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Sin contactar <span style="font-size:12px;font-weight:400;color:var(--text3);">— Leads nuevos esperando primer contacto</span></div>
       <div id="mh-sin-list"></div>
@@ -5269,43 +5279,85 @@ async function addNote(){
 }
 
 // ─── Mi dia ───
+// Cada seccion muestra una primera tanda y ofrece el resto. El corte lo hace
+// el endpoint, en la base: antes las cuatro venian completas y un rol de
+// lectura comercial —que no filtra por vendedor— se traia las ~391 filas del
+// equipo entero, unas 23 pantallas de scroll.
+const MH_SECCIONES=[
+  {clave:'hoy',   datos:'para_hoy',       vacio:'Nada agendado para hoy'},
+  {clave:'sin',   datos:'sin_contactar',  vacio:'Sin leads nuevos por contactar'},
+  {clave:'vencer',datos:'por_vencer',     vacio:'Todos los leads estan al dia'},
+  {clave:'resp',  datos:'respondieron',   vacio:'Ningun lead ha respondido aun'},
+  {clave:'neg',   datos:'en_negociacion', vacio:'Sin leads en negociacion activa'},
+];
+const MH_TANDA=10;
+let _mhDatos=null;
+let _mhExpandidas=new Set();
+let _mhCompleto=false;   // ya pedimos todas las filas al servidor
+
 async function loadMiHoy(){
   try{
-    const r=await fetch('/api/leads/mis-leads-hoy');
-    const d=await r.json();
-    const s=d.resumen;
-    document.getElementById('mh-sin').textContent=s.sin_contactar;
-    document.getElementById('mh-vencer').textContent=s.por_vencer;
-    document.getElementById('mh-resp').textContent=s.respondieron;
-    document.getElementById('mh-neg').textContent=s.en_negociacion;
-
-    // FEAT-2026-09-09: el ambar de "Por vencer" solo aparece si hay algo por
-    // vencer. Antes las cuatro secciones iban en rojo, naranja, verde y azul
-    // fijos, asi que con todo en cero la pantalla gritaba cuatro alarmas sobre
-    // nada. De las cuatro, esta es la unica con consecuencia real —el lead
-    // avanza solo si nadie lo toca— asi que es la unica que se pinta de estado.
-    const _hayVence = (s.por_vencer||0) > 0;
-    const _tarj = document.getElementById('mh-vencer-card');
-    const _enc  = document.getElementById('mh-vencer-head');
-    if(_tarj) _tarj.style.borderLeftColor = _hayVence ? 'var(--amber)' : '#608ee6';
-    if(_enc)  _enc.style.color            = _hayVence ? 'var(--amber)' : '#608ee6';
-
-    // Badge
-    const badge=document.getElementById('mihoy-badge');
-    if(s.total_accion>0){badge.textContent=s.total_accion;}else{badge.textContent='';}
-
-    // Render sections
-    _renderMhList('mh-sin-list',d.sin_contactar,'Sin leads nuevos por contactar');
-    _renderMhList('mh-vencer-list',d.por_vencer,'Todos los leads estan al dia');
-    _renderMhList('mh-resp-list',d.respondieron,'Ningun lead ha respondido aun');
-    _renderMhList('mh-neg-list',d.en_negociacion,'Sin leads en negociacion activa');
+    const r=await fetch('/api/leads/mis-leads-hoy?limite='+(_mhCompleto?0:MH_TANDA));
+    _mhDatos=await r.json();
+    _mhPinta();
   }catch(e){console.error('Mi hoy error:',e);}
 }
 
-function _renderMhList(containerId,leads,emptyMsg){
+// "Ver los N restantes" solo expande SU seccion. La primera vez hay que
+// traerse las filas que el corte dejo fuera; despues ya estan en memoria.
+async function mhVerMas(clave){
+  _mhExpandidas.add(clave);
+  if(!_mhCompleto){_mhCompleto=true;await loadMiHoy();return;}
+  _mhPinta();
+}
+
+function _mhPinta(){
+  const d=_mhDatos;if(!d)return;
+  const s=d.resumen;
+  document.getElementById('mh-hoy').textContent=s.para_hoy;
+  document.getElementById('mh-sin').textContent=s.sin_contactar;
+  document.getElementById('mh-vencer').textContent=s.por_vencer;
+  document.getElementById('mh-resp').textContent=s.respondieron;
+  document.getElementById('mh-neg').textContent=s.en_negociacion;
+
+  // FEAT-2026-09-09: el ambar de "Por vencer" solo aparece si hay algo por
+  // vencer. Antes las cuatro secciones iban en rojo, naranja, verde y azul
+  // fijos, asi que con todo en cero la pantalla gritaba cuatro alarmas sobre
+  // nada. De las cuatro, esta es la unica con consecuencia real —el lead
+  // avanza solo si nadie lo toca— asi que es la unica que se pinta de estado.
+  const _hayVence = (s.por_vencer||0) > 0;
+  const _tarj = document.getElementById('mh-vencer-card');
+  const _enc  = document.getElementById('mh-vencer-head');
+  if(_tarj) _tarj.style.borderLeftColor = _hayVence ? 'var(--amber)' : '#608ee6';
+  if(_enc)  _enc.style.color            = _hayVence ? 'var(--amber)' : '#608ee6';
+
+  // Badge
+  const badge=document.getElementById('mihoy-badge');
+  if(s.total_accion>0){badge.textContent=s.total_accion;}else{badge.textContent='';}
+
+  let algo=false;
+  MH_SECCIONES.forEach(sec=>{
+    const total=s[sec.datos]||0;
+    const nodo=document.getElementById('mh-'+sec.clave+'-section');
+    // Una seccion en cero no aporta nada, y dos de las cuatro lo estan
+    // siempre: dejaban encabezado y caja de "vacio" ocupando pantalla. La
+    // tarjeta de arriba ya las reporta en 0, que es donde se leen.
+    if(!total){if(nodo)nodo.style.display='none';return;}
+    algo=true;
+    if(nodo)nodo.style.display='';
+    let filas=d[sec.datos]||[];
+    if(!_mhExpandidas.has(sec.clave))filas=filas.slice(0,MH_TANDA);
+    _renderMhList('mh-'+sec.clave+'-list',filas,sec.vacio,total,sec.clave);
+  });
+
+  const nada=document.getElementById('mh-todo-al-dia');
+  if(nada)nada.style.display=algo?'none':'';
+}
+
+function _renderMhList(containerId,leads,emptyMsg,total,clave){
   const c=document.getElementById(containerId);
   if(!leads.length){c.innerHTML=`<div class="mh-empty">${emptyMsg}</div>`;return;}
-  c.innerHTML=leads.map(l=>{
+  let html=leads.map(l=>{
     const etapaColor=ETAPA_COLORS[l.etapa_pipeline]||'var(--text2)';
     const valor=l.valor_estimado?fmt$(l.valor_estimado):'';
     const icp=l.icp_nivel?`<span class="tag tag-icp-${l.icp_nivel}">ICP ${l.icp_nivel}</span>`:'';
@@ -5323,6 +5375,11 @@ function _renderMhList(containerId,leads,emptyMsg){
       ${tiempo?`<span style="font-size:11px;color:var(--text3);white-space:nowrap;">${tiempo}</span>`:''}
     </div>`;
   }).join('');
+  const faltan=(total||leads.length)-leads.length;
+  if(faltan>0){
+    html+=`<div class="mh-mas" onclick="mhVerMas('${clave}')">Ver los ${faltan} restantes</div>`;
+  }
+  c.innerHTML=html;
 }
 
 function _tiempoRelativo(iso){
