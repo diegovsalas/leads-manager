@@ -868,6 +868,92 @@ def _un_principal_por_vendedor(vendedores, inicio, fin):
     return salida
 
 
+@dashboard_bp.route("/cartera-ejecutiva", methods=["GET"])
+@require_role(["reportes"])
+def cartera_ejecutiva():
+    """Cartera de un responsable comercial, en dos bloques separados.
+
+    FEAT-2026-09-30. Direccion lleva la relacion de las cuentas grandes
+    —precio, upsell, renovacion— mientras el KAM sigue con la operacion.
+    Pedia "ver su pipe ganado", y se resolvio leyendo en vez de duplicando:
+    importar las 173 cuentas de CS al pipe como leads ganados habria metido
+    $2.8M mensuales a Ventas y Comisiones que nadie vendio este mes, o
+    habria sumado 173 ganados sin venta a los 169 que ya arrastra el CRM.
+
+    Los dos bloques miden cosas distintas y por eso no se suman:
+      cartera  — clientes vivos con su facturacion recurrente (cs_accounts)
+      cierres  — lo que cerro en el periodo (sales)
+
+    ?ejecutivo=<users_crm.id>   por omision, el usuario logueado
+    ?mes=YYYY-MM                periodo de los cierres
+    """
+    from models import CSAccount, UserCRM, Usuario, Sale
+
+    inicio, fin = _get_date_range(request.args.get("mes"))
+    pedido = (request.args.get("ejecutivo") or "").strip()
+    ejecutivo_id = pedido or session.get("user_id")
+
+    # Quien tiene cartera asignada, para poblar el selector.
+    con_cartera = (
+        db.session.query(UserCRM.id, UserCRM.nombre, func.count(CSAccount.id))
+        .join(CSAccount, CSAccount.ejecutivo_id == UserCRM.id)
+        .group_by(UserCRM.id, UserCRM.nombre)
+        .order_by(UserCRM.nombre).all()
+    )
+    ejecutivos = [{"id": str(i), "nombre": n, "cuentas": int(c)} for i, n, c in con_cartera]
+
+    cuentas = (CSAccount.query.filter(CSAccount.ejecutivo_id == ejecutivo_id)
+               .order_by(CSAccount.mrr.desc()).all()) if ejecutivo_id else []
+    cartera = [{
+        "id":       str(a.id),
+        "nombre":   a.nombre,
+        "mrr":      float(a.mrr or 0),
+        "unidades": a.unidades_contratadas or "",
+        "tier":     a.tier or "",
+        # El KAM sigue siendo el dueño operativo: se muestra para que quede
+        # claro que esta vista supervisa, no sustituye.
+        "kam":      a.kam.nombre if a.kam else None,
+    } for a in cuentas]
+
+    # Cierres del periodo. Van por usuarios.id, no por users_crm.id: las
+    # ventas se atribuyen al perfil comercial, no al login.
+    perfil_id = None
+    if ejecutivo_id:
+        login = db.session.get(UserCRM, ejecutivo_id)
+        perfil_id = str(login.usuario_id) if login and login.usuario_id else None
+
+    ventas = []
+    if perfil_id:
+        ventas = (Sale.query
+                  .filter(Sale.user_id == perfil_id,
+                          Sale.closed_at >= inicio, Sale.closed_at < fin)
+                  .order_by(Sale.closed_at.desc()).all())
+    cierres = [{
+        "id":       str(v.id),
+        "unidad":   v.unit,
+        "tipo":     v.sale_type,
+        "monto":    float(v.total_amount or 0),
+        "mensual":  float(v.monthly_amount or 0),
+        "fecha":    v.closed_at.isoformat() if v.closed_at else None,
+    } for v in ventas]
+
+    return jsonify({
+        "mes":            inicio.strftime("%Y-%m"),
+        "ejecutivo_id":   str(ejecutivo_id) if ejecutivo_id else None,
+        "ejecutivos":     ejecutivos,
+        "cartera":        cartera,
+        "cartera_total":  {"cuentas": len(cartera),
+                           "mrr": sum(c["mrr"] for c in cartera),
+                           "arr": sum(c["mrr"] for c in cartera) * 12},
+        "cierres":        cierres,
+        "cierres_total":  {"count": len(cierres),
+                           "monto": sum(c["monto"] for c in cierres)},
+        # Sin perfil comercial no hay a quien atribuirle ventas; la vista lo
+        # dice en vez de mostrar un cero que parece un mal mes.
+        "tiene_perfil_comercial": bool(perfil_id),
+    })
+
+
 @dashboard_bp.route("/ventas-vs-meta", methods=["GET"])
 @require_role(["reportes"])
 def ventas_vs_meta():

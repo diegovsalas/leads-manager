@@ -577,6 +577,7 @@ fbq('track','PageView');
 <div class="slink" onclick="showView('leads',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> <span class="sl-text">Leads</span></div>
 <div class="slink" onclick="showView('accounts',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8.5 6h.01M15.5 6h.01M8.5 10h.01M15.5 10h.01M8.5 14h.01M15.5 14h.01"/></svg> <span class="sl-text">Empresas</span> <span class="slink-badge" id="sidebar-acc-count"></span></div>
 <div class="slink" onclick="showView('contacts',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> <span class="sl-text">Contactos</span> <span class="slink-badge" id="sidebar-con-count"></span></div>
+<div class="slink admin-only" onclick="showView('cartera',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg> <span class="sl-text">Cartera Ejecutiva</span></div>
 {% if MOSTRAR_UPSELLS %}<div class="slink" onclick="showView('opps',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg> <span class="sl-text">Upsells</span></div>{% endif %}
 
       <div class="sidebar-divider reportes-only"></div>
@@ -1951,6 +1952,50 @@ fbq('track','PageView');
 </div>
 
 <!-- ===== REVISIÓN COMERCIAL ===== -->
+<!-- ===== CARTERA EJECUTIVA ===== -->
+{# FEAT-2026-09-30: cartera de un responsable comercial, en dos bloques que
+   NO se suman. Direccion pidio "ver su pipe ganado"; se resolvio leyendo de
+   CS en vez de importar las cuentas al pipe, que habria metido $2.8M
+   mensuales a Ventas y Comisiones que nadie vendio este mes. #}
+<div class="view" id="view-cartera" style="overflow-y:auto;">
+  <div class="page-header">
+    <div class="page-emoji"><svg class="page-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></div>
+    <div class="page-title">Cartera Ejecutiva</div>
+    <div class="page-desc">Cuentas que un responsable comercial supervisa, y lo que cerró en el periodo. El KAM de cada cuenta no cambia: aquí se ve quién lleva la relación.</div>
+  </div>
+  <div style="padding:20px 48px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <select class="filter-select" id="car-ejecutivo" onchange="loadCartera()" style="font-size:13px;"></select>
+    <input type="month" id="car-mes" onchange="loadCartera()" style="font-size:13px;padding:5px 10px;border:1px solid var(--border);border-radius:6px;"/>
+    <span id="car-status" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
+  </div>
+  <div style="padding:16px 48px 40px;">
+    <div class="dash-card" style="margin-bottom:16px;">
+      <div class="dash-card-title">Cartera viva
+        <span style="font-size:11px;font-weight:400;color:var(--text3);">facturación recurrente de sus cuentas · no es venta del mes</span></div>
+      <div id="car-kpis" style="display:flex;gap:14px;flex-wrap:wrap;padding:4px 0 12px;"></div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Cuenta</th><th>Unidades</th><th>Tier</th>
+          <th style="text-align:right;">MRR</th><th>KAM que la atiende</th>
+        </tr></thead>
+        <tbody id="car-tbody"></tbody>
+      </table></div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-card-title">Cierres del periodo
+        <span style="font-size:11px;font-weight:400;color:var(--text3);">ventas registradas a su nombre · esto sí cuenta para metas y comisiones</span></div>
+      <div id="car-cierres-kpis" style="display:flex;gap:14px;flex-wrap:wrap;padding:4px 0 12px;"></div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Fecha</th><th>Unidad</th><th>Tipo</th>
+          <th style="text-align:right;">Mensual</th><th style="text-align:right;">Total</th>
+        </tr></thead>
+        <tbody id="car-cierres-tbody"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
 <div class="view" id="view-revision" style="overflow-y:auto;">
   <div class="page-header">
     <div class="page-emoji"><svg class="page-ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="20" x2="6" y2="15"/><line x1="12" y1="20" x2="12" y2="9"/><line x1="18" y1="20" x2="18" y2="4"/></svg></div>
@@ -3237,6 +3282,7 @@ function showView(name,el){
   if(name==='campanas')loadCampanas();
   if(name==='revision')loadRevision();
   if(name==='opps')loadOpps();
+  if(name==='cartera')loadCartera();
   if(name==='accounts')loadAccounts();
   if(name==='contacts')loadContacts();
 }
@@ -4320,6 +4366,78 @@ const _OPPS_ETAPA_COLOR = {
   'Cerrado Ganado': COLOR_GANADO,
   'Cerrado Perdido':COLOR_PERDIDO,
 };
+
+// ── Cartera Ejecutiva ───────────────────────────────────────────────
+// Dos bloques que NO se suman: la cartera viva es facturacion recurrente
+// que ya existe, los cierres son lo vendido en el periodo. Mezclarlos daria
+// un numero que no significa nada.
+async function loadCartera(){
+  const st=document.getElementById('car-status');
+  st.textContent='Cargando...';
+  try{
+    const ej=document.getElementById('car-ejecutivo').value;
+    const mes=document.getElementById('car-mes').value;
+    const q=[]; if(ej)q.push('ejecutivo='+ej); if(mes)q.push('mes='+mes);
+    const d=await _api('/api/dashboard/cartera-ejecutiva'+(q.length?'?'+q.join('&'):''));
+    if(!d){st.textContent='Error cargando';return;}
+
+    // Selector de responsable
+    const sel=document.getElementById('car-ejecutivo');
+    if(!sel.dataset.listo){
+      sel.innerHTML=(d.ejecutivos||[]).map(e=>
+        `<option value="${e.id}">${_esc(e.nombre)} · ${e.cuentas} cuenta${e.cuentas===1?'':'s'}</option>`).join('')
+        || '<option value="">Nadie tiene cartera asignada</option>';
+      if(d.ejecutivo_id) sel.value=d.ejecutivo_id;
+      sel.dataset.listo='1';
+    }
+
+    const ct=d.cartera_total||{};
+    const kpi=(t,v,sub,color)=>`<div class="kpi" style="flex:1;min-width:150px;">
+        <div class="metric-label">${t}</div>
+        <div class="metric-value" style="${color?'color:'+color+';':''}">${v}</div>
+        ${sub?`<div style="font-size:10px;color:var(--text3);">${sub}</div>`:''}</div>`;
+    document.getElementById('car-kpis').innerHTML =
+        kpi('Cuentas', ct.cuentas||0, 'que supervisa')
+      + kpi('MRR', _fmtMxn(ct.mrr||0), 'facturación mensual', 'var(--green)')
+      + kpi('ARR', _fmtMxn(ct.arr||0), 'MRR × 12');
+
+    const tb=document.getElementById('car-tbody'); tb.innerHTML='';
+    for(const c of (d.cartera||[])){
+      tb.innerHTML+=`<tr>
+        <td><strong>${_esc(c.nombre)}</strong></td>
+        <td style="font-size:11px;color:var(--text2);">${_esc(c.unidades||'—')}</td>
+        <td style="font-size:11px;">${_esc(c.tier||'—')}</td>
+        <td style="text-align:right;font-weight:600;color:var(--green);">${_fmtMxn(c.mrr)}</td>
+        <td style="font-size:11px;color:var(--text2);">${_esc(c.kam||'sin KAM')}</td>
+      </tr>`;
+    }
+    if(!tb.innerHTML)tb.innerHTML='<tr><td colspan="5" style="color:var(--text2);text-align:center;padding:14px;">Sin cuentas asignadas a este responsable</td></tr>';
+
+    const cc=d.cierres_total||{};
+    document.getElementById('car-cierres-kpis').innerHTML =
+        kpi('Cierres', cc.count||0, 'en el periodo')
+      + kpi('Monto', _fmtMxn(cc.monto||0), 'vendido en el periodo');
+
+    const tc=document.getElementById('car-cierres-tbody'); tc.innerHTML='';
+    for(const v of (d.cierres||[])){
+      tc.innerHTML+=`<tr>
+        <td style="font-size:12px;">${v.fecha?v.fecha.slice(0,10):'—'}</td>
+        <td>${_esc(v.unidad||'—')}</td>
+        <td style="font-size:11px;color:var(--text2);">${_esc(v.tipo||'—')}</td>
+        <td style="text-align:right;">${_fmtMxn(v.mensual||0)}</td>
+        <td style="text-align:right;font-weight:600;">${_fmtMxn(v.monto||0)}</td>
+      </tr>`;
+    }
+    if(!tc.innerHTML){
+      // Distinguir "no vendio" de "no puede tener ventas a su nombre": sin
+      // perfil comercial el cero es estructural, no un mal mes.
+      tc.innerHTML = d.tiene_perfil_comercial
+        ? '<tr><td colspan="5" style="color:var(--text2);text-align:center;padding:14px;">Sin cierres en el periodo</td></tr>'
+        : '<tr><td colspan="5" style="color:var(--orange);text-align:center;padding:14px;">Este responsable no tiene ficha de vendedor, así que no se le pueden atribuir ventas.</td></tr>';
+    }
+    st.textContent=`${ct.cuentas||0} cuentas · mes ${d.mes}`;
+  }catch(e){ st.textContent='Error: '+e.message; }
+}
 
 async function loadOpps(){
   const marca=document.getElementById('opps-marca').value;

@@ -876,7 +876,20 @@ class CSAccount(db.Model):
             return None
         return (self.fecha_renovacion - date.today()).days
 
-    kam = db.relationship("UserCRM", backref="cs_accounts")
+    # foreign_keys explicito: desde que existe ejecutivo_id hay DOS claves
+    # foraneas a users_crm y SQLAlchemy no puede adivinar cual usa cada
+    # relacion. Sin esto no arranca ningun mapper.
+    kam = db.relationship("UserCRM", foreign_keys=[kam_id], backref="cs_accounts")
+
+    # FEAT-2026-09-30: segundo responsable de la cuenta, por encima del KAM.
+    # Direccion lleva la relacion comercial de las cuentas grandes —precio,
+    # upsell, renovacion— mientras el KAM sigue con la operacion del dia a dia.
+    # Se agrega en vez de reasignar kam_id porque cambiar el KAM le quita la
+    # cuenta a quien la atiende: desaparece de sus pendientes y de su scorecard.
+    ejecutivo_id = db.Column(UUID(as_uuid=True),
+                             db.ForeignKey("users_crm.id", ondelete="SET NULL"),
+                             nullable=True, index=True)
+    ejecutivo = db.relationship("UserCRM", foreign_keys=[ejecutivo_id])
     invoices = db.relationship("CSInvoice", backref="account", lazy=True)
     appointments = db.relationship("CSAppointment", backref="account", lazy=True)
     notes = db.relationship("CSNote", backref="account", lazy=True, order_by="CSNote.created_at.desc()")

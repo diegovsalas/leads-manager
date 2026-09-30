@@ -98,6 +98,25 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] leads.tipo_venta failed (retry on next boot): %s", e)
 
+        # ─── cs_accounts.ejecutivo_id (FEAT-2026-09-30) ───
+        try:
+            with db.engine.begin() as conn:
+                exists = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'cs_accounts' AND column_name = 'ejecutivo_id'
+                """)).first()
+                if not exists:
+                    app.logger.info("[auto-migrate] adding cs_accounts.ejecutivo_id...")
+                    conn.execute(text(
+                        "ALTER TABLE cs_accounts ADD COLUMN ejecutivo_id UUID "
+                        "REFERENCES users_crm(id) ON DELETE SET NULL"))
+                    conn.execute(text(
+                        "CREATE INDEX IF NOT EXISTS ix_cs_accounts_ejecutivo_id "
+                        "ON cs_accounts (ejecutivo_id) WHERE ejecutivo_id IS NOT NULL"))
+                    app.logger.info("[auto-migrate] cs_accounts.ejecutivo_id added.")
+        except Exception as e:
+            app.logger.warning("[auto-migrate] cs_accounts.ejecutivo_id failed: %s", e)
+
         # ─── leads.shopify_* (FEAT-2026-09-29) ───
         try:
             with db.engine.begin() as conn:
