@@ -1395,6 +1395,9 @@ def clientes():
     return render_template(
         "cs_clientes.html",
         clientes=clientes_data, kams=_get_assignables(),
+        # Misma lista que para KAM: direccion son Super Admins, y un KAM
+        # tambien puede llevar la relacion comercial de una cuenta.
+        ejecutivos=_get_assignables(),
         **_ctx(),
     )
 
@@ -1549,6 +1552,11 @@ def editar_cliente(account_id):
         kam_id = request.form.get("kam_id", "").strip()
         if kam_id:
             acc.kam_id = kam_id
+    # FEAT-2026-09-30: a diferencia del KAM, aqui el vacio SI se guarda —
+    # quitarle el ejecutivo a una cuenta es una accion legitima.
+    if "ejecutivo_id" in request.form:
+        eje = request.form.get("ejecutivo_id", "").strip()
+        acc.ejecutivo_id = eje or None
     if "logo_url" in request.form:
         acc.logo_url = request.form.get("logo_url", "").strip()
     if "giro" in request.form:
