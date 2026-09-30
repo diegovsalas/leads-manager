@@ -113,6 +113,27 @@ def _account_ids_con_venta():
     )
     for consulta in (por_opp, por_lead):
         ids.update(aid for (aid,) in consulta if aid)
+
+    # FEAT-2026-09-30: tambien es cliente quien factura en CS.
+    #
+    # La definicion anterior era "tiene una venta cerrada en el modulo
+    # comercial", y dejaba fuera a la cartera de Customer Success: Innova
+    # Sport factura $1,206,906 al mes y para el buscador de upsell no
+    # existia. Un cliente que paga es un cliente, se haya registrado la
+    # venta por donde se haya registrado.
+    #
+    # Se empareja por nombre porque cs_accounts no tiene account_id —
+    # vincular las dos tablas de verdad es un trabajo aparte, mas grande.
+    # Mientras tanto esto no inventa clientes: exige MRR > 0 y que la
+    # empresa ya exista.
+    from models import CSAccount
+    facturan = (
+        db.session.query(Account.id)
+        .join(CSAccount, func.lower(CSAccount.nombre) == func.lower(Account.nombre))
+        .filter(func.coalesce(CSAccount.mrr, 0) > 0)
+        .distinct()
+    )
+    ids.update(aid for (aid,) in facturan if aid)
     return ids
 
 
