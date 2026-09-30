@@ -663,19 +663,23 @@ def _extraer_contenido(msg: dict, tipo: str) -> str:
 # ══════════════════════════════════════════════
 # WEBHOOKS DE SHOPIFY — tienda Weldu (welduapp.com)
 #
-# FEAT-2026-09-29. La tienda es de la UN Weldex, que ya existe en el CRM con
-# sus vendedores y su tabulador de comisiones.
+# FEAT-2026-09-29. La unidad a la que entran estos leads la fija
+# SHOPIFY_MARCA (ver abajo); hoy es Aromatex.
 #
 # Shopify firma distinto que Meta: el HMAC-SHA256 va en base64, no en hex, y
 # se calcula sobre el cuerpo crudo. Usar request.get_json() antes de validar
 # rompe la firma, porque el JSON reserializado no es byte a byte el original.
 # ══════════════════════════════════════════════
 
-SHOPIFY_MARCA = os.getenv("SHOPIFY_MARCA", "Weldex")
+# Unidad a la que entran los leads de la tienda. Decision de negocio, no
+# tecnica: meta_campaigns registra las campañas de Weldu como Weldex, pero
+# se pidio expresamente que los leads de la tienda vayan a Aromatex
+# (2026-09-29). Se deja configurable para no volver a tocar codigo si cambia.
+SHOPIFY_MARCA = os.getenv("SHOPIFY_MARCA", "Aromatex")
 
 # Correos de alta claramente automatizados. Ya hay basura de este tipo dada de
 # alta en la tienda (ej. "123HannahOunengxfmevbqq.dpn@inscrlab.com"), y sin
-# filtro entraria al pipe de los dos vendedores de Weldex.
+# filtro entraria al pipe de los vendedores de la unidad configurada.
 _SHOPIFY_DOMINIOS_SPAM = (
     "inscrlab.com", "mailinator.com", "tempmail", "guerrillamail",
     "10minutemail", "yopmail.com", "trashmail",
@@ -705,7 +709,7 @@ def _shopify_guard():
         return None, (jsonify({"error": "Firma invalida"}), 401)
 
     # Que la firma sea valida no dice de que tienda viene: si mañana hay otra
-    # tienda con el mismo secreto, sus clientes entrarian como Weldex.
+    # tienda con el mismo secreto, sus clientes entrarian con nuestra marca.
     dominio_ok = os.getenv("SHOPIFY_SHOP_DOMAIN", "").strip().lower()
     dominio = (request.headers.get("X-Shopify-Shop-Domain") or "").strip().lower()
     if dominio_ok and dominio and dominio != dominio_ok:
@@ -761,7 +765,7 @@ def _shopify_alta_lead(datos: dict, extra: dict, nota: str):
 
     Regla acordada: un correo suelto no basta. La tienda da de alta un cliente
     por cada suscripcion al boletin, y la mayoria llega sin nombre ni telefono;
-    meterlos todos al pipe de los dos vendedores de Weldex seria ruido, no
+    meterlos todos al pipe de los vendedores de la unidad seria ruido, no
     prospectos. Se exige al menos nombre o telefono.
     """
     nombre, email, telefono = datos["nombre"], datos["email"], datos["telefono"]
@@ -865,7 +869,7 @@ def _shopify_order(payload: dict):
 
     Cierra el lead como ganado por el monto de la orden, usando el MISMO
     cerrar_lead_core que la pantalla. Se clasifica servicio_unico/eventual
-    porque el catalogo de Weldu son visitas de diagnostico, compras de una
+    porque el catalogo de la tienda son visitas de diagnostico, compras de una
     sola vez, no suscripciones: el default del core (suscripcion_nueva /
     recurrente) calcularia la comision sobre otra base.
     """

@@ -42,7 +42,8 @@ services:
         sync: false
       - key: LEMLIST_API_KEY
         sync: false
-      # Shopify (tienda Weldu -> UN Weldex). Sin SHOPIFY_WEBHOOK_SECRET el
+      # Shopify (tienda Weldu). SHOPIFY_MARCA decide a que unidad entran sus
+      # leads; se fijo Aromatex el 2026-09-29. Sin SHOPIFY_WEBHOOK_SECRET el
       # endpoint responde 503 a proposito: mejor rechazar que tragarse
       # payloads sin poder verificar de quien vienen.
       - key: SHOPIFY_WEBHOOK_SECRET
@@ -50,7 +51,7 @@ services:
       - key: SHOPIFY_SHOP_DOMAIN
         value: www.welduapp.com
       - key: SHOPIFY_MARCA
-        value: Weldex
+        value: Aromatex
       - key: SHOPIFY_FORM_ORIGINS
         value: https://www.welduapp.com,https://welduapp.com
       - key: DOMAIN

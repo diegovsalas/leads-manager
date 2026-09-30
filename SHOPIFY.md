@@ -1,8 +1,12 @@
 # Leads de Shopify (tienda Weldu) al CRM
 
 La tienda **Weldu** (`www.welduapp.com`) manda sus prospectos al CRM como leads
-de la unidad **Weldex**, que los reparte entre sus vendedores por el mismo
+de la unidad **Aromatex**, que los reparte entre sus vendedores por el mismo
 round-robin que usan Meta y LinkedIn.
+
+La unidad la decide `SHOPIFY_MARCA`. Se fijó Aromatex el 2026-09-29 por
+decisión de negocio: el registro de campañas asocia Weldu con Weldex, así que
+si algún día hay que revertirlo es cambiar esa variable en Render.
 
 Hay dos caminos, y se necesitan los dos porque Shopify no cubre todo:
 
@@ -18,7 +22,7 @@ Hay dos caminos, y se necesitan los dos porque Shopify no cubre todo:
 ```
 SHOPIFY_WEBHOOK_SECRET   ← lo da Shopify al crear el webhook
 SHOPIFY_SHOP_DOMAIN      www.welduapp.com
-SHOPIFY_MARCA            Weldex
+SHOPIFY_MARCA            Aromatex
 SHOPIFY_FORM_ORIGINS     https://www.welduapp.com,https://welduapp.com
 ```
 
@@ -67,7 +71,7 @@ document.querySelector('form[action*="/contact"]')?.addEventListener('submit', f
       telefono: d.get('contact[phone]'),
       mensaje:  d.get('contact[body]'),
       website:  d.get('website'),
-      marca:    'Weldex',   // obligatorio: sin esto el lead se rechaza
+      marca:    'Aromatex',   // obligatorio: sin esto el lead se rechaza
     }),
   }).catch(() => {});   // si el CRM falla, el formulario de Shopify sigue su curso
 });
@@ -100,8 +104,10 @@ convierte un formulario mal configurado en leads silenciosamente mal
 clasificados: llegan a los vendedores de otra unidad, cuentan en sus metas y en
 sus comisiones, y nadie se entera. Es preferible rechazar y que se note.
 
-El formulario de Weldu manda `"marca": "Weldex"`, porque así está registrado
-Weldu en el CRM — las dos campañas de Meta de Weldu enrutan a esa unidad.
+El formulario de Weldu manda `"marca": "Aromatex"`, para que coincida con la
+unidad de los webhooks de la misma tienda. Si se cambia `SHOPIFY_MARCA`, hay
+que cambiar también el snippet: si no, el mismo sitio produce leads en dos
+unidades distintas.
 
 ### Campos que no son nombre, correo ni teléfono
 
@@ -141,7 +147,7 @@ desglosado y la segunda la pone el CRM.
 
 Un correo suelto **no** crea lead. La tienda da de alta un cliente por cada
 suscripción al boletín y la mayoría llega sin nombre ni teléfono; meterlos todos
-sería ruido para los dos vendedores de Weldex. Se exige **nombre o teléfono**.
+sería ruido para los vendedores de la unidad. Se exige **nombre o teléfono**.
 
 También se descartan los correos de dominios desechables — ya hay basura de ese
 tipo dada de alta en la tienda.
@@ -156,7 +162,7 @@ se registra, compra) y todos caen en la misma tarjeta.
 la venta llamando al mismo código que usa la pantalla de cierre — no hay una
 segunda matemática de comisiones que pueda desviarse.
 
-Se clasifica como **servicio único / eventual**, porque el catálogo de Weldu son
+Se clasifica como **servicio único / eventual**, porque el catálogo de la tienda son
 visitas de diagnóstico: compras de una sola vez, no suscripciones.
 
 **Hay algo que decidir aquí, y conviene revisarlo con el tiempo.** Los productos
@@ -169,7 +175,7 @@ sustituirse por una nota y un cierre a mano con el monto real.
 
 En Shopify, cada webhook tiene **"Enviar prueba"**. Después:
 
-- El lead aparece en el pipeline con origen **Web** y marca **Weldex**.
+- El lead aparece en el pipeline con origen **Web** y la marca de `SHOPIFY_MARCA`.
 - En los logs de Render sale `[shopify] topic=... id=...`.
 - Firma inválida responde **401**; un evento que no manejamos, **200 ignorado**.
 
