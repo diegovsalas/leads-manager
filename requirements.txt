@@ -25,3 +25,7 @@ google-ads>=24.0
 google-api-python-client>=2.100
 google-auth>=2.20
 supabase>=2.0
+
+# Pruebas. No hacen falta para correr el CRM, pero si para cambiarlo sin
+# romperlo: cubren cierre de venta, reparto de leads y avance de meta.
+pytest>=8.0
