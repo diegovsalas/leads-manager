@@ -960,6 +960,29 @@ class CSInvoice(db.Model):
     estatus = db.Column(db.String(30), default="")
     savio_invoice_id = db.Column(db.Integer, nullable=True, index=True, unique=False)  # link cuando viene de Savio
 
+    # Los dos unicos parciales existian solo como CREATE UNIQUE INDEX dentro de
+    # _run_pending_migrations, no en el modelo. Se declaran aqui porque son los
+    # unicos que sostienen la regla: las columnas de arriba piden indice, no
+    # unicidad. Mientras vivieran solo en el codigo de arranque, cualquier
+    # herramienta que compare el modelo contra la base los lee como sobrantes
+    # y propone borrarlos — y borrarlos reabre justo el bug que evitan.
+    #
+    # Parciales (WHERE ... IS NOT NULL) y no UniqueConstraint porque la mayoria
+    # de las filas tienen estas columnas en NULL: una factura cargada a mano no
+    # trae savio_invoice_id, y una de Savio no trae cs_import_key.
+    __table_args__ = (
+        # SECURITY-2026-06-24: una corrida con bug del sync duplicaba filas de
+        # la misma factura de Savio y rompia el calculo de facturacion y MRR.
+        db.Index("ux_cs_invoices_savio_invoice_id", "savio_invoice_id",
+                 unique=True,
+                 postgresql_where=db.text("savio_invoice_id IS NOT NULL")),
+        # La carga manual de cobros no trae savio_invoice_id. Esta llave evita
+        # duplicar facturas al re-subir el mismo CSV, y habilita el upsert.
+        db.Index("ux_cs_invoices_import_key", "cs_import_key",
+                 unique=True,
+                 postgresql_where=db.text("cs_import_key IS NOT NULL")),
+    )
+
 
 class CSAppointment(db.Model):
     __tablename__ = "cs_appointments"
