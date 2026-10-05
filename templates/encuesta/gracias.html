@@ -10,20 +10,26 @@
 </style>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Archivo',system-ui,sans-serif;background:#f5f5f9;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-.card{background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.08);max-width:440px;width:100%;padding:48px 32px;text-align:center}
-.icon{font-size:56px;margin-bottom:16px}
-h1{font-size:22px;font-weight:700;color:#1e1b3a;margin-bottom:8px}
-p{font-size:14px;color:#888;line-height:1.6}
-.brand{margin-top:32px;font-size:12px;color:#ccc}
+body{font-family:'Archivo',system-ui,sans-serif;background:#F4F7FB;color:#0C1F3E;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+.card{background:#fff;border:1px solid #DBE4F0;border-radius:14px;max-width:460px;width:100%;overflow:hidden;text-align:center}
+.header{background:#0C1F3E;padding:26px;border-bottom:4px solid #0954E6}
+.header img{height:22px;width:auto}
+.body{padding:40px 32px}
+.check{width:56px;height:56px;border-radius:50%;background:#E8EFFD;color:#0954E6;font-size:28px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 18px}
+h1{font-size:22px;font-weight:700;margin-bottom:10px}
+p{font-size:14px;color:#5B6D8C;line-height:1.6}
+.footer{padding:16px;font-size:11px;color:#637594;border-top:1px solid #DBE4F0;background:#F8FAFD}
 </style>
 </head>
 <body>
 <div class="card">
-    <div class="icon">🙏</div>
-    <h1>Gracias por tu respuesta</h1>
-    <p>Tu opinion nos ayuda a mejorar el servicio que brindamos a <strong>{{ account.nombre }}</strong>.</p>
-    <div class="brand">Grupo Avantex &copy; 2026</div>
+    <div class="header"><img src="/static/img/avantex-logo-blanco.svg" alt="Grupo Avantex"></div>
+    <div class="body">
+        <div class="check">✓</div>
+        <h1>Gracias por tu respuesta</h1>
+        <p>Tu opinión nos ayuda a mejorar el servicio que brindamos a <strong>{{ account.nombre }}</strong>.</p>
+    </div>
+    <div class="footer">Grupo Avantex &copy; 2026</div>
 </div>
 </body>
 </html>

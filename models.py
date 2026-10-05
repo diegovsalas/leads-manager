@@ -1062,14 +1062,27 @@ class CSEncuesta(db.Model):
     csat_comunicacion = db.Column(db.Integer)  # 1-5 Comunicación con asesor
     csat_precio = db.Column(db.Integer)  # 1-5 Relación calidad-precio
     csat_tecnico = db.Column(db.Integer)  # 1-5 Equipo técnico
+    # FEAT-2026-10-05: cuestionario v2 (cierre de año). Las preguntas nuevas
+    # van en columnas propias en vez de reusar csat_calidad: "cumplimiento" se
+    # parece a "calidad" pero no es la misma pregunta, y mezclarlas movería la
+    # serie de Q1-Q3. Las respuestas v1 quedan con estas columnas en NULL.
+    version = db.Column(db.Integer, nullable=False, default=1, server_default="1")
+    csat_cumplimiento = db.Column(db.Integer)   # 1-5 Cumplimiento vs. lo acordado
+    csat_gestion_kam = db.Column(db.Integer)    # 1-5 KAM gestiona tus necesidades
+    csat_confianza_kam = db.Column(db.Integer)  # 1-5 Confianza en el KAM
     comentario = db.Column(db.Text, default="")
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
 
+    # Todas las dimensiones 1-5 de ambas versiones. Cada respuesta solo llena
+    # las de su versión; los promedios ignoran los NULL.
+    CSAT_DIMENSIONES = ("csat", "csat_calidad", "csat_respuesta", "csat_comunicacion",
+                        "csat_precio", "csat_tecnico", "csat_cumplimiento",
+                        "csat_gestion_kam", "csat_confianza_kam")
+
     @property
     def csat_promedio(self):
-        """Promedio de las 6 dimensiones CSAT."""
-        vals = [v for v in [self.csat, self.csat_calidad, self.csat_respuesta,
-                            self.csat_comunicacion, self.csat_precio, self.csat_tecnico] if v is not None]
+        """Promedio de las dimensiones CSAT que contestó."""
+        vals = [v for v in (getattr(self, d) for d in self.CSAT_DIMENSIONES) if v is not None]
         return round(sum(vals) / len(vals), 1) if vals else None
 
 

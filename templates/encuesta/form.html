@@ -3,147 +3,155 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Encuesta de Satisfaccion — {{ account.nombre }}</title>
+<title>Encuesta de Satisfacción — {{ account.nombre }}</title>
 <style>
 /* Archivo auto-hospedada — ver static/fonts/OFL.txt */
 @font-face{font-family:'Archivo';src:url('/static/fonts/archivo-var.woff2') format('woff2-variations');font-weight:100 900;font-style:normal;font-display:swap;}
 </style>
 <style>
+/* Paleta de static/css/avantex-tokens.css (modo claro) */
+:root{
+  --navy:#0C1F3E; --blue:#0954E6; --blue-hover:#0743B8; --blue-soft:#E8EFFD;
+  --bg:#F4F7FB; --border:#DBE4F0; --ink-2:#5B6D8C; --ink-3:#637594;
+  --det:#C2412F; --pas:#B7791F; --pro:#1D7A4C;
+}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Archivo',system-ui,sans-serif;background:#f5f5f9;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-.card{background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.08);max-width:560px;width:100%;overflow:hidden}
-.header{background:#1e1b3a;color:#fff;padding:28px 32px;text-align:center}
-.header h1{font-size:18px;font-weight:700;margin-bottom:4px}
-.header p{font-size:13px;color:rgba(255,255,255,.6)}
-.brand{font-size:22px;font-weight:800;margin-bottom:12px;letter-spacing:-.5px}
-.brand span{color:#9171f5}
-.body{padding:28px 32px}
-.section{margin-bottom:24px;padding-bottom:24px;border-bottom:1px solid #f0f0f0}
+body{font-family:'Archivo',system-ui,sans-serif;background:var(--bg);color:var(--navy);min-height:100vh;padding:32px 16px}
+.card{background:#fff;border:1px solid var(--border);border-radius:14px;max-width:600px;margin:0 auto;overflow:hidden}
+
+.header{background:var(--navy);color:#fff;padding:32px 32px 28px;text-align:center;border-bottom:4px solid var(--blue)}
+.header img{height:22px;width:auto;margin-bottom:22px}
+.header h1{font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:6px}
+.header .cliente{font-size:14px;color:#A9BDE4;font-weight:500}
+.intro{padding:24px 32px 0;font-size:14px;line-height:1.6;color:var(--ink-2)}
+
+.body{padding:8px 32px 28px}
+.group-title{font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--blue);margin:28px 0 4px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.section{padding:20px 0;border-bottom:1px solid #EEF2F9}
 .section:last-of-type{border-bottom:none}
-.section-num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#7c3aed;color:#fff;font-size:11px;font-weight:700;margin-right:6px}
-.section-title{font-size:14px;font-weight:600;color:#1e1b3a;margin-bottom:3px;display:flex;align-items:center}
-.section-desc{font-size:12px;color:#888;margin-bottom:14px;line-height:1.5;padding-left:28px}
+.section-title{font-size:15px;font-weight:600;display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.section-num{flex:none;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--blue-soft);color:var(--blue);font-size:12px;font-weight:700}
+.section-desc{font-size:13px;color:var(--ink-2);margin-bottom:14px;line-height:1.5;padding-left:34px}
 
-.nps-scale{display:flex;gap:4px;justify-content:center}
-.nps-btn{width:38px;height:38px;border-radius:8px;border:2px solid #e5e5e5;background:#fff;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;color:#555}
-.nps-btn:hover{border-color:#7c3aed;color:#7c3aed}
+.nps-scale{display:flex;gap:4px}
+.nps-btn{flex:1;min-width:0;height:40px;border-radius:8px;border:1.5px solid var(--border);background:#fff;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;color:var(--ink-2);font-family:inherit}
+.nps-btn:hover{border-color:var(--blue);color:var(--blue)}
 .nps-btn.selected{color:#fff}
-.nps-btn.selected.det{background:#ef4444;border-color:#ef4444}
-.nps-btn.selected.pas{background:#eab308;border-color:#eab308}
-.nps-btn.selected.pro{background:#22c55e;border-color:#22c55e}
-.scale-labels{display:flex;justify-content:space-between;margin-top:5px}
-.scale-labels span{font-size:10px;color:#aaa}
+.nps-btn.selected.det{background:var(--det);border-color:var(--det)}
+.nps-btn.selected.pas{background:var(--pas);border-color:var(--pas)}
+.nps-btn.selected.pro{background:var(--pro);border-color:var(--pro)}
+.scale-labels{display:flex;justify-content:space-between;margin-top:6px}
+.scale-labels span{font-size:11px;color:var(--ink-3)}
 
-.stars-row{display:flex;align-items:center;gap:12px;justify-content:center}
-.stars-group{display:flex;gap:3px}
-.star-btn{font-size:24px;cursor:pointer;filter:grayscale(1) opacity(.25);transition:all .12s}
-.star-btn:hover,.star-btn.on{filter:none}
-.stars-label{font-size:11px;color:#aaa;min-width:100px}
+.stars-row{display:flex;align-items:center;gap:14px;padding-left:34px;flex-wrap:wrap}
+.stars-group{display:flex;gap:4px}
+.star-btn{font-size:28px;line-height:1;cursor:pointer;color:#D3DCEA;transition:color .12s;user-select:none}
+.star-btn.on{color:var(--blue)}
+.star-btn.hover{color:var(--blue)}
+.stars-label{font-size:12px;font-weight:600;min-width:100px}
 
-.field{margin-bottom:12px}
-.field label{display:block;font-size:12px;font-weight:500;color:#666;margin-bottom:4px}
-.field input,.field textarea{width:100%;padding:10px 12px;border:1px solid #e5e5e5;border-radius:8px;font-size:13px;font-family:inherit;outline:none;transition:border .15s}
-.field input:focus,.field textarea:focus{border-color:#7c3aed}
-.field textarea{resize:none;height:70px}
+.field{margin-bottom:12px;padding-left:34px}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--ink-2);margin-bottom:5px}
+.field input,.field textarea{width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;color:var(--navy);outline:none;transition:border .15s}
+.field input:focus,.field textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.field textarea{resize:vertical;height:90px}
 
-.submit-btn{width:100%;padding:12px;background:#7c3aed;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s;margin-top:8px}
-.submit-btn:hover{background:#6d28d9}
-.submit-btn:disabled{background:#ccc;cursor:not-allowed}
+.submit-btn{width:100%;padding:14px;background:var(--blue);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s;margin-top:12px}
+.submit-btn:hover{background:var(--blue-hover)}
+.submit-btn:disabled{background:#C5D3E8;cursor:not-allowed}
+.hint{text-align:center;font-size:12px;color:var(--ink-3);margin-top:8px}
 
-.footer{text-align:center;padding:16px;font-size:11px;color:#bbb;border-top:1px solid #f0f0f0}
-.req{color:#ef4444}
+.footer{text-align:center;padding:18px;font-size:11px;color:var(--ink-3);border-top:1px solid var(--border);background:#F8FAFD}
+.req{color:var(--det)}
+
+@media (max-width:520px){
+  body{padding:0}
+  .card{border-radius:0;border:none}
+  .header,.intro,.body{padding-left:16px;padding-right:16px}
+  .section-desc,.stars-row,.field{padding-left:0}
+  .nps-scale{gap:3px}
+  .nps-btn{height:38px;font-size:13px;border-radius:6px}
+}
 </style>
 </head>
 <body>
 
 <div class="card">
     <div class="header">
-        <div class="brand"><span>GRUPO</span>AVANTEX</div>
-        <h1>Encuesta de Satisfaccion</h1>
-        <p>{{ account.nombre }} — Tu opinion nos ayuda a mejorar</p>
+        <img src="/static/img/avantex-logo-blanco.svg" alt="Grupo Avantex">
+        <h1>Encuesta de Satisfacción</h1>
+        <div class="cliente">{{ account.nombre }} — Tu opinión nos ayuda a mejorar</div>
     </div>
+
+    <p class="intro">Queremos conocer tu experiencia con Grupo Avantex para continuar mejorando nuestro servicio y la atención que recibes de nuestro equipo.</p>
 
     <form action="/encuesta/{{ token }}/enviar" method="POST" id="survey-form">
         <div class="body">
 
-            <!-- 1. NPS -->
             <div class="section">
-                <div class="section-title"><span class="section-num">1</span> Recomendacion (NPS)</div>
-                <div class="section-desc">Del 0 al 10, que tan probable es que recomiendes nuestro servicio a un colega o conocido?</div>
+                <div class="section-title"><span class="section-num">1</span> Recomendación</div>
+                <div class="section-desc">Del 0 al 10, ¿qué tan probable es que recomiendes nuestro servicio a un colega o conocido?</div>
                 <input type="hidden" name="nps" id="nps-value" required>
                 <div class="nps-scale" id="nps-scale"></div>
                 <div class="scale-labels"><span>Nada probable</span><span>Muy probable</span></div>
             </div>
 
-            <!-- 2. Satisfacción general -->
             <div class="section">
-                <div class="section-title"><span class="section-num">2</span> Satisfaccion General</div>
-                <div class="section-desc">Que tan satisfecho estas con el servicio que recibes de Grupo Avantex?</div>
-                <div class="stars-row">
-                    <div class="stars-group" id="stars-csat"></div>
-                    <span class="stars-label" id="label-csat"></span>
-                </div>
-                <input type="hidden" name="csat" id="csat-value" required>
+                <div class="section-title"><span class="section-num">2</span> Satisfacción General</div>
+                <div class="section-desc">¿Qué tan satisfecho estás con el servicio que recibes de Grupo Avantex?</div>
+                <div class="stars-row" data-key="csat"></div>
             </div>
 
-            <!-- 3. Calidad del servicio -->
             <div class="section">
-                <div class="section-title"><span class="section-num">3</span> Calidad del Servicio</div>
-                <div class="section-desc">El servicio que recibes cumple con lo que se te prometio?</div>
-                <div class="stars-row">
-                    <div class="stars-group" id="stars-calidad"></div>
-                    <span class="stars-label" id="label-calidad"></span>
-                </div>
-                <input type="hidden" name="csat_calidad" id="calidad-value" required>
+                <div class="section-title"><span class="section-num">3</span> Cumplimiento del Servicio</div>
+                <div class="section-desc">¿Cómo calificas el cumplimiento del servicio respecto a lo acordado?</div>
+                <div class="stars-row" data-key="csat_cumplimiento"></div>
             </div>
 
-            <!-- 4. Tiempo de respuesta -->
             <div class="section">
                 <div class="section-title"><span class="section-num">4</span> Tiempo de Respuesta</div>
-                <div class="section-desc">Cuando reportas una incidencia o tienes una duda, que tan rapido te responden?</div>
-                <div class="stars-row">
-                    <div class="stars-group" id="stars-respuesta"></div>
-                    <span class="stars-label" id="label-respuesta"></span>
-                </div>
-                <input type="hidden" name="csat_respuesta" id="respuesta-value" required>
+                <div class="section-desc">Cuando reportas una incidencia o tienes una duda, ¿cómo calificas nuestro tiempo de respuesta?</div>
+                <div class="stars-row" data-key="csat_respuesta"></div>
             </div>
 
-            <!-- 5. Comunicación con tu asesor -->
+            <div class="group-title">Tu experiencia con tu KAM</div>
+
             <div class="section">
-                <div class="section-title"><span class="section-num">5</span> Comunicacion con tu Asesor</div>
-                <div class="section-desc">Como calificas la comunicacion y seguimiento de tu asesor (KAM)?</div>
-                <div class="stars-row">
-                    <div class="stars-group" id="stars-comunicacion"></div>
-                    <span class="stars-label" id="label-comunicacion"></span>
-                </div>
-                <input type="hidden" name="csat_comunicacion" id="comunicacion-value" required>
+                <div class="section-title"><span class="section-num">5</span> Comunicación y Seguimiento</div>
+                <div class="section-desc">¿Cómo calificas la comunicación y seguimiento que recibes de tu asesor (KAM)?</div>
+                <div class="stars-row" data-key="csat_comunicacion"></div>
             </div>
 
-            <!-- 6. Relación calidad-precio -->
             <div class="section">
-                <div class="section-title"><span class="section-num">6</span> Relacion Calidad-Precio</div>
-                <div class="section-desc">Consideras que el servicio que recibes tiene un precio justo por lo que incluye?</div>
-                <div class="stars-row">
-                    <div class="stars-group" id="stars-precio"></div>
-                    <span class="stars-label" id="label-precio"></span>
-                </div>
-                <input type="hidden" name="csat_precio" id="precio-value" required>
+                <div class="section-title"><span class="section-num">6</span> Gestión de tus Necesidades</div>
+                <div class="section-desc">¿Cómo calificas la capacidad de tu KAM para atender, gestionar y dar seguimiento a tus necesidades?</div>
+                <div class="stars-row" data-key="csat_gestion_kam"></div>
             </div>
 
-            <!-- 7. Equipo técnico -->
             <div class="section">
-                <div class="section-title"><span class="section-num">7</span> Equipo Tecnico en Campo</div>
-                <div class="section-desc">Como calificas el trabajo de los tecnicos que ejecutan el servicio en tus instalaciones?</div>
-                <div class="stars-row">
-                    <div class="stars-group" id="stars-tecnico"></div>
-                    <span class="stars-label" id="label-tecnico"></span>
-                </div>
-                <input type="hidden" name="csat_tecnico" id="tecnico-value" required>
+                <div class="section-title"><span class="section-num">7</span> Relación y Confianza</div>
+                <div class="section-desc">¿Qué nivel de confianza tienes en tu KAM como punto de contacto para gestionar tu relación con Grupo Avantex?</div>
+                <div class="stars-row" data-key="csat_confianza_kam"></div>
             </div>
 
-            <!-- 8. Datos -->
+            <div class="group-title">Experiencia del Servicio</div>
+
             <div class="section">
-                <div class="section-title"><span class="section-num">8</span> Tus datos</div>
+                <div class="section-title"><span class="section-num">8</span> Relación Calidad–Precio</div>
+                <div class="section-desc">¿Cómo calificas la relación entre el valor que recibes y el precio del servicio?</div>
+                <div class="stars-row" data-key="csat_precio"></div>
+            </div>
+
+            <div class="section">
+                <div class="section-title"><span class="section-num">9</span> Equipo Técnico en Campo</div>
+                <div class="section-desc">¿Cómo calificas el trabajo del personal técnico que realiza el servicio en tus instalaciones?</div>
+                <div class="stars-row" data-key="csat_tecnico"></div>
+            </div>
+
+            <div class="group-title">Para terminar</div>
+
+            <div class="section">
+                <div class="section-title"><span class="section-num">10</span> Tus datos</div>
                 <div class="field">
                     <label>Nombre <span class="req">*</span></label>
                     <input type="text" name="nombre" placeholder="Tu nombre completo" required>
@@ -154,27 +162,28 @@ body{font-family:'Archivo',system-ui,sans-serif;background:#f5f5f9;min-height:10
                 </div>
             </div>
 
-            <!-- 9. Comentarios -->
             <div class="section">
-                <div class="section-title"><span class="section-num">9</span> Comentarios</div>
-                <div class="section-desc">Hay algo que podamos mejorar? Tu feedback es muy valioso.</div>
+                <div class="section-title"><span class="section-num">11</span> Comentarios</div>
+                <div class="section-desc">¿Qué es lo principal que podríamos hacer para mejorar tu experiencia con Grupo Avantex?</div>
                 <div class="field">
-                    <textarea name="comentario" placeholder="Escribe tu comentario aqui..."></textarea>
+                    <textarea name="comentario" placeholder="Escribe tu comentario aquí..."></textarea>
                 </div>
             </div>
 
-            <button type="submit" class="submit-btn" id="submit-btn" disabled>Enviar Encuesta</button>
+            <button type="submit" class="submit-btn" id="submit-btn" disabled>Enviar encuesta</button>
+            <div class="hint" id="hint">Responde todas las preguntas para enviar.</div>
         </div>
     </form>
 
-    <div class="footer">Encuesta confidencial — Grupo Avantex &copy; 2026</div>
+    <div class="footer">Tu opinión es muy valiosa para nosotros · Grupo Avantex &copy; 2026</div>
 </div>
 
 <script>
 const csatLabels = ['', 'Muy insatisfecho', 'Insatisfecho', 'Neutral', 'Satisfecho', 'Muy satisfecho'];
-const state = { nps: null, csat: null, calidad: null, respuesta: null, comunicacion: null, precio: null, tecnico: null };
+const labelColor = v => v >= 4 ? '#1D7A4C' : v >= 3 ? '#B7791F' : '#C2412F';
+const state = { nps: null };
 
-// Build NPS buttons
+// NPS 0-10
 const npsEl = document.getElementById('nps-scale');
 for (let i = 0; i <= 10; i++) {
     const btn = document.createElement('button');
@@ -189,39 +198,46 @@ function selectNPS(val) {
     document.querySelectorAll('.nps-btn').forEach(b => {
         const v = parseInt(b.dataset.val);
         b.classList.remove('selected', 'det', 'pas', 'pro');
-        if (v <= val) {
-            b.classList.add('selected');
-            b.classList.add(val <= 6 ? 'det' : val <= 8 ? 'pas' : 'pro');
-        }
+        if (v <= val) b.classList.add('selected', val <= 6 ? 'det' : val <= 8 ? 'pas' : 'pro');
     });
     checkReady();
 }
 
-// Build star groups
-['csat', 'calidad', 'respuesta', 'comunicacion', 'precio', 'tecnico'].forEach(key => {
-    const container = document.getElementById('stars-' + key);
+// Estrellas 1-5: cada .stars-row[data-key] es el name del input que se envía.
+document.querySelectorAll('.stars-row[data-key]').forEach(row => {
+    const key = row.dataset.key;
+    state[key] = null;
+    row.innerHTML = '<div class="stars-group"></div><span class="stars-label"></span>'
+                  + '<input type="hidden" name="' + key + '" required>';
+    const group = row.querySelector('.stars-group');
     for (let i = 1; i <= 5; i++) {
         const star = document.createElement('span');
-        star.className = 'star-btn'; star.textContent = '⭐'; star.dataset.val = i;
-        star.onclick = () => selectStars(key, i);
-        container.appendChild(star);
+        star.className = 'star-btn'; star.textContent = '★'; star.dataset.val = i;
+        star.setAttribute('role', 'button'); star.setAttribute('aria-label', i + ' de 5');
+        star.onmouseenter = () => group.querySelectorAll('.star-btn')
+            .forEach(s => s.classList.toggle('hover', parseInt(s.dataset.val) <= i));
+        star.onclick = () => selectStars(row, key, i);
+        group.appendChild(star);
     }
+    group.onmouseleave = () => group.querySelectorAll('.star-btn').forEach(s => s.classList.remove('hover'));
 });
 
-function selectStars(key, val) {
+function selectStars(row, key, val) {
     state[key] = val;
-    document.getElementById(key + '-value').value = val;
-    document.getElementById('stars-' + key).querySelectorAll('.star-btn').forEach(s => {
-        s.classList.toggle('on', parseInt(s.dataset.val) <= val);
-    });
-    document.getElementById('label-' + key).textContent = csatLabels[val];
-    document.getElementById('label-' + key).style.color = val >= 4 ? '#22c55e' : val >= 3 ? '#eab308' : '#ef4444';
+    row.querySelector('input').value = val;
+    // En pantallas táctiles mouseleave no llega: limpiar la vista previa aquí.
+    row.querySelectorAll('.star-btn').forEach(s => s.classList.remove('hover'));
+    row.querySelectorAll('.star-btn').forEach(s => s.classList.toggle('on', parseInt(s.dataset.val) <= val));
+    const label = row.querySelector('.stars-label');
+    label.textContent = csatLabels[val];
+    label.style.color = labelColor(val);
     checkReady();
 }
 
 function checkReady() {
     const allDone = Object.values(state).every(v => v !== null);
     document.getElementById('submit-btn').disabled = !allDone;
+    document.getElementById('hint').style.visibility = allDone ? 'hidden' : 'visible';
 }
 </script>
 

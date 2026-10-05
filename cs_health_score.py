@@ -86,12 +86,7 @@ def _preload_encuestas(account_ids):
         db.session.query(
             CSEncuesta.account_id,
             func.avg(CSEncuesta.nps),
-            func.avg(CSEncuesta.csat),
-            func.avg(CSEncuesta.csat_calidad),
-            func.avg(CSEncuesta.csat_respuesta),
-            func.avg(CSEncuesta.csat_comunicacion),
-            func.avg(CSEncuesta.csat_precio),
-            func.avg(CSEncuesta.csat_tecnico),
+            *(func.avg(getattr(CSEncuesta, d)) for d in CSEncuesta.CSAT_DIMENSIONES),
         )
         .filter(CSEncuesta.account_id.in_(account_ids))
         .group_by(CSEncuesta.account_id)

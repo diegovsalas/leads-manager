@@ -117,6 +117,25 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] cs_accounts.ejecutivo_id failed: %s", e)
 
+        # ─── cs_encuestas v2: cuestionario de cierre de año (FEAT-2026-10-05) ───
+        try:
+            with db.engine.begin() as conn:
+                for col, ddl in (
+                    ("version", "INTEGER NOT NULL DEFAULT 1"),
+                    ("csat_cumplimiento", "INTEGER"),
+                    ("csat_gestion_kam", "INTEGER"),
+                    ("csat_confianza_kam", "INTEGER"),
+                ):
+                    exists = conn.execute(text("""
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'cs_encuestas' AND column_name = :c
+                    """), {"c": col}).first()
+                    if not exists:
+                        app.logger.info("[auto-migrate] adding cs_encuestas.%s...", col)
+                        conn.execute(text(f"ALTER TABLE cs_encuestas ADD COLUMN {col} {ddl}"))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] cs_encuestas v2 failed: %s", e)
+
         # ─── leads.shopify_* (FEAT-2026-09-29) ───
         try:
             with db.engine.begin() as conn:

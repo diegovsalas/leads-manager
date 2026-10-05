@@ -2249,9 +2249,7 @@ def account_detail(account_id):
 
     if encuestas:
         avg_nps = _avg("nps")
-        csat_vals = [v for v in (_avg(d) for d in
-                     ["csat", "csat_calidad", "csat_respuesta",
-                      "csat_comunicacion", "csat_precio", "csat_tecnico"]) if v is not None]
+        csat_vals = [v for v in (_avg(d) for d in CSEncuesta.CSAT_DIMENSIONES) if v is not None]
         avg_csat = round(sum(csat_vals) / len(csat_vals), 1) if csat_vals else None
         if avg_nps is not None and avg_csat is not None:
             kpi_satisfaccion = round((avg_nps + (avg_csat - 1) / 4 * 10) / 2, 1)
