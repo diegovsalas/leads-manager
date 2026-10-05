@@ -212,7 +212,7 @@ def _calcular_score(account, cita_stats, cobranza_map, encuesta_map, email_map=N
     if csat_val is not None:
         s_csat = min((csat_val - 1) / 4 * 100, 100)  # 1-5 → 0-100
         partes_score.append(s_csat)
-        partes_detalle.append(f"CSAT {csat_val:.1f}/5 (6 dimensiones)")
+        partes_detalle.append(f"CSAT {csat_val:.1f}/5")
     if partes_score:
         score_eval = sum(partes_score) / len(partes_score)
         componentes.append(("evaluaciones", score_eval, 35))

@@ -5245,26 +5245,56 @@ def _respuestas_encuesta():
              if (not f_trim or e.trimestre == f_trim)
              and (not f_kam or str(a.kam_id) == f_kam)
              and (not f_cat or e.categoria == f_cat)]
-    return filas, {"trimestre": f_trim, "kam": f_kam, "categoria": f_cat}, trimestres
+    filtros = {"trimestre": f_trim, "kam": f_kam, "categoria": f_cat}
+    # La evolución ignora el filtro de trimestre y de categoría (compara
+    # trimestres completos) pero respeta el de KAM.
+    base_evol = [(e, a) for e, a in todas if not f_kam or str(a.kam_id) == f_kam]
+    return filas, filtros, trimestres, base_evol
+
+
+def _resumen_nps(respuestas):
+    nps_vals = [e.nps for e in respuestas if e.nps is not None]
+    csat_vals = [e.csat_promedio for e in respuestas if e.csat_promedio is not None]
+    n = len(nps_vals)
+    prom = sum(1 for v in nps_vals if v >= 9)
+    det = sum(1 for v in nps_vals if v <= 6)
+    return {
+        "respuestas": len(respuestas),
+        "clientes": len({str(e.account_id) for e in respuestas}),
+        "nps": round((prom - det) / n * 100) if n else None,
+        "promotores": prom, "pasivos": n - prom - det, "detractores": det, "n_nps": n,
+        "csat": round(sum(csat_vals) / len(csat_vals), 1) if csat_vals else None,
+    }
+
+
+def _evolucion_nps(base):
+    """Un resumen por trimestre evaluado, los últimos cuatro, del más viejo al
+    más nuevo. El trimestre que se está evaluando ahora va marcado: todavía
+    pueden entrar respuestas y el número se va a mover."""
+    from collections import defaultdict
+    from zoneinfo import ZoneInfo
+    por_trim = defaultdict(list)
+    for e, _a in base:
+        if e.trimestre:
+            por_trim[e.trimestre].append(e)
+    en_curso = _trimestre(datetime.now(ZoneInfo("America/Monterrey")))
+    evol, previo = [], None
+    for t in sorted(por_trim)[-4:]:
+        r = _resumen_nps(por_trim[t])
+        r["trimestre"] = t
+        r["en_curso"] = t == en_curso
+        r["delta"] = (r["nps"] - previo) if (previo is not None and r["nps"] is not None) else None
+        previo = r["nps"]
+        evol.append(r)
+    return evol
 
 
 @cs_bp.route("/encuestas")
 @require_cs_analisis
 def encuestas_view():
-    filas, filtros, trimestres = _respuestas_encuesta()
-
-    nps_vals = [e.nps for e, _ in filas if e.nps is not None]
-    csat_vals = [e.csat_promedio for e, _ in filas if e.csat_promedio is not None]
-    n = len(nps_vals)
-    prom = sum(1 for v in nps_vals if v >= 9)
-    det = sum(1 for v in nps_vals if v <= 6)
-    stats = {
-        "respuestas": len(filas),
-        "clientes": len({str(a.id) for _, a in filas}),
-        "nps": round((prom - det) / n * 100) if n else None,
-        "promotores": prom, "pasivos": n - prom - det, "detractores": det,
-        "csat": round(sum(csat_vals) / len(csat_vals), 1) if csat_vals else None,
-    }
+    filas, filtros, trimestres, base_evol = _respuestas_encuesta()
+    stats = _resumen_nps([e for e, _ in filas])
+    evolucion = _evolucion_nps(base_evol)
 
     kams = []
     if not _is_kam() or _is_cs_admin():
@@ -5273,6 +5303,7 @@ def encuestas_view():
 
     return render_template("cs/cs_encuestas.html", filas=filas, filtros=filtros,
                            trimestres=trimestres, kams=kams, stats=stats,
+                           evolucion=evolucion,
                            dimensiones=_DIMENSIONES_ENCUESTA, **_ctx())
 
 
@@ -5282,7 +5313,7 @@ def encuestas_exportar():
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill
 
-    filas, filtros, _ = _respuestas_encuesta()
+    filas, filtros, _, _ = _respuestas_encuesta()
     wb = Workbook()
     ws = wb.active
     ws.title = "Respuestas"

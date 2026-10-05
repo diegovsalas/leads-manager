@@ -16,7 +16,9 @@
 .filtros select{font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg-surface);color:inherit}
 .nps-chip{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:24px;border-radius:6px;
           font-weight:700;font-size:13px;font-variant-numeric:tabular-nums;color:#fff}
-.nps-chip.Promotor{background:var(--ok)} .nps-chip.Pasivo{background:var(--warn)} .nps-chip.Detractor{background:var(--danger)}
+.nps-chip.Promotor{background:var(--nps-pro)} .nps-chip.Pasivo{background:var(--nps-pas);color:var(--ink-1)} .nps-chip.Detractor{background:var(--nps-det)}
+.table-wrap{overflow-x:auto}
+.kpi .et i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}
 table td,table th{padding:9px 11px;vertical-align:top}
 td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 .coment{font-size:12.5px;line-height:1.5;max-width:46ch;white-space:pre-line}
@@ -31,6 +33,30 @@ details.aviso input{font:inherit;font-size:12.5px;padding:6px 8px;border:1px sol
 details.aviso .ayuda{font-size:11px;color:var(--ink-3);line-height:1.4}
 .flash{padding:11px 14px;border:1px solid var(--border);border-left:4px solid var(--ok);border-radius:var(--r);background:var(--bg-card);font-size:13px;margin-top:14px}
 .flash.error{border-left-color:var(--danger)}
+
+/* Evolución por trimestre. Promotor/detractor son polos (azul / rojo) con
+   pasivo en gris neutro al centro; cada segmento lleva su número. */
+:root{--nps-pro:#0954E6;--nps-pas:#A3AEC2;--nps-det:#C2412F}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--nps-pro:#5B93F0;--nps-pas:#5B6D8C;--nps-det:#D9635A}}
+:root[data-theme="dark"]{--nps-pro:#5B93F0;--nps-pas:#5B6D8C;--nps-det:#D9635A}
+.evol{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:22px}
+.trim{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);padding:16px 18px}
+.trim.curso{border-style:dashed}
+.trim .et{display:flex;justify-content:space-between;align-items:center;font-size:11px;text-transform:uppercase;
+          letter-spacing:.07em;color:var(--ink-3);font-weight:620}
+.trim .big{display:flex;align-items:baseline;gap:8px;margin:8px 0 2px}
+.trim .big .v{font-size:34px;font-weight:660;line-height:1;font-variant-numeric:tabular-nums}
+.trim .delta{font-size:12px;font-weight:620;font-variant-numeric:tabular-nums}
+.trim .delta.sube{color:var(--ok)} .trim .delta.baja{color:var(--danger)} .trim .delta.igual{color:var(--ink-3)}
+.trim .meta{font-size:11.5px;color:var(--ink-3)}
+.stack{display:flex;gap:2px;height:22px;margin:14px 0 6px;border-radius:4px;overflow:hidden;background:var(--bg-surface-2)}
+.stack span{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:650;color:#fff;
+            min-width:0;font-variant-numeric:tabular-nums;cursor:default}
+.stack .pro{background:var(--nps-pro)} .stack .pas{background:var(--nps-pas);color:var(--ink-1)} .stack .det{background:var(--nps-det)}
+.leyenda{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-2)}
+.leyenda i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.sec-t{font-size:16px;font-weight:640;margin:26px 0 0}
+.sec-s{font-size:12.5px;color:var(--ink-3);margin:2px 0 0}
 </style>
 
 <div class="page-head">
@@ -63,14 +89,48 @@ details.aviso .ayuda{font-size:11px;color:var(--ink-3);line-height:1.4}
 {% for cat, msg in mensajes %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
 {% endwith %}
 
+{% if evolucion %}
+<h2 class="sec-t">Evolución por trimestre evaluado</h2>
+<p class="sec-s">NPS = % promotores − % detractores (de −100 a 100). Respeta el filtro de KAM; no el de trimestre ni el de categoría.</p>
+<div class="evol">
+    {% for t in evolucion %}
+    <div class="trim {% if t.en_curso %}curso{% endif %}">
+        <div class="et"><span>Evalúa {{ t.trimestre }}</span>{% if t.en_curso %}<span class="pill warn">en curso</span>{% endif %}</div>
+        <div class="big">
+            <span class="v">{{ t.nps if t.nps is not none else '—' }}</span>
+            {% if t.delta is not none %}
+            <span class="delta {{ 'sube' if t.delta > 0 else 'baja' if t.delta < 0 else 'igual' }}"
+                  title="Cambio contra el trimestre anterior">{{ '▲' if t.delta > 0 else '▼' if t.delta < 0 else '=' }} {{ t.delta|abs }}</span>
+            {% endif %}
+        </div>
+        <div class="meta">{{ t.respuestas }} respuesta{{ 's' if t.respuestas != 1 }} · {{ t.clientes }} cliente{{ 's' if t.clientes != 1 }} · CSAT {{ t.csat if t.csat is not none else '—' }}/5</div>
+        {% if t.n_nps %}
+        <div class="stack" role="img" aria-label="{{ t.promotores }} promotores, {{ t.pasivos }} pasivos, {{ t.detractores }} detractores">
+            {% for clase, n, et in (('pro', t.promotores, 'Promotores'), ('pas', t.pasivos, 'Pasivos'), ('det', t.detractores, 'Detractores')) %}
+            {% if n %}<span class="{{ clase }}" style="flex:{{ n }}" title="{{ et }}: {{ n }} ({{ (n / t.n_nps * 100)|round|int }}%)">{{ n }}</span>{% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% if t.en_curso %}<div class="meta">Todavía pueden entrar respuestas.</div>{% endif %}
+    </div>
+    {% endfor %}
+</div>
+<div class="leyenda" style="margin-top:10px">
+    <span><i style="background:var(--nps-pro)"></i>Promotores (9–10)</span>
+    <span><i style="background:var(--nps-pas)"></i>Pasivos (7–8)</span>
+    <span><i style="background:var(--nps-det)"></i>Detractores (0–6)</span>
+</div>
+<h2 class="sec-t">{% if filtros.trimestre %}Evalúa {{ filtros.trimestre }}{% else %}Todas las respuestas{% endif %}</h2>
+{% endif %}
+
 <div class="kpis">
     <div class="kpi"><div class="et">Respuestas</div><div class="v">{{ stats.respuestas }}</div>
         <div class="n">{{ stats.clientes }} cliente{{ 's' if stats.clientes != 1 }}</div></div>
     <div class="kpi"><div class="et">NPS</div><div class="v">{{ stats.nps if stats.nps is not none else '—' }}</div>
         <div class="n">% promotores − % detractores</div></div>
-    <div class="kpi"><div class="et">Promotores</div><div class="v" style="color:var(--ok)">{{ stats.promotores }}</div></div>
-    <div class="kpi"><div class="et">Pasivos</div><div class="v" style="color:var(--warn)">{{ stats.pasivos }}</div></div>
-    <div class="kpi"><div class="et">Detractores</div><div class="v" style="color:var(--danger)">{{ stats.detractores }}</div></div>
+    <div class="kpi"><div class="et"><i style="background:var(--nps-pro)"></i>Promotores</div><div class="v">{{ stats.promotores }}</div></div>
+    <div class="kpi"><div class="et"><i style="background:var(--nps-pas)"></i>Pasivos</div><div class="v">{{ stats.pasivos }}</div></div>
+    <div class="kpi"><div class="et"><i style="background:var(--nps-det)"></i>Detractores</div><div class="v">{{ stats.detractores }}</div></div>
     <div class="kpi"><div class="et">CSAT</div><div class="v">{{ stats.csat if stats.csat is not none else '—' }}</div>
         <div class="n">promedio sobre 5</div></div>
 </div>
