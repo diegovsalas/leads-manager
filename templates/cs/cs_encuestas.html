@@ -1,0 +1,97 @@
+{% extends "cs/cs_base.html" %}
+{% from "cs/_icons.html" import icon %}
+{% block title %}Encuestas NPS — CS Avantex{% endblock %}
+{% block breadcrumb %}Encuestas NPS{% endblock %}
+
+{% block content %}
+{# FEAT-2026-10-05: cada respuesta con su comentario. Antes solo existía el
+   agregado en la ficha del cliente. #}
+<style>
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:22px}
+.kpi{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);padding:15px 16px}
+.kpi .et{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);font-weight:620;margin-bottom:5px}
+.kpi .v{font-size:27px;font-weight:640;line-height:1.05;font-variant-numeric:tabular-nums}
+.kpi .n{font-size:10.5px;color:var(--ink-4);margin-top:3px}
+.filtros{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.filtros select{font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg-surface);color:inherit}
+.nps-chip{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:24px;border-radius:6px;
+          font-weight:700;font-size:13px;font-variant-numeric:tabular-nums;color:#fff}
+.nps-chip.Promotor{background:var(--ok)} .nps-chip.Pasivo{background:var(--warn)} .nps-chip.Detractor{background:var(--danger)}
+table td,table th{padding:9px 11px;vertical-align:top}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.coment{font-size:12.5px;line-height:1.5;max-width:46ch;white-space:pre-line}
+details.dims summary{cursor:pointer;font-size:11.5px;color:var(--copper);list-style:none;margin-top:4px}
+details.dims summary::-webkit-details-marker{display:none}
+.dims-grid{display:grid;grid-template-columns:auto auto;gap:2px 12px;font-size:11.5px;margin-top:4px}
+.dims-grid span:nth-child(odd){color:var(--ink-3)}
+</style>
+
+<div class="page-head">
+    <div>
+        <h1>Encuestas NPS</h1>
+        <p class="sub">Cada respuesta con su comentario.{% if is_kam %} Solo tus cuentas.{% endif %}</p>
+    </div>
+    <div class="actions">
+        <form method="get" class="filtros">
+            <select name="trimestre" onchange="this.form.submit()">
+                <option value="" {% if not filtros.trimestre %}selected{% endif %}>Todos los trimestres</option>
+                {% for t in trimestres %}<option value="{{ t }}" {% if t == filtros.trimestre %}selected{% endif %}>{{ t }}</option>{% endfor %}
+            </select>
+            {% if kams %}
+            <select name="kam" onchange="this.form.submit()">
+                <option value="">Todos los KAM</option>
+                {% for k in kams %}<option value="{{ k.id }}" {% if filtros.kam == k.id|string %}selected{% endif %}>{{ k.nombre }}</option>{% endfor %}
+            </select>
+            {% endif %}
+            <select name="categoria" onchange="this.form.submit()">
+                <option value="">Todas</option>
+                {% for c in ('Detractor', 'Pasivo', 'Promotor') %}<option {% if filtros.categoria == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+            </select>
+        </form>
+        <a class="btn" href="/cs/encuestas/exportar?{{ request.query_string.decode() if request.query_string else 'trimestre=' ~ filtros.trimestre }}">{{ icon('download', 14) }} Excel</a>
+    </div>
+</div>
+
+<div class="kpis">
+    <div class="kpi"><div class="et">Respuestas</div><div class="v">{{ stats.respuestas }}</div>
+        <div class="n">{{ stats.clientes }} cliente{{ 's' if stats.clientes != 1 }}</div></div>
+    <div class="kpi"><div class="et">NPS</div><div class="v">{{ stats.nps if stats.nps is not none else '—' }}</div>
+        <div class="n">% promotores − % detractores</div></div>
+    <div class="kpi"><div class="et">Promotores</div><div class="v" style="color:var(--ok)">{{ stats.promotores }}</div></div>
+    <div class="kpi"><div class="et">Pasivos</div><div class="v" style="color:var(--warn)">{{ stats.pasivos }}</div></div>
+    <div class="kpi"><div class="et">Detractores</div><div class="v" style="color:var(--danger)">{{ stats.detractores }}</div></div>
+    <div class="kpi"><div class="et">CSAT</div><div class="v">{{ stats.csat if stats.csat is not none else '—' }}</div>
+        <div class="n">promedio sobre 5</div></div>
+</div>
+
+<div class="table-wrap" style="margin:22px 0 28px">
+    <table>
+        <thead><tr>
+            <th>Fecha</th><th>Cliente</th><th>KAM</th><th>Respondió</th>
+            <th class="c">NPS</th><th class="n">CSAT</th><th>Comentario</th>
+        </tr></thead>
+        <tbody>
+        {% for e, a in filas %}
+            <tr>
+                <td class="muted" style="font-size:12.5px;white-space:nowrap">{{ e.fecha_local.strftime('%d/%m/%Y') if e.fecha_local else '—' }}</td>
+                <td class="primary"><a href="/cs/account/{{ a.id }}">{{ a.nombre }}</a></td>
+                <td style="font-size:12.5px">{{ a.kam.nombre if a.kam else '—' }}</td>
+                <td style="font-size:12.5px">{{ e.nombre_respondente or '—' }}
+                    {% if e.puesto_respondente %}<div class="muted" style="font-size:11px">{{ e.puesto_respondente }}</div>{% endif %}</td>
+                <td class="c">{% if e.nps is not none %}<span class="nps-chip {{ e.categoria }}" title="{{ e.categoria }}">{{ e.nps }}</span>{% else %}—{% endif %}</td>
+                <td class="n">{{ e.csat_promedio if e.csat_promedio is not none else '—' }}
+                    <details class="dims"><summary>detalle</summary>
+                        <div class="dims-grid">
+                        {% for campo, et in dimensiones %}{% if e[campo] is not none %}<span>{{ et }}</span><span>{{ e[campo] }}</span>{% endif %}{% endfor %}
+                        </div>
+                    </details></td>
+                <td><div class="coment">{% if e.comentario %}{{ e.comentario }}{% else %}<span class="muted">Sin comentario</span>{% endif %}</div></td>
+            </tr>
+        {% else %}
+            <tr><td colspan="7" class="muted" style="text-align:center;padding:28px">
+                No hay respuestas con estos filtros.{% if filtros.trimestre %} <a href="/cs/encuestas?trimestre=">Ver todos los trimestres</a>{% endif %}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

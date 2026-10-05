@@ -5176,3 +5176,130 @@ def incidencias_general():
                            sin_sucursal=sin_sucursal,
                            sin_sucursal_abiertas=sin_sucursal_abiertas,
                            tipos_catalogo=TIPOS_POR_SERVICIO, **_ctx())
+
+
+# ══════════════════════════════════════════════════════════════════
+# RESPUESTAS NPS/CSAT — FEAT-2026-10-05
+#
+# Hasta ahora las respuestas solo se veían agregadas en la ficha de cada
+# cliente ("Voz del cliente"): ni el comentario ni quién contestó. Aquí está
+# cada respuesta, por trimestre. Dirección ve todas; un KAM, las suyas.
+# ══════════════════════════════════════════════════════════════════
+
+_DIMENSIONES_ENCUESTA = (
+    ("csat", "Satisfacción general"),
+    ("csat_cumplimiento", "Cumplimiento"),
+    ("csat_calidad", "Calidad (v1)"),
+    ("csat_respuesta", "Tiempo de respuesta"),
+    ("csat_comunicacion", "Comunicación KAM"),
+    ("csat_gestion_kam", "Gestión KAM"),
+    ("csat_confianza_kam", "Confianza KAM"),
+    ("csat_precio", "Calidad-precio"),
+    ("csat_tecnico", "Equipo técnico"),
+)
+
+
+def _trimestre(fecha):
+    return f"{fecha.year}-Q{(fecha.month - 1) // 3 + 1}"
+
+
+def _categoria_nps(n):
+    if n is None:
+        return ""
+    return "Promotor" if n >= 9 else "Pasivo" if n >= 7 else "Detractor"
+
+
+def _respuestas_encuesta():
+    """Respuestas filtradas por la query string. Devuelve (filas, filtros, trimestres)."""
+    from zoneinfo import ZoneInfo
+    mx = ZoneInfo("America/Monterrey")
+
+    q = (db.session.query(CSEncuesta, CSAccount)
+         .join(CSAccount, CSEncuesta.account_id == CSAccount.id))
+    if _is_kam() and not _is_cs_admin():
+        q = q.filter(CSAccount.kam_id == _current_kam_id())
+    todas = q.order_by(CSEncuesta.created_at.desc()).all()
+
+    for e, _a in todas:
+        local = e.created_at.astimezone(mx) if e.created_at else None
+        e.fecha_local = local
+        e.trimestre = _trimestre(local) if local else ""
+        e.categoria = _categoria_nps(e.nps)
+
+    trimestres = sorted({e.trimestre for e, _ in todas if e.trimestre}, reverse=True)
+    f_trim = request.args.get("trimestre")
+    if f_trim is None:                      # sin parámetro: el trimestre más reciente con respuestas
+        f_trim = trimestres[0] if trimestres else ""
+    f_kam = (request.args.get("kam") or "").strip()
+    f_cat = (request.args.get("categoria") or "").strip()
+
+    filas = [(e, a) for e, a in todas
+             if (not f_trim or e.trimestre == f_trim)
+             and (not f_kam or str(a.kam_id) == f_kam)
+             and (not f_cat or e.categoria == f_cat)]
+    return filas, {"trimestre": f_trim, "kam": f_kam, "categoria": f_cat}, trimestres
+
+
+@cs_bp.route("/encuestas")
+@require_cs_analisis
+def encuestas_view():
+    filas, filtros, trimestres = _respuestas_encuesta()
+
+    nps_vals = [e.nps for e, _ in filas if e.nps is not None]
+    csat_vals = [e.csat_promedio for e, _ in filas if e.csat_promedio is not None]
+    n = len(nps_vals)
+    prom = sum(1 for v in nps_vals if v >= 9)
+    det = sum(1 for v in nps_vals if v <= 6)
+    stats = {
+        "respuestas": len(filas),
+        "clientes": len({str(a.id) for _, a in filas}),
+        "nps": round((prom - det) / n * 100) if n else None,
+        "promotores": prom, "pasivos": n - prom - det, "detractores": det,
+        "csat": round(sum(csat_vals) / len(csat_vals), 1) if csat_vals else None,
+    }
+
+    kams = []
+    if not _is_kam() or _is_cs_admin():
+        kams = (UserCRM.query.join(CSAccount, CSAccount.kam_id == UserCRM.id)
+                .distinct().order_by(UserCRM.nombre).all())
+
+    return render_template("cs/cs_encuestas.html", filas=filas, filtros=filtros,
+                           trimestres=trimestres, kams=kams, stats=stats,
+                           dimensiones=_DIMENSIONES_ENCUESTA, **_ctx())
+
+
+@cs_bp.route("/encuestas/exportar")
+@require_cs_analisis
+def encuestas_exportar():
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+
+    filas, filtros, _ = _respuestas_encuesta()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Respuestas"
+    ws.append(["Fecha", "Trimestre", "Cliente", "KAM", "Respondió", "Puesto", "NPS", "Categoría",
+               "CSAT promedio", *[et for _, et in _DIMENSIONES_ENCUESTA], "Comentario", "Versión"])
+    for c in ws[1]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", fgColor="0C1F3E")
+    for e, a in filas:
+        ws.append([
+            e.fecha_local.strftime("%d/%m/%Y %H:%M") if e.fecha_local else "",
+            e.trimestre, a.nombre, a.kam.nombre if a.kam else "",
+            e.nombre_respondente, e.puesto_respondente, e.nps, e.categoria, e.csat_promedio,
+            *[getattr(e, campo) for campo, _ in _DIMENSIONES_ENCUESTA],
+            e.comentario, e.version,
+        ])
+    for col in ws.columns:
+        ancho = max(len(str(c.value or "")) for c in col)
+        ws.column_dimensions[col[0].column_letter].width = min(ancho + 2, 60)
+    ws.freeze_panes = "A2"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    sufijo = filtros["trimestre"] or "todas"
+    return send_file(buf, as_attachment=True,
+                     download_name=f"encuestas_nps_{sufijo}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
