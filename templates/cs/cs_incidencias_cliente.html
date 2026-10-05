@@ -4,11 +4,12 @@
 {% block breadcrumb %}Incidencias por cliente{% endblock %}
 
 {% block content %}
-{# FEAT-2026-09-03 · reorganizada 2026-09-04
-   Es la vista que se le enseña AL cliente, así que la densidad importa más
-   que en la interna: habla de sus sucursales, no de nuestra operación.
-   Antes eran ocho tarjetas apiladas del mismo peso; ahora hay secciones
-   con título y aire entre ellas. #}
+{# FEAT-2026-09-03 · reorganizada 2026-09-04 · cola de seguimiento 2026-10-05
+   Antes abría con gráficas por tipo y por sucursal: servía para enseñarle
+   al cliente qué le pasa, no para trabajar las incidencias. Ahora arriba va
+   lo que hay que atender, en orden de urgencia y con lo necesario para
+   moverlo (compromiso, responsable, bitácora) en la misma tarjeta. Las
+   resueltas y el análisis quedan abajo, plegados. #}
 
 <style>
 .sec{margin:32px 0 0}
@@ -41,19 +42,66 @@ table td, table th{padding:7px 11px}
 td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 .vacio{color:var(--ink-4)}
 .repetido{font-weight:620}
+.kpi.alerta .v{color:var(--danger)}
+.kpi.ok .v{color:var(--ok)}
+
+.cola{display:flex;flex-direction:column;gap:10px}
+.inc{background:var(--bg-card);border:1px solid var(--border);border-left:4px solid var(--border-strong);
+     border-radius:var(--r-md);padding:14px 16px}
+.inc.vencida{border-left-color:var(--danger)}
+.inc.sin-comp{border-left-color:var(--warn)}
+.inc.en-tiempo{border-left-color:var(--ok)}
+.inc-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.inc-top .folio{font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+.inc-top .tipo{font-size:14px;font-weight:640}
+.inc-top .acciones{margin-left:auto;display:flex;gap:4px;align-items:center}
+.inc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 18px;margin-top:10px}
+.inc-grid .et{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:620}
+.inc-grid .val{font-size:13px;margin-top:2px}
+.inc-grid .val.mal{color:var(--danger);font-weight:620}
+.inc-grid .val.falta{color:var(--warn);font-weight:600}
+.inc-detalle{font-size:13px;color:var(--ink-2);margin-top:10px;line-height:1.5;white-space:pre-line}
+.inc-ultimo{font-size:12.5px;margin-top:8px;padding:7px 10px;background:var(--bg-surface-2);border-radius:var(--r)}
+.inc-ultimo b{font-weight:620}
+.inc-fotos{display:flex;gap:4px;margin-top:8px}
+.inc-fotos img{width:34px;height:34px;border-radius:4px;object-fit:cover;border:1px solid var(--border)}
+.btn-mini{height:26px;padding:0 9px;font-size:11.5px}
+
+details.seg{margin-top:10px;border-top:1px solid var(--border-subtle);padding-top:8px}
+details.seg summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--copper);list-style:none}
+details.seg summary::-webkit-details-marker{display:none}
+details.seg summary::before{content:"▸ ";}
+details.seg[open] summary::before{content:"▾ ";}
+.seg-form{display:grid;grid-template-columns:150px 1fr;gap:8px 12px;margin:10px 0;align-items:start}
+.seg-form label{font-size:12px;color:var(--ink-3);padding-top:6px}
+.seg-form input,.seg-form textarea{font:inherit;font-size:13px;padding:6px 9px;border:1px solid var(--border);
+     border-radius:var(--r);background:var(--bg-surface);color:inherit;width:100%}
+.seg-form textarea{min-height:56px;resize:vertical}
+.bitacora{list-style:none;margin:6px 0 0;padding:0}
+.bitacora li{font-size:12.5px;padding:6px 0;border-top:1px solid var(--border-subtle);line-height:1.45}
+.bitacora .quien{font-size:11px;color:var(--ink-3)}
+
+details.bloque{margin-top:32px}
+details.bloque > summary{cursor:pointer;font-size:16px;font-weight:640;list-style:none}
+details.bloque > summary::-webkit-details-marker{display:none}
+details.bloque > summary::before{content:"▸ ";color:var(--ink-3)}
+details.bloque[open] > summary::before{content:"▾ ";}
+details.bloque > summary .cuenta{font-size:12px;color:var(--ink-3);font-weight:400;margin-left:6px}
+@media (max-width:640px){ .seg-form{grid-template-columns:1fr} .seg-form label{padding-top:0} .inc-top .acciones{margin-left:0} }
 </style>
 
 <div class="page-head">
     <div>
         <h1>Incidencias por cliente</h1>
-        <p class="sub">Qué se ha reportado, de qué tipo y en qué sucursal.</p>
+        <p class="sub">Lo que sigue abierto, en orden de urgencia, y quién lo está moviendo.</p>
     </div>
     <div class="actions">
         <form method="get" style="display:flex;gap:6px;align-items:center">
             <select name="account_id" onchange="this.form.submit()"
                     style="font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--r);min-width:230px">
                 {% for c in cuentas %}
-                <option value="{{ c.id }}" {% if cuenta and c.id == cuenta.id %}selected{% endif %}>{{ c.nombre }}</option>
+                {% set n_ab = abiertas_por_cuenta.get(c.id, 0) %}
+                <option value="{{ c.id }}" {% if cuenta and c.id == cuenta.id %}selected{% endif %}>{{ c.nombre }}{% if n_ab %} · {{ n_ab }} abierta{{ 's' if n_ab != 1 }}{% endif %}</option>
                 {% endfor %}
             </select>
         </form>
@@ -68,28 +116,177 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 {% else %}
 
 <div class="kpis" style="margin-top:22px">
-    <div class="kpi">
-        <div class="et">Reportes</div>
-        <div class="v">{{ resumen.total }}</div>
-    </div>
-    <div class="kpi {% if resumen.abiertas %}aviso{% endif %}">
+    <div class="kpi {% if kpis.abiertas %}aviso{% else %}ok{% endif %}">
         <div class="et">Abiertas</div>
-        <div class="v">{{ resumen.abiertas }}</div>
+        <div class="v">{{ kpis.abiertas }}</div>
+        <div class="n">de {{ resumen.total }} reportes</div>
+    </div>
+    <div class="kpi {% if kpis.vencidas %}alerta{% endif %}">
+        <div class="et">Vencidas</div>
+        <div class="v">{{ kpis.vencidas }}</div>
+        <div class="n">pasó la fecha compromiso</div>
+    </div>
+    <div class="kpi {% if kpis.sin_compromiso %}aviso{% endif %}">
+        <div class="et">Sin compromiso</div>
+        <div class="v">{{ kpis.sin_compromiso }}</div>
+        <div class="n">nadie ha puesto fecha</div>
+    </div>
+    <div class="kpi {% if kpis.sin_responsable %}aviso{% endif %}">
+        <div class="et">Sin responsable</div>
+        <div class="v">{{ kpis.sin_responsable }}</div>
     </div>
     <div class="kpi">
-        <div class="et">Sucursales</div>
-        <div class="v">{{ resumen.por_sucursal|length }}</div>
-        <div class="n">con al menos un reporte</div>
-    </div>
-    <div class="kpi">
-        <div class="et">Días promedio</div>
-        <div class="v">{% if resumen.dias_promedio is not none %}{{ resumen.dias_promedio }}{% else %}—{% endif %}</div>
-        {% if resumen.resueltas_con_fecha %}
-        <div class="n">sobre {{ resumen.resueltas_con_fecha }} resueltas</div>
-        {% endif %}
+        <div class="et">Más antigua</div>
+        <div class="v">{% if kpis.mas_antigua is not none %}{{ kpis.mas_antigua }}<span style="font-size:14px;font-weight:500"> días</span>{% else %}—{% endif %}</div>
+        <div class="n">{% if resumen.dias_promedio is not none %}resuelven en {{ resumen.dias_promedio }} días en promedio{% endif %}</div>
     </div>
 </div>
 
+{# ══ Cola de seguimiento ══ #}
+<div class="sec">
+    <div class="sec-h">
+        <h2>Por atender</h2>
+        <span class="cuenta">{{ pendientes|length }}</span>
+    </div>
+    <p class="sec-sub">Vencidas primero, luego las que no tienen fecha compromiso y al final las que van en tiempo.
+        {% if not puede_editar %}Solo el KAM de la cuenta puede moverlas{% if cuenta.kam %} ({{ cuenta.kam.nombre }}){% endif %}.{% endif %}</p>
+
+    {% if not pendientes %}
+    <div class="panel"><p class="muted" style="margin:0">No hay incidencias abiertas en esta cuenta.</p></div>
+    {% endif %}
+
+    <datalist id="responsables">{% for n in responsables %}<option value="{{ n }}">{% endfor %}</datalist>
+
+    <div class="cola">
+    {% for i in pendientes %}
+        {% set clase = 'vencida' if i.vencida else ('sin-comp' if not i.fecha_compromiso else 'en-tiempo') %}
+        <div class="inc {{ clase }}" id="inc-{{ i.id }}">
+            <div class="inc-top">
+                <span class="folio">{{ i.folio or '—' }}</span>
+                <span class="pill info">{{ un_de(i.servicio) }}</span>
+                <span class="tipo">{{ i.tipo }}</span>
+                <span class="pill {% if i.status == 'En proceso' %}info{% else %}warn{% endif %}">{{ i.status }}</span>
+                {% if i.vencida %}<span class="pill danger">Vencida hace {{ (hoy - i.fecha_compromiso).days }} d</span>{% endif %}
+                <div class="acciones">
+                    {% set cob = i.cobrable or 'Sin definir' %}
+                    <span class="pill {% if cob == 'Se cobra' %}ok{% elif cob == 'No se cobra' %}neutral{% else %}warn{% endif %}"
+                          style="cursor:pointer" title="Definir cobro"
+                          onclick="abrirCobro('{{ i.id }}', '{{ cob }}', '{{ i.folio or '' }}')">{{ cob }}{% if i.monto_cobro %} · ${{ '{:,.0f}'.format(i.monto_cobro) }}{% endif %}</span>
+                    {% if puede_editar %}
+                    {% if i.status == 'Abierta' %}
+                    <form action="/cs/account/{{ cuenta.id }}/incidencias/{{ i.id }}/status" method="POST" style="display:inline">
+                        <input type="hidden" name="status" value="En proceso">
+                        <input type="hidden" name="next" value="{{ request.full_path }}#inc-{{ i.id }}">
+                        <button type="submit" class="btn btn-mini">En proceso</button>
+                    </form>
+                    {% endif %}
+                    <form action="/cs/account/{{ cuenta.id }}/incidencias/{{ i.id }}/status" method="POST" style="display:inline"
+                          onsubmit="return confirm('¿Marcar {{ i.folio or 'esta incidencia' }} como resuelta?')">
+                        <input type="hidden" name="status" value="Resuelta">
+                        <input type="hidden" name="next" value="{{ request.full_path }}">
+                        <button type="submit" class="btn btn-mini">Resolver</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="inc-grid">
+                <div>
+                    <div class="et">Sucursal</div>
+                    <div class="val {% if not i.propiedad_nombre %}falta{% endif %}">{{ i.propiedad_nombre or 'Sin sucursal' }}{% if i.zona %} <span class="muted">· {{ i.zona }}</span>{% endif %}</div>
+                </div>
+                <div>
+                    <div class="et">Reportada</div>
+                    <div class="val">{{ i.fecha_incidencia.strftime('%d/%m/%Y') if i.fecha_incidencia else '—' }}{% if i.dias_abierta is not none %} <span class="muted">· {{ i.dias_abierta }} días</span>{% endif %}</div>
+                </div>
+                <div>
+                    <div class="et">Compromiso</div>
+                    <div class="val {% if i.vencida %}mal{% elif not i.fecha_compromiso %}falta{% endif %}">{{ i.fecha_compromiso.strftime('%d/%m/%Y') if i.fecha_compromiso else 'Sin fecha' }}</div>
+                </div>
+                <div>
+                    <div class="et">Responsable</div>
+                    <div class="val {% if not i.responsable %}falta{% endif %}">{{ i.responsable or 'Sin asignar' }}</div>
+                </div>
+                <div>
+                    <div class="et">Reporta</div>
+                    <div class="val">{{ i.quien_reporta or i.contacto_cliente or '—' }}</div>
+                </div>
+            </div>
+
+            {% if i.detalle %}<div class="inc-detalle">{{ i.detalle }}</div>{% endif %}
+            {% if i.evidencia_urls %}
+            <div class="inc-fotos">{% for url in i.evidencia_urls %}<a href="{{ url }}" target="_blank" rel="noopener"><img src="{{ url }}" alt="Evidencia"></a>{% endfor %}</div>
+            {% endif %}
+            {% if i.seguimientos %}
+            <div class="inc-ultimo"><b>Último seguimiento</b> <span class="muted">· {{ i.seguimientos[0].autor or '—' }}, {{ i.seguimientos[0].created_at.strftime('%d/%m') if i.seguimientos[0].created_at }}</span><br>{{ i.seguimientos[0].texto }}</div>
+            {% elif i.comentarios_operaciones %}
+            <div class="inc-ultimo"><b>Comentario de operaciones</b><br>{{ i.comentarios_operaciones }}</div>
+            {% endif %}
+
+            <details class="seg">
+                <summary>Seguimiento{% if i.seguimientos %} ({{ i.seguimientos|length }}){% endif %}</summary>
+                {% if puede_editar %}
+                <form class="seg-form" action="/cs/account/{{ cuenta.id }}/incidencias/{{ i.id }}/seguimiento" method="POST">
+                    <input type="hidden" name="next" value="{{ request.full_path }}#inc-{{ i.id }}">
+                    <label>Fecha compromiso</label>
+                    <input type="date" name="fecha_compromiso" value="{{ i.fecha_compromiso.isoformat() if i.fecha_compromiso else '' }}" style="max-width:180px">
+                    <label>Responsable</label>
+                    <input type="text" name="responsable" list="responsables" value="{{ i.responsable or '' }}" placeholder="Quién la atiende" style="max-width:280px">
+                    <label>Comentario</label>
+                    <textarea name="comentario" placeholder="Qué se hizo, qué sigue…"></textarea>
+                    <span></span>
+                    <div><button type="submit" class="btn primary btn-mini">Guardar</button></div>
+                </form>
+                {% endif %}
+                {% if i.seguimientos %}
+                <ul class="bitacora">
+                    {% for sg in i.seguimientos %}
+                    <li><span class="quien">{{ sg.created_at.strftime('%d/%m/%Y %H:%M') if sg.created_at }} · {{ sg.autor or '—' }}</span><br>{{ sg.texto }}</li>
+                    {% endfor %}
+                </ul>
+                {% elif not puede_editar %}
+                <p class="muted" style="font-size:12.5px;margin:6px 0 0">Sin seguimiento registrado.</p>
+                {% endif %}
+            </details>
+        </div>
+    {% endfor %}
+    </div>
+</div>
+
+{# ══ Resueltas ══ #}
+<details class="bloque">
+    <summary>Resueltas<span class="cuenta">{{ resueltas|length }}</span></summary>
+    <div class="table-wrap" style="margin-top:12px">
+        <table>
+            <thead><tr>
+                <th># Ticket</th><th>Sucursal</th><th>UN</th><th>Tipo</th>
+                <th>Reportada</th><th>Resuelta</th><th class="n">Días</th><th class="c">Cobro</th>
+            </tr></thead>
+            <tbody>
+            {% for i in resueltas %}
+                {% set cob = i.cobrable or 'Sin definir' %}
+                <tr>
+                    <td style="font-family:var(--mono);font-size:12px">{{ i.folio or '—' }}</td>
+                    <td>{% if i.propiedad_nombre %}{{ i.propiedad_nombre }}{% else %}<span class="vacio">sin sucursal</span>{% endif %}</td>
+                    <td><span class="pill info">{{ un_de(i.servicio) }}</span></td>
+                    <td style="font-size:12.5px">{{ i.tipo }}</td>
+                    <td class="muted" style="font-size:12.5px">{{ i.fecha_incidencia.strftime('%d/%m/%Y') if i.fecha_incidencia else '—' }}</td>
+                    <td class="muted" style="font-size:12.5px">{{ i.fecha_solucion.strftime('%d/%m/%Y') if i.fecha_solucion else '—' }}</td>
+                    <td class="n">{% if i.fecha_solucion and i.fecha_incidencia %}{{ (i.fecha_solucion - i.fecha_incidencia).days }}{% else %}—{% endif %}</td>
+                    <td class="c"><span class="pill {% if cob == 'Se cobra' %}ok{% elif cob == 'No se cobra' %}neutral{% else %}warn{% endif %}"
+                          style="cursor:pointer" onclick="abrirCobro('{{ i.id }}', '{{ cob }}', '{{ i.folio or '' }}')">{{ cob }}</span></td>
+                </tr>
+            {% else %}
+                <tr><td colspan="8" class="muted">Ninguna resuelta todavía.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</details>
+
+{# ══ Análisis (antes era lo primero de la página) ══ #}
+<details class="bloque" style="margin-bottom:28px">
+    <summary>Análisis por tipo y sucursal<span class="cuenta">para revisar con el cliente</span></summary>
 {# ══ Qué se reporta ══ #}
 <div class="sec">
     <div class="sec-h"><h2>Qué se ha reportado</h2></div>
@@ -146,79 +343,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
     </div>
 </div>
 
-{# ══ El detalle ══ #}
-<div class="sec" style="margin-bottom:28px">
-    <div class="sec-h">
-        <h2>Todos los reportes</h2>
-        <span class="cuenta">{{ incidencias|length }}</span>
-    </div>
-    <div class="table-wrap">
-        <table>
-            <thead><tr>
-                <th># Ticket</th><th>Propiedad</th><th>UN</th><th>Tipo de incidencia</th>
-                <th>Reportada</th><th>Solución</th><th class="c">Cobro</th>
-                <th class="c">Status</th><th class="c"></th>
-            </tr></thead>
-            <tbody>
-            {% for i in incidencias %}
-                <tr>
-                    <td style="font-family:var(--mono);font-size:12px">{{ i.folio or '—' }}</td>
-                    <td>
-                        {% if i.propiedad_nombre %}{{ i.propiedad_nombre }}
-                        {% else %}<span class="vacio">sin propiedad</span>{% endif %}
-                        {% if i.zona %}<div class="muted" style="font-size:11px">{{ i.zona }}</div>{% endif %}
-                    </td>
-                    <td><span class="pill info">{{ un_de(i.servicio) }}</span></td>
-                    <td style="font-size:12.5px">{{ i.tipo }}</td>
-                    <td class="muted" style="font-size:12.5px">
-                        {{ i.fecha_incidencia.strftime('%d/%m/%Y') if i.fecha_incidencia else '—' }}</td>
-                    <td class="muted" style="font-size:12.5px">
-                        {{ i.fecha_solucion.strftime('%d/%m/%Y') if i.fecha_solucion else '—' }}</td>
-                    {# FEAT-2026-09-04: se puede actuar desde aquí. Antes esta vista
-                       era de solo lectura y había que ir al registro a resolver o
-                       marcar el cobro, que es donde la gente se perdía. #}
-                    <td class="c" style="white-space:nowrap">
-                        {% set cob = i.cobrable or 'Sin definir' %}
-                        <span class="pill {% if cob == 'Se cobra' %}ok{% elif cob == 'No se cobra' %}info{% else %}warn{% endif %}"
-                              style="cursor:pointer" onclick="abrirCobro('{{ i.id }}', '{{ cob }}', '{{ i.folio or '' }}')">
-                            {{ cob }}</span>
-                        {% if i.monto_cobro %}
-                        <div style="font-size:11px;font-variant-numeric:tabular-nums">${{ '{:,.2f}'.format(i.monto_cobro) }}</div>
-                        {% endif %}
-                        {% if i.factura_url %}
-                        <a href="{{ i.factura_url }}" target="_blank" rel="noopener" style="font-size:10.5px">ver factura</a>
-                        {% endif %}
-                    </td>
-                    <td class="c">
-                        <span class="pill {% if i.status == 'Resuelta' %}ok{% elif i.status == 'En proceso' %}info{% else %}warn{% endif %}">
-                            {{ i.status }}</span>
-                    </td>
-                    <td class="c" style="white-space:nowrap">
-                        {% if i.status != 'Resuelta' and puede_editar %}
-                        {% if i.status == 'Abierta' %}
-                        <form action="/cs/account/{{ cuenta.id }}/incidencias/{{ i.id }}/status" method="POST" style="display:inline">
-                            <input type="hidden" name="status" value="En proceso">
-                            <input type="hidden" name="next" value="{{ request.full_path }}">
-                            <button type="submit" class="btn" style="height:24px;padding:0 7px;font-size:11px">En proceso</button>
-                        </form>
-                        {% endif %}
-                        <form action="/cs/account/{{ cuenta.id }}/incidencias/{{ i.id }}/status" method="POST" style="display:inline;margin-left:4px">
-                            <input type="hidden" name="status" value="Resuelta">
-                            <input type="hidden" name="next" value="{{ request.full_path }}">
-                            <button type="submit" class="btn" style="height:24px;padding:0 7px;font-size:11px">Resolver</button>
-                        </form>
-                        {% elif i.status != 'Resuelta' %}
-                        <span class="muted" style="font-size:10.5px" title="Solo el KAM de la cuenta puede cambiar el estatus">
-                            {% if cuenta.kam %}la atiende {{ cuenta.kam.nombre }}{% else %}cuenta sin KAM{% endif %}
-                        </span>
-                        {% endif %}
-                    </td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
+</details>
 
 {% endif %}
 

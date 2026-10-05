@@ -1175,6 +1175,27 @@ class CSIncidencia(db.Model):
 
     account = db.relationship("CSAccount", backref="incidencias")
     propiedad = db.relationship("CSPropiedad")
+    seguimientos = db.relationship("CSIncidenciaSeguimiento", backref="incidencia",
+                                   lazy=True, cascade="all, delete-orphan",
+                                   order_by="CSIncidenciaSeguimiento.created_at.desc()")
+
+
+class CSIncidenciaSeguimiento(db.Model):
+    """FEAT-2026-10-05: bitácora de seguimiento de una incidencia.
+
+    comentarios_operaciones guarda un solo texto y cada comentario nuevo
+    pisaba el anterior: no quedaba rastro de qué se hizo ni cuándo. Aquí se
+    acumulan; comentarios_operaciones se sigue llenando con el último para
+    las vistas que ya lo leen.
+    """
+    __tablename__ = "cs_incidencia_seguimientos"
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    incidencia_id = db.Column(UUID(as_uuid=True),
+                              db.ForeignKey("cs_incidencias.id", ondelete="CASCADE"),
+                              nullable=False, index=True)
+    texto = db.Column(db.Text, nullable=False)
+    autor = db.Column(db.String(200), default="")
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
 
 
 @db.event.listens_for(CSIncidencia, "before_insert")

@@ -20,7 +20,7 @@ from blueprints.auth import is_admin_role, is_full_access_role
 from models import (
     CSAccount, CSInvoice, CSAppointment, CSNote, CSTask,
     CSOnboardingAccount, CSOpportunity, CSContacto, CSEntregable,
-    CSEncuesta, CSIncidencia, CSPropiedad, CSWorkloadSurvey,
+    CSEncuesta, CSIncidencia, CSIncidenciaSeguimiento, CSPropiedad, CSWorkloadSurvey,
     CSObjetivo, CSDocumento, KAMEmailResponse,
     UserCRM, RolCRM,
 )
@@ -4274,10 +4274,69 @@ def cambiar_status_incidencia(account_id, inc_id):
                     inc.tiempo_respuesta = (date.today() - inc.fecha_incidencia).days
         comentario = request.form.get("comentarios", "").strip()
         if comentario:
-            inc.comentarios_operaciones = comentario
+            _agregar_seguimiento(inc, comentario)
         db.session.commit()
     return redirect(_destino_seguro(
         url_for("cs.account_detail", account_id=account_id) + "?tab=proyectos"))
+
+
+def _agregar_seguimiento(inc, texto):
+    """Suma una entrada a la bitácora y deja el último texto donde ya se lee."""
+    db.session.add(CSIncidenciaSeguimiento(
+        incidencia_id=inc.id, texto=texto, autor=session.get("user_nombre", "")))
+    inc.comentarios_operaciones = texto
+
+
+@cs_bp.route("/account/<uuid:account_id>/incidencias/<uuid:inc_id>/seguimiento", methods=["POST"])
+@require_cs_account_access
+def seguimiento_incidencia(account_id, inc_id):
+    """FEAT-2026-10-05: compromiso, responsable y bitácora desde la cola.
+
+    Los cambios de fecha y de responsable también quedan en la bitácora:
+    mover un compromiso tres veces es justo lo que hay que poder ver.
+    """
+    inc = db.session.get(CSIncidencia, inc_id)
+    destino = _destino_seguro(
+        url_for("cs.account_detail", account_id=account_id) + "?tab=proyectos")
+    if not inc:
+        return redirect(destino)
+    if str(inc.account_id) != str(account_id):
+        return _permission_denied()
+    err = _require_account_access(_get_cs_account(inc.account_id))
+    if err:
+        return err
+
+    cambios = []
+    if "fecha_compromiso" in request.form:
+        crudo = request.form.get("fecha_compromiso", "").strip()
+        nueva = None
+        if crudo:
+            try:
+                nueva = datetime.strptime(crudo, "%Y-%m-%d").date()
+            except ValueError:
+                flash("La fecha compromiso no es válida.", "error")
+                return redirect(destino)
+        if nueva != inc.fecha_compromiso:
+            antes = inc.fecha_compromiso.strftime("%d/%m/%Y") if inc.fecha_compromiso else "sin fecha"
+            despues = nueva.strftime("%d/%m/%Y") if nueva else "sin fecha"
+            cambios.append(f"Compromiso: {antes} → {despues}")
+            inc.fecha_compromiso = nueva
+
+    if "responsable" in request.form:
+        nuevo = request.form.get("responsable", "").strip()[:200]
+        if nuevo != (inc.responsable or ""):
+            cambios.append(f"Responsable: {inc.responsable or 'nadie'} → {nuevo or 'nadie'}")
+            inc.responsable = nuevo
+
+    comentario = request.form.get("comentario", "").strip()
+    if cambios:
+        db.session.add(CSIncidenciaSeguimiento(
+            incidencia_id=inc.id, texto=" · ".join(cambios),
+            autor=session.get("user_nombre", "")))
+    if comentario:
+        _agregar_seguimiento(inc, comentario)
+    db.session.commit()
+    return redirect(destino)
 
 
 # ══════════════════════════════════════════════
@@ -4968,12 +5027,39 @@ def incidencias_por_cliente():
         seleccionada = cuentas[0]
 
     incidencias, resumen, detalle = [], None, []
+    pendientes, resueltas, kpis = [], [], {}
     if seleccionada:
-        incidencias = (CSIncidencia.query
-                       .filter(CSIncidencia.account_id == seleccionada.id)
-                       .order_by(CSIncidencia.fecha_incidencia.desc().nullslast())
-                       .all())
+        incidencias = _con_evidencia_urls(
+            CSIncidencia.query
+            .filter(CSIncidencia.account_id == seleccionada.id)
+            .order_by(CSIncidencia.fecha_incidencia.desc().nullslast())
+            .all())
         resumen = _resumen_incidencias(incidencias)
+
+        # FEAT-2026-10-05: cola de seguimiento. Primero lo vencido (lo que
+        # más se pasó, arriba), luego lo que no tiene compromiso —nadie se ha
+        # comprometido a nada—, y al final lo que va en tiempo. Dentro de cada
+        # grupo, lo más viejo primero.
+        hoy = date.today()
+        for i in incidencias:
+            i.dias_abierta = (hoy - i.fecha_incidencia).days if i.fecha_incidencia else None
+            i.vencida = _incidencia_vencida(i)
+        pendientes = [i for i in incidencias if i.status != "Resuelta"]
+        pendientes.sort(key=lambda i: (
+            0 if i.vencida else 1 if not i.fecha_compromiso else 2,
+            i.fecha_compromiso or date.max if i.vencida else date.max,
+            i.fecha_incidencia or date.max,
+        ))
+        resueltas = [i for i in incidencias if i.status == "Resuelta"]
+        resueltas.sort(key=lambda i: i.fecha_solucion or date.min, reverse=True)
+        kpis = {
+            "abiertas": len(pendientes),
+            "vencidas": sum(1 for i in pendientes if i.vencida),
+            "sin_compromiso": sum(1 for i in pendientes if not i.fecha_compromiso),
+            "sin_responsable": sum(1 for i in pendientes if not (i.responsable or "").strip()),
+            "mas_antigua": max((i.dias_abierta for i in pendientes
+                                if i.dias_abierta is not None), default=None),
+        }
         # cruce sucursal × tipo: dónde se repite cada problema
         from collections import defaultdict, Counter
         cruce = defaultdict(Counter)
@@ -4982,9 +5068,21 @@ def incidencias_por_cliente():
             cruce[suc][i.tipo or "Sin tipo"] += 1
         detalle = sorted(cruce.items(), key=lambda kv: -sum(kv[1].values()))
 
+    # Abiertas por cuenta para el selector: que se vea a dónde ir sin entrar.
+    abiertas_por_cuenta = dict(
+        db.session.query(CSIncidencia.account_id, func.count(CSIncidencia.id))
+        .filter(CSIncidencia.status != "Resuelta")
+        .group_by(CSIncidencia.account_id).all())
+    responsables = [n for (n,) in UserCRM.query.with_entities(UserCRM.nombre)
+                    .filter(UserCRM.activo.is_(True)).order_by(UserCRM.nombre).all()]
+
     return render_template("cs/cs_incidencias_cliente.html",
                            cuentas=cuentas, cuenta=seleccionada,
                            incidencias=incidencias, resumen=resumen,
+                           pendientes=pendientes, resueltas=resueltas, kpis=kpis,
+                           abiertas_por_cuenta=abiertas_por_cuenta,
+                           responsables=responsables,
+                           hoy=date.today(),
                            puede_editar=_can_edit_account(seleccionada),
                            cruce=detalle, **_ctx())
 

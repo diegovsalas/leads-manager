@@ -136,6 +136,23 @@ def _run_pending_migrations(app):
         except Exception as e:
             app.logger.warning("[auto-migrate] cs_encuestas v2 failed: %s", e)
 
+        # ─── cs_incidencia_seguimientos: bitácora (FEAT-2026-10-05) ───
+        try:
+            with db.engine.begin() as conn:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS cs_incidencia_seguimientos (
+                        id UUID PRIMARY KEY,
+                        incidencia_id UUID NOT NULL REFERENCES cs_incidencias(id) ON DELETE CASCADE,
+                        texto TEXT NOT NULL,
+                        autor VARCHAR(200) DEFAULT '',
+                        created_at TIMESTAMPTZ
+                    )"""))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_cs_incidencia_seguimientos_incidencia_id "
+                    "ON cs_incidencia_seguimientos (incidencia_id)"))
+        except Exception as e:
+            app.logger.warning("[auto-migrate] cs_incidencia_seguimientos failed: %s", e)
+
         # ─── leads.shopify_* (FEAT-2026-09-29) ───
         try:
             with db.engine.begin() as conn:
