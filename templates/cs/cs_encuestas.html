@@ -29,13 +29,13 @@ details.dims summary::-webkit-details-marker{display:none}
 <div class="page-head">
     <div>
         <h1>Encuestas NPS</h1>
-        <p class="sub">Cada respuesta con su comentario.{% if is_kam %} Solo tus cuentas.{% endif %}</p>
+        <p class="sub">Cada respuesta con su comentario. El trimestre es el evaluado: lo que se contesta en octubre califica julio–septiembre.{% if is_kam %} Solo tus cuentas.{% endif %}</p>
     </div>
     <div class="actions">
         <form method="get" class="filtros">
             <select name="trimestre" onchange="this.form.submit()">
                 <option value="" {% if not filtros.trimestre %}selected{% endif %}>Todos los trimestres</option>
-                {% for t in trimestres %}<option value="{{ t }}" {% if t == filtros.trimestre %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                {% for t in trimestres %}<option value="{{ t }}" {% if t == filtros.trimestre %}selected{% endif %}>Evalúa {{ t }}</option>{% endfor %}
             </select>
             {% if kams %}
             <select name="kam" onchange="this.form.submit()">

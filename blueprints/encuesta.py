@@ -75,19 +75,25 @@ def enviar_encuesta(token):
     return render_template("encuesta/gracias.html", account=account)
 
 
-def _notificar_respuesta(account, r):
+def _notificar_respuesta(account, r, para=None, cc=None):
     """Avisa al KAM (con copia a CS) que el cliente contestó.
+
+    para/cc sustituyen a los destinatarios normales: sirven para reenviar
+    un aviso a una sola persona sin volver a escribirle al KAM.
 
     Nunca debe tumbar la encuesta: la respuesta ya está guardada, y un
     cliente no tiene por qué ver un error porque Resend falló.
+    Devuelve True si Resend aceptó el correo.
     """
     if not RESEND_API_KEY or r.nps is None:
-        return
+        return False
     kam = account.kam
-    para = [kam.correo] if kam and kam.correo else []
-    cc = [c for c in NOTIF_CC if c not in para]
+    if para is None:
+        para = [kam.correo] if kam and kam.correo else []
+        cc = [c for c in NOTIF_CC if c not in para]
+    cc = cc or []
     if not para and not cc:
-        return
+        return False
     try:
         import resend
         resend.api_key = RESEND_API_KEY
@@ -131,6 +137,8 @@ def _notificar_respuesta(account, r):
             "subject": f"{'⚠️ Detractor — ' if urgente else ''}NPS {r.nps} · {account.nombre} respondió la encuesta",
             "html": html,
         })
+        return True
     except Exception as e:
         current_app.logger.warning("No se pudo avisar la respuesta de encuesta de %s: %s",
                                    account.nombre, e)
+        return False

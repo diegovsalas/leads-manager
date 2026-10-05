@@ -5200,7 +5200,15 @@ _DIMENSIONES_ENCUESTA = (
 
 
 def _trimestre(fecha):
-    return f"{fecha.year}-Q{(fecha.month - 1) // 3 + 1}"
+    """Trimestre EVALUADO: el anterior al de la respuesta.
+
+    La encuesta se manda al cerrar el trimestre, así que lo que se contesta
+    en octubre califica julio-septiembre. Etiquetar por la fecha de
+    respuesta ponía la evaluación de Q3 como si fuera de Q4.
+    """
+    q = (fecha.month - 1) // 3          # 0-3, trimestre de la respuesta
+    anio = fecha.year if q else fecha.year - 1
+    return f"{anio}-Q{q if q else 4}"
 
 
 def _categoria_nps(n):
@@ -5278,7 +5286,7 @@ def encuestas_exportar():
     wb = Workbook()
     ws = wb.active
     ws.title = "Respuestas"
-    ws.append(["Fecha", "Trimestre", "Cliente", "KAM", "Respondió", "Puesto", "NPS", "Categoría",
+    ws.append(["Fecha respuesta", "Trimestre evaluado", "Cliente", "KAM", "Respondió", "Puesto", "NPS", "Categoría",
                "CSAT promedio", *[et for _, et in _DIMENSIONES_ENCUESTA], "Comentario", "Versión"])
     for c in ws[1]:
         c.font = Font(bold=True, color="FFFFFF")
