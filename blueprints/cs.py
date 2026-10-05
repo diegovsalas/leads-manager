@@ -5311,3 +5311,44 @@ def encuestas_exportar():
     return send_file(buf, as_attachment=True,
                      download_name=f"encuestas_nps_{sufijo}.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@cs_bp.route("/encuestas/<uuid:enc_id>/notificar", methods=["POST"])
+@require_cs_analisis
+def encuesta_notificar(enc_id):
+    """Envía (o reenvía) a mano el aviso de una respuesta.
+
+    El aviso automático al responder sigue igual; esto cubre las respuestas
+    que entraron antes de que existiera o cuando alguien más necesita verla.
+    Sin correos escritos va a los destinatarios normales (KAM + copias).
+    """
+    import re
+    from blueprints.encuesta import _notificar_respuesta
+
+    destino = _destino_seguro("/cs/encuestas")
+    e = db.session.get(CSEncuesta, enc_id)
+    if not e:
+        return _not_found()
+    account = _get_cs_account(e.account_id)
+    err = _require_account_access(account)
+    if err:
+        return err
+
+    crudo = (request.form.get("correos") or "").replace(";", ",")
+    correos = [c.strip() for c in crudo.split(",") if c.strip()]
+    malos = [c for c in correos if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", c)]
+    if malos:
+        flash(f"Correo no válido: {', '.join(malos)}", "error")
+        return redirect(destino)
+
+    if correos:
+        ok = _notificar_respuesta(account, e, para=correos, cc=[])
+        a_quien = ", ".join(correos)
+    else:
+        ok = _notificar_respuesta(account, e)
+        a_quien = "el KAM y las copias habituales"
+    if ok:
+        flash(f"Aviso de {account.nombre} enviado a {a_quien}.", "ok")
+    else:
+        flash("No se pudo enviar el aviso. Revisa que el correo esté configurado (RESEND_API_KEY).", "error")
+    return redirect(destino)

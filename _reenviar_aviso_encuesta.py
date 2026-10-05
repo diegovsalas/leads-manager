@@ -29,16 +29,22 @@ def main():
     from models import CSAccount, CSEncuesta
     from blueprints import encuesta
 
+    # Sin distinguir mayúsculas ni espacios: el nombre en la base puede
+    # traer un espacio de más que en pantalla no se ve.
+    def _norm(t):
+        return " ".join(t.split()).lower()
+    buscados = [_norm(c) for c in args.cliente]
+
     app = create_app()
     with app.app_context(), app.test_request_context(base_url=BASE_URL):
         filas = (db.session.query(CSEncuesta, CSAccount)
                  .join(CSAccount, CSEncuesta.account_id == CSAccount.id)
-                 .filter(CSAccount.nombre.in_(args.cliente))
+                 .filter(db.func.lower(db.func.trim(db.func.regexp_replace(CSAccount.nombre, r'\s+', ' ', 'g'))).in_(buscados))
                  .filter(db.func.date(db.func.timezone("America/Monterrey", CSEncuesta.created_at)) == dia)
                  .order_by(CSEncuesta.created_at).all())
 
-        encontrados = {a.nombre for _, a in filas}
-        for falta in sorted(set(args.cliente) - encontrados):
+        encontrados = {_norm(a.nombre) for _, a in filas}
+        for falta in sorted(c for c in args.cliente if _norm(c) not in encontrados):
             print(f"  ! sin respuesta ese día: {falta}")
         for e, a in filas:
             print(f"  {a.nombre} · {e.nombre_respondente} · NPS {e.nps} · CSAT {e.csat_promedio}")

@@ -24,6 +24,13 @@ details.dims summary{cursor:pointer;font-size:11.5px;color:var(--copper);list-st
 details.dims summary::-webkit-details-marker{display:none}
 .dims-grid{display:grid;grid-template-columns:auto auto;gap:2px 12px;font-size:11.5px;margin-top:4px}
 .dims-grid span:nth-child(odd){color:var(--ink-3)}
+details.aviso summary{cursor:pointer;font-size:12px;color:var(--copper);list-style:none;white-space:nowrap}
+details.aviso summary::-webkit-details-marker{display:none}
+details.aviso form{display:flex;flex-direction:column;gap:6px;margin-top:6px;min-width:220px}
+details.aviso input{font:inherit;font-size:12.5px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg-surface);color:inherit}
+details.aviso .ayuda{font-size:11px;color:var(--ink-3);line-height:1.4}
+.flash{padding:11px 14px;border:1px solid var(--border);border-left:4px solid var(--ok);border-radius:var(--r);background:var(--bg-card);font-size:13px;margin-top:14px}
+.flash.error{border-left-color:var(--danger)}
 </style>
 
 <div class="page-head">
@@ -52,6 +59,10 @@ details.dims summary::-webkit-details-marker{display:none}
     </div>
 </div>
 
+{% with mensajes = get_flashed_messages(with_categories=true) %}
+{% for cat, msg in mensajes %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+{% endwith %}
+
 <div class="kpis">
     <div class="kpi"><div class="et">Respuestas</div><div class="v">{{ stats.respuestas }}</div>
         <div class="n">{{ stats.clientes }} cliente{{ 's' if stats.clientes != 1 }}</div></div>
@@ -68,7 +79,7 @@ details.dims summary::-webkit-details-marker{display:none}
     <table>
         <thead><tr>
             <th>Fecha</th><th>Cliente</th><th>KAM</th><th>Respondió</th>
-            <th class="c">NPS</th><th class="n">CSAT</th><th>Comentario</th>
+            <th class="c">NPS</th><th class="n">CSAT</th><th>Comentario</th><th>Aviso</th>
         </tr></thead>
         <tbody>
         {% for e, a in filas %}
@@ -86,9 +97,23 @@ details.dims summary::-webkit-details-marker{display:none}
                         </div>
                     </details></td>
                 <td><div class="coment">{% if e.comentario %}{{ e.comentario }}{% else %}<span class="muted">Sin comentario</span>{% endif %}</div></td>
+                <td>
+                    {% if not is_kam or a.kam_id|string == session.get('user_id') %}
+                    <details class="aviso">
+                        <summary>{{ icon('mail', 13) }} Enviar aviso</summary>
+                        <form method="POST" action="/cs/encuestas/{{ e.id }}/notificar"
+                              onsubmit="this.querySelector('button').disabled=true">
+                            <input type="hidden" name="next" value="{{ request.full_path }}">
+                            <input type="text" name="correos" placeholder="correo@grupoavantex.com">
+                            <span class="ayuda">Vacío: al KAM{% if a.kam %} ({{ a.kam.nombre }}){% endif %} con las copias de siempre. Varios: sepáralos con coma.</span>
+                            <button type="submit" class="btn primary" style="height:28px;font-size:12px">Enviar</button>
+                        </form>
+                    </details>
+                    {% endif %}
+                </td>
             </tr>
         {% else %}
-            <tr><td colspan="7" class="muted" style="text-align:center;padding:28px">
+            <tr><td colspan="8" class="muted" style="text-align:center;padding:28px">
                 No hay respuestas con estos filtros.{% if filtros.trimestre %} <a href="/cs/encuestas?trimestre=">Ver todos los trimestres</a>{% endif %}</td></tr>
         {% endfor %}
         </tbody>
