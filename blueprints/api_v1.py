@@ -4,6 +4,8 @@ API v1 — Endpoints para sistemas externos (bots, integraciones).
 Autenticación: Header X-API-Key
 Cada endpoint requiere un permiso específico.
 """
+import os
+
 from flask import Blueprint, request, jsonify
 from extensions import db
 from models import Lead, EtapaPipeline, OrigenLead, Usuario
@@ -236,4 +238,10 @@ def listar_etapas():
 @api_v1_bp.route("/health", methods=["GET"])
 def health():
     """Health check público."""
-    return jsonify({"status": "ok", "version": "1.0", "sistema": "Leads Manager Avantex"})
+    response = jsonify({"status": "ok", "version": "1.0", "sistema": "Leads Manager Avantex"})
+    # Identifica la versión desplegada sin modificar el contrato JSON del health check.
+    revision = os.getenv("RENDER_GIT_COMMIT")
+    if revision:
+        response.headers["X-App-Revision"] = revision
+    response.headers["Cache-Control"] = "no-store"
+    return response
