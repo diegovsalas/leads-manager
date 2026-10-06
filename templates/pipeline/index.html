@@ -4879,7 +4879,7 @@ function lpEmpresaSearch(){
       const items=await _api('/api/accounts/search?q='+encodeURIComponent(q))||[];
       let html='';
       if(items.length){
-        html=items.map(a=>`<div class="nl-empresa-item" onclick='lpPickEmpresa("${a.id}",${JSON.stringify(a.nombre||"")})'>${a.client_id?`<span style="font-family:var(--mono);font-size:10px;background:var(--bg-tag);color:var(--accent);padding:1px 5px;border-radius:3px;font-weight:600;margin-right:6px;">${a.client_id}</span>`:''}<strong>${a.nombre}</strong>${a.rfc?` <span style="color:var(--text3);font-size:11px;font-family:var(--mono);">${a.rfc}</span>`:''}${a.is_cliente?` <span style="background:var(--green-bg);color:var(--green);padding:0 5px;border-radius:99px;font-size:9px;font-weight:600;margin-left:4px;">CLIENTE</span>`:''}</div>`).join('');
+        html=items.map(a=>`<div class="nl-empresa-item" onclick='lpPickEmpresa("${a.id}",${_esc(JSON.stringify(a.nombre||""))})'>${a.client_id?`<span style="font-family:var(--mono);font-size:10px;background:var(--bg-tag);color:var(--accent);padding:1px 5px;border-radius:3px;font-weight:600;margin-right:6px;">${a.client_id}</span>`:''}<strong>${a.nombre}</strong>${a.rfc?` <span style="color:var(--text3);font-size:11px;font-family:var(--mono);">${a.rfc}</span>`:''}${a.is_cliente?` <span style="background:var(--green-bg);color:var(--green);padding:0 5px;border-radius:99px;font-size:9px;font-weight:600;margin-left:4px;">CLIENTE</span>`:''}</div>`).join('');
       }else{
         html='<div style="padding:8px 11px;color:var(--text3);font-size:12px;font-style:italic;">Sin resultados</div>';
       }
@@ -6439,7 +6439,7 @@ async function moverOpp(oppId,etapa){
       showToast('No se movio', d.error||'Error al mover la oportunidad');
       loadOpps(); return false;
     }
-    loadOpps(); return true;
+    location.reload(); return true;
   }catch(err){ showToast('Error',err.message); loadOpps(); return false; }
 }
 
@@ -7475,7 +7475,7 @@ window.IS_ADMIN_AI = IS_ADMIN || false;
       </div>
       <div class="nl-row two">
         <div>
-          <label class="nl-label">Valor *</label>
+          <label class="nl-label">Valor adicional de la venta (MXN) *</label>
           <input class="nl-input" id="opp-valor" type="number" step="0.01" min="0"/>
         </div>
         <div>
@@ -7508,9 +7508,18 @@ window.IS_ADMIN_AI = IS_ADMIN || false;
           <input class="nl-input" id="opp-sucursales" type="number" min="1"/>
         </div>
         <div>
-          <label class="nl-label">Monthly amount</label>
+          <label class="nl-label">Ingreso mensual adicional (MXN)</label>
           <input class="nl-input" id="opp-monthly" type="number" step="0.01" min="0"/>
         </div>
+      </div>
+      <div class="nl-row">
+        <label class="nl-label">Tipo de venta</label>
+        <select class="nl-input" id="opp-sale-type">
+          <option value="upsell">Expansión recurrente</option>
+          <option value="servicio_unico">Servicio único</option>
+          <option value="suscripcion_nueva">Suscripción nueva (oportunidad existente)</option>
+        </select>
+        <div style="font-size:11px;color:var(--text3);margin-top:5px;">Captura solo el incremento vendido. La expansión recurrente requiere ingreso mensual adicional para cerrar.</div>
       </div>
       <div class="nl-row">
         <label class="nl-label">Notas</label>
@@ -7564,6 +7573,7 @@ async function convertirLeadAOportunidad(leadId){
     document.getElementById('opp-contacto-email').value='';
     document.getElementById('opp-valor').value=valorInicial;
     document.getElementById('opp-monthly').value=monthly;
+    document.getElementById('opp-sale-type').value=monthly?'suscripcion_nueva':'servicio_unico';
     document.getElementById('opp-fecha-cierre').value='';
     document.getElementById('opp-sucursales').value=lead.num_sucursales||'';
     document.getElementById('opp-notas').value=lead.tipo_cliente||lead.notas||'';
@@ -7606,6 +7616,9 @@ async function openOppModal(opp){
   // Reset
   ['opp-nombre','opp-empresa','opp-account-id','opp-sitio','opp-estado','opp-contacto-nombre','opp-contacto-telefono','opp-contacto-email','opp-valor','opp-monthly','opp-fecha-cierre','opp-sucursales','opp-notas','opp-motivo-perdida'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('opp-empresa-list').style.display='none';
+  document.querySelector('#opp-sale-type option[value="suscripcion_nueva"]').disabled=!opp;
+  document.querySelector('#opp-sale-type option[value="suscripcion_nueva"]').hidden=!opp;
+  document.getElementById('opp-sale-type').value=opp?(opp.sale_type||(opp.monthly_amount?'upsell':'servicio_unico')):'upsell';
   document.querySelectorAll('#opp-marca-pills .nl-pill').forEach((p,i)=>{p.classList.remove('active');p.onclick=()=>{p.parentElement.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');};});
   document.querySelectorAll('#opp-etapa-pills .nl-pill').forEach((p,i)=>{p.classList.remove('active');p.onclick=()=>{p.parentElement.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');_oppToggleMotivo();};});
   if(opp){
@@ -7650,13 +7663,18 @@ async function saveOpp(){
   const empresaId=document.getElementById('opp-account-id').value||null;
   const marca=document.querySelector('#opp-marca-pills .nl-pill.active')?.dataset.val;
   const etapa=document.querySelector('#opp-etapa-pills .nl-pill.active')?.dataset.val;
-  const valor=parseFloat(document.getElementById('opp-valor').value)||0;
+  const valor=Number(document.getElementById('opp-valor').value);
+  const monthly=Number(document.getElementById('opp-monthly').value);
+  const saleType=document.getElementById('opp-sale-type').value;
+  if(!Number.isFinite(valor)||valor<0||!Number.isFinite(monthly)||monthly<0){_nlToast('Captura montos válidos, sin valores negativos',true);return;}
+  if(etapa==='Cerrado Ganado'&&(valor<=0||(saleType!=='servicio_unico'&&monthly<=0))){_nlToast(valor<=0?'Captura el valor adicional de la venta':'Captura el ingreso mensual adicional',true);return;}
   if(!nombre){_nlToast('Falta el nombre de la oportunidad',true);return;}
   if(!empresaName){_nlToast('Todo upsell debe ligarse a un cliente existente',true);document.getElementById('opp-empresa').focus();return;}
-  if(!empresaId){_nlToast('Elegí una empresa del listado o creala con "+ Agregar"',true);document.getElementById('opp-empresa').focus();return;}
+  if(!empresaId){_nlToast('Selecciona un cliente existente del listado',true);document.getElementById('opp-empresa').focus();return;}
   if(!marca){_nlToast('Seleccioná una marca',true);return;}
   const body={
     nombre, empresa:empresaName, account_id:empresaId,
+    is_upsell: !_oppFromLeadId, sale_type: saleType,
     estado_cliente:document.getElementById('opp-estado').value.trim()||null,
     contacto_nombre:document.getElementById('opp-contacto-nombre').value.trim()||null,
     contacto_telefono:document.getElementById('opp-contacto-telefono').value.trim()||null,
@@ -7665,7 +7683,7 @@ async function saveOpp(){
     fecha_cierre_esperada:document.getElementById('opp-fecha-cierre').value||null,
     num_sucursales:parseInt(document.getElementById('opp-sucursales').value)||null,
     sitio:document.getElementById('opp-sitio').value.trim()||null,
-    monthly_amount:parseFloat(document.getElementById('opp-monthly').value)||null,
+    monthly_amount:monthly||null,
     notas:document.getElementById('opp-notas').value.trim()||null,
     motivo_perdida:document.getElementById('opp-motivo-perdida').value.trim()||null,
   };
@@ -7680,17 +7698,24 @@ async function saveOpp(){
       url='/api/oportunidades/';method='POST';
     }
     const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!r.ok){const e=await r.json();throw new Error(e.error||'Error');}
+    if(!r.ok){
+      const e=await r.json();
+      if(e.requiere_evidencia && _oppEditing){
+        const id=_oppEditing.id;
+        const pending=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,etapa:_oppEditing.etapa})});
+        if(!pending.ok){const err=await pending.json();throw new Error(err.error||'No se pudieron guardar los cambios');}
+        closeOppModal();
+        _oeEtapaPendiente='Cerrado Ganado';
+        await openOppEvid(id,e.error);
+        return;
+      }
+      throw new Error(e.error||'Error');
+    }
     const successMsg=_oppEditing?'Actualizada: '+nombre:
       _oppFromLeadId?'Lead convertido → Oportunidad: '+nombre:'Creada: '+nombre;
     _nlToast(successMsg);
     closeOppModal();
-    if(_oppFromLeadId){
-      // Si estábamos en pipeline, recargar para ver el cambio de etapa del lead
-      if(typeof location!=='undefined')location.reload();
-    }else{
-      loadOpps();
-    }
+    location.reload();  // Restore the saved view and refresh both server-rendered Pipe and Upsells.
   }catch(e){_nlToast('Error: '+e.message,true);}
   finally{btn.disabled=false;}
 }
@@ -7700,8 +7725,8 @@ async function deleteOpp(){
   if(!confirm(`¿Eliminar oportunidad "${_oppEditing.nombre}"?`))return;
   try{
     const r=await fetch(`/api/oportunidades/${_oppEditing.id}`,{method:'DELETE'});
-    if(!r.ok)throw new Error('Error eliminando');
-    _nlToast('Eliminada');closeOppModal();loadOpps();
+    if(!r.ok){const e=await r.json();throw new Error(e.error||'Error eliminando');}
+    _nlToast('Eliminada');closeOppModal();location.reload();
   }catch(e){_nlToast('Error: '+e.message,true);}
 }
 
@@ -8403,7 +8428,7 @@ function nlEmpresaSearch(){
       const items=await _api('/api/accounts/search?q='+encodeURIComponent(q))||[];
       let html='';
       if(items.length){
-        html=items.map(a=>`<div class="nl-empresa-item" onclick='nlPickEmpresa("${a.id}",${JSON.stringify(a.nombre||"")})'>${a.client_id?`<span style="font-family:var(--mono);font-size:10px;background:var(--bg-tag);color:var(--accent);padding:1px 5px;border-radius:3px;font-weight:600;margin-right:6px;">${a.client_id}</span>`:''}<strong>${a.nombre}</strong>${a.rfc?` <span style="color:var(--text3);font-size:11px;font-family:var(--mono);">${a.rfc}</span>`:''}${a.is_cliente?` <span style="background:var(--green-bg);color:var(--green);padding:0 5px;border-radius:99px;font-size:9px;font-weight:600;margin-left:4px;">CLIENTE</span>`:''}</div>`).join('');
+        html=items.map(a=>`<div class="nl-empresa-item" onclick='nlPickEmpresa("${a.id}",${_esc(JSON.stringify(a.nombre||""))})'>${a.client_id?`<span style="font-family:var(--mono);font-size:10px;background:var(--bg-tag);color:var(--accent);padding:1px 5px;border-radius:3px;font-weight:600;margin-right:6px;">${a.client_id}</span>`:''}<strong>${a.nombre}</strong>${a.rfc?` <span style="color:var(--text3);font-size:11px;font-family:var(--mono);">${a.rfc}</span>`:''}${a.is_cliente?` <span style="background:var(--green-bg);color:var(--green);padding:0 5px;border-radius:99px;font-size:9px;font-weight:600;margin-left:4px;">CLIENTE</span>`:''}</div>`).join('');
       }else{
         html='<div style="padding:8px 11px;color:var(--text3);font-size:12px;font-style:italic;">Sin resultados</div>';
       }
@@ -8446,19 +8471,20 @@ let _empresaCreateReturnTo=null;
 let _oppEmpresaTimer;
 function oppEmpresaSearch(){
   clearTimeout(_oppEmpresaTimer);
+  document.getElementById('opp-account-id').value='';
   _oppEmpresaTimer=setTimeout(async()=>{
     const q=document.getElementById('opp-empresa').value.trim();
     const list=document.getElementById('opp-empresa-list');
-    document.getElementById('opp-account-id').value='';  // limpiar link al tipear
     if(q.length<3){list.style.display='none';return;}
     try{
       // Solo cuentas con venta cerrada. /api/accounts/search devolveria
       // tambien prospectos, y un upsell a un prospecto se crearia pero no
       // saldria en el tablero, sin que nada explique por que.
       const items=await _api('/api/oportunidades/cuentas-upsell?q='+encodeURIComponent(q))||[];
+      if(document.getElementById('opp-empresa').value.trim()!==q||document.getElementById('opp-account-id').value)return;
       let html='';
       if(items.length){
-        html=items.map(a=>`<div class="nl-empresa-item" onclick='oppPickEmpresa("${a.id}",${JSON.stringify(a.nombre||"")})'>${a.client_id?`<span style="font-family:var(--mono);font-size:10px;background:var(--bg-tag);color:var(--accent);padding:1px 5px;border-radius:3px;font-weight:600;margin-right:6px;">${a.client_id}</span>`:''}<strong>${a.nombre}</strong>${a.rfc?` <span style="color:var(--text3);font-size:11px;font-family:var(--mono);">${a.rfc}</span>`:''} <span style="background:var(--green-bg);color:var(--green);padding:0 5px;border-radius:99px;font-size:9px;font-weight:600;margin-left:4px;">CLIENTE</span></div>`).join('');
+        html=items.map(a=>`<div class="nl-empresa-item" onclick='oppPickEmpresa("${a.id}",${_esc(JSON.stringify(a.nombre||""))})'>${a.client_id?`<span style="font-family:var(--mono);font-size:10px;background:var(--bg-tag);color:var(--accent);padding:1px 5px;border-radius:3px;font-weight:600;margin-right:6px;">${_esc(a.client_id)}</span>`:''}<strong>${_esc(a.nombre)}</strong>${a.rfc?` <span style="color:var(--text3);font-size:11px;font-family:var(--mono);">${_esc(a.rfc)}</span>`:''} <span style="background:var(--green-bg);color:var(--green);padding:0 5px;border-radius:99px;font-size:9px;font-weight:600;margin-left:4px;">CLIENTE</span></div>`).join('');
       }else{
         html='<div style="padding:8px 11px;color:var(--text3);font-size:12px;font-style:italic;">Ningun cliente con ese nombre. Un upsell solo aplica a quien ya nos compra; si es negocio nuevo va en el Pipe.</div>';
       }

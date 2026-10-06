@@ -1,7 +1,7 @@
 # Pruebas
 
 ```bash
-python3 -m pytest          # las 17
+python3 -m pytest          # suite completa
 python3 -m pytest -q tests/test_cierre.py   # solo un flujo
 ```
 
@@ -15,10 +15,10 @@ descubre en la nómina.
 |---|---|---|
 | `test_cierre.py` | cerrar un lead como ganado | que la venta se registre con el monto correcto, que no se duplique, que Pestex no cierre sin respaldo, y que una venta sin monto quede *pendiente* y no como comisión de cero |
 | `test_asignacion.py` | reparto de leads | que el lead llegue a un vendedor de su marca, que no se pierdan campos por el camino, que el reparto mire la carga |
+| `test_upsell.py` | expansión en oportunidades | clasificación desde leads/CS, permisos, montos, cancelación y reapertura sin duplicados, evidencia, forecast y sintaxis del Pipe |
 | `test_metas.py` | avance contra meta | que una venta cuente en el mes en que **se cerró**, no en el que entró el lead |
 
-Deliberadamente **no** cubren pantallas ni endpoints HTTP. Eso es más frágil y
-menos valioso: una tabla que se pinta mal se ve; una comisión mal calculada no.
+Las regresiones de upsell también verifican endpoints HTTP, porque los permisos y las validaciones deben proteger todas las vías de cierre. El render del Pipe comprueba la sintaxis del JavaScript.
 
 ## Cómo corren
 

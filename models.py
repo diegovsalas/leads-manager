@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import inspect
 from sqlalchemy.orm.base import NO_VALUE
 from sqlalchemy.dialects.postgresql import UUID, ARRAY, JSONB
 from extensions import db
@@ -2861,10 +2862,15 @@ def _auto_probabilidad(mapper, connection, target):
     """Autoset probabilidad desde la etapa si el caller no la pasó
     explícitamente. Si fecha_cierre_real falta y etapa es ganada/perdida,
     setearla a now."""
-    if target.etapa and (target.probabilidad is None or target.probabilidad == 0
-                         or target.probabilidad == 10):
-        # Solo override si es default (10 = CALIFICACION) o vacío
+    state = inspect(target)
+    stage_changed = state.attrs.etapa.history.has_changes()
+    explicit_probability = state.attrs.probabilidad.history.has_changes()
+    closed = target.etapa in (EtapaOportunidad.CIERRE_GANADO, EtapaOportunidad.CIERRE_PERDIDO)
+    if target.etapa and (closed or target.probabilidad is None or
+                         (stage_changed and not explicit_probability)):
         target.probabilidad = PROBABILIDAD_OPORTUNIDAD.get(target.etapa, 10)
+    if stage_changed and not closed:
+        target.fecha_cierre_real = None
     if target.etapa in (EtapaOportunidad.CIERRE_GANADO, EtapaOportunidad.CIERRE_PERDIDO):
         if not target.fecha_cierre_real:
             target.fecha_cierre_real = datetime.now(timezone.utc)

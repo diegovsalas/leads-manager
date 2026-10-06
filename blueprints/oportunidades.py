@@ -6,9 +6,9 @@ leads-manager pueda operar sin Zoho.
 Endpoints bajo /api/oportunidades/.
 """
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from flask import Blueprint, request, jsonify, session
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, false
 
 import cierre_evidencia as CE
 from extensions import db
@@ -18,6 +18,62 @@ from models import (
 )
 
 oportunidades_bp = Blueprint("oportunidades", __name__)
+
+
+@oportunidades_bp.before_request
+def enforce_opportunity_access():
+    """Apply owner and unit access to every individual operation and payload."""
+    from blueprints.auth import (is_commercial_read_role, allowed_units_for_role,
+                                 rol_norm)
+    from un_filter import normalizar_un
+    uid = _current_user_id()
+    if not is_commercial_read_role() and not uid:
+        return jsonify({"error": "No autorizado"}), 403
+    if request.method != "GET" and rol_norm() == "revision_comercial":
+        return jsonify({"error": "Este perfil solo puede consultar"}), 403
+    opp_id = (request.view_args or {}).get("opp_id")
+    if opp_id and not _apply_role_un_scope(_apply_owner_scope(
+            Oportunidad.query.filter(Oportunidad.id == opp_id))).first():
+        return jsonify({"error": "Oportunidad no encontrada"}), 404
+    lead_id = (request.view_args or {}).get("lead_id")
+    data = (request.get_json(silent=True) or {}) if request.is_json else {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "El cuerpo debe ser un objeto JSON"}), 400
+    lead_id = lead_id or data.get("lead_id")
+    allowed = allowed_units_for_role()
+    if lead_id:
+        lead = db.session.get(Lead, lead_id)
+        if not lead or (not is_commercial_read_role() and str(lead.usuario_asignado_id) != str(uid)):
+            return jsonify({"error": "Lead no encontrado"}), 404
+        if allowed and normalizar_un(lead.marca_interes) not in allowed:
+            return jsonify({"error": "No autorizado para esta unidad"}), 403
+    if request.method in ("POST", "PATCH"):
+        if "propietario_id" in data and not is_commercial_read_role() and str(data["propietario_id"]) != str(uid):
+            return jsonify({"error": "No puedes cambiar el propietario"}), 403
+        if allowed and "marca_interes" in data and normalizar_un(data["marca_interes"]) not in allowed:
+            return jsonify({"error": "No autorizado para esta unidad"}), 403
+        for field in ("valor", "monthly_amount"):
+            if data.get(field) not in (None, ""):
+                value = _to_decimal(data[field])
+                if value is None or value < 0:
+                    return jsonify({"error": f"{field} debe ser un monto válido mayor o igual a cero"}), 400
+        if "sale_type" in data and data["sale_type"] not in (None, "suscripcion_nueva", "servicio_unico", "upsell"):
+            return jsonify({"error": "Tipo de venta inválido"}), 400
+        if _truthy(data.get("is_upsell")):
+            if not data.get("account_id") or str(data["account_id"]) not in {str(a) for a in _account_ids_con_venta()}:
+                return jsonify({"error": "El upsell debe vincularse a un cliente existente"}), 400
+
+
+def _validate_close_amount(op):
+    monthly = op.monthly_amount or Decimal("0")
+    total = op.valor or Decimal("0")
+    sale = Sale.query.filter(Sale.opportunity_id == op.id).first() if op.id else None
+    sale_type = op.sale_type or (sale.sale_type if sale else _sale_type_por_defecto(op, float(monthly)))
+    if total <= 0:
+        return "Captura el valor adicional de la venta antes de cerrarla"
+    if sale_type in ("upsell", "suscripcion_nueva") and monthly <= 0:
+        return "Captura el ingreso mensual adicional antes de cerrar la venta recurrente"
+    return None
 
 
 # ── Helpers ────────────────────────────────────────────────────────
@@ -65,8 +121,9 @@ def _to_decimal(v):
     if v is None or v == "":
         return None
     try:
-        return Decimal(str(v))
-    except (ValueError, TypeError):
+        value = Decimal(str(v))
+        return value if value.is_finite() else None
+    except (ValueError, TypeError, InvalidOperation):
         return None
 
 
@@ -129,7 +186,12 @@ def _account_ids_con_venta():
     from models import CSAccount
     facturan = (
         db.session.query(Account.id)
-        .join(CSAccount, func.lower(CSAccount.nombre) == func.lower(Account.nombre))
+        .join(CSAccount, or_(
+            func.lower(func.regexp_replace(func.trim(CSAccount.nombre), r"\s+", " ", "g")) ==
+            func.lower(func.regexp_replace(func.trim(Account.nombre), r"\s+", " ", "g")),
+            func.lower(func.regexp_replace(func.trim(CSAccount.nombre), r"\s+", " ", "g")) ==
+            func.lower(func.regexp_replace(func.trim(Account.nombre_comercial), r"\s+", " ", "g")),
+        ))
         .filter(func.coalesce(CSAccount.mrr, 0) > 0)
         .distinct()
     )
@@ -157,7 +219,8 @@ def _apply_owner_scope(query):
     from blueprints.auth import get_vendedor_filter
     uid = get_vendedor_filter()
     if not uid:
-        return query
+        from blueprints.auth import is_commercial_read_role
+        return query if is_commercial_read_role() else query.filter(false())
     return query.filter(Oportunidad.propietario_id == uid)
 
 
@@ -244,50 +307,41 @@ def _find_duplicate_open_opportunity(account_id=None, lead_id=None, marca=None, 
 
 
 def _sale_type_por_defecto(op, monthly):
-    """suscripcion_nueva la PRIMERA vez que esta cuenta compra esta unidad;
-    upsell de ahí en adelante.
+    """Una venta recurrente a un cliente existente es expansión.
 
-    FEAT-2026-09-08: vender sucursal por sucursal genera N ventas sobre la
-    misma cuenta. Con el default anterior las ocho entraban como
-    'suscripcion_nueva' y la tasa de venta nueva se pagaba ocho veces sobre
-    el mismo cliente. El vendedor puede seguir mandando sale_type explícito;
-    esto solo cambia qué se asume cuando no lo manda.
+    La misma definición de cliente alimenta el buscador y la clasificación:
+    ventas activas de leads/oportunidades o cartera de CS con MRR positivo.
     """
     if monthly <= 0:
         return "servicio_unico"
     if not op.account_id:
         return "suscripcion_nueva"
-    ya_compro = (
-        db.session.query(Sale.id)
-        .join(Oportunidad, Sale.opportunity_id == Oportunidad.id)
-        .filter(
-            Oportunidad.account_id == op.account_id,
-            Oportunidad.id != op.id,
-            Sale.unit == _unit_from_marca(op.marca_interes),
-            Sale.status == "activa",
-        )
-        .first()
-    )
-    return "upsell" if ya_compro else "suscripcion_nueva"
+    return "upsell" if str(op.account_id) in {str(a) for a in _account_ids_con_venta()} else "suscripcion_nueva"
 
 
 def _sync_sale_from_oportunidad(op):
     """Cierre ganado: refleja la oportunidad en Sales de forma idempotente."""
     if op.etapa != EtapaOportunidad.CIERRE_GANADO:
-        return None
+        sale = Sale.query.filter(Sale.opportunity_id == op.id).first() if op.id else None
+        if sale and sale.status == "activa":
+            sale.status = "cancelada"
+            sale.canceled_at = datetime.now(timezone.utc)
+            sale.cancel_reason = f"Oportunidad movida a {op.etapa.value}"
+            if sale.commission_status != "pagada":
+                sale.commission_status = "cancelada"
+        return sale
     if not op.id:
         db.session.flush()
 
     monthly = float(op.monthly_amount or 0)
     total = float(op.valor or 0)
-    sale_type = op.sale_type or _sale_type_por_defecto(op, monthly)
-    if sale_type in ("suscripcion_nueva", "upsell") and monthly <= 0:
-        monthly = total
-    sale_category = "recurrente" if sale_type in ("suscripcion_nueva", "upsell") or monthly > 0 else "eventual"
+    sale = Sale.query.filter(Sale.opportunity_id == op.id).first()
+    sale_type = op.sale_type or (sale.sale_type if sale else _sale_type_por_defecto(op, monthly))
+    op.sale_type = sale_type  # Preserve the classification of this sale on later edits.
+    sale_category = "recurrente" if sale_type in ("suscripcion_nueva", "upsell") else "eventual"
     commission_type = "lead_otorgado" if op.lead_id else "autogenerado"
     rate, amount = _calc_commission(sale_type, commission_type, monthly, total)
 
-    sale = Sale.query.filter(Sale.opportunity_id == op.id).first()
     if not sale:
         sale = Sale(opportunity_id=op.id)
         db.session.add(sale)
@@ -303,7 +357,13 @@ def _sync_sale_from_oportunidad(op):
     sale.commission_type = commission_type
     sale.commission_rate = Decimal(str(rate))
     sale.commission_amount = Decimal(str(amount))
+    if sale.status == "cancelada":
+        sale.closed_at = datetime.now(timezone.utc)
+        if sale.commission_status == "cancelada":
+            sale.commission_status = "pendiente"
     sale.status = "activa"
+    sale.canceled_at = None
+    sale.cancel_reason = None
 
     if op.lead and op.lead.origen:
         sale.lead_source = op.lead.origen.value
@@ -314,7 +374,7 @@ def _sync_sale_from_oportunidad(op):
             acc.is_cliente = True
 
     if op.lead:
-        op.lead.etapa_pipeline = EtapaPipeline.CIERRE_GANADO
+        _propagate_close_to_lead(op)
         if op.valor and not op.lead.valor_estimado:
             op.lead.valor_estimado = op.valor
 
@@ -562,6 +622,10 @@ def create_oportunidad():
         except (ValueError, TypeError):
             pass
     if op.etapa == EtapaOportunidad.CIERRE_GANADO:
+        err = _validate_close_amount(op)
+        if err:
+            db.session.rollback()
+            return jsonify({"error": err}), 400
         err = _nace_cerrada_sin_respaldo(op.marca_interes)
         if err:
             db.session.rollback()
@@ -601,14 +665,16 @@ def update_oportunidad(opp_id):
         new_etapa = _parse_etapa(data["etapa"])
         if new_etapa:
             if new_etapa == EtapaOportunidad.CIERRE_GANADO:
+                err = _validate_close_amount(op)
+                if err:
+                    db.session.rollback()
+                    return jsonify({"error": err}), 400
                 err = _falta_evidencia(op)
                 if err:
                     db.session.rollback()
                     return jsonify({"error": err, "requiere_evidencia": True,
                                     "tipos": CE.TIPOS, "max_tipos": CE.MAX_TIPOS}), 422
             op.etapa = new_etapa
-            _propagate_close_to_lead(op)
-            _sync_sale_from_oportunidad(op)
     if "probabilidad" in data:
         try:
             op.probabilidad = max(0, min(100, int(data["probabilidad"])))
@@ -628,13 +694,24 @@ def update_oportunidad(opp_id):
             exclude_id=op.id,
         )
         if dup:
+            db.session.rollback()
             return jsonify({
                 "error": "Ya existe otra oportunidad abierta para esta empresa/lead y unidad de negocio.",
                 "duplicate": dup.to_dict(),
             }), 409
 
     if op.etapa == EtapaOportunidad.CIERRE_GANADO:
-        _sync_sale_from_oportunidad(op)
+        err = _validate_close_amount(op)
+        if err:
+            db.session.rollback()
+            return jsonify({"error": err}), 400
+        err = _falta_evidencia(op)
+        if err:
+            db.session.rollback()
+            return jsonify({"error": err, "requiere_evidencia": True,
+                            "tipos": CE.TIPOS, "max_tipos": CE.MAX_TIPOS}), 422
+    _propagate_close_to_lead(op)
+    _sync_sale_from_oportunidad(op)
 
     db.session.commit()
     return jsonify(op.to_dict())
@@ -717,6 +794,9 @@ def mover_oportunidad(opp_id):
     # El drag&drop del kanban es la vía más usada para cerrar, y era la única
     # sin ninguna validación. El gate va aquí o no sirve de nada.
     if nueva == EtapaOportunidad.CIERRE_GANADO:
+        err = _validate_close_amount(op)
+        if err:
+            return jsonify({"error": err}), 400
         err = _falta_evidencia(op)
         if err:
             return jsonify({"error": err, "requiere_evidencia": True,
@@ -763,6 +843,8 @@ def delete_oportunidad(opp_id):
     op = db.session.get(Oportunidad, opp_id)
     if not op:
         return jsonify({"error": "Oportunidad no encontrada"}), 404
+    if Sale.query.filter(Sale.opportunity_id == op.id).first():
+        return jsonify({"error": "Esta oportunidad tiene una venta registrada; cambia su etapa para conservar el historial"}), 409
     db.session.delete(op)
     db.session.commit()
     return jsonify({"ok": True})
@@ -836,6 +918,10 @@ def from_lead(lead_id):
         contact_id=contact_id,
     )
     if op.etapa == EtapaOportunidad.CIERRE_GANADO:
+        err = _validate_close_amount(op)
+        if err:
+            db.session.rollback()
+            return jsonify({"error": err}), 400
         err = _nace_cerrada_sin_respaldo(op.marca_interes)
         if err:
             db.session.rollback()
@@ -858,7 +944,7 @@ def from_lead(lead_id):
 
 @oportunidades_bp.route("/stats", methods=["GET"])
 def stats():
-    base = Oportunidad.query
+    base = _apply_upsell_scope(_apply_role_un_scope(_apply_owner_scope(Oportunidad.query)))
     rows = (
         base.with_entities(Oportunidad.etapa, func.count(),
                            func.coalesce(func.sum(Oportunidad.valor), 0))
