@@ -2874,3 +2874,22 @@ def _auto_probabilidad(mapper, connection, target):
     if target.etapa in (EtapaOportunidad.CIERRE_GANADO, EtapaOportunidad.CIERRE_PERDIDO):
         if not target.fecha_cierre_real:
             target.fecha_cierre_real = datetime.now(timezone.utc)
+
+
+class LeadAssignmentNotice(db.Model):
+    """Aviso transaccional: solo se envía después de confirmar la asignación."""
+    __tablename__ = "lead_assignment_notices"
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    lead_id = db.Column(UUID(as_uuid=True), db.ForeignKey("leads.id", ondelete="CASCADE"), nullable=False, index=True)
+    vendedor_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+    snapshot = db.Column(JSONB, nullable=False)
+    payload = db.Column(JSONB, nullable=True)
+    status = db.Column(db.String(20), default="pendiente", nullable=False, index=True)
+    attempts = db.Column(db.Integer, default=0, nullable=False)
+    next_attempt_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False, index=True)
+    first_attempt_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    sent_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    provider_id = db.Column(db.String(120), nullable=True)
+    last_error = db.Column(db.String(80), nullable=True)

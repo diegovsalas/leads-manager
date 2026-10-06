@@ -8,6 +8,8 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
+      - key: RESEND_API_KEY
+        sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET

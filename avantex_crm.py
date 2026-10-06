@@ -25,8 +25,13 @@ def _run_pending_migrations(app):
     """Migraciones de columna idempotentes que corren en cada boot.
     Cada bloque verifica si el cambio ya está aplicado antes de tocar la DB.
     Si algo falla, loguea y sigue — la app igual arranca."""
-    from sqlalchemy import text
+    from sqlalchemy import text, inspect
     with app.app_context():
+        # Cola de avisos: solo crea la tabla, no avisa asignaciones históricas.
+        from models import LeadAssignmentNotice
+        if inspect(db.engine).has_table("leads"):
+            LeadAssignmentNotice.__table__.create(db.engine, checkfirst=True)
+
         # ─── rol_crm_enum: perfiles segmentados + Developer ───
         try:
             with db.engine.begin() as conn:
@@ -834,6 +839,9 @@ def create_app():
     # ── Auto-migrations (idempotente, corre en cada boot) ──
     _run_pending_migrations(app)
 
+    from lead_notifications import init_app as init_lead_notifications
+    init_lead_notifications(app)
+
     # ── Blueprints ─────────────────────────────
     from blueprints.auth       import auth_bp
     from blueprints.webhooks   import webhooks_bp
@@ -939,7 +947,7 @@ def create_app():
             if request.path.startswith("/api/"):
                 from flask import jsonify
                 return jsonify({"error": "Sesión expirada", "session_expired": True}), 401
-            return redirect(url_for("auth.login_page"))
+            return redirect(url_for("auth.login_page", next=request.full_path))
         # KAMs solo pueden acceder a /cs/ y /logout
         if session.get("user_rol", "").upper() == "KAM":
             if not request.path.startswith("/cs/") and request.path != "/logout":

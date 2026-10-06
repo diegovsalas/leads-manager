@@ -93,6 +93,11 @@ def _cadencia():
     return check_cadencia()
 
 
+def _lead_notices():
+    from lead_notifications import dispatch_pending
+    return dispatch_pending()
+
+
 def _notificaciones():
     from notificaciones import enviar_notificaciones_diarias
     return enviar_notificaciones_diarias()
@@ -196,6 +201,9 @@ _ZOHO_VARS = ("ZOHO_CLIENT_ID", "ZOHO_CLIENT_SECRET", "ZOHO_REFRESH_TOKEN",
               "SUPABASE_URL", "SUPABASE_SERVICE_KEY")
 
 TAREAS = {
+    "avisos-asignacion": Tarea(
+        _lead_notices, "Reintenta avisos de asignación de leads pendientes",
+        "cada minuto", ("interval", {"minutes": 1}), "RESEND_API_KEY"),
     "meta-leads": Tarea(
         _meta_leads, "Trae los leads nuevos de Meta Lead Ads",
         "cada 5 min", ("interval", {"minutes": 5}), "META_PAGE_TOKEN"),

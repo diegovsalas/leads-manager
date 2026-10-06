@@ -112,6 +112,14 @@ def obtener_lead(lead_id):
     lead = db.session.get(Lead, lead_id)
     if not lead:
         return jsonify({"error": "Lead no encontrado"}), 404
+    from blueprints.auth import get_vendedor_filter, is_commercial_read_role, allowed_units_for_role
+    from un_filter import normalizar_un
+    owner = get_vendedor_filter()
+    if not is_commercial_read_role() and (not owner or str(lead.usuario_asignado_id) != str(owner)):
+        return jsonify({"error": "Lead no encontrado"}), 404
+    units = allowed_units_for_role()
+    if units and not any(normalizar_un(m) in units for m in [lead.marca_interes] + list(lead.marcas_interes or [])):
+        return jsonify({"error": "Lead no encontrado"}), 404
     return jsonify(lead.to_dict())
 
 
@@ -1755,3 +1763,14 @@ def exportar_pipe_csv():
         mimetype="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{nombre}"'},
     )
+
+
+@leads_bp.route("/avisos-asignacion/estado", methods=["GET"])
+@require_role(["super_admin"])
+def assignment_notice_status():
+    import os
+    from models import LeadAssignmentNotice
+    rows = db.session.query(LeadAssignmentNotice.status, func.count()).group_by(LeadAssignmentNotice.status).all()
+    return jsonify({"correo_configurado": bool(os.getenv("RESEND_API_KEY")),
+                    "remitente": "CRM Avantex <crm@grupoavantex.com>",
+                    "destinatario": "solo vendedor asignado", "estados": dict(rows)})

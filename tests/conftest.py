@@ -44,6 +44,7 @@ def app(_crea_base):
     os.environ["SCHEDULER_EN_PROCESO"] = "0"   # sin tareas de fondo
     from avantex_crm import create_app
     aplicacion = create_app()
+    aplicacion.config["LEAD_ASSIGNMENT_EMAIL_DISPATCH"] = False
     with aplicacion.app_context():
         from extensions import db
         db.create_all()

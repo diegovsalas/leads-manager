@@ -5513,7 +5513,7 @@ const ICP_BADGE_STYLES={A:{bg:'var(--green-bg)',c:'var(--green)'},B:{bg:'var(--b
 async function abrirLeadPanel(id){
   try{
     const r=await fetch('/api/leads/'+id);
-    if(!r.ok)return;
+    if(!r.ok){showToast('Lead no disponible','El lead no existe o ya no está asignado a tu usuario.');return;}
     const l=await r.json();
     document.getElementById('lp-id').value=l.id;
     document.getElementById('lp-lead-id-display').textContent='ID: '+l.id.substring(0,8)+'...';
@@ -8684,6 +8684,14 @@ async function nlSubmit(mode){
     btn.disabled=false;
   }
 }
+</script>
+<script>
+window.addEventListener('DOMContentLoaded',()=>{
+  const id=new URLSearchParams(location.search).get('lead');
+  if(!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))return;
+  showView('pipeline',document.querySelector(`.slink[onclick*="showView('pipeline'"]`));
+  abrirLeadPanel(id);
+});
 </script>
 </body>
 </html>

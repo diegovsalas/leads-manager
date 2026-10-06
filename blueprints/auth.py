@@ -170,10 +170,26 @@ def is_kam():
     return session.get("user_rol", "").upper() == "KAM"
 
 
+def _lead_login_destination(value):
+    """Solo conserva enlaces internos a un lead, nunca destinos externos."""
+    import uuid
+    from urllib.parse import urlsplit, parse_qs
+    if not value:
+        return "/"
+    try:
+        url = urlsplit(value)
+        if url.scheme or url.netloc or url.path != "/":
+            return "/"
+        lead = parse_qs(url.query).get("lead", [None])[0]
+        return "/?lead=" + str(uuid.UUID(lead)) if lead else "/"
+    except (ValueError, TypeError, AttributeError):
+        return "/"
+
+
 @auth_bp.route("/login", methods=["GET"])
 def login_page():
     if session.get("user_id"):
-        return redirect(url_for("index"))
+        return redirect(_lead_login_destination(request.args.get("next")))
     return render_template("auth/login.html")
 
 
@@ -204,7 +220,7 @@ def login():
     # KAMs van directo al CS Dashboard
     if user.rol.value.upper() == "KAM":
         return redirect("/cs/")
-    return redirect(url_for("index"))
+    return redirect(_lead_login_destination(request.form.get("next")))
 
 
 @auth_bp.route("/logout")
@@ -240,6 +256,7 @@ def google_login():
     """Inicia flujo OAuth 2.0 con Google."""
     import secrets
     import urllib.parse
+    session["lead_login_next"] = _lead_login_destination(request.args.get("next"))
 
     client_id = os.getenv("GOOGLE_CLIENT_ID", "")
     if not client_id:
@@ -351,7 +368,7 @@ def google_callback():
 
     if user.rol.value.upper() == "KAM":
         return redirect("/cs/")
-    return redirect(url_for("index"))
+    return redirect(_lead_login_destination(session.pop("lead_login_next", None)))
 
 
 # ─── Backup manual (admin) ──────────────────────────────────────────
