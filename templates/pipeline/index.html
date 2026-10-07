@@ -512,8 +512,8 @@ fbq('track','PageView');
    al caso que hoy no tiene ninguno: el cliente que se vende sucursal por
    sucursal, donde la segunda en adelante es expansión, no venta nueva.
 
-   Qué cuenta como upsell: que la cuenta ya tenga al menos una venta activa,
-   sin importar la unidad. Se deriva de las ventas, no se captura (ver
+   Qué cuenta como cliente: alta manual como cliente existente, venta activa
+   o cartera de CS. No hace falta registrar una venta histórica ficticia (ver
    _account_ids_con_venta en blueprints/oportunidades.py).
 
    Lo que NO se reactiva es convertir un lead en oportunidad: un lead es
@@ -1682,9 +1682,11 @@ fbq('track','PageView');
         <input class="nl-input" id="acc-client-id" style="text-transform:uppercase;font-family:var(--mono);font-size:12px;max-width:200px;" maxlength="10" placeholder="se asigna automáticamente al crear"/>
       </div>
       <div class="nl-row two">
-        <div><label class="nl-label">Nombre legal *</label><input class="nl-input" id="acc-nombre"/></div>
+        <div><label class="nl-label" id="acc-name-label">Nombre legal *</label><input class="nl-input" id="acc-nombre"/></div>
         <div><label class="nl-label">Nombre comercial</label><input class="nl-input" id="acc-comercial"/></div>
       </div>
+      <details id="acc-extra-fields" open>
+        <summary id="acc-extra-summary" style="display:none;font-size:12px;cursor:pointer;margin:8px 0;">Datos adicionales (opcionales)</summary>
       <div class="nl-row two">
         <div><label class="nl-label">RFC</label><input class="nl-input" id="acc-rfc" style="text-transform:uppercase;"/></div>
         <div><label class="nl-label">Industria</label><input class="nl-input" id="acc-industria" placeholder="ej: Retail, Hospitality"/></div>
@@ -1710,10 +1712,11 @@ fbq('track','PageView');
         <label class="nl-label">Notas</label>
         <textarea class="nl-input" id="acc-notas" rows="2" style="resize:vertical;"></textarea>
       </div>
+      </details>
       <div class="nl-row">
         <label class="nl-checkbox">
           <input type="checkbox" id="acc-is-cliente"/>
-          <span>Marcar como <strong>cliente</strong> (ya cerró venta)</span>
+          <span>Es un <strong>cliente existente</strong> — habilitar para Upsells</span>
         </label>
       </div>
 
@@ -4921,7 +4924,7 @@ function lpCreateNewEmpresaFromPanel(){
   _empresaCreateReturnTo='leadPanel';
   openAccountModal();
   document.getElementById('acc-nombre').value=typed;
-  setTimeout(()=>document.getElementById('acc-rfc').focus(),60);
+  setTimeout(()=>document.getElementById('acc-nombre').focus(),60);
 }
 // Restaurar preferencias de toggles al cargar
 document.addEventListener('DOMContentLoaded',()=>{
@@ -7448,6 +7451,8 @@ window.IS_ADMIN_AI = IS_ADMIN || false;
         <input class="nl-input" id="opp-empresa" type="text" autocomplete="off" oninput="oppEmpresaSearch()" placeholder="Buscar por ID, nombre o RFC (3+ letras)..."/>
         <input type="hidden" id="opp-account-id"/>
         <div id="opp-empresa-list" class="nl-empresa-list" style="display:none;"></div>
+        <button type="button" class="btn" onclick="oppCreateNewEmpresa()" style="font-size:12px;margin-top:7px;">+ Registrar cliente existente</button>
+        <div style="font-size:11px;color:var(--text3);margin-top:5px;">Si ya te compra y no aparece, regístralo aquí. Solo necesitas su nombre; no requiere alta en CS.</div>
       </div>
       <!-- FEAT-2026-09-08: la sucursal es lo que distingue dos tratos de la
            misma empresa y la misma UN. Vacio = trato a nivel corporativo. -->
@@ -7834,6 +7839,9 @@ async function submitImportAccounts(){
 function openAccountModal(acc){
   _accEditing=acc||null;
   document.getElementById('acc-modal-title').textContent=acc?'Editar empresa':'Nueva empresa';
+  document.getElementById('acc-name-label').textContent='Nombre legal *';
+  document.getElementById('acc-extra-fields').open=true;
+  document.getElementById('acc-extra-summary').style.display='none';
   document.getElementById('acc-delete-btn').style.display=acc?'':'none';
   ['acc-client-id','acc-nombre','acc-comercial','acc-rfc','acc-industria','acc-sucursales','acc-estado-input','acc-ciudad','acc-telefono','acc-website','acc-notas','acc-c-nombre','acc-c-puesto','acc-c-telefono','acc-c-email'].forEach(id=>document.getElementById(id).value='');
   // La sección de contacto principal solo tiene sentido al crear (al editar usás el módulo Contactos)
@@ -7865,7 +7873,7 @@ function openAccountModal(acc){
   document.getElementById('acc-overlay').classList.add('open');
   setTimeout(()=>document.getElementById('acc-nombre').focus(),50);
 }
-function closeAccountModal(){document.getElementById('acc-overlay').classList.remove('open');_accEditing=null;}
+function closeAccountModal(preserveReturn=false){document.getElementById('acc-overlay').classList.remove('open');_accEditing=null;if(_empresaCreateReturnTo==='opp')document.getElementById('opp-overlay').classList.add('open');if(!preserveReturn)_empresaCreateReturnTo=null;}
 
 async function saveAccount(){
   const nombre=document.getElementById('acc-nombre').value.trim();
@@ -7883,6 +7891,7 @@ async function saveAccount(){
     notas:document.getElementById('acc-notas').value.trim()||null,
     is_cliente:document.getElementById('acc-is-cliente').checked,
   };
+  if(_empresaCreateReturnTo==='opp'&&!body.is_cliente){_nlToast('Para registrar un cliente de upsell, marca que es un cliente existente',true);return;}
   // client_id solo se envía si está editando (en alta lo asigna el backend)
   if(_accEditing){
     body.client_id=document.getElementById('acc-client-id').value.trim().toUpperCase()||null;
@@ -7909,8 +7918,8 @@ async function saveAccount(){
         }catch(e){_nlToast('Empresa creada, pero falló el contacto: '+e.message,true);}
       }
     }
-    _nlToast(_accEditing?'Actualizada: '+nombre:'Creada: '+nombre);
-    closeAccountModal();
+    _nlToast(_empresaCreateReturnTo==='opp'?'Cliente listo para upsell: '+newAcc.nombre:(_accEditing?'Actualizada: '+nombre:'Creada: '+nombre));
+    closeAccountModal(true);
     // Si veníamos de otro modal, autoseleccionar la nueva empresa allá
     if(_empresaCreateReturnTo==='lead'){
       document.getElementById('nl-empresa').value=newAcc.nombre||'';
@@ -8477,16 +8486,14 @@ function oppEmpresaSearch(){
     const list=document.getElementById('opp-empresa-list');
     if(q.length<3){list.style.display='none';return;}
     try{
-      // Solo cuentas con venta cerrada. /api/accounts/search devolveria
-      // tambien prospectos, y un upsell a un prospecto se crearia pero no
-      // saldria en el tablero, sin que nada explique por que.
+      // Solo clientes registrados o detectados; el negocio nuevo va en el Pipe.
       const items=await _api('/api/oportunidades/cuentas-upsell?q='+encodeURIComponent(q))||[];
       if(document.getElementById('opp-empresa').value.trim()!==q||document.getElementById('opp-account-id').value)return;
       let html='';
       if(items.length){
         html=items.map(a=>`<div class="nl-empresa-item" onclick='oppPickEmpresa("${a.id}",${_esc(JSON.stringify(a.nombre||""))})'>${a.client_id?`<span style="font-family:var(--mono);font-size:10px;background:var(--bg-tag);color:var(--accent);padding:1px 5px;border-radius:3px;font-weight:600;margin-right:6px;">${_esc(a.client_id)}</span>`:''}<strong>${_esc(a.nombre)}</strong>${a.rfc?` <span style="color:var(--text3);font-size:11px;font-family:var(--mono);">${_esc(a.rfc)}</span>`:''} <span style="background:var(--green-bg);color:var(--green);padding:0 5px;border-radius:99px;font-size:9px;font-weight:600;margin-left:4px;">CLIENTE</span></div>`).join('');
       }else{
-        html='<div style="padding:8px 11px;color:var(--text3);font-size:12px;font-style:italic;">Ningun cliente con ese nombre. Un upsell solo aplica a quien ya nos compra; si es negocio nuevo va en el Pipe.</div>';
+        html='<div style="padding:8px 11px;color:var(--text3);font-size:12px;font-style:italic;">No hay un cliente con ese nombre. Si ya te compra, usa "+ Registrar cliente existente". Si es negocio nuevo, va en el Pipe.</div>';
       }
       list.innerHTML=html;
       list.style.display='block';
@@ -8502,8 +8509,14 @@ function oppCreateNewEmpresa(){
   const typed=document.getElementById('opp-empresa').value.trim();
   document.getElementById('opp-empresa-list').style.display='none';
   _empresaCreateReturnTo='opp';
+  document.getElementById('opp-overlay').classList.remove('open');
   openAccountModal();
   document.getElementById('acc-nombre').value=typed;
+  document.getElementById('acc-is-cliente').checked=true;
+  document.getElementById('acc-modal-title').textContent='Registrar cliente existente';
+  document.getElementById('acc-name-label').textContent='Nombre del cliente *';
+  document.getElementById('acc-extra-fields').open=false;
+  document.getElementById('acc-extra-summary').style.display='block';
   setTimeout(()=>document.getElementById('acc-rfc').focus(),60);
 }
 

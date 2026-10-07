@@ -145,11 +145,17 @@ def create_account():
     if rfc:
         existing = Account.query.filter(Account.rfc == rfc).first()
         if existing:
+            if _truthy(data.get("is_cliente")) and not existing.is_cliente:
+                existing.is_cliente = True
+                db.session.commit()
             return jsonify(existing.to_dict()), 200
     # Idempotente por nombre exacto también
     nombre = data["nombre"].strip()
     existing = Account.query.filter(func.lower(Account.nombre) == nombre.lower()).first()
     if existing:
+        if _truthy(data.get("is_cliente")) and not existing.is_cliente:
+            existing.is_cliente = True
+            db.session.commit()
         return jsonify(existing.to_dict()), 200
 
     acc = Account(
@@ -166,7 +172,7 @@ def create_account():
         estado=data.get("estado"),
         pais=data.get("pais") or "México",
         owner_id=data.get("owner_id") or _current_user_id(),
-        is_cliente=bool(data.get("is_cliente", False)),
+        is_cliente=_truthy(data.get("is_cliente", False)),
         notas=data.get("notas"),
         cs_account_id=data.get("cs_account_id"),
         zoho_account_id=data.get("zoho_account_id"),
@@ -210,7 +216,7 @@ def update_account(account_id):
                 "notas", "cs_account_id", "zoho_account_id",
                 "customer_master_id"):
         if fld in data:
-            setattr(acc, fld, data[fld])
+            setattr(acc, fld, _truthy(data[fld]) if fld == "is_cliente" else data[fld])
     try:
         db.session.commit()
     except IntegrityError as e:

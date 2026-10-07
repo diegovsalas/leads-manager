@@ -282,3 +282,109 @@ def test_cierre_por_api_clasifica_el_id_de_cliente_recibido_como_texto(app):
         assert response.status_code == 201
         assert response.get_json()["sale_type"] == "upsell"
         assert Sale.query.one().sale_type == "upsell"
+
+
+def test_alta_manual_de_cliente_habilita_upsell_sin_cs_ni_ventas(app):
+    from models import Account, CSAccount
+    with app.app_context():
+        client = _client(app)
+        response = client.post('/api/accounts/', json={'nombre': 'Farmacias del Ahorro', 'is_cliente': True})
+        assert response.status_code == 201
+        account_id = response.get_json()['id']
+        rows = client.get('/api/oportunidades/cuentas-upsell?q=Farmacias').get_json()
+        assert [row['id'] for row in rows] == [account_id]
+        assert Sale.query.count() == 0 and CSAccount.query.count() == 0
+        assert Account.query.count() == 1
+        response = client.post('/api/oportunidades/', json={
+            'nombre': 'Farmacias del Ahorro — más sucursales', 'account_id': account_id,
+            'marca_interes': 'Aromatex', 'monthly_amount': 1000, 'valor': 12000,
+            'is_upsell': True, 'etapa': E.NEGOCIACION.value})
+        assert response.status_code == 201
+        assert _sale_type_por_defecto(Oportunidad.query.one(), 1000) == 'upsell'
+        board = client.get('/api/oportunidades/kanban?solo_upsell=1').get_json()
+        assert board['summary']['abiertas_count'] == 1
+        assert Sale.query.count() == 0
+
+
+@pytest.mark.parametrize('match', ['nombre', 'rfc'])
+def test_registrar_cliente_existente_reutiliza_empresa_y_la_habilita(app, match):
+    from models import Account, CSAccount
+    with app.app_context():
+        account = f.empresa('Farmacias del Ahorro')
+        account.rfc = 'FAR123456ABC'
+        db.session.commit()
+        client = _client(app)
+        body = {'nombre': 'Farmacias del Ahorro', 'is_cliente': True}
+        if match == 'rfc':
+            body.update(nombre='Otro nombre capturado', rfc='FAR123456ABC')
+        response = client.post('/api/accounts/', json=body)
+        assert response.status_code == 200 and response.get_json()['id'] == str(account.id)
+        assert response.get_json()['is_cliente'] is True
+        assert Account.query.count() == 1
+        assert CSAccount.query.count() == 0 and Sale.query.count() == 0
+        assert client.get('/api/oportunidades/cuentas-upsell?q=Farmacias').get_json()[0]['id'] == str(account.id)
+
+
+def test_marcar_empresa_existente_como_cliente_la_habilita(app):
+    with app.app_context():
+        account = f.empresa('Farmacias del Ahorro')
+        client = _client(app)
+        assert client.get('/api/oportunidades/cuentas-upsell?q=Farmacias').get_json() == []
+        response = client.patch(f'/api/accounts/{account.id}', json={'is_cliente': True})
+        assert response.status_code == 200
+        assert client.get('/api/oportunidades/cuentas-upsell?q=Farmacias').get_json()[0]['id'] == str(account.id)
+        assert Sale.query.count() == 0
+
+
+def test_texto_false_no_convierte_prospecto_en_cliente(app):
+    with app.app_context():
+        client = _client(app)
+        response = client.post('/api/accounts/', json={'nombre': 'Prospecto real', 'is_cliente': 'false'})
+        assert response.status_code == 201 and response.get_json()['is_cliente'] is False
+        assert client.get('/api/oportunidades/cuentas-upsell?q=Prospecto').get_json() == []
+
+
+def test_registro_desde_upsell_vuelve_al_formulario_con_cliente_seleccionado(app):
+    import shutil
+    import subprocess
+    from pathlib import Path
+    if not shutil.which('node'):
+        pytest.skip('Node no disponible')
+    source = Path('templates/pipeline/index.html').read_text()
+    account_functions = source[source.index('function openAccountModal('):source.index('async function deleteAccount(')]
+    open_client = source[source.index('function oppCreateNewEmpresa()'):source.index('function _nlUpdateIcp')]
+    script = r'''
+    const assert = require('node:assert/strict');
+    const elements = new Map();
+    const document = {getElementById(id){
+      if(!elements.has(id))elements.set(id,{value:'',checked:false,style:{},classList:{
+        states:new Set(),add(x){this.states.add(x)},remove(x){this.states.delete(x)},contains(x){return this.states.has(x)}
+      },focus(){}});
+      return elements.get(id);
+    }};
+    let _empresaCreateReturnTo=null, _accEditing=null;
+    const _nlToast=()=>{}, loadAccounts=()=>{}, loadSidebarCounts=()=>{};
+    const setTimeout=()=>{};
+    const fetch=async()=>({ok:true,json:async()=>({id:'cliente-1',nombre:'Farmacias del Ahorro',is_cliente:true})});
+    ''' + account_functions + open_client + r'''
+    (async()=>{
+      document.getElementById('opp-empresa').value='Farmacias del Ahorro';
+      document.getElementById('opp-overlay').classList.add('open');
+      oppCreateNewEmpresa();
+      assert.equal(document.getElementById('opp-overlay').classList.contains('open'),false);
+      assert.equal(document.getElementById('acc-overlay').classList.contains('open'),true);
+      assert.equal(document.getElementById('acc-is-cliente').checked,true);
+      closeAccountModal();
+      assert.equal(document.getElementById('opp-overlay').classList.contains('open'),true);
+      assert.equal(_empresaCreateReturnTo,null);
+      oppCreateNewEmpresa();
+      await saveAccount();
+      assert.equal(document.getElementById('opp-overlay').classList.contains('open'),true);
+      assert.equal(document.getElementById('acc-overlay').classList.contains('open'),false);
+      assert.equal(document.getElementById('opp-account-id').value,'cliente-1');
+      assert.equal(document.getElementById('opp-empresa').value,'Farmacias del Ahorro');
+      assert.equal(_empresaCreateReturnTo,null);
+    })().catch(error=>{console.error(error);process.exitCode=1});
+    '''
+    result = subprocess.run(['node'], input=script, text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr

@@ -144,18 +144,12 @@ def _unit_from_marca(marca):
 
 
 def _account_ids_con_venta():
-    """Cuentas que ya cerraron al menos una venta activa.
+    """Clientes existentes: alta manual, venta activa o cartera de CS.
 
-    Es la definición operativa de «cliente existente», y por lo tanto de
-    upsell: venderle algo más a quien ya nos compra.
-
-    NO se usa Account.is_cliente. Esa bandera solo se prende cuando cierra
-    una OPORTUNIDAD, nunca cuando cierra un lead — y como todo el flujo
-    comercial corre sobre leads, está prácticamente vacía. Filtrar por ella
-    dejaría el tablero en blanco. La venta cerrada sí es un hecho, venga por
-    donde venga.
+    El alta manual permite registrar clientes históricos sin crear una
+    venta ficticia ni exigir una segunda alta en Customer Success.
     """
-    ids = set()
+    ids = {aid for (aid,) in db.session.query(Account.id).filter(Account.is_cliente.is_(True))}
     por_opp = (
         db.session.query(Oportunidad.account_id)
         .join(Sale, Sale.opportunity_id == Oportunidad.id)
@@ -310,7 +304,7 @@ def _sale_type_por_defecto(op, monthly):
     """Una venta recurrente a un cliente existente es expansión.
 
     La misma definición de cliente alimenta el buscador y la clasificación:
-    ventas activas de leads/oportunidades o cartera de CS con MRR positivo.
+    alta manual como cliente, ventas activas o cartera de CS con MRR positivo.
     """
     if monthly <= 0:
         return "servicio_unico"
@@ -424,7 +418,7 @@ def get_oportunidad(opp_id):
 
 @oportunidades_bp.route("/cuentas-upsell", methods=["GET"])
 def cuentas_upsell():
-    """Cuentas que ya compraron, para el buscador del modal de upsell.
+    """Clientes registrados o detectados, para el buscador del modal de upsell.
 
     Existe aparte de /api/accounts/search porque ese devuelve prospectos
     también: si el vendedor eligiera uno, el trato se crearía y no
