@@ -151,6 +151,18 @@ def _kam_respuestas():
 
 
 def _zoho_citas():
+    import zoho_analytics
+    if zoho_analytics.is_configured():
+        from datetime import datetime, timedelta
+        from blueprints.cs import import_analytics_citas
+        since = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+        result = zoho_analytics.fetch_citas(criteria=f'"Fecha de Inicio" >= \'{since}\'')
+        if result.get('error'):
+            raise RuntimeError(result['error'])
+        stats = import_analytics_citas(result.get('rows', []))
+        if stats['errores']:
+            raise RuntimeError(f"Analytics: {stats['errores']} filas rechazadas; {stats['insertados']} procesadas")
+        return stats
     import zoho_appointments_etl as etl
     return etl.run()
 
@@ -195,6 +207,12 @@ def _sdr_engine():
 # que piden casi todos los programadores externos. La columna `cadencia`
 # las repite en hora de México (UTC−6) para quien lea esto, y es la que
 # aparece en TAREAS.md.
+
+class TareaAnalytics(Tarea):
+    def faltantes(self):
+        import zoho_analytics
+        return [] if zoho_analytics.is_configured() else super().faltantes()
+
 
 _ZOHO_VARS = ("ZOHO_CLIENT_ID", "ZOHO_CLIENT_SECRET", "ZOHO_REFRESH_TOKEN",
               "ZOHO_USER_EMAIL", "ZOHO_WORKSPACE", "ZOHO_TABLE",
@@ -248,7 +266,7 @@ TAREAS = {
         "diaria 4:00 CST", ("cron", {"hour": 10, "minute": 0}),
         "GMAIL_SERVICE_ACCOUNT_JSON"),
 
-    "zoho-citas": Tarea(
+    "zoho-citas": TareaAnalytics(
         _zoho_citas, "Trae las citas de Zoho Analytics",
         "diaria 4:30 CST", ("cron", {"hour": 10, "minute": 30}), _ZOHO_VARS),
 

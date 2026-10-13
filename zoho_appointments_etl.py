@@ -48,9 +48,11 @@ log = logging.getLogger("zoho_etl")
 # Las keys son los nombres en Zoho; los values son las columnas Supabase.
 # ──────────────────────────────────────────────────────────────────
 COLUMN_MAP: dict[str, str] = {
+    "ID cita":        "zoho_appointment_id",
     "Appointment ID": "zoho_appointment_id",   # PK natural — clave de upsert
     "ID":              "zoho_appointment_id",   # fallback si el header se llama "ID"
     "Cliente":         "_cliente_lookup",       # NO es columna destino — se usa para resolver account_id
+    "ID cliente":      "_client_id_lookup",
     "ID Cliente":      "_client_id_lookup",
     "Propiedad":       "propiedad",
     "Dirección":       "direccion",
@@ -193,6 +195,9 @@ def transform(rows: list[dict[str, Any]], accounts_index: dict[str, str]) -> lis
     """Aplica COLUMN_MAP, resuelve account_id por nombre o ID de cliente, parsea fechas."""
     out: list[dict[str, Any]] = []
     sin_match = 0
+    from cs_analytics_matching import resolve_account
+    names = {k:v for k,v in accounts_index.items() if k != k.upper()}
+    ids = {k:v for k,v in accounts_index.items() if k == k.upper()}
 
     for r in rows:
         record: dict[str, Any] = {}
@@ -215,7 +220,7 @@ def transform(rows: list[dict[str, Any]], accounts_index: dict[str, str]) -> lis
                 record[supabase_col] = ("" if val is None else str(val)).strip()
 
         # Resolver account_id (client_id primero, luego nombre)
-        acc_id = accounts_index.get(client_id_lookup) or accounts_index.get(cliente_lookup.lower())
+        acc_id = resolve_account(cliente_lookup, client_id_lookup, names, ids)
         if not acc_id:
             sin_match += 1
             continue

@@ -3952,8 +3952,6 @@ def cargar_citas():
 @require_cs_admin
 def zoho_sync_citas():
     """Jala citas directamente desde Zoho Analytics API y las upsertea."""
-    import logging as _logging
-    from sqlalchemy import text as _text
     from datetime import timedelta
     import zoho_analytics
 
@@ -3980,8 +3978,20 @@ def zoho_sync_citas():
         flash("Zoho Analytics devolvió 0 filas.", "error")
         return redirect(url_for("cs.cargar_datos"))
 
+    stats = import_analytics_citas(rows)
+    return render_template("cs_cargar_resultado.html", tipo="Citas (Zoho Analytics)",
+                           **stats, **_ctx())
+
+
+def import_analytics_citas(rows):
+    """Importación compartida por el botón y el scheduler, siempre con ID."""
+    import logging as _logging
+    from sqlalchemy.dialects.postgresql import insert as _pg_insert
+    from cs_analytics_matching import resolve_account
+
     accounts = CSAccount.query.filter(db.or_(CSAccount.en_due_diligence.is_(None), CSAccount.en_due_diligence.is_(False))).all()
     accounts_map = {a.nombre: str(a.id) for a in accounts}
+    client_id_map = {str(a.client_id).strip().upper(): str(a.id) for a in accounts if a.client_id}
     has_zoho_col = _has_zoho_appointment_col()
 
     insertados = 0
@@ -3991,62 +4001,40 @@ def zoho_sync_citas():
     samples_error: list[str] = []
     batch: list[dict] = []
 
-    _SQL_UPSERT = _text("""
-        INSERT INTO cs_appointments
-            (account_id, propiedad, direccion, zona, tecnico,
-             fecha_inicio, fecha_terminacion, estatus, titulo_servicio,
-             cantidad, zoho_appointment_id)
-        VALUES
-            (:account_id, :propiedad, :direccion, :zona, :tecnico,
-             :fecha_inicio, :fecha_terminacion, :estatus, :titulo_servicio,
-             :cantidad, :zoho_appointment_id)
-        ON CONFLICT (zoho_appointment_id) WHERE zoho_appointment_id IS NOT NULL
-        DO UPDATE SET
-            account_id = EXCLUDED.account_id,
-            propiedad = EXCLUDED.propiedad,
-            direccion = EXCLUDED.direccion,
-            zona = EXCLUDED.zona,
-            tecnico = EXCLUDED.tecnico,
-            fecha_inicio = EXCLUDED.fecha_inicio,
-            fecha_terminacion = EXCLUDED.fecha_terminacion,
-            estatus = EXCLUDED.estatus,
-            titulo_servicio = EXCLUDED.titulo_servicio,
-            cantidad = EXCLUDED.cantidad
-    """)
-    _SQL_INSERT = _text("""
-        INSERT INTO cs_appointments
-            (account_id, propiedad, direccion, zona, tecnico,
-             fecha_inicio, fecha_terminacion, estatus, titulo_servicio, cantidad)
-        VALUES
-            (:account_id, :propiedad, :direccion, :zona, :tecnico,
-             :fecha_inicio, :fecha_terminacion, :estatus, :titulo_servicio, :cantidad)
-    """)
-
     def _flush_zoho(buf):
         if not buf:
             return 0, 0
-        if has_zoho_col:
-            try:
-                db.session.execute(_SQL_UPSERT, buf)
-                db.session.commit()
-                return len(buf), 0
-            except Exception as e:
-                db.session.rollback()
-                _logging.warning("[ZOHO-CITAS] upsert batch falló: %s", str(e)[:200])
-        plain = [{k: v for k, v in r.items() if k != "zoho_appointment_id"} for r in buf]
+        # El ID externo es imprescindible: nunca insertar sin él cuando
+        # falla el upsert, porque la siguiente corrida duplicaría las citas.
+        if not has_zoho_col:
+            return 0, len(buf)
         try:
-            db.session.execute(_SQL_INSERT, plain)
+            # Un INSERT de múltiples filas evita miles de viajes al servidor.
+            statement = _pg_insert(CSAppointment.__table__).values(buf)
+            columns = ('account_id', 'propiedad', 'direccion', 'zona', 'tecnico',
+                       'fecha_inicio', 'fecha_terminacion', 'estatus', 'titulo_servicio', 'cantidad')
+            statement = statement.on_conflict_do_update(
+                index_elements=['zoho_appointment_id'],
+                index_where=CSAppointment.zoho_appointment_id.isnot(None),
+                set_={key: getattr(statement.excluded, key) for key in columns})
+            db.session.execute(statement)
             db.session.commit()
-            return len(plain), 0
-        except Exception as e:
+            return len(buf), 0
+        except Exception:
             db.session.rollback()
-            _logging.warning("[ZOHO-CITAS] insert batch falló: %s", str(e)[:200])
-            return 0, len(plain)
+            _logging.exception("[ZOHO-CITAS] lote rechazado; no se insertó sin IDs")
+            return 0, len(buf)
 
     for row in rows:
-        visita_id = str(row.get("ID", "")).strip()
+        visita_id = str(row.get("ID cita") or row.get("ID") or row.get("Appointment ID") or "").strip()
+        if not visita_id or len(visita_id) > 64:
+            errores += 1
+            if "Filas sin ID de cita válido omitidas" not in samples_error:
+                samples_error.append("Filas sin ID de cita válido omitidas")
+            continue
         cliente = str(row.get("Cliente", "")).strip()
-        acc_id = _match_account(cliente, accounts_map) if cliente else None
+        client_id = str(row.get("ID cliente") or row.get("ID Cliente") or "").strip().upper()
+        acc_id = resolve_account(cliente, client_id, accounts_map, client_id_map)
         if not acc_id:
             no_match += 1
             if len(samples_no_match) < 5 and cliente:
@@ -4055,6 +4043,7 @@ def zoho_sync_citas():
 
         try:
             r_dict = {
+                "id": str(uuid.uuid4()),
                 "account_id": acc_id,
                 "propiedad": str(row.get("Propiedad", "")).strip(),
                 "direccion": str(row.get("Dirección", "") or row.get("Direccion", "")).strip(),
@@ -4070,8 +4059,7 @@ def zoho_sync_citas():
                 ).strip(),
                 "cantidad": int(float(row.get("Cantidad") or 1)),
             }
-            if has_zoho_col and visita_id:
-                r_dict["zoho_appointment_id"] = visita_id[:64]
+            r_dict["zoho_appointment_id"] = visita_id
             batch.append(r_dict)
 
             if len(batch) >= 2000:
@@ -4089,19 +4077,14 @@ def zoho_sync_citas():
         insertados += ins
         errores += fail
 
-    debug_parts = [f"Zoho Analytics: {result.get('count', 0)} filas recibidas"]
+    debug_parts = [f"Zoho Analytics: {len(rows)} filas recibidas"]
     if samples_no_match:
         debug_parts.append(f"clientes sin match: {samples_no_match}")
     if samples_error:
         debug_parts.append(f"errores: {samples_error}")
 
-    return render_template(
-        "cs_cargar_resultado.html",
-        tipo="Citas (Zoho Analytics)", insertados=insertados, no_match=no_match,
-        errores=errores, total=insertados + no_match + errores,
-        debug_info=" | ".join(debug_parts),
-        **_ctx(),
-    )
+    return dict(insertados=insertados, no_match=no_match, errores=errores,
+                total=insertados + no_match + errores, debug_info=" | ".join(debug_parts))
 
 
 @cs_bp.route("/api/zoho-analytics/workspaces")
