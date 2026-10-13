@@ -1,0 +1,8 @@
+{% extends "cs/cs_base.html" %}
+{% block title %}Seleccionar cuentas AAA{% endblock %}
+{% block breadcrumb %}Cuentas AAA{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Cuentas AAA</h1><p class="sub">Selecciona las cuentas estratégicas que se revisarán cada semana.</p></div><a class="btn" href="{{ url_for('cs.seguimiento_semanal') }}">Volver al seguimiento</a></div>
+<form method="post"><div class="card"><div class="card-body"><p class="weekly-note">Esta selección es independiente del tier financiero y aplica a todos los cortes del seguimiento.</p><div class="weekly-accounts">{% for a in accounts %}<label class="weekly-account"><input type="checkbox" name="account_id" value="{{ a.id }}" {% if a.es_aaa %}checked{% endif %}><span>{{ a.nombre }}<small>{{ a.kam.nombre if a.kam else 'Sin KAM' }} · {{ a.tier or 'Sin tier' }}</small></span></label>{% else %}<p>No hay cuentas activas.</p>{% endfor %}</div></div></div><div class="weekly-save"><button class="btn primary">Guardar selección</button></div></form>
+{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="{{ url_for('static',filename='css/cs_weekly.css') }}">{% endblock %}

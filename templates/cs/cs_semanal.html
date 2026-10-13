@@ -1,0 +1,41 @@
+{% extends "cs/cs_base.html" %}
+{% from "cs/_icons.html" import icon %}
+{% block title %}Seguimiento semanal — CS Avantex{% endblock %}
+{% block breadcrumb %}Seguimiento semanal{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Seguimiento semanal</h1><p class="sub">{{ 'Cuentas AAA' if scope == 'aaa' else 'Todas las cuentas' }} · {{ week_start.strftime('%d/%m') }} al {{ cut.strftime('%d/%m/%Y') }} · Corte al viernes</p></div>
+  {% if can_manage_aaa %}<a class="btn" href="{{ url_for('cs.cuentas_aaa') }}">{{ icon('star',14) }} Seleccionar cuentas AAA</a>{% endif %}
+</div>
+<form method="get" class="weekly-filters">
+  <label>Viernes de corte<input type="date" name="corte" value="{{ cut.isoformat() }}" required></label>
+  {% if not is_kam %}<label>KAM<select name="kam"><option value="">Todos</option>{% for kam in kams %}<option value="{{ kam.id }}" {% if request.args.get('kam') == kam.id|string %}selected{% endif %}>{{ kam.nombre }}</option>{% endfor %}</select></label>{% endif %}
+  <label>Unidad de negocio<select name="un"><option value="">Todas</option>{% for un in ['Aromatex','Pestex','Weldex','Nexo'] %}<option {% if request.args.get('un') == un %}selected{% endif %}>{{ un }}</option>{% endfor %}</select></label>
+  <label>Alcance<select name="alcance"><option value="aaa" {% if scope == 'aaa' %}selected{% endif %}>Cuentas AAA</option><option value="todas" {% if scope == 'todas' %}selected{% endif %}>Todas las cuentas</option></select></label>
+  <button class="btn primary" type="submit">Aplicar</button>
+</form>
+{% if rows %}
+<div class="grid g-4 mb-4">
+  <div class="kpi"><div class="label">Cuentas con cierre en riesgo</div><div class="value">{{ stats.risk }}</div><div class="foot">En riesgo o atrasadas</div></div>
+  <div class="kpi"><div class="label">Servicios sin agendar</div><div class="value">{{ stats.unscheduled }}</div><div class="foot">{% if stats.unknown %}{{ stats.unknown }} cuentas sin confirmar{% else %}Pendientes del mes{% endif %}</div></div>
+  <div class="kpi"><div class="label">Compromisos vencidos</div><div class="value">{{ stats.overdue }}</div><div class="foot">QBR y acuerdos de sesión</div></div>
+  <div class="kpi"><div class="label">Bloqueos activos</div><div class="value">{{ stats.blockers }}</div><div class="foot">Stopers y retos por resolver</div></div>
+</div>
+<p class="weekly-note">{{ rows|length }} cuentas · {{ rows|length - stats.missing }} reportes entregados{% if stats.missing %} · <strong>{{ stats.missing }} pendientes de reporte</strong>{% endif %}. Los indicadores muestran la captura al corte; los borradores aún no cuentan como entrega.</p>
+<div class="card"><div class="card-head"><h3>Seguimiento por cuenta</h3><span class="meta">Primero las cuentas que requieren atención</span></div>
+<div class="weekly-table-wrap"><table class="tbl weekly-table"><thead><tr><th>Cuenta / KAM</th><th>Mes anterior<br><small>{{ previous_month }}</small></th><th>Avance actual<br><small>{{ current_month }}</small></th><th>Proyección<br><small>Cierre de mes</small></th><th>Operación / entrega</th><th>Principal bloqueo</th><th>Próxima acción</th><th></th></tr></thead><tbody>
+{% for row in rows %}{% set s = row.summary %}<tr>
+<td class="primary"><a href="{{ url_for('cs.account_detail',account_id=row.account.id) }}">{{ row.account.nombre }}</a><div class="muted">{{ row.account.kam.nombre if row.account.kam else 'Sin KAM' }}{% if row.account.es_aaa %} · AAA{% endif %}</div></td>
+<td>{{ (s.previous|string ~ '%') if s.previous is not none else 'Sin confirmar' }}{% if row.metrics.prev_expected is defined and row.metrics.prev_expected is not none %}<div class="muted">{{ row.metrics.prev_done if row.metrics.prev_done is not none else '—' }} / {{ row.metrics.prev_expected }} servicios</div>{% endif %}{% if row.metrics.prev_billed is defined and row.metrics.prev_billed is not none %}<div class="muted">Facturado ${{ '{:,.0f}'.format(row.metrics.prev_billed) }}</div>{% endif %}</td>
+<td>{{ (s.progress|string ~ '%') if s.progress is not none else 'Sin confirmar' }}{% if s.pending is not none %}<div class="muted">{{ s.pending }} pendientes</div>{% endif %}{% if row.metrics.billed is defined and row.metrics.billed is not none %}<div class="muted">Facturado ${{ '{:,.0f}'.format(row.metrics.billed) }}</div>{% endif %}</td>
+<td>{{ (s.projection|string ~ '%') if s.projection is not none else 'Sin confirmar' }}{% if row.metrics.closing_date %}<div class="muted">{{ row.metrics.closing_date }}</div>{% endif %}{% if row.metrics.billing_forecast is defined and row.metrics.billing_forecast is not none %}<div class="muted">Facturación ${{ '{:,.0f}'.format(row.metrics.billing_forecast) }}{% if row.metrics.target is defined and row.metrics.target is not none %} / ${{ '{:,.0f}'.format(row.metrics.target) }} meta{% endif %}</div>{% endif %}</td>
+<td><span class="pill {{ s.tone }}">{{ s.status }}</span><div class="muted">{{ row.report.estado if row.report else 'Sin reporte' }}</div>{% if s.overdue %}<div class="weekly-danger">{{ s.overdue }} compromisos vencidos</div>{% endif %}</td>
+<td>{% if s.blocker %}{{ s.blocker.title }}<div class="muted">{{ s.blocker.support or 'Apoyo sin definir' }}</div>{% else %}{{ 'Sin bloqueos registrados' if row.report else 'Sin confirmar' }}{% endif %}</td>
+<td>{% if s.next_action %}{{ s.next_action.next or s.next_action.action or s.next_action.title }}<div class="muted">{{ s.next_action.owner or 'Sin responsable' }} · {{ s.next_action.due or 'Sin fecha' }}</div>{% else %}{{ 'Sin acciones registradas' if row.report else 'Sin confirmar' }}{% endif %}</td>
+<td><a class="btn" href="{{ url_for('cs.reporte_semanal',account_id=row.account.id,corte=cut.isoformat()) }}">{{ 'Ver reporte' if row.report else 'Preparar' }}</a></td>
+</tr>{% endfor %}</tbody></table></div></div>
+{% else %}
+<div class="card"><div class="card-body"><h3>{{ 'Selecciona las cuentas AAA' if scope == 'aaa' else 'No hay cuentas con estos filtros' }}</h3><p class="sub">{% if scope == 'aaa' %}La selección de cuentas estratégicas se administra de forma independiente de su facturación.{% else %}Ajusta el KAM o la unidad de negocio para ver otras cuentas.{% endif %}</p>{% if can_manage_aaa and scope == 'aaa' %}<a class="btn primary" href="{{ url_for('cs.cuentas_aaa') }}">Seleccionar cuentas AAA</a>{% elif scope == 'aaa' %}<p class="muted">Dirección puede seleccionar las cuentas AAA. También puedes consultar todas tus cuentas desde el filtro de alcance.</p>{% endif %}</div></div>
+{% endif %}
+{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="{{ url_for('static',filename='css/cs_weekly.css') }}">{% endblock %}

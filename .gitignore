@@ -57,3 +57,6 @@ exports/
 
 # Evidencias de cierre guardadas en disco por el entorno local
 static/dev_evidencias/
+
+# Estado y evidencias del piloto local de CS
+.cs_pilot/

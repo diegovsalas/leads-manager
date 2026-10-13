@@ -1,0 +1,15 @@
+{% if services and services.get('comparison') %}
+{% set comparison=services.comparison %}
+<div class="card daily-section" id="comparativa-servicios"><div class="card-head"><h3>Contrato y operación</h3><a class="btn" href="{{ url_for('cs_daily.services_view',account_id=account.id) }}">Ver servicios</a></div><div class="card-body">
+<div class="weekly-table-wrap"><table class="tbl"><thead><tr><th>Comparativa</th><th>Contrato activo de referencia</th><th>Registros operativos disponibles</th></tr></thead><tbody>
+<tr><td>Sucursales</td><td>{{ comparison.contracted if comparison.has_scope else 'Alcance pendiente de estructurar' }}</td><td>{{ comparison.observed }} nombres distintos en toda la historia</td></tr>
+<tr><td>Vinculación</td><td>{% if comparison.has_scope %}{{ comparison.matched }} sucursales con coincidencia por nombre{% else %}Requiere alcance validado{% endif %}</td><td>ID de propiedad pendiente de importar; {{ comparison.api_ids }} citas con ID de Analytics</td></tr>
+<tr><td>Importe comprometido</td><td>{% if comparison.amount is not none %}${{ '{:,.2f}'.format(comparison.amount|float) }} MXN{% if comparison.cycle %} por ciclo de {{ comparison.cycle }} mes(es){% endif %}{% else %}Sin confirmar{% endif %}</td><td>Facturación real: requiere registros de facturas</td></tr>
+{% for m in services.months %}<tr><td>{{ m.month }}</td><td>Meta mensual pendiente de fechas del ciclo y alcance validado</td><td>{% if m.records or m.completed %}{{ m.completed }} citas terminadas con fecha de cierre · {{ m.pending }} pendientes según estatus actual{% else %}Sin registros del mes; cobertura sin confirmar{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+<p class="weekly-note">Las coincidencias por nombre incluyen toda la historia y no confirman una visita del mes. Para calcular cumplimiento automático necesitamos IDs de propiedad, fechas del ciclo y citas completas sin duplicados.</p>
+{% if comparison.has_scope and comparison.missing %}<details><summary>{{ comparison.missing|length }} sucursales del contrato sin coincidencia en las citas disponibles</summary><ul>{% for name in comparison.missing %}<li>{{ name }}</li>{% endfor %}</ul></details>{% endif %}
+{% if not comparison.has_scope %}<p class="weekly-note">Puedes consultar servicios sin contrato. Para comparar compromisos, carga una versión activa con alcance estructurado; un PDF sirve como referencia y requiere capturar o validar su alcance.</p><a class="btn" href="{{ url_for('cs_daily.contracts',account_id=account.id) }}">Contrato y alcance</a>{% endif %}
+{% if locked|default(false) %}<p class="weekly-note">Comparativa guardada con el reporte entregado.</p>{% endif %}
+</div></div>
+{% endif %}

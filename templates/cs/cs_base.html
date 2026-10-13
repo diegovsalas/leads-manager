@@ -120,6 +120,7 @@ function switchTab(name){
     </script>
 </head>
 <body>
+{% if cs_pilot %}<div style="position:relative;z-index:100;padding:8px 14px;background:#e8efff;color:#102543;font-size:12px;text-align:center">Piloto local · datos de demostración · <a href="/auth/google/__pilot">Cambiar perfil / ver recorrido</a></div>{% endif %}
 
 {% from "cs/_icons.html" import icon %}
 
@@ -135,31 +136,40 @@ function switchTab(name){
         </div>
 
         <nav class="side-nav">
-            <div class="side-section">Navegacion</div>
-            {% set nav = [
-                ('/cs/', 'cs.dashboard', 'layout-dashboard', 'Dashboard'),
-                ('/cs/kam-scorecard', 'cs.kam_scorecard', 'activity', 'KAM Scorecard'),
-                ('/cs/carga-operativa', 'cs.carga_operativa', 'clock', 'Carga Operativa'),
-                ('/cs/mis-cuentas', 'cs.mis_cuentas', 'star', 'Mis cuentas'),
-                ('/cs/mis-pendientes', 'cs.mis_pendientes', 'check-square', 'Mis pendientes y tareas'),
-                ('/cs/clientes', 'cs.clientes', 'building', 'Clientes'),
+            {% set groups = [
+              ('Trabajo diario', [('/cs/', 'cs.dashboard', 'layout-dashboard', 'Hoy'),
+                ('/cs/cuentas', 'cs_daily.accounts_view', 'building', 'Mis cuentas'),
+                ('/cs/incidencias', 'cs.incidencias_view', 'bell', 'Incidencias'),
+                ('/cs/semanal', 'cs.seguimiento_semanal', 'clipboard', 'Reporte semanal')]),
+              ('Análisis', [('/cs/analisis', 'cs.analisis', 'bar-chart', 'Cartera y finanzas'),
+                ('/cs/encuestas', 'cs.encuestas_view', 'clipboard', 'Satisfacción de clientes'),
+                ('/cs/incidencias/general', 'cs.incidencias_general', 'activity', 'Análisis de incidencias'),
+                ('/cs/kam-scorecard', 'cs.kam_scorecard', 'user-check', 'Desempeño KAM'),
+                ('/cs/carga-operativa', 'cs.carga_operativa', 'clock', 'Carga operativa'),
+                ('/cs/kam', 'cs.kam_view', 'users', 'Cartera por KAM'),
+                ('/cs/alertas', 'cs.alertas_view', 'bell', 'Todas las alertas'),
+                ('/cs/catch-up', 'cs.catch_up', 'route', 'Cuentas con alertas'),
+                ('/cs/clientes', 'cs.clientes', 'building', 'Directorio y asignaciones'),
                 ('/cs/contactos', 'cs.contactos_directory', 'users', 'Contactos'),
-                ('/cs/kam', 'cs.kam_view', 'user-check', 'KAMs'),
                 ('/cs/oportunidades', 'cs.oportunidades', 'target', 'Oportunidades'),
-                ('/cs/onboarding', 'cs.onboarding', 'rocket', 'Onboarding'),
-                ('/cs/alertas', 'cs.alertas_view', 'bell', 'Alertas'),
-                ('/cs/catch-up', 'cs.catch_up', 'route', 'Catch-Up'),
-                ('/cs/incidencias/general', 'cs.incidencias_general', 'bar-chart', 'Incidencias · Análisis'),
-                ('/cs/encuestas', 'cs.encuestas_view', 'clipboard', 'Encuestas NPS'),
+                ('/cs/onboarding', 'cs.onboarding', 'rocket', 'Onboarding')])
             ] %}
+            {% for title, nav in groups %}
+            {% if title == 'Análisis' %}<details {% if request.endpoint in nav|map(attribute=1)|list %}open{% endif %}><summary class="side-section" style="cursor:pointer">{{ title }}</summary>{% else %}<div class="side-section">{{ title }}</div>{% endif %}
             {% for href, endpoint, ico, label in nav %}
-            <a href="{{ href }}" data-label="{{ label }}" class="side-link {% if request.endpoint == endpoint %}active{% endif %}">
-                {{ icon(ico) }}<span class="label">{{ label }}</span>
-            </a>
+            <a href="{{ href }}" data-label="{{ label }}" class="side-link {% if request.endpoint == endpoint or endpoint == 'cs.seguimiento_semanal' and request.endpoint == 'cs.reporte_semanal' %}active{% endif %}">{{ icon(ico) }}<span class="label">{{ label }}</span></a>
+            {% endfor %}
+            {% if title == 'Análisis' %}</details>{% endif %}
             {% endfor %}
 
             {% if not is_kam %}
-            <div class="side-section">Administracion</div>
+            <div class="side-section">Administración</div>
+            {% if user_rol|lower|replace(' ','_') in ['super_admin','developer','super_admin_aromatex','super_admin_pestex','super_admin_comercial','super_admin_nexo'] %}
+            <a href="{{ url_for('cs.cuentas_aaa') }}" data-label="Cuentas AAA" class="side-link {% if request.endpoint == 'cs.cuentas_aaa' %}active{% endif %}">{{ icon('star') }}<span class="label">Cuentas AAA</span></a>
+            {% endif %}
+            {% if user_rol|lower|replace(' ','_') in ['super_admin','developer'] %}
+            <a href="{{ url_for('cs.administracion') }}" data-label="Integraciones" class="side-link {% if request.endpoint == 'cs.administracion' %}active{% endif %}">{{ icon('refresh') }}<span class="label">Integraciones</span></a>
+            {% endif %}
             <a href="/cs/cargar-datos" data-label="Cargar Datos" class="side-link {% if request.endpoint == 'cs.cargar_datos' %}active{% endif %}">
                 {{ icon('upload') }}<span class="label">Cargar Datos</span>
             </a>
@@ -199,6 +209,11 @@ function switchTab(name){
         </header>
 
         <main class="content">
+            {% if request.endpoint in ['cs.dashboard','cs.cuentas_aaa','cs.reporte_semanal','cs.seguimiento_semanal'] or request.endpoint.startswith('cs_daily.') %}
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category,message in messages %}<div role="status" style="padding:12px 16px;margin-bottom:16px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px">{{ message }}</div>{% endfor %}
+            {% endwith %}
+            {% endif %}
             {% block content %}{% endblock %}
         </main>
     </div>

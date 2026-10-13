@@ -16,7 +16,7 @@
             {{ icon('search') }}
             <input type="text" id="search-clientes" placeholder="Buscar cuenta..." oninput="filterTable(this.value)">
         </div>
-        {% if not is_kam %}
+        {% if is_kam %}<a class="btn primary" href="{{ url_for('cs_daily.add_account') }}">+ Agregar cuenta</a>{% else %}
         <button class="btn primary" onclick="openCreateModal()" style="margin-left:8px;">+ Nueva cuenta</button>
         {% endif %}
     </div>

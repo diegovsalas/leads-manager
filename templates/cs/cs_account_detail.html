@@ -18,6 +18,8 @@
 <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
     <a href="/cs/clientes" class="text-xs text-brand-600 hover:underline inline-flex items-center gap-1">{{ icon('arrow-left', 13) }} Todas las cuentas</a>
     <div class="flex items-center gap-2 flex-wrap">
+        <a href="{{ url_for('cs_daily.account_work', account_id=account.id) }}" class="btn primary">Gestión diaria</a>
+        <a href="{{ url_for('cs.reporte_semanal', account_id=account.id) }}" class="btn">Reporte semanal{% if account.es_aaa %} · AAA{% endif %}</a>
         {# FEAT-2026-09-25: enlace del portal de tickets del cliente.
            El token existia en la base desde antes, pero ninguna pantalla lo
            mostraba: el KAM no tenia forma de hacerselo llegar al cliente, asi

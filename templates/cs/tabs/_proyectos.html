@@ -48,7 +48,7 @@
             </div>
             <div>
                 <label for="tk-fecha" class="cv-label">Fecha límite</label>
-                <input id="tk-fecha" name="fecha_limite" type="date" class="cv-input">
+                <input id="tk-fecha" name="fecha_limite" type="date" required class="cv-input">
             </div>
         </div>
         <div class="grid gap-3 grid-cols-1 md:grid-cols-4 mt-3">
@@ -71,7 +71,7 @@
             <form action="/cs/account/{{ account.id }}/tasks/{{ t.id }}/toggle" method="POST" class="pt-0.5">
                 <button type="submit" class="w-4 h-4 rounded border-2 grid place-items-center shrink-0
                     {% if t.completada %}bg-green-500 border-green-500 text-white{% else %}border-gray-300 hover:border-brand-500{% endif %}"
-                    aria-label="{{ 'Marcar como pendiente' if t.completada else 'Marcar como completada' }}">
+                    aria-label="{{ 'Reabrir con motivo' if t.completada else 'Cerrar con respaldo' }}">
                     {% if t.completada %}<span class="text-[10px] leading-none">✓</span>{% endif %}
                 </button>
             </form>
@@ -92,8 +92,8 @@
                 {% if t.adjuntos %}{{ render_adjuntos(t.adjuntos) }}{% endif %}
             </div>
             <form action="/cs/account/{{ account.id }}/tasks/{{ t.id }}/delete" method="POST"
-                  onsubmit="return confirm('¿Eliminar esta tarea?')">
-                <button type="submit" class="text-gray-300 hover:text-red-500 text-sm px-1" aria-label="Eliminar tarea">×</button>
+                  >
+                <button type="submit" class="text-gray-300 hover:text-red-500 text-sm px-1" aria-label="Cancelar con motivo">×</button>
             </form>
         </div>
         {% endfor %}

@@ -1,0 +1,12 @@
+<details class="card weekly-section"><summary>Servicios registrados · {{ services.total }} citas</summary><div class="card-body">
+{% if cs_pilot %}<p class="weekly-note">Piloto aislado: copia local para pruebas; no consulta Analytics en vivo. La fecha de copia no es la fecha de sincronización del origen.</p>{% endif %}
+<p class="weekly-note">Datos disponibles en CS, incluidos los importados de Analytics. Última sincronización: no registrada. Los estatus son los actuales; no existe historial para reconstruirlos al viernes de corte. Los realizados cuentan registros con fecha de terminación dentro del mes y hasta el corte. No equivalen todavía al cumplimiento contractual confirmado.</p>
+{% if not services.total %}<p>Sin citas importadas para esta cuenta. Esto no confirma que haya cero servicios: verifica su identificador y la sincronización con Administración.</p>{% endif %}
+{% for m in services.months %}<div style="margin:12px 0"><strong>{{ m.month }}</strong>{% if not m.records %}<p class="weekly-note">Sin citas con inicio en este mes en la base disponible. Esto no acredita cero servicios ni cobertura completa de Analytics.</p>{% endif %}<p>{{ m.records }} citas con inicio en el mes · {{ m.completed }} terminadas con fecha de cierre · {{ m.pending }} pendientes según estatus actual ({{ m.overdue }} con fecha hasta el corte).</p>
+{% if m.duplicate_groups or m.missing_end %}<p class="weekly-note">Por revisar: {{ m.duplicate_groups }} grupos con misma sucursal, inicio y servicio; {{ m.missing_end }} terminadas sin fecha de cierre. No se eliminan ni suman como cumplimiento confirmado.</p>{% endif %}
+<p class="weekly-note">{{ m.api_ids }} citas tienen identificador de Analytics; las demás no permiten confirmar su origen.</p>
+<div class="daily-actions">{% for s in m.statuses %}<a class="btn" href="{{ url_for('cs_daily.services_view',account_id=account.id,mes=m.month,estatus=s.status) }}">{{ s.status }} · {{ s.count }}</a>{% endfor %}<a class="btn" href="{{ url_for('cs_daily.services_view',account_id=account.id,mes=m.month) }}">Ver detalle del mes</a></div></div>{% endfor %}
+{% if services.undated %}<p>{{ services.undated }} citas sin fecha de inicio.</p>{% endif %}
+<a class="btn" href="{{ url_for('cs_daily.services_view',account_id=account.id) }}">Todos los servicios y estatus</a>
+{% if locked|default(false) %}<p class="weekly-note">Totales congelados al entregar el reporte. El detalle abre los registros operativos actuales.</p>{% endif %}
+</div></details>

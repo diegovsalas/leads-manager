@@ -18,7 +18,7 @@ from sqlalchemy import func
 from extensions import db
 from blueprints.auth import is_admin_role, is_full_access_role
 from models import (
-    CSAccount, CSInvoice, CSAppointment, CSNote, CSTask,
+    CSAccount, CSWeeklyReport, CSInvoice, CSAppointment, CSNote, CSTask,
     CSOnboardingAccount, CSOpportunity, CSContacto, CSEntregable,
     CSEncuesta, CSIncidencia, CSIncidenciaSeguimiento, CSPropiedad, CSWorkloadSurvey,
     CSObjetivo, CSDocumento, KAMEmailResponse,
@@ -1164,7 +1164,293 @@ def _build_kam_scorecard(inicio, fin):
 # DASHBOARD
 # ══════════════════════════════════════════════
 @cs_bp.route("/")
+@require_cs_analisis
 def dashboard():
+    from blueprints.cs_daily import today_view
+    return today_view()
+
+
+@cs_bp.route("/semanal")
+@require_cs_analisis
+def seguimiento_semanal():
+    from cs_weekly import parse_cut, summarize, month_bounds, MONTHS
+    from un_filter import filtrar_cs_accounts_por_un
+    try:
+        cut = parse_cut(request.args.get('corte'))
+    except ValueError as e:
+        return str(e), 400
+    q = CSAccount.query.filter(CSAccount.en_due_diligence.is_not(True))
+    if _is_kam():
+        q = q.filter(CSAccount.kam_id == _current_kam_id())
+    elif request.args.get('kam'):
+        try:
+            kam_id = uuid.UUID(request.args['kam'])
+        except ValueError:
+            return 'KAM no válido', 400
+        q = q.filter(CSAccount.kam_id == kam_id)
+    q = filtrar_cs_accounts_por_un(q, CSAccount, request.args.get('un'))
+    scope = request.args.get('alcance', 'aaa')
+    if scope != 'todas':
+        scope = 'aaa'
+        q = q.filter(CSAccount.es_aaa.is_(True))
+    accounts = q.order_by(CSAccount.nombre).all()
+    reports = {str(r.account_id): r for r in CSWeeklyReport.query.filter(
+        CSWeeklyReport.account_id.in_([a.id for a in accounts]), CSWeeklyReport.cut_date == cut).all()}
+    rows = []
+    for a in accounts:
+        r = reports.get(str(a.id))
+        payload = r.payload if r else {}
+        rows.append(dict(account=a, report=r, metrics=payload.get('metrics', {}),
+                         summary=summarize(payload, cut)))
+    priority = {'Atrasado': 0, 'En riesgo': 1, 'Sin confirmar': 2, 'En tiempo': 3, 'Sin servicios': 4}
+    rows.sort(key=lambda r: (priority[r['summary']['status']], -r['summary']['overdue'], r['account'].nombre))
+    previous, current, _ = month_bounds(cut)
+    return render_template('cs_semanal.html', rows=rows, cut=cut,
+        week_start=cut - timedelta(days=4), scope=scope,
+        current_month=MONTHS[current.month-1], previous_month=MONTHS[previous.month-1],
+        stats=dict(risk=sum(r['summary']['status'] in ('En riesgo', 'Atrasado') for r in rows),
+                   unscheduled=sum(r['summary']['unscheduled'] or 0 for r in rows),
+                   unknown=sum(r['summary']['unscheduled'] is None for r in rows),
+                   overdue=sum(r['summary']['overdue'] for r in rows),
+                   blockers=sum(r['summary']['blockers'] for r in rows),
+                   missing=sum(not r['report'] or r['report'].estado not in ('Entregado','Revisado') for r in rows)),
+        kams=_get_kams(), can_manage_aaa=_is_cs_admin(), **_ctx())
+
+
+@cs_bp.route('/cuentas-aaa', methods=['GET', 'POST'])
+@require_cs_admin
+def cuentas_aaa():
+    accounts = CSAccount.query.filter(CSAccount.en_due_diligence.is_not(True)).order_by(CSAccount.nombre).all()
+    if request.method == 'POST':
+        selected = set(request.form.getlist('account_id'))
+        if not selected.issubset({str(a.id) for a in accounts}):
+            return 'Selección de cuentas no válida.', 400
+        for account in accounts:
+            account.es_aaa = str(account.id) in selected
+        db.session.commit()
+        flash('La selección de cuentas AAA se guardó.', 'success')
+        return redirect(url_for('cs.seguimiento_semanal'))
+    return render_template('cs_cuentas_aaa.html', accounts=accounts, **_ctx())
+
+
+def _weekly_incidents(account_id, cut):
+    """Foto al corte; una resolución posterior permanece abierta en ese corte."""
+    from cs_weekly import MX
+    from sqlalchemy.orm import selectinload
+    week_start = cut - timedelta(days=4)
+    incidents = CSIncidencia.query.options(selectinload(CSIncidencia.seguimientos)).filter_by(account_id=account_id).all()
+    rows, durations = [], []
+    for inc in incidents:
+        created = inc.created_at.astimezone(MX).date() if inc.created_at else None
+        opened = inc.fecha_incidencia or created
+        if not opened or opened > cut or (created and created > cut):
+            continue
+        closed = inc.fecha_solucion if inc.status == 'Resuelta' else None
+        closed_at_cut = closed is not None and closed <= cut
+        new = week_start <= opened <= cut
+        closed_this_week = closed_at_cut and closed >= week_start
+        if closed_at_cut and not closed_this_week:
+            continue
+        status = 'Cerrada' if closed_at_cut else 'En atención' if inc.status == 'En proceso' else 'Abierta'
+        if inc.status == 'Resuelta' and closed is None:
+            status = 'Cierre sin fecha'
+        # El comentario más reciente puede ser posterior al corte: usar bitácora fechada.
+        followups = [f for f in inc.seguimientos if f.created_at and f.created_at.astimezone(MX).date() <= cut]
+        action = max(followups, key=lambda f: f.created_at).texto if followups else ''
+        rows.append(dict(id=str(inc.id), folio=inc.folio or '', date=opened.isoformat(),
+            branch=inc.propiedad_nombre or '', title=inc.detalle or inc.tipo, type=inc.tipo,
+            action=action, owner=inc.responsable or '', status=status, new=new,
+            closed_this_week=closed_this_week))
+        if closed_this_week and closed >= opened:
+            durations.append((closed - opened).days)
+    rows.sort(key=lambda r: (r['status'] == 'Cerrada', r['date']))
+    return dict(rows=rows, new=sum(r['new'] for r in rows),
+                open=sum(r['status'] in ('Abierta', 'En atención') for r in rows),
+                closed=sum(r['closed_this_week'] for r in rows),
+                average=round(sum(durations)/len(durations), 1) if durations else None)
+
+
+@cs_bp.route('/account/<uuid:account_id>/semanal', methods=['GET', 'POST'])
+@require_cs_account_access
+def reporte_semanal(account_id):
+    from cs_weekly import parse_cut, validate_payload, summarize, METRICS, SECTIONS, month_bounds, MONTHS, MX
+    from sqlalchemy.exc import IntegrityError
+    account = _get_cs_account(account_id)
+    try:
+        cut = parse_cut(request.args.get('corte'))
+    except ValueError as e:
+        return str(e), 400
+    report = CSWeeklyReport.query.filter_by(account_id=account_id, cut_date=cut).first()
+    payload = report.payload if report else {}
+    carried_from = None
+    if not report:
+        previous_report = CSWeeklyReport.query.filter(CSWeeklyReport.account_id == account_id,
+            CSWeeklyReport.cut_date < cut).order_by(CSWeeklyReport.cut_date.desc()).first()
+        if previous_report:
+            carried_from = previous_report.cut_date
+            payload = {key: [r for r in previous_report.payload.get(key, []) if r.get('status') not in ('Cerrado','Cancelado')]
+                       for key, _, _ in SECTIONS}
+    error = None
+    code = 200
+    if request.method == 'POST':
+        if report and report.estado in ('Entregado', 'Revisado'):
+            return jsonify(error='El reporte está entregado. Dirección debe devolverlo para modificarlo.'), 409
+        version = report.updated_at.isoformat() if report and report.updated_at else ''
+        if request.form.get('version', '') != version:
+            return jsonify(error='El reporte cambió desde que lo abriste. Recarga antes de guardar.'), 409
+        try:
+            raw = json.loads(request.form.get('payload', '{}'))
+            if not isinstance(raw, dict):
+                raise ValueError('El reporte no tiene un formato válido.')
+            legacy_before = {key: [r for r in payload.get(key, []) if not r.get('task_id')]
+                             for key, _, _ in SECTIONS}
+            from cs_services import service_snapshot, previous_month_data, PREVIOUS_AUTO_KEYS
+            services_snapshot = service_snapshot(account_id, cut)
+            previous_auto = previous_month_data(services_snapshot)
+            submitted_metrics = raw.get('metrics', {})
+            if not isinstance(submitted_metrics, dict):
+                raise ValueError('Las métricas no tienen un formato válido.')
+            submitted_metrics = dict(submitted_metrics)
+            for key in PREVIOUS_AUTO_KEYS:
+                submitted_metrics[key] = previous_auto[key]['value']
+            payload = validate_payload({'metrics': submitted_metrics})
+            payload['previous_auto'] = previous_auto
+            action = request.form.get('accion', 'guardar')
+            if action not in ('guardar','enviar'):
+                raise ValueError('Acción de reporte no válida.')
+            if action == 'enviar':
+                required = ('expected','done','scheduled','forecast','billed','target','billing_forecast')
+                if any(payload['metrics'][k] is None for k in required):
+                    raise ValueError('Confirma los servicios, la facturación, las metas y la proyección antes de entregar. Puedes guardar un borrador.')
+        except (ValueError, TypeError) as e:
+            if _wants_json():
+                return jsonify(error=str(e)), 400
+            error, code = str(e), 400
+        else:
+            from cs_daily import weekly_tasks
+            payload.update(weekly_tasks(account_id, cut))
+            from cs_contracts import contract_reference
+            payload['contract_reference'] = contract_reference(account_id, cut)
+            from cs_services import service_snapshot
+            payload['services'] = services_snapshot
+            from cs_daily import name_key
+            for key, rows in legacy_before.items():
+                existing = {name_key(r.get('title')) for r in payload[key]}
+                payload[key].extend(r for r in rows if name_key(r.get('title')) not in existing)
+            # Congelar las incidencias evita que el reporte guardado cambie con la cola actual.
+            payload['incidents'] = report.payload.get('incidents') if report else None
+            if payload['incidents'] is None:
+                payload['incidents'] = _weekly_incidents(account_id, cut)
+            if action == 'enviar':
+                payload['incidents'] = _weekly_incidents(account_id, cut)
+            from datetime import timezone
+            report_state = 'Entregado' if action == 'enviar' else 'Borrador'
+            submitted_at = datetime.now(timezone.utc) if action == 'enviar' else None
+            if not report:
+                report = CSWeeklyReport(account_id=account_id, cut_date=cut)
+                db.session.add(report)
+                report.payload = payload
+                report.updated_by = session.get('user_nombre') or session.get('user_id', '')
+                report.estado, report.submitted_at = report_state, submitted_at
+            else:
+                from datetime import timezone
+                # Comparación atómica: dos pestañas no pueden pisar el mismo corte.
+                changed = CSWeeklyReport.query.filter_by(id=report.id).filter(
+                    CSWeeklyReport.updated_at == report.updated_at).update({
+                        CSWeeklyReport.payload: payload,
+                        CSWeeklyReport.updated_by: session.get('user_nombre') or session.get('user_id', ''),
+                        CSWeeklyReport.updated_at: datetime.now(timezone.utc),
+                        CSWeeklyReport.estado: report_state,
+                        CSWeeklyReport.submitted_at: submitted_at,
+                    }, synchronize_session=False)
+                if changed != 1:
+                    db.session.rollback()
+                    return jsonify(error='El reporte cambió. Recarga antes de guardar.'), 409
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                return jsonify(error='Otro usuario creó este corte. Recarga el reporte antes de guardar.'), 409
+            flash('Reporte entregado para revisión.' if action == 'enviar' else 'Borrador guardado.', 'success')
+            return redirect(url_for('cs.reporte_semanal', account_id=account_id, corte=cut.isoformat()))
+    previous, current, _ = month_bounds(cut)
+    from cs_daily import weekly_tasks
+    from cs_contracts import contract_reference
+    locked = bool(report and report.estado in ('Entregado','Revisado'))
+    live_tasks = {key: payload.get(key,[]) for key, _, _ in SECTIONS} if locked else weekly_tasks(account_id, cut)
+    legacy_rows = {key: [row for row in payload.get(key, []) if not row.get('task_id')]
+                   for key, _, _ in SECTIONS}
+    display_payload = dict(payload)
+    display_payload.update(live_tasks)
+    if not locked:
+        for key, rows in legacy_rows.items():
+            from cs_daily import name_key
+            existing = {name_key(r.get('title')) for r in display_payload[key]}
+            display_payload[key].extend(r for r in rows if name_key(r.get('title')) not in existing)
+    incidents = payload.get('incidents') or _weekly_incidents(account_id, cut)
+    from cs_services import service_snapshot
+    services = payload.get('services') if locked else service_snapshot(account_id, cut)
+    from cs_services import previous_month_data
+    previous_auto = payload.get('previous_auto') if locked else previous_month_data(services)
+    if not locked:
+        display_payload['metrics'] = dict(payload.get('metrics', {}))
+        display_payload['metrics'].update({k: v['value'] for k, v in previous_auto.items()})
+    return render_template('cs_reporte_semanal.html', account=account, report=report,
+        previous_auto=previous_auto, services=services, cut=cut, payload=display_payload, metrics_fields=METRICS, sections=SECTIONS,
+        has_legacy=any(legacy_rows.values()),
+        locked=locked, can_review=_is_cs_admin(),
+        contract_ref=payload.get('contract_reference') if locked else contract_reference(account_id,cut),
+        saved_at=report.updated_at.astimezone(MX) if report and report.updated_at else None,
+        summary=summarize(display_payload, cut), incidents=incidents, error=error,
+        carried_from=carried_from, current_month=MONTHS[current.month-1],
+        previous_month=MONTHS[previous.month-1], **_ctx()), code
+
+
+@cs_bp.route('/account/<uuid:account_id>/semanal/revisar', methods=['POST'])
+@require_cs_admin
+@require_cs_account_access
+def revisar_reporte_semanal(account_id):
+    from cs_weekly import parse_cut
+    from cs_daily import record_event
+    from datetime import timezone
+    try:
+        cut = parse_cut(request.args.get('corte'))
+    except ValueError as e:
+        return str(e),400
+    report = db.session.execute(db.select(CSWeeklyReport).where(
+        CSWeeklyReport.account_id == account_id, CSWeeklyReport.cut_date == cut).with_for_update()).scalar_one_or_none()
+    if not report:
+        return 'Reporte no encontrado',404
+    if request.form.get('version') != (report.updated_at.isoformat() if report.updated_at else ''):
+        return 'El reporte cambió. Recarga antes de revisar.',409
+    action = request.form.get('accion')
+    note = (request.form.get('observaciones') or '').strip()
+    if action not in ('revisar','devolver') or report.estado not in ('Entregado','Revisado'):
+        return 'El reporte debe estar entregado para revisarlo.',400
+    if len(note)>3000 or action=='devolver' and not note:
+        return 'Indica el motivo de devolución (máximo 3,000 caracteres).',400
+    before = report.estado
+    report.estado = 'Revisado' if action=='revisar' else 'Devuelto'
+    report.reviewed_by = session.get('user_nombre') or session.get('user_id','')
+    report.reviewed_at = report.updated_at = datetime.now(timezone.utc)
+    report.review_note = note
+    event = record_event(_get_cs_account(account_id), 'Revisión de reporte',
+        note or 'Reporte semanal revisado.', report.reviewed_by,session.get('user_id',''))
+    event.snapshot = {'report_id':str(report.id),'before':before,'after':report.estado}
+    db.session.commit()
+    flash('Reporte revisado.' if action=='revisar' else 'Reporte devuelto con observaciones.','success')
+    return redirect(url_for('cs.reporte_semanal',account_id=account_id,corte=cut.isoformat()))
+
+
+@cs_bp.route('/administracion')
+@require_cs_full_access
+def administracion():
+    return render_template('cs_administracion.html', **_ctx())
+
+
+@cs_bp.route("/analisis")
+@require_cs_analisis
+def analisis():
     inicio, fin, periodo_label, periodo_param = _get_periodo()
 
     kam_filter = _current_kam_id()
@@ -1316,7 +1602,7 @@ def dashboard():
     suc_pestex = suc_un_rows[1] if suc_un_rows else 0
 
     return render_template(
-        "cs_dashboard.html",
+        "cs_analisis.html",
         mrr_total=mrr_total, arr_total=arr_total,
         mrr_observado_total=mrr_observado_total, arr_observado_total=arr_observado_total,
         gap_pct=gap_pct,
@@ -1409,42 +1695,8 @@ def clientes():
 def mis_cuentas():
     """Lista de cuentas CS donde kam_id == usuario actual. Independiente del
     rol — funciona para KAM, admin, super_admin."""
-    user_id = _current_user_id()
-    if not user_id:
-        return redirect(url_for("auth.login_page"))
-
-    accounts = CSAccount.query.filter_by(kam_id=user_id).order_by(CSAccount.mrr.desc()).all()
-    scores_map = calcular_health_scores_batch(accounts) if accounts else {}
-
-    # Tasks pendientes por cuenta
-    account_data = []
-    for acc in accounts:
-        hs = scores_map.get(str(acc.id), {"score": 0})
-        tareas = CSTask.query.filter_by(account_id=acc.id, completada=False).order_by(CSTask.fecha_limite).all()
-        owners = CSContacto.query.filter_by(account_id=acc.id, is_owner=True).all()
-        account_data.append({
-            "account": acc, "health": hs,
-            "owners": owners, "tareas_pendientes": tareas,
-        })
-
-    # KPIs propios
-    mrr_total = sum(float(a.mrr or 0) for a in accounts)
-    arr_total = sum(float(a.arr_proyectado or 0) for a in accounts)
-    cuentas_nuevas = sum(1 for a in accounts if a.es_cuenta_nueva)
-    # FIX-2026-07-03: score puede ser None (sin datos suficientes); no cuenta como riesgo
-    en_riesgo = sum(
-        1 for a in accounts
-        if (scores_map.get(str(a.id), {}).get("score") or 100) < 40
-    )
-
-    return render_template(
-        "cs_mis_cuentas.html",
-        accounts=account_data,
-        mrr_total=mrr_total, arr_total=arr_total,
-        cuentas_nuevas=cuentas_nuevas, en_riesgo=en_riesgo,
-        total_cuentas=len(accounts),
-        **_ctx(),
-    )
+    from blueprints.cs_daily import accounts_view
+    return accounts_view()
 
 
 # ══════════════════════════════════════════════
@@ -1454,86 +1706,14 @@ def mis_cuentas():
 def mis_pendientes():
     """Todo lo asignado al usuario logueado: tareas, citas próximas,
     incidencias abiertas, alertas. Cross-account."""
-    user_id = _current_user_id()
-    user_nombre = session.get("user_nombre", "")
-    if not user_id:
-        return redirect(url_for("auth.login_page"))
-
-    # Mis cuentas (para limitar tareas/citas a las que me corresponden)
-    mis_account_ids = [a.id for a in CSAccount.query.filter_by(kam_id=user_id).all()]
-
-    # Tasks pendientes
-    tasks_q = CSTask.query.filter_by(completada=False)
-    if mis_account_ids:
-        # Tasks de mis cuentas O tasks donde responsable matchea mi nombre
-        from sqlalchemy import or_ as _or
-        tasks_q = tasks_q.filter(_or(
-            CSTask.account_id.in_(mis_account_ids),
-            CSTask.responsable.ilike(f"%{user_nombre}%") if user_nombre else False,
-        ))
-    elif user_nombre:
-        tasks_q = tasks_q.filter(CSTask.responsable.ilike(f"%{user_nombre}%"))
-    else:
-        tasks_q = tasks_q.filter(False)  # no scope, empty
-
-    tareas = tasks_q.order_by(CSTask.fecha_limite.asc().nullslast()).limit(200).all()
-    accounts_for_tareas = {str(a.id): a for a in CSAccount.query.filter(
-        CSAccount.id.in_([t.account_id for t in tareas])
-    ).all()}
-
-    # Citas próximas (próximos 14 días) de mis cuentas
-    from datetime import timedelta as _td
-    today_dt = datetime.utcnow()
-    citas_proximas = []
-    if mis_account_ids:
-        citas_proximas = (
-            CSAppointment.query
-            .filter(CSAppointment.account_id.in_(mis_account_ids))
-            .filter(CSAppointment.fecha_inicio >= today_dt)
-            .filter(CSAppointment.fecha_inicio < today_dt + _td(days=14))
-            .filter(~CSAppointment.estatus.in_(("Cancelada", "No Realizada", "Archivada")))
-            .order_by(CSAppointment.fecha_inicio.asc()).limit(50).all()
-        )
-    accounts_for_citas = {str(a.id): a for a in CSAccount.query.filter(
-        CSAccount.id.in_([c.account_id for c in citas_proximas])
-    ).all()}
-
-    # Incidencias abiertas
-    incidencias = []
-    if mis_account_ids:
-        from models import CSIncidencia
-        incidencias = (
-            CSIncidencia.query
-            .filter(CSIncidencia.account_id.in_(mis_account_ids))
-            .filter(CSIncidencia.status != "Resuelta")
-            .order_by(CSIncidencia.created_at.desc()).limit(50).all()
-        )
-    accounts_for_inc = {str(a.id): a for a in CSAccount.query.filter(
-        CSAccount.id.in_([i.account_id for i in incidencias])
-    ).all()}
-
-    # Stats
-    stats = {
-        "total_tareas": len(tareas),
-        "tareas_vencidas": sum(1 for t in tareas if t.fecha_limite and t.fecha_limite < today_dt.date()),
-        "citas_proximas": len(citas_proximas),
-        "incidencias_abiertas": len(incidencias),
-        "mis_cuentas": len(mis_account_ids),
-    }
-
-    return render_template(
-        "cs_mis_pendientes.html",
-        tareas=tareas, accounts_for_tareas=accounts_for_tareas,
-        citas_proximas=citas_proximas, accounts_for_citas=accounts_for_citas,
-        incidencias=incidencias, accounts_for_inc=accounts_for_inc,
-        stats=stats,
-        **_ctx(),
-    )
+    return redirect(url_for('cs.dashboard'))
 
 
 @cs_bp.route("/clientes/<uuid:account_id>/editar", methods=["POST"])
 @require_cs_account_access
 def editar_cliente(account_id):
+    if _is_kam() and any(k in request.form for k in ('kam_id','ejecutivo_id','client_id','tier','mrr','sucursales','unidades_contratadas')):
+        return _permission_denied('Dirección administra la asignación y los datos comerciales.')
     acc = _get_cs_account(account_id)
     # nombre se puede editar también si viene
     if "nombre" in request.form:
@@ -1593,14 +1773,18 @@ def editar_cliente(account_id):
 
 
 @cs_bp.route("/clientes/crear", methods=["POST"])
-@require_cs_admin
+@require_cs_analisis
 def crear_cliente():
     """Crear nueva CSAccount. Solo admin/director (no KAM)."""
+    if _is_kam():
+        from blueprints.cs_daily import add_account
+        return add_account()
     nombre = (request.form.get("nombre") or "").strip()
     if not nombre:
         return "nombre es requerido", 400
-    if CSAccount.query.filter(CSAccount.nombre == nombre).first():
-        return "Ya existe una cuenta con ese nombre", 400
+    from cs_daily import duplicate_account
+    if duplicate_account(nombre):
+        return "Ya existe una cuenta con ese nombre; revisa la asignación.", 400
     kam_id = request.form.get("kam_id", "").strip()
     if not kam_id:
         return "kam_id es requerido", 400
@@ -4900,55 +5084,36 @@ def delete_note(account_id, note_id):
 @cs_bp.route("/account/<uuid:account_id>/tasks", methods=["POST"])
 @require_cs_account_access
 def create_task(account_id):
-    descripcion = request.form.get("descripcion", "").strip()
-    if descripcion:
-        fecha_str = request.form.get("fecha_limite", "").strip()
-        fecha_limite = None
-        if fecha_str:
-            try:
-                fecha_limite = datetime.strptime(fecha_str, "%Y-%m-%d").date()
-            except ValueError:
-                pass
-        adj = _parse_adjuntos(request.form)
-        db.session.add(CSTask(
-            account_id=account_id, tipo=request.form.get("tipo", "check-in"),
-            descripcion=descripcion, responsable=request.form.get("responsable", ""),
-            fecha_limite=fecha_limite, adjuntos=adj,
-        ))
+    from cs_daily import new_task
+    account = _get_cs_account(account_id)
+    try:
+        new_task(account, request.form, session.get('user_nombre') or account.kam.nombre,
+                 session.get('user_id',''))
         db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=proyectos")
+    except ValueError as e:
+        db.session.rollback()
+        return str(e), 400
+    return redirect(url_for('cs_daily.account_work', account_id=account_id))
 
 
 @cs_bp.route("/account/<uuid:account_id>/tasks/<uuid:task_id>/toggle", methods=["POST"])
 @require_cs_account_access
 def toggle_task(account_id, task_id):
     task = db.session.get(CSTask, task_id)
-    if task:
-        if str(task.account_id) != str(account_id):
-            return _permission_denied()
-        account = _get_cs_account(task.account_id)
-        err = _require_account_access(account)
-        if err:
-            return err
-        task.completada = not task.completada
-        db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=proyectos")
+    if not task or str(task.account_id) != str(account_id):
+        return _not_found('Tarea no encontrada')
+    return redirect(url_for('cs_daily.manage', account_id=account_id, tarea=task_id,
+                            modo="reabrir" if task.completada else "cerrar"))
 
 
 @cs_bp.route("/account/<uuid:account_id>/tasks/<uuid:task_id>/delete", methods=["POST"])
 @require_cs_account_access
 def delete_task(account_id, task_id):
     task = db.session.get(CSTask, task_id)
-    if task:
-        if str(task.account_id) != str(account_id):
-            return _permission_denied()
-        account = _get_cs_account(task.account_id)
-        err = _require_account_access(account)
-        if err:
-            return err
-        db.session.delete(task)
-        db.session.commit()
-    return redirect(url_for("cs.account_detail", account_id=account_id) + "?tab=proyectos")
+    if not task or str(task.account_id) != str(account_id):
+        return _not_found('Tarea no encontrada')
+    return redirect(url_for('cs_daily.manage', account_id=account_id, tarea=task_id,
+                            modo="cancelar"))
 
 
 # ══════════════════════════════════════════════════════════════════

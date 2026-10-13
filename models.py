@@ -860,6 +860,8 @@ class CSAccount(db.Model):
     ticket_token = db.Column(db.String(32), unique=True, nullable=True, index=True)
     giro = db.Column(db.String(100), default="")
     tier = db.Column(db.String(20), default="")  # Gold, Silver, Bronze
+    es_aaa = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
+    datos_por_validar = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
     adjuntos = db.Column(db.JSON, default=list)  # [{nombre, url, tipo}]
     nps = db.Column(db.Float, nullable=True)
     pulso = db.Column(db.String(20), nullable=True)
@@ -939,6 +941,46 @@ def _auto_client_id(mapper, connection, target):
             if cid.isdigit():
                 max_num = max(max_num, int(cid))
         target.client_id = f"AX-{max_num + 1:04d}"
+
+
+class CSWeeklyReport(db.Model):
+    """Corte semanal confirmado por KAM; independiente del tier financiero."""
+    __tablename__ = "cs_weekly_reports"
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id", ondelete="CASCADE"), nullable=False)
+    cut_date = db.Column(db.Date, nullable=False)
+    payload = db.Column(db.JSON, nullable=False, default=dict)
+    updated_by = db.Column(db.String(200), default="")
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+    estado = db.Column(db.String(20), nullable=False, default="Borrador", server_default="Borrador")
+    submitted_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    reviewed_by = db.Column(db.String(200), default="")
+    reviewed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    review_note = db.Column(db.Text, default="")
+    __table_args__ = (db.UniqueConstraint("account_id", "cut_date", name="uq_cs_weekly_account_cut"),)
+    account = db.relationship("CSAccount", backref=db.backref("weekly_reports", cascade="all, delete-orphan", passive_deletes=True))
+
+
+class CSContrato(db.Model):
+    """Versiones privadas del contrato o cartera de servicios de una cuenta."""
+    __tablename__ = "cs_contratos"
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id", ondelete="CASCADE"), nullable=False, index=True)
+    nombre = db.Column(db.String(200), nullable=False)
+    mimetype = db.Column(db.String(100), nullable=False)
+    contenido = db.deferred(db.Column(db.LargeBinary, nullable=False))
+    sha256 = db.Column(db.String(64), nullable=False)
+    bytes = db.Column(db.Integer, nullable=False)
+    activo = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
+    inicio = db.Column(db.Date, nullable=True)
+    fin = db.Column(db.Date, nullable=True)
+    resumen = db.Column(db.JSON, nullable=False, default=dict)
+    created_by = db.Column(db.String(200), nullable=False)
+    actor_id = db.Column(db.String(40), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow, nullable=False)
+    account = db.relationship("CSAccount", backref="contratos")
+    __table_args__ = (db.Index("uq_cs_contrato_activo", "account_id", unique=True,
+                             postgresql_where=db.text("activo = true")),)
 
 
 class CSInvoice(db.Model):
@@ -1023,6 +1065,27 @@ class CSTask(db.Model):
     completada = db.Column(db.Boolean, default=False)
     adjuntos = db.Column(db.JSON, default=list)
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+    estado = db.Column(db.String(30), nullable=False, default="Pendiente", server_default="Pendiente")
+    fecha_original = db.Column(db.Date, nullable=True)
+    completed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+    detalle = db.Column(db.JSON, nullable=False, default=dict, server_default="{}")
+
+
+class CSGestion(db.Model):
+    """Bitácora acumulativa de gestión y cambios en compromisos."""
+    __tablename__ = "cs_gestiones"
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_accounts.id", ondelete="CASCADE"), nullable=False, index=True)
+    task_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cs_tasks.id", ondelete="SET NULL"), nullable=True, index=True)
+    accion = db.Column(db.String(30), nullable=False)
+    resultado = db.Column(db.Text, nullable=False)
+    respaldo = db.Column(db.Text, default="")
+    actor = db.Column(db.String(200), nullable=False)
+    actor_id = db.Column(db.String(40), nullable=False)
+    snapshot = db.Column(db.JSON, nullable=False, default=dict)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+    task = db.relationship("CSTask")
 
 
 class CSContacto(db.Model):

@@ -32,6 +32,25 @@ def _run_pending_migrations(app):
         if inspect(db.engine).has_table("leads"):
             LeadAssignmentNotice.__table__.create(db.engine, checkfirst=True)
 
+        # El esquema de CS se aplica con migración versionada o autorización
+        # explícita de despliegue; abrir la app/CLI para revisar no debe aplicarlo.
+        if os.getenv("CS_SCHEMA_AUTO_MIGRATE") == "1" and inspect(db.engine).has_table("cs_accounts"):
+            with db.engine.begin() as conn:
+                conn.execute(text("ALTER TABLE cs_accounts ADD COLUMN IF NOT EXISTS es_aaa BOOLEAN NOT NULL DEFAULT false"))
+            from models import CSWeeklyReport
+            CSWeeklyReport.__table__.create(db.engine, checkfirst=True)
+            from importlib import import_module
+            daily_schema = import_module("migraciones.versions.20261013_e285b1749cad_gestion_diaria")
+            with db.engine.begin() as conn:
+                for table, columns in (("cs_accounts", daily_schema.ACCOUNT_COLUMNS), ("cs_tasks", daily_schema.TASK_COLUMNS), ("cs_weekly_reports", daily_schema.REPORT_COLUMNS)):
+                    if inspect(db.engine).has_table(table):
+                        for col, ddl in columns:
+                            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {ddl}"))
+            from models import CSGestion
+            CSGestion.__table__.create(db.engine, checkfirst=True)
+            from models import CSContrato
+            CSContrato.__table__.create(db.engine, checkfirst=True)
+
         # ─── rol_crm_enum: perfiles segmentados + Developer ───
         try:
             with db.engine.begin() as conn:
@@ -856,6 +875,7 @@ def create_app():
     from blueprints.api_v1        import api_v1_bp
     from blueprints.api_v2        import api_v2_bp
     from blueprints.cs            import cs_bp
+    from blueprints.cs_daily      import cs_daily_bp
     from blueprints.encuesta      import encuesta_bp
     from blueprints.tickets       import tickets_bp
     from blueprints.savio         import savio_bp
@@ -889,6 +909,7 @@ def create_app():
     app.register_blueprint(api_v1_bp,        url_prefix="/api/v1")
     app.register_blueprint(api_v2_bp,       url_prefix="/api/v2")
     app.register_blueprint(cs_bp,            url_prefix="/cs")
+    app.register_blueprint(cs_daily_bp,      url_prefix="/cs")
     app.register_blueprint(encuesta_bp,      url_prefix="/encuesta")
     app.register_blueprint(tickets_bp,       url_prefix="/soporte")
     # FEAT-2026-07-06 (Fugaci Due Diligence): sin url_prefix porque expone
