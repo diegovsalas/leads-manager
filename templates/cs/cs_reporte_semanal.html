@@ -27,7 +27,7 @@
 <div class="weekly-fields">{% for key,label,kind,g in metrics_fields if g == group %}
 {% if group == 'previous' and key != 'previous_comment' %}
 <div class="weekly-field"><span>{{ label }}</span>
-{% if previous_auto %}{% set item=previous_auto[key] %}<strong>{{ item.value if item.value is not none else 'Pendiente de validar' }}</strong><p class="weekly-note">Fuente: {{ item.source }}<br>Responsable de validar: {{ item.owner }}</p><p class="weekly-note">{{ item.reason }}</p>{% if item.observed is defined and item.observed is not none %}<p class="weekly-note">{{ item.observed }} citas terminadas con fecha de cierre en la base disponible; total del mes sin confirmar.</p>{% endif %}
+{% if previous_auto %}{% set item=previous_auto[key] %}<strong>{{ item.value if item.value is not none else 'Pendiente de validar' }}</strong>{% if item.status is defined and item.value is not none %}<span class="pill neutral">{{ item.status }}</span>{% endif %}<p class="weekly-note">Fuente: {{ item.source }}<br>Responsable de validar: {{ item.owner }}</p><p class="weekly-note">{{ item.reason }}</p>{% if item.value is none and item.observed is defined and item.observed is not none %}<p class="weekly-note">{{ item.observed }} citas terminadas con fecha de cierre en la base disponible; total del mes sin confirmar.</p>{% endif %}
 {% else %}<strong>{{ payload.get('metrics',{}).get(key) if payload.get('metrics',{}).get(key) is not none else 'Sin dato guardado' }}</strong><p class="weekly-note">Captura anterior conservada con este reporte. No tiene una fuente automática validada.</p>{% endif %}</div>
 {% else %}{{ field(key,label,kind,payload.get('metrics',{}).get(key),true) }}{% endif %}{% endfor %}</div></div></details>
 {% endfor %}

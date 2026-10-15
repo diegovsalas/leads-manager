@@ -66,12 +66,16 @@ def previous_month_data(services):
     """
     months = (services or {}).get('months', [])
     previous = months[0] if months else {}
+    # Mostrar la evidencia disponible sin certificar cobertura ni inventar cero.
+    has_records = bool(previous.get('records') or previous.get('completed'))
+    completed = previous.get('completed') if has_records else None
     return {
         'prev_expected': dict(value=None, source='Contrato y calendario', owner='Administración / Comercial',
             reason='Falta validar fechas del ciclo por sucursal; la frecuencia sola no determina el mes.'),
-        'prev_done': dict(value=None, source='Citas importadas de Analytics y otras cargas', owner='Operaciones / Integraciones',
-            observed=previous.get('completed'),
-            reason='Falta confirmar cobertura y actualización del origen, fechas de cierre y posibles duplicados.'),
+        'prev_done': dict(value=completed, source='Citas importadas de Analytics y otras cargas', owner='Operaciones / Integraciones',
+            observed=previous.get('completed'), status='Registrados' if completed is not None else 'Sin registros del mes',
+            reason=('Citas terminadas con fecha de cierre en el mes. Cifra registrada; cobertura y posibles duplicados pendientes de validar.'
+                    if completed is not None else 'Sin registros suficientes para calcular los servicios realizados; no se interpreta como cero.')),
         'prev_billed': dict(value=None, source='Facturas del mes', owner='Administración / Finanzas',
             reason='Falta conectar y conciliar las facturas del periodo; el precio cotizado no es facturación.'),
         'prev_target': dict(value=None, source='Condiciones comerciales y calendario', owner='Administración / Comercial',

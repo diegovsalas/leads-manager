@@ -92,3 +92,39 @@ def test_previous_month_no_manual_inputs_and_ignores_tampering(app):
         assert all(report.payload['metrics'][k] is None for k in ('prev_expected','prev_done','prev_billed','prev_target'))
         assert report.payload['previous_auto']['prev_done']['value'] is None
         assert 'Pendiente de validar' in c.get(url).get_data(as_text=True)
+
+
+def test_previous_completed_is_automatic_and_frozen_on_delivery(app):
+    from cs_weekly import latest_cut, month_bounds
+    cut=latest_cut()
+    previous,_,_=month_bounds(cut)
+    closed=datetime(previous.year,previous.month,15,12,tzinfo=timezone.utc)
+    with app.app_context():
+        kam=f.login('KAM auto',RolCRM.KAM)
+        a=f.cuenta_cs('Cliente auto',kam=kam)
+        c=client_for(app,kam)
+        db.session.add_all([
+            CSAppointment(account_id=a.id,estatus='Terminada',fecha_inicio=closed,fecha_terminacion=closed),
+            CSAppointment(account_id=a.id,estatus='Cancelada',fecha_inicio=closed)])
+        db.session.commit()
+        url=f'/cs/account/{a.id}/semanal?corte={cut.isoformat()}'
+        page=c.get(url).get_data(as_text=True)
+        assert '<strong>1</strong>' in page and '>Registrados</span>' in page
+        assert 'data-key="prev_done"' not in page
+        metrics={k:0 for k in ('expected','done','scheduled','forecast','billed','target','billing_forecast')}
+        metrics['prev_done']=999
+        assert c.post(url,data={'payload':json.dumps({'metrics':metrics}),'accion':'enviar','version':''}).status_code==302
+        report=CSWeeklyReport.query.one()
+        assert report.estado=='Entregado' and report.payload['metrics']['prev_done']==1
+        assert report.payload['previous_auto']['prev_done']['status']=='Registrados'
+        db.session.add(CSAppointment(account_id=a.id,estatus='Terminada',fecha_inicio=closed,fecha_terminacion=closed))
+        db.session.commit()
+        assert '<strong>1</strong>' in c.get(url).get_data(as_text=True)
+        assert CSWeeklyReport.query.one().payload['metrics']['prev_done']==1
+
+
+def test_previous_completed_distinguishes_missing_data_from_recorded_zero():
+    from cs_services import previous_month_data
+    assert previous_month_data({'months':[{'records':0,'completed':0}]})['prev_done']['value'] is None
+    assert previous_month_data({'months':[{'records':3,'completed':0}]})['prev_done']['value']==0
+    assert previous_month_data({'months':[{'records':0,'completed':2}]})['prev_done']['value']==2
