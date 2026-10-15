@@ -157,6 +157,13 @@ def test_current_month_auto_services_and_invoices_are_frozen(app):
         assert '$1,234.56' in page and '$50.00' in page
         assert all(f'data-key="{key}"' not in page for key in ('done','scheduled','billed'))
         assert 'Proyección de servicios del KAM' in page and 'Confirmar meta con Comercial' in page
+        # La gráfica usa estatus actuales (dos terminadas); el KPI respeta
+        # el corte (solo un cierre). No presenta ambos como cumplimiento.
+        from re import search, S
+        assert search(r'weekly-kpi green.*?<strong>(.*?)</strong>',page,S)[1]=='1'
+        assert search(r'weekly-kpi amber.*?<strong>(.*?)</strong>',page,S)[1]=='1'
+        assert 'width:50.0%' in page
+        assert 'no es un porcentaje de cumplimiento' in page
         metrics={'expected':1,'done':999,'scheduled':999,'billed':999,'forecast':3,'target':2000,'billing_forecast':1500}
         assert c.post(url,data={'payload':json.dumps({'metrics':metrics}),'accion':'enviar','version':''}).status_code==302
         report=CSWeeklyReport.query.one()
@@ -167,7 +174,8 @@ def test_current_month_auto_services_and_invoices_are_frozen(app):
         assert report.payload['current_auto']['billed']['value']==1234.56
         db.session.add(CSAppointment(account_id=a.id,estatus='Agendada',fecha_inicio=start))
         db.session.commit()
-        c.get(url)
+        frozen=c.get(url).get_data(as_text=True)
+        assert search(r'weekly-kpi amber.*?<strong>(.*?)</strong>',frozen,S)[1]=='1'
         assert CSWeeklyReport.query.one().payload['current_auto']['scheduled']['value']==1
 
 

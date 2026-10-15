@@ -1,6 +1,25 @@
 (() => {
   const form = document.getElementById('weekly-form');
   if (!form) return;
+  const updateProjectionProgress = () => {
+    const count = ['forecast','billing_forecast'].filter(key => {
+      const input = form.querySelector(`[data-key="${key}"]`);
+      return input && input.value.trim() !== '' && input.validity.valid;
+    }).length;
+    const progress = document.getElementById('weekly-projection-progress');
+    if (progress) {
+      progress.value = count;
+      document.getElementById('weekly-projection-count').textContent = `${count} de 2`;
+    }
+  };
+  form.addEventListener('input', updateProjectionProgress);
+  updateProjectionProgress();
+  document.querySelectorAll('.weekly-workspace a[href^="#"]').forEach(link => {
+    link.addEventListener('click', () => {
+      const section = document.getElementById(link.getAttribute('href').slice(1));
+      if (section?.tagName === 'DETAILS') section.open = true;
+    });
+  });
   form.addEventListener('invalid', event => {
     const section = event.target.closest('details');
     if (section) section.open = true;
@@ -32,7 +51,7 @@
     }
   });
   document.getElementById('weekly-print').addEventListener('click', () => {
-    const sections = [...document.querySelectorAll('.weekly-section')];
+    const sections = [...document.querySelectorAll('.weekly-section, .weekly-context, .weekly-source')];
     const open = sections.map(section => section.open);
     sections.forEach(section => section.open = true);
     window.print();

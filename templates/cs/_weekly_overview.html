@@ -1,0 +1,32 @@
+{% set current = services.months[1] if services and services.months|length > 1 else none %}
+{% set m = payload.get('metrics',{}) %}
+{% set done = current_auto.done.value if current_auto else m.get('done') %}
+{% set scheduled = current_auto.scheduled.value if current_auto else m.get('scheduled') %}
+{% set billed = current_auto.billed.value if current_auto else m.get('billed') %}
+<section class="weekly-hero" aria-label="Resumen de la cuenta">
+  <div><span class="weekly-eyebrow">TU SEMANA CON EL CLIENTE</span><h2>Avance de la cuenta</h2><p>{{ current_month }} · Realizados y facturación al {{ cut.strftime('%d/%m/%Y') }}. Agenda según estatus actual.</p></div>
+  <a class="weekly-hero-link" href="#cumplimiento-actual">{{ 'Consultar cierre' if locked else 'Preparar mi cierre' }} <span aria-hidden="true">↗</span></a>
+</section>
+<div class="weekly-kpis">
+  <article class="weekly-kpi green"><span class="weekly-kpi-label">Servicios realizados al corte</span><strong>{{ done if done is not none else 'Sin dato' }}</strong><small>Cierres registrados en {{ current_month|lower }}</small></article>
+  <article class="weekly-kpi amber"><span class="weekly-kpi-label">Pendientes del mes</span><strong>{{ scheduled if scheduled is not none else 'Sin dato' }}</strong><small>Agenda con estatus actual</small></article>
+  <article class="weekly-kpi blue"><span class="weekly-kpi-label">Facturado al corte</span><strong>{{ ('$' ~ '{:,.2f}'.format(billed)) if billed is not none else 'Sin fuente' }}</strong><small>MXN · {{ 'Facturas verificadas' if billed is not none else 'Fuente pendiente de validar' }}</small></article>
+  <article class="weekly-kpi purple"><span class="weekly-kpi-label">Incidencias en atención</span><strong>{{ incidents.open }}</strong><small>{{ incidents.new }} nuevas · {{ incidents.closed }} cerradas en la semana</small></article>
+</div>
+<div class="weekly-overview-grid">
+  <section class="card weekly-agenda"><div class="weekly-panel-heading"><div><span class="weekly-eyebrow">PANORAMA OPERATIVO</span><h3>Agenda de {{ current_month|lower }}</h3></div><a href="{{ url_for('cs_daily.services_view',account_id=account.id,mes=current.month if current else '') }}">Ver servicios ↗</a></div>
+    {% if current and current.records %}
+    <p class="weekly-note">{{ current.records }} citas con inicio en el mes · Estatus actual{% if locked %} guardado con el reporte{% endif %}</p>
+    <div class="weekly-status-bar" aria-hidden="true">{% for s in current.statuses %}<span class="weekly-status-color {{ 'green' if s.status|lower in ['terminada','terminado','completada','completado','realizada','realizado'] else 'red' if 'cancel' in s.status|lower else 'amber' if s.status|lower in ['agendada','agendado','programada','programado','técnico asignado','tecnico asignado','en proceso'] else 'gray' }}" style="width:{{ (100*s.count/current.records)|round(2) }}%"></span>{% endfor %}</div>
+    <ul class="weekly-status-legend">{% for s in current.statuses %}<li><span><i aria-hidden="true" class="weekly-status-color {{ 'green' if s.status|lower in ['terminada','terminado','completada','completado','realizada','realizado'] else 'red' if 'cancel' in s.status|lower else 'amber' if s.status|lower in ['agendada','agendado','programada','programado','técnico asignado','tecnico asignado','en proceso'] else 'gray' }}"></i>{{ s.status }}</span><strong>{{ s.count }}</strong></li>{% endfor %}</ul>
+    <p class="weekly-chart-caption">Distribución de las citas registradas; no es un porcentaje de cumplimiento contractual.</p>
+    {% else %}<div class="weekly-empty"><strong>La agenda aún no tiene datos del mes</strong><p>Revisa la carga de servicios antes de interpretar el avance.</p></div>{% endif %}
+  </section>
+  <section class="card weekly-focus"><span class="weekly-eyebrow">TU SIGUIENTE PASO</span><h3>{{ 'Cierre guardado' if locked else 'Completa tu proyección' }}</h3>
+    {% if not locked %}{% set captured = (1 if m.get('forecast') is not none else 0) + (1 if m.get('billing_forecast') is not none else 0) %}
+    <p>Los sistemas aportan las cifras. Tú anticipas el cierre y explicas qué acción sigue.</p><div class="weekly-projection-label"><span>Proyecciones capturadas</span><strong id="weekly-projection-count">{{ captured }} de 2</strong></div><progress id="weekly-projection-progress" value="{{ captured }}" max="2" aria-label="Proyecciones capturadas"></progress><a class="btn primary" href="#cumplimiento-actual">Completar proyecciones</a>
+    {% else %}<p>Estas cifras conservan el corte entregado. Consulta los acuerdos para preparar la siguiente semana.</p><a class="btn" href="#weekly-agreements">Ver acuerdos</a>{% endif %}
+    {% if current and current.overdue %}<div class="weekly-attention"><strong>{{ current.overdue }} pendientes con fecha hasta el corte</strong><span>Revisa con Operaciones si requieren reprogramación.</span></div>{% endif %}
+  </section>
+</div>
+<nav class="weekly-steps" aria-label="Recorrido del reporte"><a href="#cumplimiento-anterior"><b>01</b> Revisa el mes anterior</a><a href="#cumplimiento-actual"><b>02</b> Proyecta el cierre</a><a href="#weekly-blockers"><b>03</b> Da seguimiento a los acuerdos</a></nav>
