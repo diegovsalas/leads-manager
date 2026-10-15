@@ -273,7 +273,8 @@ def contracts(account_id):
     if request.method=='POST':
         request.max_content_length=MAX_BYTES+131072
         try:
-            filename,mime,data,digest,summary=prepare_file(request.files.get('archivo'))
+            client_name=account.nombre[:-8].strip() if name_key(account.nombre).endswith(' ejemplo') else account.nombre
+            filename,mime,data,digest,summary=prepare_file(request.files.get('archivo'),account_name=client_name)
             start,end=validity(request.form)
             expected=name_key(account.nombre)
             if expected.endswith(' ejemplo'):expected=expected[:-8].strip()

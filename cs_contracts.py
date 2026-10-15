@@ -30,7 +30,7 @@ def money(value, field, line):
     return result
 
 
-def analyze_csv(data):
+def analyze_csv(data, account_name=None):
     try:
         contents=data.decode('utf-8-sig')
     except UnicodeDecodeError:
@@ -42,11 +42,18 @@ def analyze_csv(data):
     reader=csv.DictReader(io.StringIO(contents),delimiter=delimiter,strict=True)
     try:headers=reader.fieldnames
     except csv.Error:raise ValueError('El CSV tiene encabezados mal formados.')
-    if not headers or len(set(headers)) != len(headers):
+    canonical={name_key(h):h for h in (*HEADERS,'Detalles','Descuento')}
+    headers=[canonical.get(name_key(h),h.strip()) for h in (headers or [])]
+    if not headers or len({name_key(h) for h in headers}) != len(headers):
         raise ValueError('El CSV debe tener encabezados únicos.')
-    if any(key not in reader.fieldnames for key in HEADERS):
-        raise ValueError('El CSV necesita Cliente, Servicio, Recurrencia, Precio Unitario, Propiedad, Monto Cotizado, Estatus e ID.')
-    rows=[];ids=set();clients=set();active_amount=Decimal(0);cancelled=0
+    reader.fieldnames=headers
+    required=[h for h in HEADERS if h not in ('Cliente','ID')]
+    missing=[h for h in required if h not in headers]
+    if missing:
+        raise ValueError('Faltan columnas en el CSV: '+', '.join(missing)+'.')
+    if 'Cliente' not in headers and not account_name:
+        raise ValueError('Carga el archivo desde la cuenta del cliente o incluye la columna Cliente.')
+    rows=[];ids=set();clients=set();active_amount=Decimal(0);cancelled=0;pending=0;warnings=[]
     try:
         for line,row in enumerate(reader,2):
             if None in row or any(value is None for value in row.values()):
@@ -55,31 +62,45 @@ def analyze_csv(data):
             if len(rows)>=5000:
                 raise ValueError('El CSV admite hasta 5,000 registros.')
             row={key:value.strip() for key,value in row.items()}
+            row['Cliente']=row.get('Cliente') or account_name or ''
+            row['ID']=row.get('ID','')
             if any(len(value)>3000 for value in row.values()):
                 raise ValueError(f'Fila {line}: una celda supera los 3,000 caracteres.')
-            for key in ('ID','Cliente','Servicio','Propiedad','Recurrencia','Estatus'):
+            for key in ('Cliente','Servicio','Propiedad','Recurrencia','Estatus'):
                 if not row[key]:raise ValueError(f'Fila {line}: falta {key}.')
             key=name_key(row['ID'])
-            if key in ids:raise ValueError(f'Fila {line}: ID de servicio duplicado.')
-            ids.add(key);clients.add(row['Cliente'])
-            amount=money(row['Monto Cotizado'],'Monto Cotizado',line)
-            price=money(row['Precio Unitario'],'Precio Unitario',line)
+            if key and key in ids:raise ValueError(f'Fila {line}: ID de servicio duplicado.')
+            if key:ids.add(key)
+            clients.add(row['Cliente'])
             status=name_key(row['Estatus'])
-            if status not in ('agendado','activo','vigente','cancelado'):
-                raise ValueError(f'Fila {line}: estatus no reconocido; usa Agendado, Activo, Vigente o Cancelado.')
+            if status not in ('agendado','activo','vigente','cancelado','pendiente'):
+                raise ValueError(f'Fila {line}: estatus no reconocido; usa Agendado, Activo, Vigente, Pendiente o Cancelado.')
+            amounts=[]
+            for field in ('Monto Cotizado','Precio Unitario'):
+                try:amounts.append(money(row[field],field,line))
+                except ValueError:
+                    if status not in ('cancelado','pendiente'):raise
+                    amounts.append(None)
+                    warnings.append(f'Fila {line}: {field} "{row[field]}" por validar. Se conserva el valor original; servicio {row["Estatus"]}, excluido del importe vigente.')
+            amount,price=amounts
             discount=row.get('Descuento','')
             if discount:
                 try:
                     d=Decimal(discount.rstrip('%'))
                     if not d.is_finite() or not 0<=d<=100:raise InvalidOperation
                 except InvalidOperation:raise ValueError(f'Fila {line}: descuento inválido.')
-            is_active=status!='cancelado'
+            is_active=status not in ('cancelado','pendiente')
             if is_active:active_amount+=amount
-            else:cancelled+=1
+            elif status=='cancelado':cancelled+=1
+            else:pending+=1
             recurrence=name_key(row['Recurrencia'])
-            every=2 if re.fullmatch(r'cada 2 meses(?: el segundo lunes)?',recurrence) else 1 if recurrence in ('mensual','cada mes') else None
+            months=re.fullmatch(r'cada ([1-9]\d*) mes(?:es)?(?: el (?:primer|segundo|tercer|cuarto|quinto|ultimo) (?:lunes|martes|miercoles|jueves|viernes|sabado|domingo))?',recurrence)
+            weeks=re.fullmatch(r'cada ([1-9]\d*) semanas?',recurrence)
+            every=int(months[1]) if months else 1 if recurrence in ('mensual','cada mes') else None
             rows.append(dict(id=row['ID'],cliente=row['Cliente'],servicio=row['Servicio'],propiedad=row['Propiedad'],
-                recurrencia=row['Recurrencia'],cada_meses=every,precio=str(price),monto=str(amount),
+                recurrencia=row['Recurrencia'],cada_meses=every,cada_semanas=int(weeks[1]) if weeks else None,
+                precio=str(price) if price is not None else None,monto=str(amount) if amount is not None else None,
+                precio_original=row['Precio Unitario'],monto_original=row['Monto Cotizado'],
                 descuento=discount,detalles=row.get('Detalles',''),estatus=row['Estatus'],activo=is_active))
     except csv.Error:
         raise ValueError('El CSV tiene comillas o filas mal formadas.')
@@ -87,14 +108,14 @@ def analyze_csv(data):
     if len({name_key(client) for client in clients})!=1:
         raise ValueError('Carga un contrato por cliente; este CSV contiene más de uno.')
     active=[row for row in rows if row['activo']]
-    return dict(cliente=rows[0]['cliente'],registros=len(rows),activos=len(active),cancelados=cancelled,
+    return dict(cliente=rows[0]['cliente'],registros=len(rows),activos=len(active),cancelados=cancelled,pendientes=pending,
         sucursales=len({name_key(row['propiedad']) for row in active}),importe_activos=str(active_amount),
         cada_meses=active[0]['cada_meses'] if active and all(row['cada_meses']==active[0]['cada_meses'] for row in active) else None,
-        filas=rows,
+        filas=rows,avisos=warnings,
         pendiente='Falta confirmar vigencia y fechas del ciclo por sucursal para calcular compromisos de cada mes.')
 
 
-def prepare_file(upload):
+def prepare_file(upload, account_name=None):
     if not upload or not upload.filename:raise ValueError('Selecciona el archivo del contrato.')
     ext=Path(upload.filename).suffix.lower()
     if ext not in FORMATS:raise ValueError('Admitimos CSV, PDF, Excel (.xlsx) y Word (.docx).')
@@ -102,7 +123,7 @@ def prepare_file(upload):
     if not data:raise ValueError('El archivo está vacío.')
     if len(data)>MAX_BYTES:raise ValueError('El archivo supera 10 MB.')
     summary={}
-    if ext=='.csv':summary=analyze_csv(data)
+    if ext=='.csv':summary=analyze_csv(data,account_name=account_name)
     elif ext=='.pdf' and not data.startswith(b'%PDF-'):raise ValueError('El archivo no es un PDF válido.')
     elif ext in ('.xlsx','.docx'):
         try:

@@ -127,3 +127,47 @@ def test_limite_de_archivo_y_contrato_de_otra_cuenta(app):
         assert admin.get(f'/cs/cuentas/{b.id}/contratos/{doc.id}/descargar').status_code==404
         assert admin.post(f'/cs/cuentas/{b.id}/contratos/{doc.id}/activar').status_code==404
         assert doc.activo
+
+
+def test_contract_without_client_or_source_ids_preserves_pending_and_recurrence(app):
+    header=' Servicio ,Recurrencia,Precio Unitario,Detalles,Descuento,Propiedad,Monto Cotizado,Estatus\n'
+    data=(header+'Fumigación,Cada 1 mes,604,,0%,Tienda A,604,Agendado\n'
+          +'Fumigación,Cada 1 mes el tercer viernes,604,,0%,Tienda B,604,Pendiente\n'
+          +'Fumigación,Cada 2 semanas,604,,0%,Tienda A,604,Activo\n'
+          +'Fumigación,Cada 1 mes,604,,0%,Tienda C,604,Cancelado\n').encode()
+    with app.app_context():
+        a,b,c,foreign=setup(app)
+        assert upload(c,a,data).status_code==302
+        doc=CSContrato.query.one();s=doc.resumen
+        assert doc.contenido==data
+        assert (s['cliente'],s['registros'],s['activos'],s['pendientes'],s['cancelados'])==('Grupo Haber',4,2,1,1)
+        assert s['importe_activos']=='1208' and s['cada_meses'] is None
+        assert all(r['id']=='' for r in s['filas'])
+        assert s['filas'][0]['cada_meses']==1
+        assert s['filas'][1]['cada_meses']==1 and s['filas'][1]['estatus']=='Pendiente'
+        assert not s['filas'][1]['activo']
+        assert s['filas'][2]['cada_semanas']==2 and s['filas'][2]['cada_meses'] is None
+        page=c.get(f'/cs/cuentas/{a.id}/contratos')
+        assert b'Sin ID de origen' in page.data and b'pendientes de confirmar' in page.data
+
+
+def test_optional_client_never_overwrites_an_explicit_different_account(app):
+    with app.app_context():
+        a,b,c,foreign=setup(app)
+        assert upload(c,a,DATA.replace(b'Grupo Haber',b'Otro cliente')).status_code==400
+        assert CSContrato.query.count()==0
+    assert analyze_csv(DATA.replace(b'Grupo Haber',b''),account_name='Grupo Haber')['cliente']=='Grupo Haber'
+    with pytest.raises(ValueError,match='duplicado'):
+        analyze_csv(DATA.replace(b'HAB-002',b'HAB-001'),account_name='Grupo Haber')
+    with pytest.raises(ValueError,match='encabezados'):
+        analyze_csv(DATA.replace(b'Cliente,Servicio',b'Cliente, cliente ,Servicio'),account_name='Grupo Haber')
+
+
+def test_invalid_cancelled_amount_is_preserved_with_warning_never_counted_as_zero():
+    data=DATA.replace(b'Tienda B,600,Cancelado',b'Tienda B,"1,500,00",Cancelado')
+    s=analyze_csv(data)
+    assert s['importe_activos']=='600' and s['cancelados']==1
+    row=s['filas'][1]
+    assert row['monto'] is None and row['monto_original']=='1,500,00'
+    assert 'Fila 3' in s['avisos'][0] and 'por validar' in s['avisos'][0]
+    with pytest.raises(ValueError):analyze_csv(data.replace(b'Cancelado',b'Activo'))
