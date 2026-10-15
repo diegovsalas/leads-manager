@@ -56,6 +56,11 @@ def test_source_id_conflicts_and_ambiguous_names_are_rejected():
     assert resolve_account('Autozone de México','3490',{'AUTOZONE':'a','Otro':'b'},{'3490':'b'}) is None
     assert resolve_account('Autozone de México','3490',{'AUTOZONE':'a','Autozone de México':'b'},{}) is None
     assert resolve_account('Auto','',{'AUTOZONE':'a'},{}) is None
+    assert resolve_account('Grupo Batia','1305',{'Batia':'a'},{'1305':'a'})=='a'
+    assert resolve_account('Grupo Diagnostico Aries - GDA','1274',{'GDA':'a'},{'1274':'a'})=='a'
+    assert resolve_account('Tiendas Soriana','4201',{'Soriana':'a'},{'4201':'a'})=='a'
+    assert resolve_account('Grupo Batia','',{'Batia':'a'},{}) is None
+    assert resolve_account('Grupo Batia','1305',{'Batia':'a','Grupo Batia':'b'},{'1305':'a'}) is None
 
 
 def test_scheduled_sync_uses_same_configured_source(app,monkeypatch):

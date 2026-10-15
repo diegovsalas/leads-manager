@@ -45,5 +45,10 @@ def resolve_account(cliente, client_id, names, ids):
     matches={account for label,account in names.items() if name and (_name(label)==name or name.startswith(_name(label)+' ') or _name(label).startswith(name+' '))}
     candidate=ids.get(str(client_id or '').strip().upper())
     if candidate:
-        return candidate if not name or matches=={candidate} else None
+        # Con ID corroborado, permite el nombre completo al final de la
+        # razón social (GRUPO BATIA / Batia, ... - GDA / GDA). No habilita
+        # búsquedas por fragmentos interiores ni esta regla sin ID conocido.
+        suffix_matches={account for label,account in names.items()
+                        if name and _name(label) and name.endswith(' '+_name(label))}
+        return candidate if not name or (matches | suffix_matches)=={candidate} else None
     return next(iter(matches)) if len(matches)==1 else None
