@@ -8,9 +8,9 @@
   <a class="weekly-hero-link" href="#cumplimiento-actual">{{ 'Consultar cierre' if locked else 'Preparar mi cierre' }} <span aria-hidden="true">↗</span></a>
 </section>
 <div class="weekly-kpis">
-  <article class="weekly-kpi green"><span class="weekly-kpi-label">Servicios realizados al corte</span><strong>{{ done if done is not none else 'Sin dato' }}</strong><small>Cierres registrados en {{ current_month|lower }}</small></article>
-  <article class="weekly-kpi amber"><span class="weekly-kpi-label">Pendientes del mes</span><strong>{{ scheduled if scheduled is not none else 'Sin dato' }}</strong><small>Agenda con estatus actual</small></article>
-  <article class="weekly-kpi blue"><span class="weekly-kpi-label">Facturado al corte</span><strong>{{ ('$' ~ '{:,.2f}'.format(billed)) if billed is not none else 'Sin fuente' }}</strong><small>MXN · {{ 'Facturas verificadas' if billed is not none else 'Fuente pendiente de validar' }}</small></article>
+  <article class="weekly-kpi green"><span class="weekly-kpi-label">Servicios realizados al corte</span><strong>{{ done if done is not none else 'Sin dato' }}</strong><small>{{ 'Cierres registrados en ' ~ current_month|lower if current_auto else 'Dato guardado para este corte' }}</small></article>
+  <article class="weekly-kpi amber"><span class="weekly-kpi-label">Pendientes del mes</span><strong>{{ scheduled if scheduled is not none else 'Sin dato' }}</strong><small>{{ 'Agenda con estatus actual' if current_auto else 'Dato guardado en el reporte' }}</small></article>
+  <article class="weekly-kpi blue"><span class="weekly-kpi-label">Facturado al corte</span><strong>{{ ('$' ~ '{:,.2f}'.format(billed)) if billed is not none else 'Sin fuente' }}</strong><small>MXN · {{ 'Facturas verificadas' if current_auto and billed is not none else 'Dato guardado del reporte' if billed is not none else 'Fuente pendiente de validar' }}</small></article>
   <article class="weekly-kpi purple"><span class="weekly-kpi-label">Incidencias en atención</span><strong>{{ incidents.open }}</strong><small>{{ incidents.new }} nuevas · {{ incidents.closed }} cerradas en la semana</small></article>
 </div>
 <div class="weekly-overview-grid">
