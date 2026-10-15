@@ -128,3 +128,59 @@ def test_previous_completed_distinguishes_missing_data_from_recorded_zero():
     assert previous_month_data({'months':[{'records':0,'completed':0}]})['prev_done']['value'] is None
     assert previous_month_data({'months':[{'records':3,'completed':0}]})['prev_done']['value']==0
     assert previous_month_data({'months':[{'records':0,'completed':2}]})['prev_done']['value']==2
+
+
+def test_current_month_auto_services_and_invoices_are_frozen(app):
+    from datetime import timedelta
+    from cs_weekly import latest_cut, month_bounds
+    from models import CSInvoice, SavioInvoice
+    cut=latest_cut()
+    previous,current,_=month_bounds(cut)
+    start=datetime(current.year,current.month,1,12,tzinfo=timezone.utc)
+    close=datetime(cut.year,cut.month,cut.day,12,tzinfo=timezone.utc)
+    with app.app_context():
+        kam=f.login('KAM actual',RolCRM.KAM);a=f.cuenta_cs('Cuenta actual',kam=kam)
+        c=client_for(app,kam)
+        db.session.add_all([
+            CSAppointment(account_id=a.id,estatus='Terminada',fecha_inicio=start,fecha_terminacion=close),
+            CSAppointment(account_id=a.id,estatus='Terminada',fecha_inicio=start,fecha_terminacion=close+timedelta(days=1)),
+            CSAppointment(account_id=a.id,estatus='Agendada',fecha_inicio=start),
+            CSAppointment(account_id=a.id,estatus='Cancelada',fecha_inicio=start),
+            SavioInvoice(id='234567',date=current,status='valid',amount=1234.56,raw_data={'currency':'MXN'}),
+            CSInvoice(account_id=a.id,savio_invoice_id=234567,total=1234.56,fecha_cobro=current),
+            SavioInvoice(id='234568',date=previous,status='valid',amount=50,raw_data={'currency':'MXN'}),
+            CSInvoice(account_id=a.id,savio_invoice_id=234568,total=50,fecha_cobro=previous),
+        ])
+        db.session.commit()
+        url=f'/cs/account/{a.id}/semanal?corte={cut.isoformat()}'
+        page=c.get(url).get_data(as_text=True)
+        assert '$1,234.56' in page and '$50.00' in page
+        assert all(f'data-key="{key}"' not in page for key in ('done','scheduled','billed'))
+        assert 'Proyección de servicios del KAM' in page and 'Confirmar meta con Comercial' in page
+        metrics={'expected':1,'done':999,'scheduled':999,'billed':999,'forecast':3,'target':2000,'billing_forecast':1500}
+        assert c.post(url,data={'payload':json.dumps({'metrics':metrics}),'accion':'enviar','version':''}).status_code==302
+        report=CSWeeklyReport.query.one()
+        assert report.payload['metrics']['done']==1
+        assert report.payload['metrics']['scheduled']==1
+        assert report.payload['metrics']['billed']==1234.56
+        assert report.payload['metrics']['prev_billed']==50
+        assert report.payload['current_auto']['billed']['value']==1234.56
+        db.session.add(CSAppointment(account_id=a.id,estatus='Agendada',fecha_inicio=start))
+        db.session.commit()
+        c.get(url)
+        assert CSWeeklyReport.query.one().payload['current_auto']['scheduled']['value']==1
+
+
+def test_invoice_summary_requires_verified_currency_date_status_and_amount():
+    from decimal import Decimal
+    from cs_services import summarize_invoices
+    cut=date(2026,10,9)
+    def invoice(total='100',source_date=date(2026,10,1),status='valid',currency='MXN',amount='100'):
+        return (SimpleNamespace(total=Decimal(total),fecha_cobro=source_date),
+                SimpleNamespace(date=source_date,status=status,raw_data={'currency':currency},amount=Decimal(amount)))
+    rows=[invoice(),invoice(status='cancelled'),invoice(currency='USD'),invoice(currency=''),
+          invoice(source_date=date(2026,10,10)),invoice(amount='200'),
+          (SimpleNamespace(total=100,fecha_cobro=date(2026,10,1)),None)]
+    result=summarize_invoices(rows,'2026-10',cut)
+    assert result['value']==100 and result['count']==1 and result['omitted']==5
+    assert summarize_invoices([],'2026-10',cut)['value'] is None

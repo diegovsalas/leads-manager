@@ -1304,24 +1304,28 @@ def reporte_semanal(account_id):
                 raise ValueError('El reporte no tiene un formato válido.')
             legacy_before = {key: [r for r in payload.get(key, []) if not r.get('task_id')]
                              for key, _, _ in SECTIONS}
-            from cs_services import service_snapshot, previous_month_data, PREVIOUS_AUTO_KEYS
+            from cs_services import service_snapshot, previous_month_data, PREVIOUS_AUTO_KEYS, current_month_data, CURRENT_AUTO_KEYS
             services_snapshot = service_snapshot(account_id, cut)
             previous_auto = previous_month_data(services_snapshot)
+            current_auto = current_month_data(services_snapshot)
             submitted_metrics = raw.get('metrics', {})
             if not isinstance(submitted_metrics, dict):
                 raise ValueError('Las métricas no tienen un formato válido.')
             submitted_metrics = dict(submitted_metrics)
             for key in PREVIOUS_AUTO_KEYS:
                 submitted_metrics[key] = previous_auto[key]['value']
-            payload = validate_payload({'metrics': submitted_metrics})
+            for key in CURRENT_AUTO_KEYS:
+                submitted_metrics[key] = current_auto[key]['value']
+            payload = validate_payload({'metrics': submitted_metrics}, automatic_keys=PREVIOUS_AUTO_KEYS + CURRENT_AUTO_KEYS)
             payload['previous_auto'] = previous_auto
+            payload['current_auto'] = current_auto
             action = request.form.get('accion', 'guardar')
             if action not in ('guardar','enviar'):
                 raise ValueError('Acción de reporte no válida.')
             if action == 'enviar':
-                required = ('expected','done','scheduled','forecast','billed','target','billing_forecast')
+                required = ('forecast','billing_forecast')
                 if any(payload['metrics'][k] is None for k in required):
-                    raise ValueError('Confirma los servicios, la facturación, las metas y la proyección antes de entregar. Puedes guardar un borrador.')
+                    raise ValueError('Confirma las proyecciones de servicios y facturación antes de entregar. Puedes guardar un borrador.')
         except (ValueError, TypeError) as e:
             if _wants_json():
                 return jsonify(error=str(e)), 400
@@ -1390,13 +1394,15 @@ def reporte_semanal(account_id):
     incidents = payload.get('incidents') or _weekly_incidents(account_id, cut)
     from cs_services import service_snapshot
     services = payload.get('services') if locked else service_snapshot(account_id, cut)
-    from cs_services import previous_month_data
+    from cs_services import previous_month_data, current_month_data
+    current_auto = payload.get('current_auto') if locked else current_month_data(services)
     previous_auto = payload.get('previous_auto') if locked else previous_month_data(services)
     if not locked:
         display_payload['metrics'] = dict(payload.get('metrics', {}))
         display_payload['metrics'].update({k: v['value'] for k, v in previous_auto.items()})
+        display_payload['metrics'].update({k: v['value'] for k, v in current_auto.items()})
     return render_template('cs_reporte_semanal.html', account=account, report=report,
-        previous_auto=previous_auto, services=services, cut=cut, payload=display_payload, metrics_fields=METRICS, sections=SECTIONS,
+        previous_auto=previous_auto, current_auto=current_auto, services=services, cut=cut, payload=display_payload, metrics_fields=METRICS, sections=SECTIONS,
         has_legacy=any(legacy_rows.values()),
         locked=locked, can_review=_is_cs_admin(),
         contract_ref=payload.get('contract_reference') if locked else contract_reference(account_id,cut),

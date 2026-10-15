@@ -104,16 +104,18 @@ def _value(value, kind, label):
     return value.strip()
 
 
-def validate_payload(raw):
+def validate_payload(raw, automatic_keys=()):
     if not isinstance(raw, dict) or not isinstance(raw.get('metrics', {}), dict):
         raise ValueError('El reporte no tiene un formato válido.')
     m = {key: _value(raw.get('metrics', {}).get(key), kind, label)
          for key, label, kind, _ in METRICS}
+    # Los hechos del sistema pueden superar el alcance capturado; no se
+    # corrigen a mano para poder guardar. La proyección sí debe cubrirlos.
     for prefix in ('prev_', ''):
         expected, done = m[prefix + 'expected'], m[prefix + 'done']
-        if expected is not None and done is not None and done > expected:
+        if prefix + 'done' not in automatic_keys and expected is not None and done is not None and done > expected:
             raise ValueError('Los servicios realizados no pueden superar los comprometidos; revisa el alcance.')
-    if all(m[k] is not None for k in ('expected', 'done', 'scheduled')):
+    if not {'done','scheduled'}.intersection(automatic_keys) and all(m[k] is not None for k in ('expected', 'done', 'scheduled')):
         if m['done'] + m['scheduled'] > m['expected']:
             raise ValueError('Los realizados más los pendientes agendados superan los servicios comprometidos.')
     if m['forecast'] is not None and m['done'] is not None and m['forecast'] < m['done']:

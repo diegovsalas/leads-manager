@@ -1,6 +1,7 @@
 """Lectura operativa de citas importadas; no presume cobertura ni historial."""
 from collections import Counter
 from datetime import datetime, timezone
+from decimal import Decimal
 from cs_weekly import MX, month_bounds
 from cs_daily import name_key
 
@@ -32,11 +33,16 @@ def summarize_rows(rows, month, cut=None):
 
 
 def service_snapshot(account_id, cut):
-    from models import CSAppointment, CSContrato
+    from models import CSAppointment, CSContrato, CSInvoice, SavioInvoice
+    from extensions import db
     rows = CSAppointment.query.filter_by(account_id=account_id).all()
     previous, current, _ = month_bounds(cut)
     contract = CSContrato.query.filter_by(account_id=account_id, activo=True).first()
-    return dict(comparison=compare_scope(contract.resumen if contract else {}, rows),
+    invoices = db.session.query(CSInvoice, SavioInvoice).outerjoin(
+        SavioInvoice, db.cast(CSInvoice.savio_invoice_id, db.String) == SavioInvoice.id
+    ).filter(CSInvoice.account_id == account_id).all()
+    return dict(billing={'months': [summarize_invoices(invoices, d.strftime('%Y-%m'), cut) for d in (previous, current)]},
+                comparison=compare_scope(contract.resumen if contract else {}, rows),
                 captured_at=datetime.now(timezone.utc).isoformat(), total=len(rows),
                 undated=sum(r.fecha_inicio is None for r in rows),
                 months=[summarize_rows(rows, d.strftime('%Y-%m'), cut) for d in (previous,current)])
@@ -69,6 +75,8 @@ def previous_month_data(services):
     # Mostrar la evidencia disponible sin certificar cobertura ni inventar cero.
     has_records = bool(previous.get('records') or previous.get('completed'))
     completed = previous.get('completed') if has_records else None
+    billing = (services or {}).get('billing', {}).get('months', [])
+    previous_billing = billing[0] if billing else {}
     return {
         'prev_expected': dict(value=None, source='Contrato y calendario', owner='Administración / Comercial',
             reason='Falta validar fechas del ciclo por sucursal; la frecuencia sola no determina el mes.'),
@@ -76,8 +84,63 @@ def previous_month_data(services):
             observed=previous.get('completed'), status='Registrados' if completed is not None else 'Sin registros del mes',
             reason=('Citas terminadas con fecha de cierre en el mes. Cifra registrada; cobertura y posibles duplicados pendientes de validar.'
                     if completed is not None else 'Sin registros suficientes para calcular los servicios realizados; no se interpreta como cero.')),
-        'prev_billed': dict(value=None, source='Facturas del mes', owner='Administración / Finanzas',
-            reason='Falta conectar y conciliar las facturas del periodo; el precio cotizado no es facturación.'),
+        'prev_billed': billing_metric(previous_billing),
         'prev_target': dict(value=None, source='Condiciones comerciales y calendario', owner='Administración / Comercial',
             reason='Falta validar el importe exigible de este mes; un ciclo bimestral no se divide automáticamente entre dos.'),
+    }
+
+
+CURRENT_AUTO_KEYS = ('done', 'scheduled', 'billed')
+
+
+def summarize_invoices(rows, month, cut):
+    """Facturación observada con fecha de emisión y moneda de Savio verificables.
+
+    fecha_cobro de las cargas manuales puede ser fecha de cobro; no se usa
+    como emisión. Se excluyen canceladas, monedas distintas y estados no válidos.
+    """
+    included=[]
+    omitted=0
+    for invoice, source in rows:
+        if source is None:
+            if invoice.fecha_cobro and invoice.fecha_cobro.strftime('%Y-%m')==month and invoice.fecha_cobro<=cut:
+                omitted+=1
+            continue
+        if not source.date or source.date.strftime('%Y-%m')!=month or source.date>cut:
+            continue
+        raw=source.raw_data or {}
+        if str(raw.get('currency') or '').upper()!='MXN' or name_key(source.status)!='valid':
+            omitted+=1
+            continue
+        if invoice.total is None or source.amount is None or Decimal(str(invoice.total))!=Decimal(str(source.amount)):
+            omitted+=1
+            continue
+        included.append(invoice)
+    return dict(month=month,value=float(sum((Decimal(str(i.total)) for i in included),Decimal('0'))) if included else None,
+                count=len(included),omitted=omitted)
+
+
+def billing_metric(billing):
+    value=billing.get('value')
+    reason=(f"{billing.get('count',0)} facturas vigentes en MXN, por fecha de emisión hasta el corte. Total con impuestos; no es cobranza."
+            if value is not None else 'Sin facturas vigentes en MXN con fecha de emisión verificada para este periodo. Administración debe revisar la integración.')
+    if billing.get('omitted'):
+        reason+=f" {billing['omitted']} registros excluidos por estado, moneda o datos sin verificar."
+    return dict(value=value,source='Facturas registradas de Savio',owner='Administración / Finanzas',
+                status='Registrado' if value is not None else 'Sin fuente verificada',reason=reason)
+
+
+def current_month_data(services):
+    months=(services or {}).get('months',[])
+    current=months[1] if len(months)>1 else {}
+    has_records=bool(current.get('records') or current.get('completed'))
+    billing=(services or {}).get('billing',{}).get('months',[])
+    return {
+        'done':dict(value=current.get('completed') if has_records else None,
+            source='Citas importadas de Analytics y otras cargas',owner='Operaciones / Integraciones',status='Registrados',
+            reason='Citas terminadas con fecha de cierre dentro del mes y hasta el corte. Cobertura y posibles duplicados por validar.'),
+        'scheduled':dict(value=current.get('pending') if has_records else None,
+            source='Agenda importada de Analytics y otras cargas',owner='Operaciones / Integraciones',status='Estatus actual',
+            reason=f"Citas pendientes fechadas dentro del mes según su estatus actual; {current.get('overdue',0)} con fecha vencida al corte. No hay historial para reconstruir el estatus del viernes." if has_records else 'Sin citas del mes para consultar pendientes; no se interpreta como cero.'),
+        'billed':billing_metric(billing[1] if len(billing)>1 else {}),
     }

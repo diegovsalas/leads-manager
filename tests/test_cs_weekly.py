@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 from extensions import db
-from models import CSWeeklyReport, CSIncidencia, CSIncidenciaSeguimiento, RolCRM
+from models import CSWeeklyReport, CSIncidencia, CSIncidenciaSeguimiento, CSAppointment, RolCRM
 from cs_weekly import validate_payload, summarize, parse_cut, latest_cut, MX
 from tests import fabricas as f
 
@@ -95,6 +95,10 @@ def test_guardar_corte_valida_y_detecta_edicion_obsoleta(app):
         a = f.cuenta_cs(kam=kam)
         client = client_for(app, kam)
         cut = latest_cut()
+        stamp = datetime.combine(cut, datetime.min.time(), MX) + timedelta(hours=12)
+        db.session.add_all([CSAppointment(account_id=a.id,estatus='Terminada',fecha_inicio=stamp,fecha_terminacion=stamp) for _ in range(5)] +
+                           [CSAppointment(account_id=a.id,estatus='Agendada',fecha_inicio=stamp) for _ in range(5)])
+        db.session.commit()
         url = f'/cs/account/{a.id}/semanal?corte={cut.isoformat()}'
         raw = {'metrics': {'expected': 10, 'done': 5, 'scheduled': 5, 'forecast': 10}}
         assert client.get(url).status_code == 200
@@ -104,7 +108,7 @@ def test_guardar_corte_valida_y_detecta_edicion_obsoleta(app):
         assert report.payload['metrics']['done'] == 5
         assert client.get(url).status_code == 200
         assert client.post(url, data={'payload': json.dumps(raw)}, headers={'Accept': 'application/json'}).status_code == 409
-        raw['metrics']['done'] = 12
+        raw['metrics']['forecast'] = 4
         error = client.post(url, data={'payload': json.dumps(raw), 'version': version}, headers={'Accept':'application/json'})
         assert error.status_code == 400
         assert error.get_json()['error']
