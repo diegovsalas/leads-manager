@@ -837,6 +837,8 @@ class CSAccount(db.Model):
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=_genuuid)
     client_id = db.Column(db.String(10), unique=True, nullable=True)  # AX-0001, AX-0002, ...
     nombre = db.Column(db.String(200), nullable=False, unique=True)
+    # Vinculaciones de Analytics confirmadas; independientes del ID comercial.
+    analytics_aliases = db.Column(db.JSON, nullable=True)
     # FEAT-2026-07-06: kam_id nullable para cuentas Due Diligence (aún sin KAM)
     kam_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users_crm.id"), nullable=True)
     es_cuenta_nueva = db.Column(db.Boolean, default=False)

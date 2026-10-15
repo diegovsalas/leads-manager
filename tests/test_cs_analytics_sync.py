@@ -112,3 +112,29 @@ def test_unique_rows_preserves_missing_id_errors_and_rejects_conflicting_quantit
     unique, duplicates, conflicts = unique_appointment_rows(rows)
     assert unique == [{}, {}]
     assert duplicates == 0 and conflicts == 2
+
+
+def test_confirmed_aliases_are_persistent_and_unambiguous(app, monkeypatch):
+    from blueprints import cs
+    from cs_analytics_matching import resolve_account
+    names={'Holding':'a','Otro':'b'}
+    aliases={'a':[{'name':'Holding','match':'contains'}]}
+    assert resolve_account('Seguros Holding','999',names,{},aliases)=='a'
+    assert resolve_account('Holding Bancario','998',names,{},aliases)=='a'
+    assert resolve_account('Otro Holding','999',names,{},aliases) is None
+    assert resolve_account('Seguros Holding','999',names,{},dict(aliases,b=aliases['a'])) is None
+    exact={'a':[{'name':'Sucursal Sonora','client_id':'2046'}]}
+    assert resolve_account('Sucursal Sonora','2046',names,{},exact)=='a'
+    assert resolve_account('Sucursal Sonora','2047',names,{},exact) is None
+    with app.app_context():
+        admin=f.login('Admin',RolCRM.DEVELOPER)
+        account=f.cuenta_cs('Holding',kam=admin)
+        account.analytics_aliases=aliases['a']
+        db.session.commit()
+        db.session.execute(db.text('CREATE UNIQUE INDEX IF NOT EXISTS ux_cs_appointments_zoho_id ON cs_appointments (zoho_appointment_id) WHERE zoho_appointment_id IS NOT NULL'))
+        db.session.commit()
+        monkeypatch.setattr(cs,'_HAS_ZOHO_APPT_COL',True)
+        stats=cs.import_analytics_citas([{'ID cita':'10','Cliente':'Seguros Holding','ID cliente':'999'},
+                                       {'ID cita':'11','Cliente':'Banca Holding','ID cliente':'998'}])
+        assert stats['insertados']==2 and stats['no_match']==0
+        assert CSAppointment.query.filter_by(account_id=account.id).count()==2

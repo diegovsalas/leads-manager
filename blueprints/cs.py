@@ -3998,6 +3998,7 @@ def import_analytics_citas(rows):
     accounts = CSAccount.query.filter(db.or_(CSAccount.en_due_diligence.is_(None), CSAccount.en_due_diligence.is_(False))).all()
     accounts_map = {a.nombre: str(a.id) for a in accounts}
     client_id_map = {str(a.client_id).strip().upper(): str(a.id) for a in accounts if a.client_id}
+    analytics_aliases = {str(a.id): a.analytics_aliases for a in accounts if a.analytics_aliases}
     has_zoho_col = _has_zoho_appointment_col()
 
     insertados = 0
@@ -4041,7 +4042,7 @@ def import_analytics_citas(rows):
             continue
         cliente = str(row.get("Cliente", "")).strip()
         client_id = str(row.get("ID cliente") or row.get("ID Cliente") or "").strip().upper()
-        acc_id = resolve_account(cliente, client_id, accounts_map, client_id_map)
+        acc_id = resolve_account(cliente, client_id, accounts_map, client_id_map, analytics_aliases)
         if not acc_id:
             no_match += 1
             if len(samples_no_match) < 5 and cliente:
