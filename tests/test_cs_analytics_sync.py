@@ -75,3 +75,35 @@ def test_legacy_connector_preserves_actual_column_names_and_source_alias():
     result=transform(rows,{'3115':'a','autozone':'a'})
     assert len(result)==1
     assert result[0]['account_id']=='a' and result[0]['zoho_appointment_id']=='162978'
+
+
+def test_general_sync_collapses_repeated_ids_and_isolates_conflicts(app, monkeypatch):
+    from blueprints import cs
+    with app.app_context():
+        admin = f.login('Admin', RolCRM.DEVELOPER)
+        a = f.cuenta_cs('Cliente A', kam=admin)
+        b = f.cuenta_cs('Cliente B', kam=admin)
+        db.session.commit()
+        db.session.execute(db.text('CREATE UNIQUE INDEX IF NOT EXISTS ux_cs_appointments_zoho_id ON cs_appointments (zoho_appointment_id) WHERE zoho_appointment_id IS NOT NULL'))
+        db.session.commit()
+        monkeypatch.setattr(cs, '_HAS_ZOHO_APPT_COL', True)
+        row = {'ID cita': '1', 'Cliente': 'Cliente A', 'Estatus': 'Terminada'}
+        rows = [dict(row, Equipos=str(i)) for i in range(2001)]
+        rows += [{'ID cita': '2', 'Cliente': 'Cliente B', 'Estatus': 'Agendada'},
+                 {'ID cita': '3', 'Cliente': 'Cliente B', 'Estatus': 'Terminada'},
+                 {'ID cita': '3', 'Cliente': 'Cliente B', 'Estatus': 'Cancelada'}]
+        for _ in range(2):
+            stats = cs.import_analytics_citas(rows)
+            assert stats['insertados'] == 2
+            assert stats['errores'] == 2
+            assert CSAppointment.query.count() == 2
+            assert CSAppointment.query.filter_by(zoho_appointment_id='1').one().account_id == a.id
+            assert CSAppointment.query.filter_by(zoho_appointment_id='2').one().account_id == b.id
+
+
+def test_unique_rows_preserves_missing_id_errors_and_rejects_conflicting_quantity():
+    from cs_analytics_matching import unique_appointment_rows
+    rows = [{}, {}, {'ID cita': '7', 'Cantidad': '1'}, {'ID cita': '7', 'Cantidad': '2'}]
+    unique, duplicates, conflicts = unique_appointment_rows(rows)
+    assert unique == [{}, {}]
+    assert duplicates == 0 and conflicts == 2

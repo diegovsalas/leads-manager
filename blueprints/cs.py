@@ -3993,7 +3993,7 @@ def import_analytics_citas(rows):
     """Importación compartida por el botón y el scheduler, siempre con ID."""
     import logging as _logging
     from sqlalchemy.dialects.postgresql import insert as _pg_insert
-    from cs_analytics_matching import resolve_account
+    from cs_analytics_matching import resolve_account, unique_appointment_rows
 
     accounts = CSAccount.query.filter(db.or_(CSAccount.en_due_diligence.is_(None), CSAccount.en_due_diligence.is_(False))).all()
     accounts_map = {a.nombre: str(a.id) for a in accounts}
@@ -4002,7 +4002,8 @@ def import_analytics_citas(rows):
 
     insertados = 0
     no_match = 0
-    errores = 0
+    received_count = len(rows)
+    rows, duplicados, errores = unique_appointment_rows(rows)
     samples_no_match: list[str] = []
     samples_error: list[str] = []
     batch: list[dict] = []
@@ -4083,14 +4084,18 @@ def import_analytics_citas(rows):
         insertados += ins
         errores += fail
 
-    debug_parts = [f"Zoho Analytics: {len(rows)} filas recibidas"]
+    debug_parts = [f"Zoho Analytics: {received_count} filas recibidas"]
+    if duplicados:
+        debug_parts.append(f"repeticiones idénticas omitidas: {duplicados}")
+    if errores:
+        debug_parts.append(f"filas rechazadas (incluye IDs contradictorios): {errores}")
     if samples_no_match:
         debug_parts.append(f"clientes sin match: {samples_no_match}")
     if samples_error:
         debug_parts.append(f"errores: {samples_error}")
 
     return dict(insertados=insertados, no_match=no_match, errores=errores,
-                total=insertados + no_match + errores, debug_info=" | ".join(debug_parts))
+                total=received_count, debug_info=" | ".join(debug_parts))
 
 
 @cs_bp.route("/api/zoho-analytics/workspaces")
