@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recomendaciones — Grupo Avantex</title>
+<link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
+{% include "referidos/_estilo.html" %}
+<style>
+body{padding:24px 16px;background:var(--bg)}
+@media (max-width:480px){body{padding:16px 12px;background:var(--bg)}}
+.wrap{max-width:980px;margin:0 auto}
+a.back{font-size:13px;color:var(--blue);text-decoration:none;font-weight:600}
+h1{font-size:24px;font-weight:700;letter-spacing:-.3px;margin:12px 0 6px}
+.lede{font-size:14px;color:var(--ink-2);line-height:1.55;max-width:700px;margin-bottom:20px}
+.panel{background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px}
+@media (max-width:480px){.panel{border-radius:12px;border:1px solid var(--border)}}
+.panel h2{font-size:15px;font-weight:650;margin-bottom:4px}
+.panel .sub{font-size:13px;color:var(--ink-2);margin-bottom:14px;line-height:1.45}
+.share{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.share code{flex:1 1 260px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;word-break:break-all;color:var(--ink-1)}
+.b{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:8px;border:1px solid var(--blue);background:var(--blue);color:#fff;font:inherit;font-size:14px;font-weight:600;cursor:pointer;text-decoration:none;white-space:nowrap}
+.b:hover{background:var(--blue-hover)}
+.b.sec{background:#fff;color:var(--blue);border-color:var(--border-strong)}
+.b.sec:hover{background:var(--bg-hover)}
+form.alta{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+form.alta .field{flex:1 1 220px;margin:0}
+.flash{border-radius:10px;padding:12px 14px;font-size:14px;margin-bottom:16px}
+.flash.ok{background:var(--ok-soft);color:var(--ok)}
+.flash.err{background:var(--danger-soft);color:var(--danger-ink)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-size:12px;color:var(--ink-3);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--border)}
+td{padding:12px 10px;border-bottom:1px solid var(--border-subtle);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-3);font-size:13px}
+.empty{color:var(--ink-3);font-size:14px;padding:6px 0}
+@media (max-width:640px){
+  thead{display:none}
+  tr{display:block;padding:10px 0;border-bottom:1px solid var(--border-subtle)}
+  tr:last-child{border-bottom:0}
+  td{display:flex;justify-content:space-between;gap:12px;border:0;padding:3px 0}
+  td[data-k]::before{content:attr(data-k);color:var(--ink-3);font-size:13px}
+  .num{text-align:right}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/">&larr; Volver al pipe</a>
+  <h1>Recomendaciones desde campo</h1>
+  <p class="lede">Cualquier persona de la empresa puede recomendar un servicio desde el link, sin usuario de CRM. Quien esté registrado aquí con su celular cobra la etapa de prospectar de lo que recomienda.</p>
+
+  {% if error %}<div class="flash err" role="alert">{{ error }}</div>{% endif %}
+  {% if acreditadas is not none %}<div class="flash ok" role="status">Registrado.
+    {% if acreditadas == '1' %}Su recomendación anterior quedó a su nombre.{% elif acreditadas != '0' %}Sus {{ acreditadas }} recomendaciones anteriores quedaron a su nombre.{% endif %}</div>{% endif %}
+
+  <section class="panel">
+    <h2>Link para compartir</h2>
+    <p class="sub">El mismo para todos. Mándalo a los grupos de operaciones o fíjalo en el celular de cada técnico.</p>
+    <div class="share">
+      <code id="link">{{ link }}</code>
+      <button class="b" type="button" id="copiar">Copiar</button>
+      <a class="b sec" target="_blank" rel="noopener"
+         href="https://wa.me/?text={{ ('¿Viste en una visita que un cliente necesita otro servicio de Grupo Avantex? Recomiéndalo aquí: ' ~ link)|urlencode }}">Compartir por WhatsApp</a>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Registrar a alguien para que cobre</h2>
+    <p class="sub">Se le reconoce por su celular. Lo que ya haya recomendado con ese celular pasa a su nombre.</p>
+    <form class="alta" method="POST" action="{{ url_for('tecnicos.crear') }}">
+      <div class="field"><label for="n">Nombre y apellido</label><input id="n" name="nombre" required maxlength="150"></div>
+      <div class="field"><label for="t">Celular</label><input id="t" name="telefono" required maxlength="30" inputmode="tel" placeholder="10 dígitos"></div>
+      <button class="b" type="submit">Registrar</button>
+    </form>
+  </section>
+
+  {% if sin_registro %}
+  <section class="panel">
+    <h2>Recomendaron sin estar registrados</h2>
+    <p class="sub">Su recomendación ya llegó al vendedor. Regístralos para que la etapa de prospectar quede a su nombre.</p>
+    <table>
+      <thead><tr><th>Nombre</th><th>Celular</th><th class="num">Recomendaciones</th><th class="num">Ganadas</th><th></th></tr></thead>
+      <tbody>
+      {% for p in sin_registro %}
+        <tr>
+          <td><strong>{{ p.nombre }}</strong></td>
+          <td data-k="Celular">{{ p.telefono or '—' }}</td>
+          <td class="num" data-k="Recomendaciones">{{ p.total }}</td>
+          <td class="num" data-k="Ganadas">{{ p.ganados }}</td>
+          <td>{% if p.telefono %}
+            <form method="POST" action="{{ url_for('tecnicos.crear') }}">
+              <input type="hidden" name="nombre" value="{{ p.nombre }}"><input type="hidden" name="telefono" value="{{ p.telefono }}">
+              <button class="b sec" type="submit">Registrar</button>
+            </form>
+          {% else %}<span class="muted">Sin celular: regístralo arriba y asígnale la etapa en la comisión del lead</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+
+  <section class="panel">
+    <h2>Registrados</h2>
+    {% if tecnicos %}
+    <table>
+      <thead><tr><th>Nombre</th><th>Celular</th><th class="num">Recomendaciones</th><th class="num">Ganadas</th></tr></thead>
+      <tbody>
+      {% for t in tecnicos %}
+        {% set total, ganados = conteo.get(t.id, (0, 0)) %}
+        <tr>
+          <td><strong>{{ t.nombre }}</strong></td>
+          <td data-k="Celular">{{ t.telefono_whatsapp or '—' }}</td>
+          <td class="num" data-k="Recomendaciones">{{ total }}</td>
+          <td class="num" data-k="Ganadas">{{ ganados }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">Todavía no hay nadie registrado.</p>
+    {% endif %}
+  </section>
+</div>
+<script>
+document.getElementById('copiar').addEventListener('click', function(){
+  const b = this;
+  navigator.clipboard.writeText(document.getElementById('link').textContent.trim()).then(function(){
+    b.textContent = 'Copiado'; setTimeout(function(){ b.textContent = 'Copiar'; }, 1500);
+  });
+});
+</script>
+</body>
+</html>

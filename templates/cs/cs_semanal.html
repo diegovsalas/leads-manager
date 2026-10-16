@@ -10,7 +10,7 @@
 <form method="get" class="weekly-filters">
   <label>Viernes de corte<input type="date" name="corte" value="{{ cut.isoformat() }}" required></label>
   {% if not is_kam %}<label>KAM<select name="kam"><option value="">Todos</option>{% for kam in kams %}<option value="{{ kam.id }}" {% if request.args.get('kam') == kam.id|string %}selected{% endif %}>{{ kam.nombre }}</option>{% endfor %}</select></label>{% endif %}
-  <label>Unidad de negocio<select name="un"><option value="">Todas</option>{% for un in ['Aromatex','Pestex','Weldex','Nexo'] %}<option {% if request.args.get('un') == un %}selected{% endif %}>{{ un }}</option>{% endfor %}</select></label>
+  <label>Unidad de negocio<select name="un"><option value="">Todas</option>{% for un in ['Aromatex','Pestex','Weldex','Nexo','Café Origen'] %}<option {% if request.args.get('un') == un %}selected{% endif %}>{{ un }}</option>{% endfor %}</select></label>
   <label>Alcance<select name="alcance"><option value="aaa" {% if scope == 'aaa' %}selected{% endif %}>Cuentas AAA</option><option value="todas" {% if scope == 'todas' %}selected{% endif %}>Todas las cuentas</option></select></label>
   <button class="btn primary" type="submit">Aplicar</button>
 </form>

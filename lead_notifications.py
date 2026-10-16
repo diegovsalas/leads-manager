@@ -12,7 +12,7 @@ from sqlalchemy import event, inspect, select, update
 from sqlalchemy.orm import Session, object_session
 
 from extensions import db
-from models import Lead, LeadAssignmentNotice, UserCRM
+from models import Lead, LeadAssignmentNotice, Usuario, UserCRM
 
 _INSTALLED = False
 FROM_EMAIL = "CRM Avantex <crm@grupoavantex.com>"
@@ -26,12 +26,17 @@ def _capture(mapper, connection, lead):
     if str(old) == str(lead.usuario_asignado_id):
         return
     now = datetime.now(timezone.utc)
+    referido_por = lead.referido_nombre
+    if not referido_por and lead.referido_por_id:
+        referido_por = connection.execute(select(Usuario.nombre).where(
+            Usuario.id == lead.referido_por_id)).scalar()
     connection.execute(LeadAssignmentNotice.__table__.insert().values(
         id=uuid.uuid4(), lead_id=lead.id, vendedor_id=lead.usuario_asignado_id,
         created_at=now, next_attempt_at=now, attempts=0, status="pendiente",
         snapshot={"nombre": lead.nombre or "Lead", "empresa": lead.empresa_nombre or "",
                   "marca": lead.marca_interes or "Sin marca",
-                  "tipo": "reasignado" if old else "asignado"},
+                  "tipo": "reasignado" if old else "asignado",
+                  "referido_por": referido_por},
     ))
     object_session(lead).info["lead_notices_pending"] = True
 
@@ -50,15 +55,22 @@ def _payload(notice, email):
     date = notice["created_at"].astimezone(ZoneInfo("America/Monterrey")).strftime("%d/%m/%Y %H:%M")
     link = os.getenv("DOMAIN", "https://leads-manager-avantex.onrender.com").rstrip("/") + "/?lead=" + str(notice["lead_id"])
     subject = "Lead " + data["tipo"] + " · " + data["marca"]
+    # Solo el nombre de quien lo refirió: lo que vio va en las notas, que
+    # igual que el contacto se quedan en el CRM.
+    referido = data.get("referido_por")
+    referido_html = (f"<p><strong>Recomendado por:</strong> {escape(referido)}, desde una visita."
+                     " Revisa en las notas lo que detectó.</p>") if referido else ""
+    referido_text = f"\nRecomendado por: {referido}, desde una visita" if referido else ""
     html = f'''<div style="font-family:Arial,sans-serif;max-width:580px;margin:auto;color:#243047">
       <h2>Se te ha {escape(data['tipo'])} un lead</h2>
       <p><strong>Lead:</strong> {escape(data['nombre'])}</p>
       <p><strong>Empresa:</strong> {escape(data['empresa'] or 'Sin empresa registrada')}</p>
       <p><strong>Marca:</strong> {escape(data['marca'])}</p>
+      {referido_html}
       <p><strong>Fecha de asignación:</strong> {date} (Monterrey)</p>
       <p><a href="{escape(link, quote=True)}" style="display:inline-block;background:#0954e6;color:white;padding:12px 18px;border-radius:6px;text-decoration:none">Abrir lead en el CRM</a></p>
       <p>Consulta los datos de contacto y da seguimiento dentro del CRM.</p></div>'''
-    text = f"Lead {data['tipo']}\nLead: {data['nombre']}\nEmpresa: {data['empresa']}\nMarca: {data['marca']}\nFecha de asignación: {date} (Monterrey)\nAbrir lead en el CRM: {link}"
+    text = f"Lead {data['tipo']}\nLead: {data['nombre']}\nEmpresa: {data['empresa']}\nMarca: {data['marca']}{referido_text}\nFecha de asignación: {date} (Monterrey)\nAbrir lead en el CRM: {link}"
     return {"from": FROM_EMAIL, "to": [email], "subject": subject, "html": html, "text": text}
 
 

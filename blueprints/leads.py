@@ -1220,6 +1220,9 @@ ORIGEN_A_COMISION = {
     "Prospeccion":   "autogenerado",
     "Upselling":     "autogenerado",
     "Cross-selling": "autogenerado",
+    # FEAT-2026-10-16: al vendedor se lo pasó un técnico. Es la propuesta;
+    # dirección la cambia en el cierre como cualquier otra.
+    "Referido operaciones": "lead_otorgado",
     "Meta Ads":          "lead_otorgado",
     "Web":               "lead_otorgado",
     "WhatsApp Organico": "lead_otorgado",

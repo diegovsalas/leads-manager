@@ -24,7 +24,10 @@ def listar():
     from un_filter import usuario_pertenece_a_un
     from blueprints.auth import allowed_units_for_role
     from flask import request as _req
-    vendedores_all = Usuario.query.order_by(Usuario.nombre).all()
+    # Los técnicos se administran en /tecnicos: no venden ni reciben leads.
+    vendedores_all = (Usuario.query
+                      .filter(Usuario.rol_comercial != RolComercial.TECNICO)
+                      .order_by(Usuario.nombre).all())
     un = _req.args.get("un")
     role_units = allowed_units_for_role()
     if role_units:
@@ -77,7 +80,7 @@ def crear_completo():
       nombre (str, requerido)
       correo (str, requerido) — email corporativo para login
       password (str, opcional) — si no se da, se genera y se devuelve
-      especialidad_marca (list[str], opcional) — ["Aromatex","Pestex","Weldex","Nexo","Aromatex Home"]
+      especialidad_marca (list[str], opcional) — ["Aromatex","Pestex","Weldex","Nexo","Café Origen","Aromatex Home"]
       zona_cobertura (list[str], opcional) — estados de México
       telefono_whatsapp (str, opcional)
       gmail_address (str, opcional) — Gmail corp para monitoreo

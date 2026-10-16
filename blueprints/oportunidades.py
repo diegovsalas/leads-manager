@@ -231,6 +231,7 @@ def _apply_role_un_scope(query):
         "Pestex": ("pestex",),
         "Weldex": ("weldex",),
         "Nexo": ("nexo",),
+        "Café Origen": ("café origen", "cafe origen", "cafeorigen", "cafe_origen"),
     }.get(canon, ())
     return query.filter(or_(
         Oportunidad.marca_interes.is_(None),

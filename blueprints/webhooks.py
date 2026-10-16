@@ -1086,7 +1086,7 @@ def shopify_form():
         logger.warning("[form] rechazado: marca ausente o no valida (%r)", pedida)
         return _cors(jsonify({
             "error": "Falta el campo 'marca' o no es una unidad valida.",
-            "validas": ["Aromatex", "Pestex", "Weldex", "Nexo"],
+            "validas": list(__import__("un_filter").UN_CANONICAS),
         })), 400
 
     extra = {"marca_interes": marca}

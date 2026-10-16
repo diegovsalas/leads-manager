@@ -5,11 +5,12 @@ Filtro global por Unidad de Negocio (UN). FEAT-2026-06-29.
 Centraliza la lógica de filtrado por UN para que cada endpoint la aplique
 de forma consistente.
 
-UN canónicas (4):
+UN canónicas (5):
   - Aromatex      (agrupa Aromatex Home)
   - Pestex
   - Weldex
   - Nexo
+  - Café Origen   (FEAT-2026-10-16)
 
 Decisiones aprobadas por Diego (2026-06-29):
   - Aromatex Home cae dentro del filtro Aromatex.
@@ -23,7 +24,7 @@ Decisiones aprobadas por Diego (2026-06-29):
 """
 from sqlalchemy import or_, func
 
-UN_CANONICAS = ("Aromatex", "Pestex", "Weldex", "Nexo")
+UN_CANONICAS = ("Aromatex", "Pestex", "Weldex", "Nexo", "Café Origen")
 
 # Aliases que mapean a cada UN canónica (case-insensitive).
 # Si un valor matchea cualquiera de estos aliases, se considera de esa UN.
@@ -32,6 +33,7 @@ _UN_ALIASES = {
     "Pestex":   ("pestex",),
     "Weldex":   ("weldex",),
     "Nexo":     ("nexo",),
+    "Café Origen": ("café origen", "cafe origen", "cafeorigen", "cafe_origen"),
 }
 
 
@@ -48,10 +50,11 @@ def normalizar_un(value):
 
 
 def es_un_valida(un):
-    """True si la UN pasada es una de las 4 canónicas (case-insensitive)."""
-    if not un:
-        return False
-    return un.capitalize() in UN_CANONICAS
+    """True si la UN pasada es una de las canónicas (case-insensitive).
+
+    FIX-2026-10-16: antes comparaba un.capitalize(), que convierte
+    "Café Origen" en "Café origen" y la daba por inválida."""
+    return normalizar_un(un) is not None
 
 
 def filtrar_leads_por_un(query, lead_model, un):
@@ -67,7 +70,7 @@ def filtrar_leads_por_un(query, lead_model, un):
     """
     if not un or not es_un_valida(un):
         return query
-    canon = un.capitalize()
+    canon = normalizar_un(un)
     aliases = _UN_ALIASES[canon]
     # marcas_interes se guarda YA normalizado a UN canónicas (ver
     # normalizar_marcas), así que aquí basta una comparación exacta. Nada de
@@ -106,7 +109,7 @@ def filtrar_cs_accounts_por_un(query, account_model, un):
     """
     if not un or not es_un_valida(un):
         return query
-    canon = un.capitalize()
+    canon = normalizar_un(un)
     aliases = _UN_ALIASES[canon]
     # OR de LIKEs: marca_interes ilike '%aromatex%' OR '%aromatex home%' etc.
     ors = [func.lower(account_model.unidades_contratadas).like(f"%{a}%") for a in aliases]
@@ -121,9 +124,10 @@ def usuario_pertenece_a_un(especialidad_marca_list, un):
         return True  # sin filtro → todos pasan
     if not especialidad_marca_list:
         return False
-    aliases = _UN_ALIASES[un.capitalize()]
+    canon = normalizar_un(un)
+    aliases = _UN_ALIASES[canon]
     for marca in especialidad_marca_list:
-        if normalizar_un(marca) == un.capitalize():
+        if normalizar_un(marca) == canon:
             return True
         if str(marca or "").strip().lower() in aliases:
             return True
@@ -136,7 +140,7 @@ def filtrar_usuarios_por_un(query, usuario_model, un):
     sobre la representación texto para no requerir extensión jsonb_path."""
     if not un or not es_un_valida(un):
         return query
-    aliases = _UN_ALIASES[un.capitalize()]
+    aliases = _UN_ALIASES[normalizar_un(un)]
     # Cast JSONB → text y LIKE (Postgres permite jsonb::text directamente)
     ors = [
         func.lower(func.cast(usuario_model.especialidad_marca, db_text_type()))

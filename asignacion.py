@@ -132,21 +132,18 @@ def _pct_conversion(vendedor) -> float:
     return ganados / total
 
 
-def asignar_lead_comercial(datos_lead: dict) -> Lead:
+def elegir_vendedor(marca: str, estado: str = ""):
     """
-    Asigna un lead al mejor vendedor según:
+    El mejor vendedor para un lead nuevo, sin crearlo:
       1. Filtro por marca (especialidad) + en_turno
       2. Filtro por zona geográfica
       3. Menor carga de trabajo
       4. Desempate: mejor % conversión
-    """
-    marca = datos_lead.get("marca_interes", "")
-    # Aceptar tanto "estado" como "estado_cliente" (el polling y el modal
-    # usan distinta key — ambas son válidas y representan el mismo dato).
-    estado = normalizar_estado(
-        datos_lead.get("estado") or datos_lead.get("estado_cliente") or ""
-    )
 
+    FEAT-2026-10-16: separado de asignar_lead_comercial para que los
+    referidos de técnicos usen el mismo reparto. Lanza ValueError si no hay
+    nadie en turno para esa marca.
+    """
     # ── 1. Filtrar por marca + en_turno ──
     candidatos = (
         Usuario.query.filter(
@@ -170,9 +167,20 @@ def asignar_lead_comercial(datos_lead: dict) -> Lead:
     # ── 3. Ordenar por carga (menor primero), luego por conversión (mayor primero) ──
     candidatos.sort(key=lambda v: (_carga_trabajo(v), -_pct_conversion(v)))
 
-    vendedor = candidatos[0]
+    return candidatos[0]
 
-    # ── 4. Crear el lead ──
+
+def asignar_lead_comercial(datos_lead: dict) -> Lead:
+    """Asigna un lead al mejor vendedor (ver elegir_vendedor) y lo crea."""
+    marca = datos_lead.get("marca_interes", "")
+    # Aceptar tanto "estado" como "estado_cliente" (el polling y el modal
+    # usan distinta key — ambas son válidas y representan el mismo dato).
+    estado = normalizar_estado(
+        datos_lead.get("estado") or datos_lead.get("estado_cliente") or ""
+    )
+    vendedor = elegir_vendedor(marca, estado)
+
+    # ── Crear el lead ──
     from models import OrigenLead
 
     origen_valor = datos_lead.get("origen")

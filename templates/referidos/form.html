@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0C1F3E">
+<title>Recomendar un servicio — Grupo Avantex</title>
+<link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
+{% include "referidos/_estilo.html" %}
+<style>
+.q{padding:22px 20px;border-bottom:1px solid var(--border-subtle)}
+.q:last-of-type{border-bottom:0}
+.q-head{display:flex;gap:12px;align-items:flex-start;margin-bottom:14px}
+.q-num{flex:none;width:26px;height:26px;border-radius:50%;background:var(--blue-soft);color:var(--blue);font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.q-title{font-size:16px;font-weight:650;line-height:1.3;padding-top:2px}
+.q-title small{display:block;font-size:13px;font-weight:400;color:var(--ink-2);margin-top:3px}
+.q-body{padding-left:38px}
+@media (max-width:380px){.q-body{padding-left:0}}
+
+/* Sí / No */
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg span{display:flex;flex-direction:column;gap:2px;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;font-size:15px;font-weight:600;transition:border-color .15s,background .15s}
+.seg span small{font-size:12px;font-weight:400;color:var(--ink-2)}
+.seg input:checked+span{border-color:var(--blue);background:var(--blue-soft);color:var(--blue-ink)}
+.seg input:focus-visible+span{outline:2px solid var(--blue);outline-offset:2px}
+
+/* Servicios */
+.svc{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.svc input{position:absolute;opacity:0;pointer-events:none}
+.svc span{position:relative;display:block;padding:12px 36px 12px 14px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;font-size:15px;font-weight:600;line-height:1.25;transition:border-color .15s,background .15s}
+.svc span small{display:block;font-size:12px;font-weight:400;color:var(--ink-2);margin-top:2px}
+.svc span::after{content:"";position:absolute;top:12px;right:12px;width:18px;height:18px;border-radius:5px;border:1.5px solid var(--border-strong);background:#fff}
+.svc input:checked+span{border-color:var(--blue);background:var(--blue-soft)}
+.svc input:checked+span::after{background:var(--blue) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5L20 7'/%3E%3C/svg%3E") center/12px no-repeat;border-color:var(--blue)}
+.svc input:focus-visible+span{outline:2px solid var(--blue);outline-offset:2px}
+
+.negocio{display:none;margin-top:14px}
+.es-si .negocio,.es-no .negocio{display:block}
+.only-si,.only-no{display:none}
+.es-si .only-si,.es-no .only-no{display:inline}
+
+details.opt summary{list-style:none;cursor:pointer;font-size:15px;font-weight:600;color:var(--blue);display:flex;align-items:center;gap:8px}
+details.opt summary::-webkit-details-marker{display:none}
+details.opt summary::before{content:"+";display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;border:1.5px solid currentColor;font-size:15px;line-height:1}
+details.opt[open] summary::before{content:"–"}
+details.opt[open] summary{margin-bottom:14px}
+
+.trampa{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.bar{position:sticky;bottom:0;background:rgba(255,255,255,.96);backdrop-filter:blur(6px);border-top:1px solid var(--border);padding:12px 20px calc(12px + env(safe-area-inset-bottom))}
+</style>
+</head>
+<body>
+<main class="card">
+  <header class="hero">
+    <img src="/static/img/avantex-logo-blanco.svg" alt="Grupo Avantex">
+    <h1>Recomendar un servicio</h1>
+    <p>¿Viste una necesidad en una visita? Cuéntanos y un vendedor le da seguimiento.</p>
+  </header>
+
+  <form method="POST" action="/recomendar/" id="ref-form" novalidate>
+    {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+    <div class="trampa" aria-hidden="true"><label>Sitio web<input name="sitio_web" tabindex="-1" autocomplete="off"></label></div>
+
+    <section class="q">
+      <div class="q-head"><span class="q-num">1</span>
+        <div class="q-title">Tus datos<small>Para saber quién hizo la recomendación.</small></div></div>
+      <div class="q-body">
+        <div class="field">
+          <label for="quien_nombre">Nombre y apellido</label>
+          <input id="quien_nombre" name="quien_nombre" maxlength="150" autocomplete="name" value="{{ datos.quien_nombre or '' }}">
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label for="quien_telefono">Tu celular <span class="opt-tag">opcional</span></label>
+          <input id="quien_telefono" name="quien_telefono" type="tel" inputmode="tel" maxlength="30" autocomplete="tel" value="{{ datos.quien_telefono or '' }}" placeholder="10 dígitos">
+          <p class="hint">Con tu celular la recomendación queda a tu nombre para tu comisión.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="q" id="q-cliente">
+      <div class="q-head"><span class="q-num">2</span>
+        <div class="q-title">¿El negocio ya es cliente de Grupo Avantex?<small>Si ya tiene alguno de nuestros servicios.</small></div></div>
+      <div class="q-body">
+        <div class="seg" role="radiogroup">
+          <label><input type="radio" name="es_cliente" value="si" {% if datos.es_cliente == 'si' %}checked{% endif %}><span>Sí, ya es cliente</span></label>
+          <label><input type="radio" name="es_cliente" value="no" {% if datos.es_cliente == 'no' %}checked{% endif %}><span>No, es nuevo</span></label>
+        </div>
+        <div class="negocio">
+          <div class="field">
+            <label for="cliente"><span class="only-si">Nombre del cliente</span><span class="only-no">Nombre del negocio</span></label>
+            <input id="cliente" name="cliente_nombre" maxlength="200" autocomplete="off" value="{{ datos.cliente_nombre or '' }}">
+          </div>
+          <div class="field" style="margin-bottom:0">
+            <label for="sucursal">Sucursal o dirección <span class="opt-tag">opcional</span></label>
+            <input id="sucursal" name="sucursal" maxlength="200" value="{{ datos.sucursal or '' }}" placeholder="Ej. Sucursal Cumbres">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="q">
+      <div class="q-head"><span class="q-num">3</span>
+        <div class="q-title">¿Qué servicio necesita?<small>Puedes elegir más de uno.</small></div></div>
+      <div class="q-body">
+        {% set desc = {'Aromatex': 'Aromatización', 'Pestex': 'Control de plagas', 'Weldex': 'Soldadura industrial', 'Café Origen': 'Café'} %}
+        <div class="svc">
+          {% for un in unidades %}
+          <label><input type="checkbox" name="marcas" value="{{ un }}" {% if un in marcas_sel %}checked{% endif %}><span>{{ un }}<small>{{ desc.get(un, '') }}</small></span></label>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section class="q">
+      <div class="q-head"><span class="q-num">4</span>
+        <div class="q-title">¿Qué viste?<small>Lo que le dirías al vendedor para que llegue preparado.</small></div></div>
+      <div class="q-body">
+        <div class="field" style="margin-bottom:0">
+          <textarea id="observacion" name="observacion" maxlength="2000" aria-label="Qué viste"
+                    placeholder="Ej. Vi cucarachas en la cocina y el encargado preguntó por fumigación.">{{ datos.observacion or '' }}</textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="q">
+      <details class="opt" {% if datos.contacto_nombre or datos.contacto_telefono or datos.contacto_email %}open{% endif %}>
+        <summary>Agregar contacto del negocio</summary>
+        <div class="field">
+          <label for="contacto_nombre">Nombre</label>
+          <input id="contacto_nombre" name="contacto_nombre" maxlength="200" autocomplete="off" value="{{ datos.contacto_nombre or '' }}">
+        </div>
+        <div class="field">
+          <label for="contacto_telefono">Teléfono</label>
+          <input id="contacto_telefono" name="contacto_telefono" type="tel" inputmode="tel" maxlength="30" autocomplete="off" value="{{ datos.contacto_telefono or '' }}">
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label for="contacto_email">Correo</label>
+          <input id="contacto_email" name="contacto_email" type="email" inputmode="email" maxlength="200" autocomplete="off" value="{{ datos.contacto_email or '' }}">
+        </div>
+      </details>
+    </section>
+
+    <div class="bar">
+      <p class="alert" id="falta" role="alert" hidden></p>
+      <button type="submit" class="btn" id="enviar">Enviar recomendación</button>
+    </div>
+  </form>
+</main>
+
+<script>
+(function(){
+  const form = document.getElementById('ref-form');
+  const caja = document.getElementById('q-cliente');
+  const val = function(id){ return document.getElementById(id).value.trim(); };
+
+  // El navegador recuerda nombre y celular para la siguiente recomendación.
+  const guardados = ['quien_nombre', 'quien_telefono'];
+  try {
+    guardados.forEach(function(id){
+      const el = document.getElementById(id);
+      if (!el.value) el.value = localStorage.getItem('avx_rec_' + id) || '';
+    });
+  } catch (e) {}
+
+  function modo(){
+    const v = (form.querySelector('input[name="es_cliente"]:checked') || {}).value;
+    caja.classList.toggle('es-si', v === 'si');
+    caja.classList.toggle('es-no', v === 'no');
+    return v;
+  }
+  form.querySelectorAll('input[name="es_cliente"]').forEach(function(r){
+    r.addEventListener('change', function(){ modo(); document.getElementById('cliente').focus(); });
+  });
+  modo();
+
+  form.addEventListener('submit', function(e){
+    let falta = '';
+    const digitos = val('quien_telefono').replace(/\D/g, '');
+    if (val('quien_nombre').split(/\s+/).length < 2) falta = 'Escribe tu nombre y apellido.';
+    else if (digitos && digitos.length < 10) falta = 'Tu celular debe tener 10 dígitos.';
+    else if (!modo()) falta = 'Indica si el negocio ya es cliente de Grupo Avantex.';
+    else if (!val('cliente')) falta = 'Escribe el nombre del negocio que visitaste.';
+    else if (!form.querySelector('input[name="marcas"]:checked')) falta = 'Elige al menos un servicio que necesita.';
+    else if (!val('observacion')) falta = 'Cuéntanos qué viste en la visita.';
+    const aviso = document.getElementById('falta');
+    if (falta){ e.preventDefault(); aviso.textContent = falta; aviso.hidden = false; return; }
+    aviso.hidden = true;
+    try { guardados.forEach(function(id){ localStorage.setItem('avx_rec_' + id, val(id)); }); } catch (e) {}
+    const b = document.getElementById('enviar'); b.disabled = true; b.textContent = 'Enviando…';
+  });
+})();
+</script>
+</body>
+</html>

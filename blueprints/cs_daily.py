@@ -134,7 +134,7 @@ def add_account():
             if not name_key(name):
                 raise ValueError('Indica un nombre de cuenta válido.')
             unit = request.form.get('unidad')
-            if unit not in ('Aromatex','Pestex','Weldex','Nexo'):
+            if unit not in ('Aromatex','Pestex','Weldex','Nexo','Café Origen'):
                 raise ValueError('Selecciona la unidad de negocio.')
             contact = text(request.form.get('contacto'), 'El contacto', True, 200)
             phone = text(request.form.get('telefono'), 'El teléfono', maximum=30)

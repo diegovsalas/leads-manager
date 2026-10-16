@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0C1F3E">
+<title>Recomendación recibida — Grupo Avantex</title>
+<link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
+{% include "referidos/_estilo.html" %}
+<style>
+.done{padding:28px 20px 24px}
+.check{width:48px;height:48px;border-radius:50%;background:var(--ok-soft);color:var(--ok);display:flex;align-items:center;justify-content:center;margin-bottom:16px}
+.done h2{font-size:20px;font-weight:700;letter-spacing:-.2px;margin-bottom:8px}
+.done p{font-size:15px;line-height:1.5;color:var(--ink-2)}
+.resumen{margin:20px 0 24px;border:1px solid var(--border);border-radius:10px}
+.resumen div{display:flex;justify-content:space-between;gap:16px;padding:12px 14px;border-bottom:1px solid var(--border-subtle);font-size:14px}
+.resumen div:last-child{border-bottom:0}
+.resumen dt{color:var(--ink-3)}
+.resumen dd{font-weight:600;text-align:right}
+</style>
+</head>
+<body>
+<main class="card">
+  <header class="hero">
+    <img src="/static/img/avantex-logo-blanco.svg" alt="Grupo Avantex">
+    <h1>{% if es_nuevo %}¡Gracias{% if quien %}, {{ quien }}{% endif %}!{% else %}Ya estaba registrada{% endif %}</h1>
+    <p>{% if es_nuevo %}Tu recomendación ya está en manos del equipo comercial.{% else %}Agregamos lo que viste a la recomendación que ya existía.{% endif %}</p>
+  </header>
+  <section class="done">
+    <div class="check" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></div>
+    {% if es_nuevo %}
+    <h2>Recomendación registrada</h2>
+    <p>Queda registrado que la recomendación fue tuya.</p>
+    {% else %}
+    <h2>No se duplicó</h2>
+    <p>Ya había una recomendación abierta de este negocio y servicio. El vendedor verá tu nota nueva en la misma.</p>
+    {% endif %}
+    <dl class="resumen">
+      <div><dt>Negocio</dt><dd>{{ empresa }}</dd></div>
+      <div><dt>Servicio</dt><dd>{{ marcas|join(', ') }}</dd></div>
+      <div><dt>Seguimiento</dt><dd>{{ vendedor or 'Lo asigna dirección comercial' }}</dd></div>
+    </dl>
+    <a class="btn" href="/recomendar/">Recomendar otro</a>
+  </section>
+</main>
+</body>
+</html>

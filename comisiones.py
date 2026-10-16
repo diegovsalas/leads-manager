@@ -277,6 +277,17 @@ def aplica_tabulador(lead):
     if dueno is None:
         return False, "El lead no tiene vendedor asignado."
 
+    # FEAT-2026-10-16: un lead referido por un técnico se reparte siempre.
+    # El técnico cobra la etapa que hizo (prospectar) como en multi-UN, sin
+    # importar el perfil del vendedor que lo recibe: si dependiera de eso,
+    # el mismo referido pagaría o no según a quién le tocó.
+    referidor = getattr(lead, "referido_por_id", None)
+    if referidor:
+        participantes = {uid for uid in atribucion_de(lead.id).values() if uid}
+        if len(participantes) >= 2:
+            return True, ("Lead referido por un técnico: se reparte por etapas "
+                          "entre quien lo refirió y quien lo trabajó.")
+
     if not es_multi_un(dueno):
         return False, (f"{dueno.nombre} no tiene el perfil de vendedor multi-UN. "
                        f"El tabulador solo aplica a quien lo tenga asignado.")

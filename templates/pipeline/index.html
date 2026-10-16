@@ -556,6 +556,7 @@ fbq('track','PageView');
       <option value="Pestex">🟨 Pestex</option>
       <option value="Weldex">🟦 Weldex</option>
       <option value="Nexo">🟪 Nexo</option>
+      <option value="Café Origen">🟫 Café Origen</option>
     </select>
   </div>
 
@@ -599,6 +600,7 @@ fbq('track','PageView');
       <div class="sidebar-section">Equipo y pagos</div>
 <div class="slink" onclick="showView('vendedores',this)"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> <span class="sl-text">Vendedores</span></div>
 <div class="slink admin-only" onclick="location.href='/comisiones/'" title="Tabulador de comisiones multi-UN"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg> <span class="sl-text">Comisiones</span></div>
+<div class="slink admin-only" onclick="location.href='/tecnicos/'" title="Link para recomendar servicios y quién cobra"><svg class="sl-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> <span class="sl-text">Técnicos</span></div>
 
       <div class="sidebar-divider"></div>
       <div class="sidebar-section">Clientes y campañas</div>
@@ -817,6 +819,7 @@ fbq('track','PageView');
         <option value="Prospeccion">Prospeccion</option>
         <option value="Upselling">Upselling</option>
         <option value="Cross-selling">Cross-selling</option>
+        <option value="Referido operaciones">Recomendado desde campo</option>
         <option value="Manual">Manual</option>
       </select>
       <select class="pipe-filter-control" id="pipe-age" onchange="applyPipeFilters()" title="Antiguedad">
@@ -926,7 +929,7 @@ fbq('track','PageView');
               {% if lead.tipo_venta == 'Eventual' %}<span class="tag" style="background:var(--purple-bg);color:var(--acero);">📅 Venta eventual</span>{% endif %}
             </div>
             <div class="k-card-foot">
-              <span class="tag tag-origen">{{ lead.origen.value if lead.origen else 'Manual' }}</span>
+              {% if lead.referido_nombre or lead.referido_por %}<span class="tag" style="background:var(--green-bg);color:var(--green);font-weight:600;" title="Lo detectó en una visita y lo recomendó">🔧 Recomendado por {{ lead.referido_nombre or lead.referido_por.nombre }}</span>{% else %}<span class="tag tag-origen">{{ lead.origen.value if lead.origen else 'Manual' }}</span>{% endif %}
               {% if lead.icp_nivel %}
               {# ICP es una escala ordenada (A>B>C>D): rampa ordinal, no un color por letra #}
               {% set icp_colors = {'A': ('var(--blue-bg)', '#0543be'), 'B': ('var(--blue-bg)', '#3068db'), 'C': ('var(--blue-bg)', '#608ee6'), 'D': ('var(--bg-tag)', 'var(--text3)')} %}
@@ -1566,7 +1569,7 @@ fbq('track','PageView');
   <div style="padding:20px 48px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
     <select class="form-input" id="opps-marca" onchange="loadOpps()" style="max-width:160px;font-size:13px;">
       <option value="">Todas las marcas</option>
-      <option value="Aromatex">Aromatex</option><option value="Pestex">Pestex</option><option value="Weldex">Weldex</option>
+      <option value="Aromatex">Aromatex</option><option value="Pestex">Pestex</option><option value="Weldex">Weldex</option><option value="Nexo">Nexo</option><option value="Café Origen">Café Origen</option>
     </select>
     <button class="btn btn-filled" onclick="openOppModal()" style="font-size:13px;">+ Nuevo upsell</button>
     <button class="btn" onclick="loadOpps()" style="font-size:13px;">Refrescar</button>
@@ -2169,6 +2172,7 @@ fbq('track','PageView');
           <option value="Weldex">Weldex</option>
           <option value="Aromatex Home">Aromatex Home</option>
           <option value="Nexo">Nexo</option>
+          <option value="Café Origen">Café Origen</option>
         </select>
       </div>
       <div class="form-group">
@@ -2416,6 +2420,7 @@ fbq('track','PageView');
       <label class="mv-chip"><input type="checkbox" value="Pestex"/><span>Pestex</span></label>
       <label class="mv-chip"><input type="checkbox" value="Weldex"/><span>Weldex</span></label>
       <label class="mv-chip"><input type="checkbox" value="Nexo"/><span>Nexo</span></label>
+      <label class="mv-chip"><input type="checkbox" value="Café Origen"/><span>Café Origen</span></label>
     </div>
   </div>
   <div class="form-group">
@@ -3050,7 +3055,7 @@ const socket=io();
 })();
 
 // FEAT-2026-06-29: helpers globales de filtro UN
-window.UN_CANONICAS = ['Aromatex', 'Pestex', 'Weldex', 'Nexo'];
+window.UN_CANONICAS = ['Aromatex', 'Pestex', 'Weldex', 'Nexo', 'Café Origen'];
 window.getUN = function(){
   return (localStorage.getItem('avantex_un') || 'Todas');
 };
@@ -3165,7 +3170,8 @@ window.addEventListener('DOMContentLoaded', ()=>{
         const esp = (window.MI_ESPECIALIDAD || []);
         const norm = {
           'aromatex':'Aromatex', 'aromatex home':'Aromatex',
-          'pestex':'Pestex', 'weldex':'Weldex', 'nexo':'Nexo'
+          'pestex':'Pestex', 'weldex':'Weldex', 'nexo':'Nexo',
+          'café origen':'Café Origen', 'cafe origen':'Café Origen'
         };
         const canon = new Set();
         esp.forEach(m=>{ const c = norm[(m||'').toLowerCase()]; if(c) canon.add(c); });
@@ -3693,6 +3699,7 @@ const ORIGEN_COLORS_REV={
   'Prospeccion':      {bg:'var(--purple-bg)', fg:'var(--acero)'},
   'Upselling':        {bg:'var(--pink-bg)', fg:'var(--acero)'},
   'Cross-selling':    {bg:'var(--blue-bg)', fg:'var(--brillante)'},
+  'Referido operaciones':{bg:'var(--green-bg)', fg:'var(--green)'},
   'Sin origen':       {bg:'var(--bg-sunken)', fg:'var(--text2)'},
 };
 const ETAPA_COLORS_REV={
@@ -4999,6 +5006,7 @@ async function loadDashboard(){
       'Prospeccion':      {bg:'var(--purple-bg)', fg:'var(--acero)'},
       'Upselling':        {bg:'var(--pink-bg)', fg:'var(--acero)'},
       'Cross-selling':    {bg:'var(--blue-bg)', fg:'var(--brillante)'},
+      'Referido operaciones':{bg:'var(--green-bg)', fg:'var(--green)'},
       'Sin origen':       {bg:'var(--bg-sunken)', fg:'var(--text2)'},
     };
     const subEl=document.getElementById('m-total-sub');
@@ -5538,7 +5546,7 @@ async function abrirLeadPanel(id){
     // General
     const etapaColor=ETAPA_COLORS[l.etapa_pipeline]||'var(--text2)';
     document.getElementById('lp-etapa').innerHTML=`<span class="tag" style="background:${etapaColor}22;color:${etapaColor};">${l.etapa_pipeline}</span>`;
-    document.getElementById('lp-origen').textContent=l.origen||'Manual';
+    document.getElementById('lp-origen').textContent=(l.origen||'Manual')+(l.referido_por?' · recomendado por '+l.referido_por:'');
     document.getElementById('lp-marca').innerHTML=(l.marcas_interes&&l.marcas_interes.length)
       ? l.marcas_interes.map(m=>`<span class="tag tag-marca">${_esc(m)}</span>`).join(' ')
       : (l.marca_interes?`<span class="tag tag-marca">${l.marca_interes}</span>`:'—');
@@ -7494,6 +7502,8 @@ window.IS_ADMIN_AI = IS_ADMIN || false;
           <div class="nl-pill" data-val="Aromatex">Aromatex</div>
           <div class="nl-pill" data-val="Pestex">Pestex</div>
           <div class="nl-pill" data-val="Weldex">Weldex</div>
+          <div class="nl-pill" data-val="Nexo">Nexo</div>
+          <div class="nl-pill" data-val="Café Origen">Café Origen</div>
         </div>
       </div>
       <div class="nl-row">
@@ -8167,7 +8177,7 @@ async function openLeadModal(leadToEdit){
     _NL_ESTADOS.forEach(s=>{estSel.innerHTML+=`<option value="${s}">${s}</option>`;});
   }
   // Unidades pills (filtradas por marcas del usuario)
-  const allMarcas=['Aromatex','Pestex','Weldex','Nexo'];
+  const allMarcas=['Aromatex','Pestex','Weldex','Nexo','Café Origen'];
   const userMarcas=me.is_admin?allMarcas:(me.marcas&&me.marcas.length?me.marcas:allMarcas);
   const pillsEl=document.getElementById('nl-unidad-pills');
   pillsEl.innerHTML='';

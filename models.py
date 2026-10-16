@@ -19,6 +19,11 @@ class RolComercial(enum.Enum):
     LIDER_COMERCIAL  = "Líder Comercial"
     ASESOR_COMERCIAL = "Asesor Comercial"
     SDR              = "SDR"
+    # FEAT-2026-10-16: persona de la empresa que recomienda desde campo. No
+    # vende ni recibe leads (en_turno=False); existe como perfil para que
+    # pueda cobrar la etapa "prospectar" de lo que recomienda. Se le
+    # reconoce por su celular (telefono_whatsapp).
+    TECNICO          = "Técnico"
 
 
 class OrigenLead(enum.Enum):
@@ -28,6 +33,8 @@ class OrigenLead(enum.Enum):
     PROSPECCION       = "Prospeccion"
     UPSELLING         = "Upselling"
     CROSS_SELLING     = "Cross-selling"
+    # FEAT-2026-10-16: un técnico detectó la necesidad en una visita.
+    REFERIDO_OPERACIONES = "Referido operaciones"
 
 
 class EtapaPipeline(enum.Enum):
@@ -150,7 +157,8 @@ class Usuario(db.Model):
     )
 
     # Relaciones
-    leads = db.relationship("Lead", back_populates="usuario_asignado", lazy="dynamic")
+    leads = db.relationship("Lead", back_populates="usuario_asignado", lazy="dynamic",
+                            foreign_keys="Lead.usuario_asignado_id")
     estados_bot = db.relationship("EstadoBotInterno", back_populates="usuario", lazy="dynamic")
     metas = db.relationship("MetaVendedor", back_populates="usuario", lazy="dynamic")
 
@@ -252,7 +260,19 @@ class Lead(db.Model):
     usuario_asignado_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=True
     )
-    usuario_asignado = db.relationship("Usuario", back_populates="leads")
+    usuario_asignado = db.relationship("Usuario", back_populates="leads",
+                                       foreign_keys=[usuario_asignado_id])
+
+    # FEAT-2026-10-16: quién recomendó la oportunidad desde /recomendar.
+    # Nombre y celular tal como los escribió: puede ser cualquiera de la
+    # empresa. referido_por_id se llena cuando ese celular es de alguien
+    # registrado en Técnicos, al recomendar o al registrarlo después. Queda
+    # aparte de la atribución de comisión, que dirección puede corregir.
+    referido_nombre = db.Column(db.String(150), nullable=True)
+    referido_telefono = db.Column(db.String(30), nullable=True)
+    referido_por_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"),
+                                nullable=True, index=True)
+    referido_por = db.relationship("Usuario", foreign_keys=[referido_por_id])
 
     # Cierre / Facturación (se llena cuando el vendedor mueve a Cerrado Ganado)
     factura_numero = db.Column(db.String(60), nullable=True)   # ej. "A-12345"
@@ -391,6 +411,7 @@ class Lead(db.Model):
             "meta_campaign_nombre": meta_campaign_nombre,
             "meta_campaign_unit": meta_campaign_unit,
             "usuario_asignado": vendedor,
+            "referido_por": self.referido_nombre or (self.referido_por.nombre if self.referido_por else None),
             "fecha_creacion": self.fecha_creacion.isoformat(),
             "fecha_cierre": self.fecha_cierre.isoformat() if self.fecha_cierre else None,
             "fecha_actualizacion": self.fecha_actualizacion.isoformat(),

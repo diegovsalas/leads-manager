@@ -895,6 +895,7 @@ def create_app():
     from blueprints.sales_emails    import sales_emails_bp
     from blueprints.chat_ai         import chat_ai_bp
     from blueprints.due_diligence   import dd_bp
+    from blueprints.referidos       import recomendar_bp, tecnicos_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp,      url_prefix="/webhook")
@@ -912,6 +913,9 @@ def create_app():
     app.register_blueprint(cs_daily_bp,      url_prefix="/cs")
     app.register_blueprint(encuesta_bp,      url_prefix="/encuesta")
     app.register_blueprint(tickets_bp,       url_prefix="/soporte")
+    # FEAT-2026-10-16: recomendaciones desde campo, sin login
+    app.register_blueprint(recomendar_bp,    url_prefix="/recomendar")
+    app.register_blueprint(tecnicos_bp,      url_prefix="/tecnicos")
     # FEAT-2026-07-06 (Fugaci Due Diligence): sin url_prefix porque expone
     # tanto rutas admin bajo /cs/due-diligence como públicas /dd-encuesta/
     app.register_blueprint(dd_bp)
@@ -954,7 +958,7 @@ def create_app():
     @app.before_request
     def require_login():
         allowed = ("/login", "/auth/google", "/webhook/", "/static/", "/api/v1/",
-                   "/encuesta/", "/dd-encuesta/", "/soporte/",
+                   "/encuesta/", "/dd-encuesta/", "/soporte/", "/recomendar",
                    # FEAT-2026-08-31: las dispara un cron externo, que no
                    # puede iniciar sesión. Van protegidas por TAREAS_SECRET.
                    "/tareas/")  # público sin login
@@ -1042,7 +1046,10 @@ def create_app():
         # Lista de vendedores para el dropdown (solo admins lo usan)
         vendedores_list = []
         if user_rol.upper() != "VENDEDOR":
-            vendedores_list = Usuario.query.order_by(Usuario.nombre.asc()).all()
+            from models import RolComercial
+            vendedores_list = (Usuario.query
+                               .filter(Usuario.rol_comercial != RolComercial.TECNICO)
+                               .order_by(Usuario.nombre.asc()).all())
 
         all_leads = q.order_by(Lead.fecha_actualizacion.desc()).all()
 
@@ -1081,6 +1088,7 @@ def create_app():
                     "Pestex": ("pestex",),
                     "Weldex": ("weldex",),
                     "Nexo": ("nexo",),
+                    "Café Origen": ("café origen", "cafe origen", "cafeorigen", "cafe_origen"),
                 }.get(canon, ())
                 oppo_q = oppo_q.filter(db.or_(
                     Oportunidad.marca_interes.is_(None),
