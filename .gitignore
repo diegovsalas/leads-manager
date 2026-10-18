@@ -60,3 +60,6 @@ static/dev_evidencias/
 
 # Estado y evidencias del piloto local de CS
 .cs_pilot/
+
+# Documentos internos con datos de clientes: el repositorio es público.
+docs/
