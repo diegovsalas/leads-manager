@@ -17,6 +17,7 @@ descubre en la nómina.
 | `test_asignacion.py` | reparto de leads | que el lead llegue a un vendedor de su marca, que no se pierdan campos por el camino, que el reparto mire la carga |
 | `test_lead_notifications.py` | avisos de asignación | destinatario único, privacidad, rollback, reasignación, reintentos idempotentes y enlace con login seguro; todos los envíos son simulados |
 | `test_upsell.py` | expansión en oportunidades | clasificación desde leads/CS, permisos, montos, cancelación y reapertura sin duplicados, evidencia, forecast y sintaxis del Pipe |
+| `test_cs_weekly.py` | seguimiento semanal AAA | alcance por KAM, selección independiente del tier, faltantes, proyecciones, cortes, incidencias congeladas y guardado con control de versiones |
 | `test_metas.py` | avance contra meta | que una venta cuente en el mes en que **se cerró**, no en el que entró el lead |
 
 Las regresiones de upsell también verifican endpoints HTTP, porque los permisos y las validaciones deben proteger todas las vías de cierre. El render del Pipe comprueba la sintaxis del JavaScript.
@@ -53,3 +54,14 @@ si falla: `test_no_se_puede_cerrar_dos_veces` sirve, `test_cerrar_lead_2` no.
 
 Usa `tests/fabricas.py` para construir los datos. Si una prueba necesita saber
 que `especialidad_marca` es una lista, ese detalle tapa lo que se está probando.
+
+## CS diario y semanal
+
+`test_cs_daily.py` valida altas del KAM, permisos de cartera, prevención de duplicados,
+bitácora, reprogramaciones, cierres con respaldo, cancelación sin borrado, cortes
+históricos y entrega/revisión de reportes. `test_cs_weekly.py` cubre alcance AAA,
+faltantes, cifras coherentes, incidencias al corte y guardado concurrente.
+
+`test_cs_pilot.py` comprueba que el piloto exige una base local dedicada,
+rechaza conexiones externas, conserva avances al repetir la preparación y
+no registra su selector de perfiles en la aplicación normal.
