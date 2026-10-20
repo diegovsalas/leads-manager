@@ -416,6 +416,9 @@ def _ctx():
         # Aroma -> Aromatex, Fumigacion -> Pestex. El equipo habla de UN,
         # no del nombre operativo del servicio.
         "un_de": un_de,
+        # FEAT-2026-10-20: vincular una cuenta con Savio es de dirección
+        # (/api/savio exige admin). Los demás ven el aviso, no el botón.
+        "puede_vincular_savio": is_admin_role(),
     }
 
 
@@ -1196,12 +1199,14 @@ def seguimiento_semanal():
     accounts = q.order_by(CSAccount.nombre).all()
     reports = {str(r.account_id): r for r in CSWeeklyReport.query.filter(
         CSWeeklyReport.account_id.in_([a.id for a in accounts]), CSWeeklyReport.cut_date == cut).all()}
+    import cs_savio
+    savio = cs_savio.contratos([a.id for a in accounts])
     rows = []
     for a in accounts:
         r = reports.get(str(a.id))
         payload = r.payload if r else {}
         rows.append(dict(account=a, report=r, metrics=payload.get('metrics', {}),
-                         summary=summarize(payload, cut)))
+                         summary=summarize(payload, cut), savio=savio[str(a.id)]))
     priority = {'Atrasado': 0, 'En riesgo': 1, 'Sin confirmar': 2, 'En tiempo': 3, 'Sin servicios': 4}
     rows.sort(key=lambda r: (priority[r['summary']['status']], -r['summary']['overdue'], r['account'].nombre))
     previous, current, _ = month_bounds(cut)
@@ -1213,7 +1218,9 @@ def seguimiento_semanal():
                    unknown=sum(r['summary']['unscheduled'] is None for r in rows),
                    overdue=sum(r['summary']['overdue'] for r in rows),
                    blockers=sum(r['summary']['blockers'] for r in rows),
-                   missing=sum(not r['report'] or r['report'].estado not in ('Entregado','Revisado') for r in rows)),
+                   missing=sum(not r['report'] or r['report'].estado not in ('Entregado','Revisado') for r in rows),
+                   savio_mrr=sum((r['savio']['mrr'] or 0) for r in rows),
+                   savio_sin_vincular=sum(not r['savio']['vinculada'] for r in rows)),
         kams=_get_kams(), can_manage_aaa=_is_cs_admin(), **_ctx())
 
 
@@ -1401,7 +1408,9 @@ def reporte_semanal(account_id):
         display_payload['metrics'] = dict(payload.get('metrics', {}))
         display_payload['metrics'].update({k: v['value'] for k, v in previous_auto.items()})
         display_payload['metrics'].update({k: v['value'] for k, v in current_auto.items()})
-    return render_template('cs_reporte_semanal.html', account=account, report=report,
+    import cs_savio
+    savio = cs_savio.contrato(account_id)
+    return render_template('cs_reporte_semanal.html', account=account, report=report, savio=savio,
         previous_auto=previous_auto, current_auto=current_auto, services=services, cut=cut, payload=display_payload, metrics_fields=METRICS, sections=SECTIONS,
         has_legacy=any(legacy_rows.values()),
         locked=locked, can_review=_is_cs_admin(),

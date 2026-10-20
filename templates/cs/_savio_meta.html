@@ -1,0 +1,18 @@
+{# Meta de facturación propuesta desde Savio. Solo propone: el KAM decide. #}
+{% if savio and savio.meta_sugerida and not locked %}
+<p class="weekly-note" style="margin-top:12px">Contrato en Savio: <strong>${{ '{:,.2f}'.format(savio.mrr) }}</strong> al mes sin IVA, que equivale a <strong>${{ '{:,.2f}'.format(savio.meta_sugerida) }}</strong> con IVA.
+<button type="button" class="btn" data-meta-savio="{{ savio.meta_sugerida }}">Usar como meta de facturación</button></p>
+<script>
+document.querySelectorAll('[data-meta-savio]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var meta = document.querySelector('[data-key="target"]');
+    if (!meta) return;
+    meta.value = b.dataset.metaSavio;
+    meta.dispatchEvent(new Event('input', {bubbles: true}));
+    meta.focus();
+  });
+});
+</script>
+{% elif savio and not savio.vinculada and not locked %}
+<p class="weekly-note" style="margin-top:12px">Sin vincular a Savio: no hay contrato con qué proponer la meta de facturación.</p>
+{% endif %}

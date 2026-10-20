@@ -3491,6 +3491,7 @@ async function loadVincular(){
     </tr>`;
   }
   if(!tb.innerHTML)tb.innerHTML='<tr><td colspan="8" style="color:var(--text2);text-align:center;padding:12px;">Sin cuentas CS</td></tr>';
+  return data;
 }
 function openVincModal(acc){
   _vincState.accountId=acc.id;_vincState.accountName=acc.nombre;
@@ -8709,6 +8710,18 @@ async function nlSubmit(mode){
 }
 </script>
 <script>
+// FEAT-2026-10-20: desde CS, /?vincular=<cuenta> abre la vinculación con
+// Savio de esa cuenta. Solo dirección ve la vista; a los demás no les pasa nada.
+window.addEventListener('DOMContentLoaded',async()=>{
+  const id=new URLSearchParams(location.search).get('vincular');
+  const link=document.querySelector(`.slink[onclick*="showView('vincular'"]`);
+  if(!id || !link || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))return;
+  if(link.closest('.portal-section')?.style.display==='none')switchPortal('admin');
+  showView('vincular',link);
+  const data=await loadVincular();
+  const acc=(data||[]).find(a=>String(a.id)===id);
+  if(acc)openVincModal({id:acc.id,nombre:acc.nombre,rfcs:acc.rfcs});
+});
 window.addEventListener('DOMContentLoaded',()=>{
   const id=new URLSearchParams(location.search).get('lead');
   if(!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))return;

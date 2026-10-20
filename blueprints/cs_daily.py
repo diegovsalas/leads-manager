@@ -80,7 +80,14 @@ def today_view():
                for source in SOURCES for row in report.payload.get(source, [])):
             # El botón permite importar una sola vez, con historial.
             legacy.append(account_map[report.account_id])
-    return render_template('cs_hoy.html', accounts=accounts, tasks=shown,
+    # FEAT-2026-10-20: sin vínculo a Savio la cuenta no tiene contrato ni
+    # facturación automática. Primero las que ya facturan: ahí el hueco es
+    # seguro, no una cuenta que quizá ya no tiene servicio.
+    import cs_savio
+    savio = cs_savio.contratos(ids)
+    sin_savio = sorted((a for a in accounts if not savio[str(a.id)]['vinculada']),
+                       key=lambda a: (-(a.mrr_observado or 0), a.nombre))
+    return render_template('cs_hoy.html', accounts=accounts, tasks=shown, sin_savio=sin_savio,
         incidents=incidents, account_map=account_map, today=today, stats=stats,
         latest=latest, team=team, view=view, legacy=legacy, task_status=task_status,
         kams=_get_kams(), **_ctx())
@@ -199,8 +206,12 @@ def account_work(account_id):
         e.local_date = e.created_at.astimezone(MX)
     from cs_services import service_snapshot
     services = service_snapshot(account_id, datetime.now(MX).date())
+    contract = CSContrato.query.filter_by(account_id=account_id,activo=True).first()
+    import cs_savio
+    savio = cs_savio.contrato(account_id)
     return render_template('cs_trabajo_cuenta.html', services=services, account=account,tasks=tasks,events=events,
-        task_status=task_status, today=datetime.now(MX).date(), can_validate=_is_cs_admin(), contract=CSContrato.query.filter_by(account_id=account_id,activo=True).first(), **_ctx())
+        task_status=task_status, today=datetime.now(MX).date(), can_validate=_is_cs_admin(), contract=contract,
+        savio=savio, conciliacion=cs_savio.conciliar(savio, contract.resumen if contract else None), **_ctx())
 
 
 @cs_daily_bp.route('/cuentas/<uuid:account_id>/gestion', methods=['GET','POST'])

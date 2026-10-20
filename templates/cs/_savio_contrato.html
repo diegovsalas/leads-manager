@@ -1,0 +1,25 @@
+{# Contrato de Savio de una cuenta. Espera savio, account y, opcional, conciliacion. #}
+{% if savio %}
+<div class="card daily-section"><div class="card-head"><h3>Contrato en Savio</h3><span class="meta">Suscripciones vigentes · sin IVA</span></div><div class="card-body">
+{% if not savio.vinculada %}
+<p><span class="pill warn">Sin vincular a Savio</span></p>
+<p class="weekly-note">Esta cuenta no tiene razón social de Savio ligada, así que no se puede consultar su contrato ni su facturación automática.{% if not puede_vincular_savio %} Pide a Administración que la vincule.{% endif %}</p>
+{% if puede_vincular_savio %}<a class="btn" href="/?vincular={{ account.id }}">Vincular a Savio</a>{% endif %}
+{% elif not savio.mrr %}
+<p><span class="pill warn">Sin suscripción vigente</span></p>
+<p class="weekly-note">La cuenta está vinculada, pero Savio no tiene suscripciones recurrentes vigentes. Si el cliente sigue con servicio, falta darla de alta en Savio.</p>
+{% else %}
+<div class="grid g-4">
+  <div class="kpi"><div class="label">Mensual contratado</div><div class="value">${{ '{:,.0f}'.format(savio.mrr) }}</div><div class="foot">Sin IVA</div></div>
+  <div class="kpi"><div class="label">Anual</div><div class="value">${{ '{:,.0f}'.format(savio.arr) }}</div><div class="foot">Mensual × 12</div></div>
+  <div class="kpi"><div class="label">Facturación esperada</div><div class="value">${{ '{:,.0f}'.format(savio.meta_sugerida) }}</div><div class="foot">Al mes, con IVA</div></div>
+  <div class="kpi"><div class="label">Suscripciones</div><div class="value">{{ savio.suscripciones }}</div><div class="foot">{{ savio.unidades|join(', ') or 'Unidad sin clasificar' }}</div></div>
+</div>
+{% endif %}
+{% if conciliacion %}
+<p class="{{ 'weekly-note' if conciliacion.cuadra else 'weekly-danger' }}" style="margin-top:12px">
+Contrato cargado: <strong>${{ '{:,.0f}'.format(conciliacion.mensual_contrato) }} al mes</strong> contra Savio <strong>${{ '{:,.0f}'.format(conciliacion.mrr) }}</strong>{% if conciliacion.porcentaje is not none %} ({{ '{:+.0%}'.format(conciliacion.porcentaje) }}){% endif %}. {{ conciliacion.mensaje }}</p>
+<p class="weekly-note">Savio está sin IVA. Si el contrato cargado incluye IVA, una diferencia cercana a +16% es solo el impuesto.</p>
+{% endif %}
+</div></div>
+{% endif %}

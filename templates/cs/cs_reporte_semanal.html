@@ -23,6 +23,7 @@
 <details class="weekly-context"><summary>Consultar contrato, fuentes y cobertura de servicios</summary>
 {% include 'cs/_comparativa_servicios.html' %}
 {% if services %}{% include 'cs/_servicios_resumen.html' %}{% elif locked|default(false) %}<p class="weekly-note">Este reporte anterior no conserva una foto de servicios.</p>{% endif %}
+{% include 'cs/_savio_contrato.html' %}
 {% include 'cs/_contrato_reporte.html' %}
 </details>
 <div class="weekly-error" id="weekly-error" role="alert" {% if not error %}hidden{% endif %}>{{ error or '' }}</div>
@@ -35,7 +36,7 @@
 {% if previous_auto %}{{ automatic_field(label,kind,previous_auto[key]) }}
 {% else %}<div class="weekly-field"><span>{{ label }}</span><strong>{{ payload.get('metrics',{}).get(key) if payload.get('metrics',{}).get(key) is not none else 'Sin dato guardado' }}</strong><p class="weekly-note">Captura anterior conservada con este reporte. No tiene una fuente automática validada.</p></div>{% endif %}
 {% elif group == 'current' and current_auto and key in current_auto %}{{ automatic_field(label,kind,current_auto[key]) }}
-{% else %}{{ field(key,label,kind,payload.get('metrics',{}).get(key),true) }}{% endif %}{% endfor %}</div></div></details>
+{% else %}{{ field(key,label,kind,payload.get('metrics',{}).get(key),true) }}{% endif %}{% endfor %}</div>{% if group == 'current' %}{% include 'cs/_savio_meta.html' %}{% endif %}</div></details>
 {% endfor %}
 {% for key,title,fields in sections %}
 {% if key == 'plans' %}

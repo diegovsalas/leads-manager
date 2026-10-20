@@ -1,0 +1,9 @@
+{# Contrato de Savio en una celda de tabla. Espera row.savio y row.account. #}
+{% set sv = row.savio %}
+{% if sv.vinculada %}
+<div class="muted">Contrato Savio {% if sv.mrr %}<strong>${{ '{:,.0f}'.format(sv.mrr) }}/mes</strong>{% else %}<span class="weekly-danger">sin suscripción vigente</span>{% endif %}</div>
+{% elif puede_vincular_savio %}
+<div class="muted"><a href="/?vincular={{ row.account.id }}">Vincular a Savio</a></div>
+{% else %}
+<div class="muted">Sin vincular a Savio</div>
+{% endif %}
