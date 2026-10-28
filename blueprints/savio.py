@@ -386,21 +386,25 @@ def link_master_to_cs():
     not_found = []
     for cid in savio_ids:
         sc = db.session.get(SavioCustomer, str(cid))
-        if not sc or not sc.tax_id:
+        if not sc:
             not_found.append(cid)
             continue
-        existing = CustomerRfc.query.filter_by(rfc=sc.tax_id).first()
+        # FIX-2026-10-28: la fila se ubica por cliente de Savio, que es único.
+        # Antes se buscaba por RFC, que no lo es: con el genérico
+        # XAXX010101000, o una empresa con varias razones en Savio, tomaba la
+        # fila de OTRO cliente, la movía a esta cuenta y chocaba con la del
+        # cliente elegido (500, no se guardaba nada). Y un cliente sin RFC se
+        # descartaba en silencio.
+        existing = CustomerRfc.query.filter_by(savio_customer_id=sc.customer_id).first()
         if existing:
-            # Si está bajo otro master, lo movemos a este
             if existing.master_id != master.id:
                 existing.master_id = master.id
-                existing.savio_customer_id = sc.customer_id
                 added += 1
             else:
                 skipped += 1
         else:
             db.session.add(CustomerRfc(
-                master_id=master.id, rfc=sc.tax_id,
+                master_id=master.id, rfc=sc.tax_id or "",
                 legal_name=sc.legal_name or sc.name or "",
                 savio_customer_id=sc.customer_id,
             ))

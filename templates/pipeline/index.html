@@ -3554,10 +3554,15 @@ async function saveVinculacion(){
   try{
     const r=await fetch('/api/savio/customers/master/link',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({cs_account_id:_vincState.accountId,savio_customer_ids:ids})});
-    const d=await r.json();
-    if(!r.ok)throw new Error(d.error||'error');
+    // FIX-2026-10-28: un 500 devuelve HTML; leerlo como JSON tapaba el error
+    // real y la ventana parecía haber guardado.
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(d.error||`el servidor respondió ${r.status}`);
+    if(d.not_found&&d.not_found.length){
+      alert(`No se vincularon ${d.not_found.length} clientes porque ya no existen en Savio. Sincroniza Savio y vuelve a intentarlo.`);
+    }
     closeVincModal();loadVincular();
-  }catch(e){alert('Error: '+e.message);}
+  }catch(e){alert('No se guardó la vinculación: '+e.message);}
 }
 async function syncOneCs(accId,nombre){
   document.getElementById('vinc-status').textContent=`Sincronizando ${nombre}...`;
