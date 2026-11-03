@@ -26,6 +26,11 @@ from sqlalchemy import or_, func
 
 UN_CANONICAS = ("Aromatex", "Pestex", "Weldex", "Nexo", "Café Origen")
 
+# FEAT-2026-11-02: unidades que se OFRECEN en pantalla. Nexo ya no se
+# ofrece, pero sigue siendo canónica: un lead que ya la tiene tiene que
+# seguir filtrándose y no perderla al editarse.
+UN_SELECCIONABLES = ("Aromatex", "Pestex", "Weldex", "Café Origen")
+
 # Aliases que mapean a cada UN canónica (case-insensitive).
 # Si un valor matchea cualquiera de estos aliases, se considera de esa UN.
 _UN_ALIASES = {
@@ -96,6 +101,42 @@ def normalizar_marcas(valores):
         if canon and canon not in out:
             out.append(canon)
     return out
+
+
+def cambio_de_marcas(dueña, actuales, nuevas):
+    """(lista_final, agregadas, quitadas) al editar las unidades en juego.
+
+    FEAT-2026-11-02: lo usan leads y oportunidades. La unidad dueña siempre
+    queda dentro: si se saca, el trato desaparecería de su propia vista del
+    pipe. Saber qué se agregó y qué se quitó es lo que permite bloquear
+    cambios en tratos cerrados y que un vendedor quite unidades.
+    """
+    lista = normalizar_marcas(nuevas)
+    canon_dueña = normalizar_un(dueña)
+    if canon_dueña and canon_dueña not in lista:
+        lista.insert(0, canon_dueña)
+    antes = normalizar_marcas(list(actuales or []) + ([dueña] if dueña else []))
+    agregadas = [m for m in lista if m not in antes]
+    quitadas = [m for m in antes if m not in lista]
+    return lista, agregadas, quitadas
+
+
+def bloqueo_cambio_de_marcas(cerrado, quitadas, puede_quitar):
+    """(mensaje, status HTTP) si el cambio de unidades no procede, o None.
+
+    - Trato cerrado: la comisión ya se calculó con esas unidades. Cambiarlas
+      después movería la tasa de una venta pendiente de monto, que se
+      recalcula al llegar la factura.
+    - Quitar una unidad solo lo hace un gerente: quitar Pestex, por ejemplo,
+      es saltarse el respaldo que Pestex exige al cerrar.
+    """
+    if cerrado:
+        return ("Las unidades de un trato cerrado ya no se cambian: la "
+                "comisión se calculó con ellas.", 409)
+    if quitadas and not puede_quitar:
+        return ("Solo un gerente puede quitar una unidad de negocio "
+                f"({', '.join(quitadas)}).", 403)
+    return None
 
 
 def filtrar_cs_accounts_por_un(query, account_model, un):

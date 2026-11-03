@@ -2566,6 +2566,10 @@ class CierreEvidencia(db.Model):
     oportunidad_id = db.Column(UUID(as_uuid=True), db.ForeignKey("oportunidades.id", ondelete="CASCADE"),
                                nullable=True, index=True)
     tipo = db.Column(db.String(40), nullable=False)
+    # FEAT-2026-11-02: unidad que respalda este archivo. En una venta cruzada
+    # cada unidad sube el suyo; sin esto un solo archivo de Pestex
+    # "respaldaba" también la parte de Aromatex. NULL = cierre de antes.
+    unidad = db.Column(db.String(30), nullable=True)
     archivo_url = db.Column(db.Text, nullable=False)
     archivo_nombre = db.Column(db.String(300), default="")
     subido_por = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=True)
@@ -2596,6 +2600,7 @@ class CierreEvidencia(db.Model):
             "oportunidad_id": str(self.oportunidad_id) if self.oportunidad_id else None,
             "tipo": self.tipo,
             "tipo_label": self.tipo_label,
+            "unidad": self.unidad,
             "archivo_url": self.archivo_url,
             "archivo_nombre": self.archivo_nombre,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -2836,7 +2841,13 @@ class Oportunidad(db.Model):
     )
     probabilidad = db.Column(db.Integer, default=10, nullable=False)  # 0-100, auto-ajustada por etapa
     propietario_id = db.Column(UUID(as_uuid=True), db.ForeignKey("usuarios.id"), nullable=True, index=True)
+    # marca_interes = la unidad DUEÑA: manda para la venta, el guardia de
+    # duplicados y las estadísticas, igual que en Lead.
     marca_interes = db.Column(db.String(80), nullable=True, index=True)  # Aromatex/Pestex/Weldex
+    # FEAT-2026-11-02: oportunidades multi UN. Todas las unidades en juego,
+    # incluida la dueña. Una venta cruzada exige respaldo de cada una.
+    marcas_interes = db.Column(ARRAY(db.String(80)), nullable=False,
+                               default=list, server_default="{}")
     estado_cliente = db.Column(db.String(100), nullable=True)
     num_sucursales = db.Column(db.Integer, nullable=True)
     # FEAT-2026-09-08: sucursal/plaza concreta del trato.
@@ -2894,6 +2905,9 @@ class Oportunidad(db.Model):
             "propietario_id": str(self.propietario_id) if self.propietario_id else None,
             "propietario_nombre": self.propietario.nombre if self.propietario else None,
             "marca_interes": self.marca_interes,
+            "marcas_interes": list(self.marcas_interes or
+                                   ([self.marca_interes] if self.marca_interes else [])),
+            "es_multi_un": len(self.marcas_interes or []) > 1,
             "estado_cliente": self.estado_cliente,
             "num_sucursales": self.num_sucursales,
             "sitio": self.sitio,

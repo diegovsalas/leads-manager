@@ -49,21 +49,81 @@ MAX_TIPOS = CierreEvidencia.MAX_TIPOS
 UNIDADES_CON_EVIDENCIA = ("pestex",)
 
 
-def requiere_evidencia(unidad) -> bool:
-    """¿Esta unidad de negocio exige evidencia para cerrar como ganado?
+def _canon(unidad):
+    """UN canónica de un valor de marca_interes, o el texto tal cual.
 
-    Acepta un string o una colección de unidades. Con una colección basta
-    que UNA la exija: un lead multi UN que trae Pestex mueve dinero de
-    Pestex, aunque la unidad dueña del trato sea otra.
+    marca_interes trae variantes que normalizar_un no reconoce ("PESTEX
+    RECURRENTE"); sin el substring contarían como una unidad distinta y un
+    trato de una sola unidad parecería venta cruzada.
     """
+    from un_filter import UN_CANONICAS, normalizar_un
+    texto = (unidad or "").strip()
+    if not texto:
+        return None
+    canon = normalizar_un(texto)
+    if canon:
+        return canon
+    bajo = texto.lower()
+    return next((c for c in UN_CANONICAS if c.lower() in bajo), texto)
+
+
+def unidades_en_juego(unidad):
+    """Unidades distintas de un trato, canónicas y en orden. Acepta un
+    string o una colección (la dueña más marcas_interes, con repetidos)."""
     if unidad is None:
-        return False
-    unidades = [unidad] if isinstance(unidad, str) else list(unidad)
-    for u in unidades:
-        texto = (u or "").strip().lower()
-        if any(marca in texto for marca in UNIDADES_CON_EVIDENCIA):
-            return True
-    return False
+        return []
+    valores = [unidad] if isinstance(unidad, str) else list(unidad)
+    out = []
+    for u in valores:
+        c = _canon(u)
+        if c and c not in out:
+            out.append(c)
+    return out
+
+
+def unidades_que_exigen(unidad, cruzada=False):
+    """Unidades que tienen que subir respaldo para cerrar como ganado.
+
+    FEAT-2026-11-02: en una venta cruzada TODAS lo exigen, cada una el suyo.
+    La venta cruzada paga tasa distinta, así que agregar una unidad sin
+    prueba de que esa parte se vendió es la forma de inflar una comisión.
+    En una venta de una sola unidad solo lo exige Pestex, como antes.
+
+    cruzada=True: el lead es de una unidad, pero el cliente ya compra otra
+    (comisiones.lead_es_multi_un). También paga tasa cruzada, así que
+    también sube su respaldo.
+    """
+    en_juego = unidades_en_juego(unidad)
+    if len(en_juego) > 1 or cruzada:
+        return en_juego
+    return [u for u in en_juego
+            if any(marca in u.lower() for marca in UNIDADES_CON_EVIDENCIA)]
+
+
+def unidad_para_guardar(pedida, unidad_trato):
+    """(unidad, error) — a qué unidad del trato va el respaldo que se sube.
+
+    En una venta cruzada hay que decirlo; en una de una sola unidad se toma
+    esa. Una unidad ajena al trato se rechaza: el respaldo no contaría para
+    nada y el vendedor creería que ya cumplió.
+    """
+    en_juego = unidades_en_juego(unidad_trato)
+    pedida = _canon(pedida)
+    if pedida is None:
+        if len(en_juego) > 1:
+            return None, "Es una venta cruzada: indica de qué unidad es este respaldo."
+        return (en_juego[0] if en_juego else None), None
+    if en_juego and pedida not in en_juego:
+        return None, f"{pedida} no es una de las unidades de este trato."
+    return pedida, None
+
+
+def requiere_evidencia(unidad, cruzada=False) -> bool:
+    """¿Este trato exige evidencia para cerrar como ganado?
+
+    Acepta un string o una colección de unidades (ver unidades_que_exigen).
+    """
+    return bool(unidades_que_exigen(unidad, cruzada))
 
 
 def _local_dir():
@@ -138,12 +198,14 @@ def _subir(storage, owner_kind, owner_id, archivo):
         return None, f"No se pudo subir «{archivo.filename}». Intenta de nuevo."
 
 
-def guardar(owner_kind, owner_id, tipos, files, subido_por=None):
+def guardar(owner_kind, owner_id, tipos, files, subido_por=None, unidad=None):
     """Sube los archivos de cada tipo marcado y registra las evidencias.
 
     owner_kind: 'lead' | 'oportunidad'
     tipos:      lista de claves de TIPOS que marcó el vendedor
     files:      request.files — se leen los campos 'evidencia_<tipo>'
+    unidad:     unidad que respaldan. Reemplaza solo el respaldo de esa
+                unidad, para que subir el de Aromatex no borre el de Pestex.
     Devuelve (evidencias_creadas, error). Con error, no se persiste nada:
     una evidencia a medias es peor que ninguna, porque la validación del
     cierre la contaría como suficiente.
@@ -178,7 +240,11 @@ def guardar(owner_kind, owner_id, tipos, files, subido_por=None):
     # reintenta con otros dos tipos dejaría cuatro registrados y
     # validar_para_cierre rebotaría por exceso — el vendedor quedaría atorado
     # sin forma de corregirlo desde la UI.
-    previas = evidencias_de(owner_kind, owner_id)
+    # Los archivos sin unidad son de antes de que existiera; cualquier subida
+    # nueva los reemplaza, o se sumarían a los nuevos y rebotaría por exceso.
+    unidad = _canon(unidad)
+    previas = [e for e in evidencias_de(owner_kind, owner_id)
+               if e.unidad is None or _canon(e.unidad) == unidad]
 
     creadas = []
     for tipo in tipos:
@@ -191,6 +257,7 @@ def guardar(owner_kind, owner_id, tipos, files, subido_por=None):
                 lead_id=owner_id if owner_kind == "lead" else None,
                 oportunidad_id=owner_id if owner_kind == "oportunidad" else None,
                 tipo=tipo,
+                unidad=unidad,
                 archivo_url=url,
                 archivo_nombre=archivo.filename[:300],
                 subido_por=subido_por,
@@ -213,7 +280,7 @@ def evidencias_de(owner_kind, owner_id):
     return q.order_by(CierreEvidencia.created_at).all()
 
 
-def validar_para_cierre(owner_kind, owner_id, unidad):
+def validar_para_cierre(owner_kind, owner_id, unidad, cruzada=False):
     """(ok, error) — ¿se puede cerrar este trato como ganado?
 
     Solo bloquea a las unidades que lo exigen; el resto pasa de largo. La
@@ -221,10 +288,25 @@ def validar_para_cierre(owner_kind, owner_id, unidad):
     request, para que no importe si el vendedor subió la evidencia en un
     paso previo o en el mismo envío.
     """
-    if not requiere_evidencia(unidad):
+    exigen = unidades_que_exigen(unidad, cruzada)
+    if not exigen:
         return True, None
 
     evs = evidencias_de(owner_kind, owner_id)
+    if len(unidades_en_juego(unidad)) > 1 or cruzada:
+        # Venta cruzada: cada unidad con su propio respaldo. Los archivos
+        # sin unidad (de antes de esta regla) no cuentan para ninguna.
+        faltan = [u for u in exigen
+                  if not any(_canon(e.unidad) == u for e in evs)]
+        if faltan:
+            return False, ("Es una venta cruzada: cada unidad necesita su propio "
+                           "respaldo. Falta el de " + " y ".join(faltan) + ".")
+        for u in exigen:
+            tipos = {e.tipo for e in evs if _canon(e.unidad) == u}
+            if len(tipos) > MAX_TIPOS:
+                return False, f"Máximo {MAX_TIPOS} respaldos por unidad; {u} tiene {len(tipos)}."
+        return True, None
+
     if not evs:
         return False, ("Para cerrar una venta de Pestex necesitas adjuntar el "
                        "respaldo: orden de compra, contrato, correo de "

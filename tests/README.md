@@ -18,6 +18,7 @@ descubre en la nómina.
 | `test_lead_notifications.py` | avisos de asignación | destinatario único, privacidad, rollback, reasignación, reintentos idempotentes y enlace con login seguro; todos los envíos son simulados |
 | `test_upsell.py` | expansión en oportunidades | clasificación desde leads/CS, permisos, montos, cancelación y reapertura sin duplicados, evidencia, forecast y sintaxis del Pipe |
 | `test_cs_weekly.py` | seguimiento semanal AAA | alcance por KAM, selección independiente del tier, faltantes, proyecciones, cortes, incidencias congeladas y guardado con control de versiones |
+| `test_multi_un.py` | leads y oportunidades multi UN | que una venta cruzada no cierre sin respaldo de cada unidad, que un trato cerrado no cambie de unidades, que solo un gerente quite unidades, que otra unidad al mismo cliente vaya en un lead propio y que la venta cruzada se reconozca por cliente |
 | `test_metas.py` | avance contra meta | que una venta cuente en el mes en que **se cerró**, no en el que entró el lead |
 
 Las regresiones de upsell también verifican endpoints HTTP, porque los permisos y las validaciones deben proteger todas las vías de cierre. El render del Pipe comprueba la sintaxis del JavaScript.

@@ -103,15 +103,49 @@ def tasa_un(unidad, mensualidad, multi_un=False):
     return _d(mejor.tasa), mejor
 
 
+def unidades_cruzadas_del_cliente(lead):
+    """Unidades con venta ACTIVA del mismo cliente que este lead no tiene.
+
+    FEAT-2026-11-02: la venta cruzada se mide por cliente. Cuando un
+    vendedor le vende Pestex a Pastelería Leti, que ya compra Aromatex, son
+    dos leads distintos —cada uno con su etapa, su cierre y su venta— y aun
+    así es venta cruzada. El cliente es la cuenta (Account); un lead sin
+    cuenta no tiene con qué cruzarse.
+
+    Se evalúa al cerrar. La que cierra segunda es la cruzada; la primera no
+    cambia después, porque la comisión se congela al cerrar.
+    """
+    if not getattr(lead, "account_id", None):
+        return []
+    from sqlalchemy import or_
+    from models import Lead, Oportunidad, Sale
+    from cierre_evidencia import unidades_en_juego
+    filas = (db.session.query(Sale.unit)
+             .outerjoin(Lead, Sale.lead_id == Lead.id)
+             .outerjoin(Oportunidad, Sale.opportunity_id == Oportunidad.id)
+             .filter(Sale.status == "activa",
+                     or_(Sale.lead_id.is_(None), Sale.lead_id != lead.id),
+                     or_(Lead.account_id == lead.account_id,
+                         Oportunidad.account_id == lead.account_id))
+             .all())
+    propias = unidades_en_juego(
+        [lead.marca_interes] + list(getattr(lead, "marcas_interes", None) or []))
+    return [u for u in unidades_en_juego([f[0] for f in filas]) if u not in propias]
+
+
 def lead_es_multi_un(lead):
-    """La venta es cruzada cuando el lead tiene dos o más unidades en juego.
+    """La venta es cruzada cuando hay dos o más unidades en juego: en el
+    mismo lead (un paquete que se cierra junto) o en el mismo cliente (ver
+    unidades_cruzadas_del_cliente).
 
     Se mide por unidades, no por número de participantes: que dos personas
     trabajen un lead de una sola unidad no lo vuelve una venta cruzada. Quién
     participó es lo que decide el REPARTO (ver aplica_tabulador); cuántas
     unidades hay en juego es lo que decide la TASA.
     """
-    return len(getattr(lead, "marcas_interes", None) or []) > 1
+    if len(getattr(lead, "marcas_interes", None) or []) > 1:
+        return True
+    return bool(unidades_cruzadas_del_cliente(lead))
 
 
 def tramos_traslapados(unidad):

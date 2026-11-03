@@ -33,7 +33,16 @@ def _falta_evidencia(lead, unidad=None):
     # Un lead multi UN que trae Pestex exige respaldo aunque la unidad dueña
     # del trato sea otra: el dinero de Pestex se cierra igual.
     unidades = [unidad or lead.marca_interes] + list(lead.marcas_interes or [])
-    ok, err = CE.validar_para_cierre("lead", lead.id, unidades)
+    # FEAT-2026-11-02: si el cliente ya compra otra unidad, esta venta paga
+    # tasa cruzada y tiene que traer su propio respaldo, aunque sea Aromatex.
+    import comisiones as C
+    del_cliente = C.unidades_cruzadas_del_cliente(lead)
+    ok, err = CE.validar_para_cierre("lead", lead.id, unidades,
+                                     cruzada=bool(del_cliente))
+    if not ok and del_cliente and len(CE.unidades_en_juego(unidades)) == 1:
+        err = (f"Este cliente ya compra {' y '.join(del_cliente)}, así que es una "
+               f"venta cruzada: adjunta el respaldo de {CE.unidades_en_juego(unidades)[0]} "
+               "(orden de compra, contrato, correo, WhatsApp o cita en Operandium / iGeo).")
     return None if ok else err
 
 
@@ -579,13 +588,13 @@ def me():
     # FIX-2026-08-25: antes era una comparación literal contra "super_admin",
     # así que Developer y los Super Admin segmentados no contaban como admin
     # y el modal les escondía opciones que sí les tocan.
-    from blueprints.auth import is_admin_role
+    from blueprints.auth import is_admin_role, get_vendedor_filter
     is_admin = is_admin_role()
 
     # Un admin da de alta leads de cualquier unidad, no solo de las suyas.
     if is_admin:
-        from un_filter import UN_CANONICAS
-        marcas = list(UN_CANONICAS)
+        from un_filter import UN_SELECCIONABLES
+        marcas = list(UN_SELECCIONABLES)
 
     # Vendedores a los que se les puede asignar el lead. Solo los admin
     # pueden asignar a otra persona; el resto crea a su propio nombre.
@@ -603,6 +612,9 @@ def me():
         "nombre": nombre, "rol": rol, "is_admin": is_admin,
         "marcas": marcas,          # ej. ["Aromatex", "Pestex"]
         "vendedores": vendedores,  # vacío si no es admin
+        # Misma regla que bloqueo_cambio_de_marcas; el modal la usa para no
+        # ofrecer quitar una unidad que el backend va a rechazar.
+        "puede_quitar_unidades": get_vendedor_filter() is None,
     })
 
 
@@ -729,12 +741,24 @@ def actualizar_lead(lead_id):
     # Unidades en juego. Se normalizan igual que al crear, y la unidad dueña
     # se mantiene dentro de la lista: si se saca, el lead desaparecería de su
     # propia vista del pipe.
+    cambio_unidades = None
     if "marcas_interes" in data:
-        from un_filter import normalizar_marcas, normalizar_un
-        nuevas = normalizar_marcas(data.get("marcas_interes") or [])
-        dueña = normalizar_un(lead.marca_interes)
-        if dueña and dueña not in nuevas:
-            nuevas.insert(0, dueña)
+        from un_filter import cambio_de_marcas
+        antes = list(lead.marcas_interes or [])
+        nuevas, agregadas, quitadas = cambio_de_marcas(
+            lead.marca_interes, antes, data.get("marcas_interes") or [])
+        if agregadas or quitadas:
+            from blueprints.auth import get_vendedor_filter
+            from un_filter import bloqueo_cambio_de_marcas
+            bloqueo = bloqueo_cambio_de_marcas(
+                cerrado=lead.etapa_pipeline in (EtapaPipeline.CIERRE_GANADO,
+                                                EtapaPipeline.CIERRE_PERDIDO),
+                quitadas=quitadas,
+                puede_quitar=get_vendedor_filter() is None)
+            if bloqueo:
+                db.session.rollback()
+                return jsonify({"error": bloqueo[0]}), bloqueo[1]
+            cambio_unidades = (antes, nuevas)
         lead.marcas_interes = nuevas
 
     # FEAT-2026-08-25: editar un lead no puede dejarlo sin ninguna forma de
@@ -806,6 +830,10 @@ def actualizar_lead(lead_id):
         _apply_icp(lead)
 
     db.session.commit()
+    if cambio_unidades:
+        antes, nuevas = cambio_unidades
+        log_actividad("editar", "lead", lead.id,
+                      f"{lead.nombre}: unidades {', '.join(antes) or '—'} → {', '.join(nuevas)}")
     out = lead.to_dict()
     # La comisión se recalculó igual; solo no se le informa a quien no
     # debe verla (ver el bloque equivalente en cerrar_lead).
@@ -1600,15 +1628,27 @@ def evidencia_cierre_lead(lead_id):
     if vendedor_id and str(lead.usuario_asignado_id) != str(vendedor_id):
         return jsonify({"error": "No tienes permisos sobre este lead"}), 403
 
+    unidades = [lead.marca_interes] + list(lead.marcas_interes or [])
     if request.method == "GET":
+        import comisiones as C
+        del_cliente = C.unidades_cruzadas_del_cliente(lead)
+        cruzada = bool(del_cliente)
         return jsonify({
             "evidencias": [e.to_dict() for e in CE.evidencias_de("lead", lead.id)],
-            "requerida": CE.requiere_evidencia(lead.marca_interes),
+            "requerida": CE.requiere_evidencia(unidades, cruzada),
+            "unidades": CE.unidades_que_exigen(unidades, cruzada),
+            # Lo que el cliente ya compra: el modal lo muestra para que el
+            # vendedor entienda por qué se le pide respaldo.
+            "cliente_ya_compra": del_cliente,
             "tipos": CE.TIPOS, "max_tipos": CE.MAX_TIPOS,
         })
 
+    unidad, err = CE.unidad_para_guardar(request.form.get("unidad"), unidades)
+    if err:
+        return jsonify({"error": err}), 400
     creadas, err = CE.guardar("lead", lead.id, request.form.getlist("tipo"),
-                              request.files, subido_por=session.get("usuario_id"))
+                              request.files, subido_por=session.get("usuario_id"),
+                              unidad=unidad)
     if err:
         db.session.rollback()
         return jsonify({"error": err}), 400

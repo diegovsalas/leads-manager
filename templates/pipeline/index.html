@@ -555,7 +555,6 @@ fbq('track','PageView');
       <option value="Aromatex">🟧 Aromatex</option>
       <option value="Pestex">🟨 Pestex</option>
       <option value="Weldex">🟦 Weldex</option>
-      <option value="Nexo">🟪 Nexo</option>
       <option value="Café Origen">🟫 Café Origen</option>
     </select>
   </div>
@@ -861,7 +860,7 @@ fbq('track','PageView');
           <div class="k-card k-card-oppo" data-oppo-id="{{ op.id }}"
                data-nombre="{{ op.nombre or '' }}" data-telefono=""
                data-empresa="{{ op.empresa or '' }}"
-               data-marca="{{ op.marca_interes or '' }}"
+               data-marca="{{ (op.marcas_interes or [op.marca_interes or ''])|join(',') }}"
                data-origen="Oportunidad"
                data-created="{{ op.fecha_creacion.isoformat() if op.fecha_creacion else '' }}"
                data-updated="{{ op.fecha_actualizacion.isoformat() if op.fecha_actualizacion else '' }}"
@@ -869,7 +868,7 @@ fbq('track','PageView');
                onclick="openOppById('{{ op.id }}')">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
               <span class="k-card-oppo-label">💰 OPORTUNIDAD</span>
-              {% if op.marca_interes %}<span class="tag tag-marca">{{ op.marca_interes }}</span>{% endif %}
+              {% if op.marcas_interes and op.marcas_interes|length > 1 %}<span>{% for m in op.marcas_interes %}<span class="tag tag-marca">{{ m }}</span>{% endfor %}</span>{% elif op.marca_interes %}<span class="tag tag-marca">{{ op.marca_interes }}</span>{% endif %}
             </div>
             <div class="k-card-name">{{ op.nombre }}</div>
             {% if op.empresa %}<div style="font-size:11px;color:var(--text2);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ op.empresa }}</div>{% endif %}
@@ -887,7 +886,7 @@ fbq('track','PageView');
           <div class="k-card{% if lead.has_oppo %} is-converted{% endif %}{% if lead.needs_icp %} needs-icp{% endif %}" id="kcard-{{ lead.id }}" data-lead-id="{{ lead.id }}"
                data-nombre="{{ lead.nombre or 'Sin nombre' }}" data-telefono="{{ lead.telefono or '' }}"
                data-empresa="{{ lead.empresa_nombre or '' }}"
-               data-marca="{{ lead.marca_interes or '' }}"
+               data-marca="{{ (lead.marcas_interes or [lead.marca_interes or ''])|join(',') }}"
                data-origen="{{ lead.origen.value if lead.origen else 'Manual' }}"
                data-created="{{ lead.fecha_creacion.isoformat() if lead.fecha_creacion else '' }}"
                data-updated="{{ lead.fecha_actualizacion.isoformat() if lead.fecha_actualizacion else '' }}"
@@ -982,7 +981,7 @@ fbq('track','PageView');
     <table><thead><tr><th>Empresa</th><th>Contacto</th><th>Unidad</th><th>Cantidad</th><th>Valor</th><th>Etapa</th><th>Vendedor</th><th>Origen</th></tr></thead>
     <tbody id="leads-tbody">
       {% for etapa in etapas %}{% for lead in pipeline[etapa.value].leads %}
-      <tr data-marca="{{ lead.marca_interes or '' }}" onclick="abrirLeadPanel('{{ lead.id }}')">
+      <tr data-marca="{{ (lead.marcas_interes or [lead.marca_interes or ''])|join(',') }}" onclick="abrirLeadPanel('{{ lead.id }}')">
         {# FEAT-2026-08-25: manda la empresa, no la persona. Los leads sin
            empresa (uso personal) caen al nombre del contacto para no dejar
            el renglón en blanco. #}
@@ -1042,7 +1041,7 @@ fbq('track','PageView');
     </div>
     <div class="section-h2">Descripcion</div>
     <div class="editable-block" contenteditable="true" data-ph="Escribe aqui...">
-      <p>CRM comercial para <strong>Grupo Avantex</strong> con 5 unidades: Aromatex Home, Aromatex, Pestex, Weldex y Nexo.</p>
+      <p>CRM comercial para <strong>Grupo Avantex</strong> con sus unidades: Aromatex Home, Aromatex, Pestex, Weldex y Café Origen.</p>
       <p style="margin-top:8px;"><strong>Funciones:</strong></p>
       <ul style="margin:4px 0 0 20px;line-height:2;">
         <li>Kanban para embudo de ventas</li><li>Round-Robin por especialidad de marca</li><li>Chat WhatsApp (Cloud API)</li>
@@ -1569,7 +1568,7 @@ fbq('track','PageView');
   <div style="padding:20px 48px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
     <select class="form-input" id="opps-marca" onchange="loadOpps()" style="max-width:160px;font-size:13px;">
       <option value="">Todas las marcas</option>
-      <option value="Aromatex">Aromatex</option><option value="Pestex">Pestex</option><option value="Weldex">Weldex</option><option value="Nexo">Nexo</option><option value="Café Origen">Café Origen</option>
+      <option value="Aromatex">Aromatex</option><option value="Pestex">Pestex</option><option value="Weldex">Weldex</option><option value="Café Origen">Café Origen</option>
     </select>
     <button class="btn btn-filled" onclick="openOppModal()" style="font-size:13px;">+ Nuevo upsell</button>
     <button class="btn" onclick="loadOpps()" style="font-size:13px;">Refrescar</button>
@@ -2171,7 +2170,7 @@ fbq('track','PageView');
           <option value="Pestex">Pestex</option>
           <option value="Weldex">Weldex</option>
           <option value="Aromatex Home">Aromatex Home</option>
-          <option value="Nexo">Nexo</option>
+          
           <option value="Café Origen">Café Origen</option>
         </select>
       </div>
@@ -2331,7 +2330,7 @@ fbq('track','PageView');
 <div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()"><div class="modal">
   <div class="modal-title">Nuevo lead</div>
   <div class="form-row"><div class="form-group"><label class="form-label">Nombre</label><input class="form-input" id="f-nombre" type="text" placeholder="Juan Perez"/></div><div class="form-group"><label class="form-label">Telefono</label><input class="form-input" id="f-tel" type="text" placeholder="+52 55 ..."/></div></div>
-  <div class="form-row"><div class="form-group"><label class="form-label">Unidad de negocio</label><select class="form-select" id="f-marca"><option value="">Sin especificar</option><option>Aromatex Home</option><option>Aromatex</option><option>Pestex</option><option>Weldex</option><option>Nexo</option></select></div><div class="form-group"><label class="form-label">Origen</label><select class="form-select" id="f-origen" onchange="toggleVendedorSelect()"><option value="Web" selected>Web</option><option value="WhatsApp Organico">WhatsApp Organico</option><option value="Prospeccion">Prospeccion</option><option value="Meta Ads">Meta Ads (auto-asigna)</option></select></div></div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Unidad de negocio</label><select class="form-select" id="f-marca"><option value="">Sin especificar</option><option>Aromatex Home</option><option>Aromatex</option><option>Pestex</option><option>Weldex</option><option>Café Origen</option></select></div><div class="form-group"><label class="form-label">Origen</label><select class="form-select" id="f-origen" onchange="toggleVendedorSelect()"><option value="Web" selected>Web</option><option value="WhatsApp Organico">WhatsApp Organico</option><option value="Prospeccion">Prospeccion</option><option value="Meta Ads">Meta Ads (auto-asigna)</option></select></div></div>
   <div class="form-group" id="f-vendedor-group"><label class="form-label">Asignar a vendedor</label><select class="form-select" id="f-vendedor"><option value="">Sin asignar</option></select></div>
   <div class="form-row"><div class="form-group"><label class="form-label">Cantidad</label><input class="form-input" id="f-cantidad" type="number" placeholder="10" oninput="calcValor()"/></div><div class="form-group"><label class="form-label">Precio unitario</label><input class="form-input" id="f-precio" type="number" placeholder="1790" oninput="calcValor()"/></div></div>
   <div class="form-group"><label class="form-label">Valor total</label><input class="form-input" id="f-valor" type="number" placeholder="Se calcula" style="font-weight:600;color:var(--text);"/></div>
@@ -2346,7 +2345,7 @@ fbq('track','PageView');
 <!-- Modal: Gasto publicidad -->
 <div class="modal-overlay" id="modal-gasto" onclick="if(event.target===this)closeGastoModal()"><div class="modal">
   <div class="modal-title">Registrar gasto de publicidad</div>
-  <div class="form-row"><div class="form-group"><label class="form-label">Plataforma</label><select class="form-select" id="g-plat"><option>Facebook</option><option>Instagram</option><option>Google</option><option>TikTok</option></select></div><div class="form-group"><label class="form-label">Unidad de negocio</label><select class="form-select" id="g-marca"><option value="">General</option><option>Aromatex Home</option><option>Aromatex</option><option>Pestex</option><option>Weldex</option><option>Nexo</option></select></div></div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Plataforma</label><select class="form-select" id="g-plat"><option>Facebook</option><option>Instagram</option><option>Google</option><option>TikTok</option></select></div><div class="form-group"><label class="form-label">Unidad de negocio</label><select class="form-select" id="g-marca"><option value="">General</option><option>Aromatex Home</option><option>Aromatex</option><option>Pestex</option><option>Weldex</option></select></div></div>
   <div class="form-group"><label class="form-label">Campana</label><input class="form-input" id="g-camp" type="text" placeholder="Nombre de campana"/></div>
   <div class="form-row"><div class="form-group"><label class="form-label">Monto ($)</label><input class="form-input" id="g-monto" type="number" placeholder="0"/></div><div class="form-group"><label class="form-label">Fecha</label><input class="form-input" id="g-fecha" type="date"/></div></div>
   <div class="modal-actions"><button class="btn" onclick="closeGastoModal()">Cancelar</button><button class="btn btn-filled" onclick="crearGasto()">Registrar</button></div>
@@ -2390,7 +2389,6 @@ fbq('track','PageView');
         <option value="Super Admin Aromatex">Super Admin Aromatex (Aromatex + Home)</option>
         <option value="Super Admin Pestex">Super Admin Pestex</option>
         <option value="Super Admin Comercial">Super Admin Comercial (Admin + Aromatex)</option>
-        <option value="Super Admin Nexo">Super Admin Nexo</option>
         <option value="Gerente Comercial Aromatex">Gerente Comercial Aromatex</option>
         <option value="Vendedor">Vendedor (ve solo sus leads)</option>
         <option value="KAM">KAM (CS dashboard)</option>
@@ -2419,7 +2417,6 @@ fbq('track','PageView');
       <label class="mv-chip"><input type="checkbox" value="Aromatex Home"/><span>Aromatex Home</span></label>
       <label class="mv-chip"><input type="checkbox" value="Pestex"/><span>Pestex</span></label>
       <label class="mv-chip"><input type="checkbox" value="Weldex"/><span>Weldex</span></label>
-      <label class="mv-chip"><input type="checkbox" value="Nexo"/><span>Nexo</span></label>
       <label class="mv-chip"><input type="checkbox" value="Café Origen"/><span>Café Origen</span></label>
     </div>
   </div>
@@ -2746,7 +2743,7 @@ fbq('track','PageView');
   <div style="font-size:12px;color:var(--text2);margin-bottom:12px;padding:8px;background:var(--bg-sunken);border-radius:var(--r2);">Confirma los datos antes de generar el PDF. El vendedor puede editar cualquier campo.</div>
   <div class="form-row"><div class="form-group"><label class="form-label">Cliente</label><input class="form-input" id="cot-nombre" type="text"/></div><div class="form-group"><label class="form-label">Empresa</label><input class="form-input" id="cot-empresa" type="text"/></div></div>
   <div class="form-row"><div class="form-group"><label class="form-label">Teléfono</label><input class="form-input" id="cot-tel" type="text"/></div><div class="form-group"><label class="form-label">Correo (para envío)</label><input class="form-input" id="cot-correo" type="email" placeholder="cliente@empresa.com"/></div></div>
-  <div class="form-row"><div class="form-group"><label class="form-label">Unidad de negocio</label><select class="form-select" id="cot-marca"><option>Aromatex</option><option>Aromatex Home</option><option>Pestex</option><option>Weldex</option><option>Nexo</option></select></div><div class="form-group"><label class="form-label">Condiciones de pago</label><select class="form-select" id="cot-pago"><option value="PUE">PUE — Pago en una exhibición</option><option value="PPD 30 días">PPD — 30 días (clientes clave)</option></select></div></div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Unidad de negocio</label><select class="form-select" id="cot-marca"><option>Aromatex</option><option>Aromatex Home</option><option>Pestex</option><option>Weldex</option></select></div><div class="form-group"><label class="form-label">Condiciones de pago</label><select class="form-select" id="cot-pago"><option value="PUE">PUE — Pago en una exhibición</option><option value="PPD 30 días">PPD — 30 días (clientes clave)</option></select></div></div>
   <div style="border-top:1px solid var(--border-light);margin-top:8px;padding-top:12px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
       <span style="font-size:13px;font-weight:600;">Productos / Servicios</span>
@@ -3055,7 +3052,7 @@ const socket=io();
 })();
 
 // FEAT-2026-06-29: helpers globales de filtro UN
-window.UN_CANONICAS = ['Aromatex', 'Pestex', 'Weldex', 'Nexo', 'Café Origen'];
+window.UN_CANONICAS = ['Aromatex', 'Pestex', 'Weldex', 'Café Origen'];
 window.getUN = function(){
   return (localStorage.getItem('avantex_un') || 'Todas');
 };
@@ -3170,7 +3167,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
         const esp = (window.MI_ESPECIALIDAD || []);
         const norm = {
           'aromatex':'Aromatex', 'aromatex home':'Aromatex',
-          'pestex':'Pestex', 'weldex':'Weldex', 'nexo':'Nexo',
+          'pestex':'Pestex', 'weldex':'Weldex',
           'café origen':'Café Origen', 'cafe origen':'Café Origen'
         };
         const canon = new Set();
@@ -4682,11 +4679,16 @@ function clearFiltroMarca(){
   document.getElementById('filter-banner').style.display='none';
   applyFilter();
 }
+// data-marca trae TODAS las unidades en juego separadas por coma: un trato
+// multi UN tiene que verse en la vista de cada una, no solo en la de la dueña.
+function _tieneMarca(el,marca){
+  return (el.dataset.marca||'').split(',').includes(marca);
+}
 function applyFilter(){
   applyPipeFilters();
   // Filter table rows
   document.querySelectorAll('#leads-tbody tr').forEach(r=>{
-    r.style.display=(!filtroMarca||r.dataset.marca===filtroMarca)?'':'none';
+    r.style.display=(!filtroMarca||_tieneMarca(r,filtroMarca))?'':'none';
   });
   loadDashboard();
 }
@@ -4788,7 +4790,7 @@ function applyPipeFilters(){
     const emp=(c.dataset.empresa||'').toLowerCase();
     const cardOrigin=c.dataset.origen||'Manual';
     let show=true;
-    if(filtroMarca&&c.dataset.marca!==filtroMarca)show=false;
+    if(filtroMarca&&!_tieneMarca(c,filtroMarca))show=false;
     if(q&&!(n.includes(q)||p.includes(q)||emp.includes(q)))show=false;
     if(origin&&cardOrigin!==origin)show=false;
     if(month&&dateMode==='created'&&!_pipeMonthMatches(c.dataset.created,month))show=false;
@@ -6461,6 +6463,7 @@ async function moverOpp(oppId,etapa){
 }
 
 let _oeEtapaPendiente='Cerrado Ganado';
+let _oeUnidades=[];
 
 function closeOppEvid(){document.getElementById('modal-opp-evid').classList.remove('open');loadOpps();}
 
@@ -6471,59 +6474,32 @@ async function openOppEvid(oppId,motivo){
   // vendedor no puede confirmar que esta cerrando lo que cree.
   const ctx=document.getElementById('oe-contexto');
   ctx.style.display='none'; ctx.innerHTML='';
+  _oeUnidades=[];
   try{
     const r=await fetch(`/api/oportunidades/${oppId}`);
     if(r.ok){
       const o=await r.json();
+      _oeUnidades=_evidUnidadesQueExigen(o.marcas_interes);
       const partes=[o.empresa,o.sitio].filter(Boolean).join(' · ');
       ctx.innerHTML=`<div style="font-size:12px;font-weight:600;color:var(--text);">${o.nombre||''}</div>`
         + (partes?`<div style="font-size:10px;color:var(--text2);margin-top:2px;">${partes}</div>`:'')
-        + (o.marca_interes?`<div style="margin-top:3px;"><span style="display:inline-block;border:1px solid var(--copper);color:var(--copper);border-radius:10px;padding:0 7px;font-size:10px;">${o.marca_interes}</span></div>`:'');
+        + ((o.marcas_interes||[]).length?`<div style="margin-top:3px;">${o.marcas_interes.map(m=>`<span style="display:inline-block;border:1px solid var(--copper);color:var(--copper);border-radius:10px;padding:0 7px;font-size:10px;margin-right:4px;">${_esc(m)}</span>`).join('')}</div>`:'');
       ctx.style.display='block';
     }
   }catch{ /* el contexto es ayuda, no requisito: si falla se sigue */ }
   document.getElementById('oe-msg').textContent='';
-  document.getElementById('oe-tipos').innerHTML=
-    Object.entries(MG_EVID_TIPOS).map(([k,label])=>`
-      <div style="border:1px solid var(--border);border-radius:5px;padding:6px 8px;">
-        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;">
-          <input type="checkbox" class="oe-chk" value="${k}" onchange="_oeToggle(this)"/>
-          <span>${label}</span>
-        </label>
-        <input type="file" id="oe-file-${k}" multiple
-               style="display:none;margin-top:6px;font-size:11px;width:100%;"
-               accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.doc,.docx,.xls,.xlsx"/>
-      </div>`).join('');
+  _evidRender('oe-tipos','oe',_oeUnidades.length?_oeUnidades:[null]);
   document.getElementById('modal-opp-evid').classList.add('open');
-}
-
-function _oeToggle(chk){
-  const msg=document.getElementById('oe-msg');
-  if([...document.querySelectorAll('.oe-chk:checked')].length>MG_EVID_MAX){
-    chk.checked=false; msg.textContent='Maximo '+MG_EVID_MAX+' respaldos por cierre.'; return;
-  }
-  msg.textContent='';
-  const f=document.getElementById('oe-file-'+chk.value);
-  f.style.display=chk.checked?'block':'none';
-  if(!chk.checked) f.value='';
 }
 
 async function confirmarOppEvid(){
   const oppId=document.getElementById('oe-opp-id').value;
   const msg=document.getElementById('oe-msg');
-  const marcados=[...document.querySelectorAll('.oe-chk:checked')];
-  if(!marcados.length){msg.textContent='Marca con que confirmas la venta (1 o 2 respaldos).';return;}
-  const fd=new FormData();
-  for(const chk of marcados){
-    const input=document.getElementById('oe-file-'+chk.value);
-    if(!input||!input.files.length){msg.textContent='Falta el archivo de: '+MG_EVID_TIPOS[chk.value]+'.';return;}
-    fd.append('tipo',chk.value);
-    for(const f of input.files) fd.append('evidencia_'+chk.value,f);
-  }
-  try{
-    const r=await fetch(`/api/oportunidades/${oppId}/evidencia-cierre`,{method:'POST',body:fd});
-    if(!r.ok){const e=await r.json().catch(()=>({}));msg.textContent=e.error||'No se pudo subir el respaldo';return;}
-  }catch(err){ msg.textContent='No se pudo subir el respaldo: '+err.message; return; }
+  // Sin unidades conocidas (falló la carga) se sube sin rotular y el backend
+  // decide; si es venta cruzada, lo rechaza pidiendo la unidad.
+  const unidades=_oeUnidades.length?_oeUnidades:[null];
+  const ev=await _evidSubir(`/api/oportunidades/${oppId}/evidencia-cierre`,'oe',unidades);
+  if(!ev.ok){msg.textContent=ev.msg;return;}
 
   // Con el respaldo guardado, el mismo movimiento que rebotó ahora pasa.
   document.getElementById('modal-opp-evid').classList.remove('open');
@@ -6542,41 +6518,82 @@ const MG_EVID_TIPOS={
 };
 const MG_EVID_MAX=2;
 let _mgEvidReq=false;
+let _mgEvidUnidades=[];
 
-function _mgEvidAplica(lead){
-  const marcas=(lead&&lead.marcas_interes&&lead.marcas_interes.length)
-    ? lead.marcas_interes : [lead&&lead.marca_interes];
-  return marcas.some(m=>(m||'').toLowerCase().includes('pestex'));
+// FEAT-2026-11-02: mismo criterio que cierre_evidencia.unidades_que_exigen.
+// Venta cruzada: todas las unidades, cada una con su respaldo. Una sola
+// unidad: solo Pestex. Las marcas ya llegan normalizadas (marcas_interes).
+function _evidUnidadesQueExigen(marcas){
+  const u=[...new Set((marcas||[]).filter(Boolean))];
+  if(u.length>1) return u;
+  return u.filter(m=>m.toLowerCase().includes('pestex'));
 }
 
-function _mgEvidMsg(txt){document.getElementById('mg-evidencia-msg').textContent=txt||'';}
-
-function _mgRenderEvidencia(){
-  document.getElementById('mg-evidencia-tipos').innerHTML=
-    Object.entries(MG_EVID_TIPOS).map(([k,label])=>`
-      <div style="border:1px solid var(--border);border-radius:5px;padding:6px 8px;">
-        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;">
-          <input type="checkbox" class="mg-evid-chk" value="${k}" onchange="_mgEvidToggle(this)"/>
-          <span>${label}</span>
-        </label>
-        <input type="file" id="mg-evid-file-${k}" class="mg-evid-file" multiple
-               style="display:none;margin-top:6px;font-size:11px;width:100%;"
-               accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.doc,.docx,.xls,.xlsx"/>
-      </div>`).join('');
-  _mgEvidMsg('');
+// Un bloque de casillas por unidad. Con una sola unidad no se rotula: se ve
+// igual que antes. pref distingue el modal (mg = lead, oe = oportunidad).
+function _evidRender(contId,pref,unidades){
+  const rotular=unidades.length>1;
+  document.getElementById(contId).innerHTML=unidades.map((u,i)=>`
+    <div style="${rotular?'border:1px solid var(--border);border-radius:6px;padding:8px;':''}display:flex;flex-direction:column;gap:6px;">
+      ${rotular?`<div style="font-size:11px;font-weight:600;">Respaldo de ${_esc(u)}</div>`:''}
+      ${Object.entries(MG_EVID_TIPOS).map(([k,label])=>`
+        <div style="border:1px solid var(--border);border-radius:5px;padding:6px 8px;">
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;">
+            <input type="checkbox" class="${pref}-chk" data-i="${i}" value="${k}" onchange="_evidToggle(this,'${pref}')"/>
+            <span>${label}</span>
+          </label>
+          <input type="file" id="${pref}-file-${i}-${k}" multiple
+                 style="display:none;margin-top:6px;font-size:11px;width:100%;"
+                 accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.doc,.docx,.xls,.xlsx"/>
+        </div>`).join('')}
+    </div>`).join('');
 }
 
-function _mgEvidToggle(chk){
-  if([...document.querySelectorAll('.mg-evid-chk:checked')].length>MG_EVID_MAX){
+function _evidMsgEl(pref){return document.getElementById(pref==='mg'?'mg-evidencia-msg':'oe-msg');}
+
+function _evidToggle(chk,pref){
+  const msg=_evidMsgEl(pref);
+  const delBloque=document.querySelectorAll(`.${pref}-chk[data-i="${chk.dataset.i}"]:checked`);
+  if(delBloque.length>MG_EVID_MAX){
     chk.checked=false;
-    _mgEvidMsg('Maximo '+MG_EVID_MAX+' respaldos por cierre.');
+    msg.textContent='Maximo '+MG_EVID_MAX+' respaldos por unidad.';
     return;
   }
-  _mgEvidMsg('');
-  const f=document.getElementById('mg-evid-file-'+chk.value);
+  msg.textContent='';
+  const f=document.getElementById(`${pref}-file-${chk.dataset.i}-${chk.value}`);
   f.style.display=chk.checked?'block':'none';
   if(!chk.checked) f.value='';
 }
+
+// Arma un envío por unidad y los sube en orden. Valida todo ANTES de subir
+// nada, para no dejar la mitad de los respaldos guardados.
+async function _evidSubir(url,pref,unidades){
+  const envios=[];
+  for(let i=0;i<unidades.length;i++){
+    const marcados=[...document.querySelectorAll(`.${pref}-chk[data-i="${i}"]:checked`)];
+    const de=unidades.length>1?` de ${unidades[i]}`:'';
+    if(!marcados.length) return {ok:false,msg:`Marca con que confirmas la venta${de} (1 o 2 respaldos).`};
+    const fd=new FormData();
+    if(unidades[i]) fd.append('unidad',unidades[i]);
+    for(const chk of marcados){
+      const input=document.getElementById(`${pref}-file-${i}-${chk.value}`);
+      if(!input||!input.files.length)
+        return {ok:false,msg:'Falta el archivo de: '+MG_EVID_TIPOS[chk.value]+de+'.'};
+      fd.append('tipo',chk.value);
+      for(const f of input.files) fd.append('evidencia_'+chk.value,f);
+    }
+    envios.push(fd);
+  }
+  try{
+    for(const fd of envios){
+      const r=await fetch(url,{method:'POST',body:fd});
+      if(!r.ok){const e=await r.json().catch(()=>({}));return {ok:false,msg:e.error||'No se pudo subir el respaldo'};}
+    }
+    return {ok:true};
+  }catch(err){ return {ok:false,msg:'No se pudo subir el respaldo: '+err.message}; }
+}
+
+function _mgEvidMsg(txt){document.getElementById('mg-evidencia-msg').textContent=txt||'';}
 
 function _mgMarcasDe(lead){
   if(!lead) return [];
@@ -6603,10 +6620,13 @@ function _mgSetContexto(lead){
   el.style.display='block';
 }
 
-function _mgSetEvidencia(lead){
-  _mgEvidReq=_mgEvidAplica(lead);
+function _mgSetEvidencia(lead, clienteYaCompra){
+  _mgEvidUnidades=(clienteYaCompra&&clienteYaCompra.length)
+    ? [...new Set(_mgMarcasDe(lead).filter(Boolean))]
+    : _evidUnidadesQueExigen(_mgMarcasDe(lead));
+  _mgEvidReq=_mgEvidUnidades.length>0;
   document.getElementById('mg-evidencia-group').style.display=_mgEvidReq?'block':'none';
-  if(_mgEvidReq) _mgRenderEvidencia();
+  if(_mgEvidReq) _evidRender('mg-evidencia-tipos','mg',_mgEvidUnidades);
 
   _mgSetContexto(lead);
 
@@ -6614,11 +6634,27 @@ function _mgSetEvidencia(lead){
   // igual y completar despues" en ventas donde ya no se puede.
   const intro=document.getElementById('mg-intro');
   if(intro){
-    intro.innerHTML=_mgEvidReq
+    intro.innerHTML=(clienteYaCompra&&clienteYaCompra.length)
+      ? 'Este cliente ya compra <b>'+clienteYaCompra.map(_esc).join(' y ')+'</b>, así que es una <b>venta cruzada</b>. '
+        + 'Para cerrarla necesitas adjuntar el respaldo de '+_mgEvidUnidades.map(_esc).join(' + ')+'.'
+      : _mgEvidUnidades.length>1
+      ? 'Es una <b>venta cruzada</b> ('+_mgEvidUnidades.map(_esc).join(' + ')+'). '
+        + 'Para cerrarla necesitas un respaldo de <b>cada unidad</b>: así se comprueba que se vendió cada parte.'
+      : _mgEvidReq
       ? 'Esta venta es de <b>Pestex</b> y se factura con crédito, así que todavía no hay CFDI. '
         + 'Para cerrarla necesitas adjuntar el respaldo de abajo. El número de factura se captura después.'
       : 'Registra los datos del cierre. Si aún no tienes la factura, puedes cerrar igual y '
         + 'completar después desde el panel del lead.';
+  }
+  // FEAT-2026-11-02: la venta cruzada también se mide por cliente, y eso
+  // solo lo sabe el backend. Si el cliente ya compra otra unidad, se vuelve
+  // a pintar pidiendo el respaldo.
+  if(lead&&lead.id&&!clienteYaCompra){
+    fetch('/api/leads/'+lead.id+'/evidencia-cierre').then(r=>r.ok?r.json():null).then(d=>{
+      if(d&&d.cliente_ya_compra&&d.cliente_ya_compra.length
+         &&document.getElementById('mg-lead-id').value===String(lead.id))
+        _mgSetEvidencia(lead,d.cliente_ya_compra);
+    }).catch(()=>{});
   }
 }
 
@@ -6626,21 +6662,7 @@ function _mgSetEvidencia(lead){
 // evidencia ya quedo guardada y el reintento la reemplaza, no la acumula.
 async function _mgSubirEvidencia(leadId){
   if(!_mgEvidReq) return {ok:true};
-  const marcados=[...document.querySelectorAll('.mg-evid-chk:checked')];
-  if(!marcados.length) return {ok:false,msg:'Marca con que confirmas la venta (1 o 2 respaldos).'};
-  const fd=new FormData();
-  for(const chk of marcados){
-    const input=document.getElementById('mg-evid-file-'+chk.value);
-    if(!input||!input.files.length)
-      return {ok:false,msg:'Falta el archivo de: '+MG_EVID_TIPOS[chk.value]+'.'};
-    fd.append('tipo',chk.value);
-    for(const f of input.files) fd.append('evidencia_'+chk.value,f);
-  }
-  try{
-    const r=await fetch('/api/leads/'+leadId+'/evidencia-cierre',{method:'POST',body:fd});
-    if(!r.ok){const e=await r.json().catch(()=>({}));return {ok:false,msg:e.error||'No se pudo subir el respaldo'};}
-    return {ok:true};
-  }catch(err){ return {ok:false,msg:'No se pudo subir el respaldo: '+err.message}; }
+  return _evidSubir('/api/leads/'+leadId+'/evidencia-cierre','mg',_mgEvidUnidades);
 }
 
 // FEAT-2026-06-25: helper para seleccionar tipo_venta en el modal de Ganado.
@@ -7503,14 +7525,14 @@ window.IS_ADMIN_AI = IS_ADMIN || false;
         </div>
       </div>
       <div class="nl-row">
-        <label class="nl-label">Marca *</label>
+        <label class="nl-label">Unidades de negocio *</label>
         <div class="nl-pills" id="opp-marca-pills">
           <div class="nl-pill" data-val="Aromatex">Aromatex</div>
           <div class="nl-pill" data-val="Pestex">Pestex</div>
           <div class="nl-pill" data-val="Weldex">Weldex</div>
-          <div class="nl-pill" data-val="Nexo">Nexo</div>
           <div class="nl-pill" data-val="Café Origen">Café Origen</div>
         </div>
+        <div id="opp-multiun-aviso" style="display:none;font-size:11px;color:var(--text2);margin-top:6px;line-height:1.4;"></div>
       </div>
       <div class="nl-row">
         <label class="nl-label">Etapa</label>
@@ -7601,11 +7623,12 @@ async function convertirLeadAOportunidad(leadId){
     document.getElementById('opp-motivo-perdida').value='';
 
     // Marca pill
-    document.querySelectorAll('#opp-marca-pills .nl-pill').forEach(p=>{
-      p.classList.remove('active');
-      p.onclick=()=>{p.parentElement.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');};
-      if(lead.marca_interes&&p.dataset.val===lead.marca_interes)p.classList.add('active');
-    });
+    // Hereda las unidades del lead. Las que ya traía el lead no se cuentan
+    // como "originales": quitarlas de la oportunidad no las quita del lead.
+    // Solo las unidades del lead: otra unidad al mismo cliente es otra venta
+    // y va en un lead nuevo (el backend lo rechaza igual).
+    const _delLead=((lead.marcas_interes&&lead.marcas_interes.length)?lead.marcas_interes:[lead.marca_interes]).filter(Boolean);
+    await _oppPrepararMarcas(_delLead, lead.marca_interes, [], _delLead.length?_delLead:null);
     // Etapa pill — default a Calificación si no había una más avanzada en lead
     document.querySelectorAll('#opp-etapa-pills .nl-pill').forEach((p,i)=>{
       p.classList.remove('active');
@@ -7640,7 +7663,6 @@ async function openOppModal(opp){
   document.querySelector('#opp-sale-type option[value="suscripcion_nueva"]').disabled=!opp;
   document.querySelector('#opp-sale-type option[value="suscripcion_nueva"]').hidden=!opp;
   document.getElementById('opp-sale-type').value=opp?(opp.sale_type||(opp.monthly_amount?'upsell':'servicio_unico')):'upsell';
-  document.querySelectorAll('#opp-marca-pills .nl-pill').forEach((p,i)=>{p.classList.remove('active');p.onclick=()=>{p.parentElement.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');};});
   document.querySelectorAll('#opp-etapa-pills .nl-pill').forEach((p,i)=>{p.classList.remove('active');p.onclick=()=>{p.parentElement.querySelectorAll('.nl-pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');_oppToggleMotivo();};});
   if(opp){
     document.getElementById('opp-nombre').value=opp.nombre||'';
@@ -7657,10 +7679,11 @@ async function openOppModal(opp){
     document.getElementById('opp-sitio').value=opp.sitio||'';
     document.getElementById('opp-notas').value=opp.notas||'';
     document.getElementById('opp-motivo-perdida').value=opp.motivo_perdida||'';
-    if(opp.marca_interes){const p=document.querySelector(`#opp-marca-pills .nl-pill[data-val="${opp.marca_interes}"]`);if(p)p.classList.add('active');}
+    const _suyas=(opp.marcas_interes&&opp.marcas_interes.length)?opp.marcas_interes:[opp.marca_interes];
+    await _oppPrepararMarcas(_suyas, opp.marca_interes, _suyas);
     if(opp.etapa){const p=document.querySelector(`#opp-etapa-pills .nl-pill[data-val="${opp.etapa}"]`);if(p)p.classList.add('active');}
   }else{
-    document.querySelector('#opp-marca-pills .nl-pill').classList.add('active');
+    await _oppPrepararMarcas([], null, []);
     document.querySelector('#opp-etapa-pills .nl-pill').classList.add('active');
   }
   _oppToggleMotivo();
@@ -7669,6 +7692,74 @@ async function openOppModal(opp){
     `Propietario: <strong>${me.nombre||'vos'}</strong>`;
   document.getElementById('opp-overlay').classList.add('open');
   setTimeout(()=>document.getElementById('opp-nombre').focus(),50);
+}
+
+// FEAT-2026-11-02: oportunidades multi UN. Mismas reglas que el modal de
+// leads: la dueña es la que ya tenía (o la primera que se marca) y quitar
+// una unidad que ya estaba es cosa de gerente.
+let _oppDuena=null, _oppOriginales=[];
+async function _oppPrepararMarcas(marcas, duena, originales, permitidas){
+  const me=await _nlLoadMe();
+  const pillsEl=document.getElementById('opp-marca-pills');
+  marcas=(marcas||[]).filter(Boolean);
+  _oppOriginales=(originales||[]).filter(Boolean);
+  _oppDuena=duena||marcas[0]||null;
+  // Las pills agregadas para otro trato se quitan; las unidades que este ya
+  // trae y no se ofrecen (Nexo) se muestran para no perderlas al guardar.
+  pillsEl.querySelectorAll('.nl-pill[data-extra]').forEach(p=>p.remove());
+  marcas.filter(m=>!pillsEl.querySelector(`.nl-pill[data-val="${m}"]`)).forEach(m=>{
+    const p=document.createElement('div');
+    p.className='nl-pill'; p.dataset.val=m; p.dataset.extra='1'; p.textContent=m;
+    pillsEl.appendChild(p);
+  });
+  pillsEl.querySelectorAll('.nl-pill').forEach(p=>{
+    p.classList.toggle('active', marcas.includes(p.dataset.val));
+    const fuera=permitidas&&!permitidas.includes(p.dataset.val);
+    p.style.opacity=fuera?'.35':'';
+    p.title=fuera?'Otra unidad para este cliente va en un lead nuevo':'';
+    p.onclick=()=>{
+      const m=p.dataset.val;
+      if(fuera){
+        _nlToast('Para venderle '+m+' a este cliente crea un lead nuevo con la misma empresa',true);
+        return;
+      }
+      if(p.classList.contains('active') && _oppOriginales.includes(m) && !me.puede_quitar_unidades){
+        _nlToast('Solo un gerente puede quitar una unidad de negocio',true);
+        return;
+      }
+      p.classList.toggle('active');
+      if(!pillsEl.querySelector('.nl-pill.active')) p.classList.add('active');
+      if(!_oppDuena || !_oppUnidadesMarcadas().includes(_oppDuena)) _oppDuena=_oppUnidadesMarcadas()[0];
+      _oppMarcarDuena();
+    };
+  });
+  if(!pillsEl.querySelector('.nl-pill.active')){
+    const primera=pillsEl.querySelector('.nl-pill');
+    primera.classList.add('active');
+    _oppDuena=primera.dataset.val;
+  }
+  _oppMarcarDuena();
+}
+function _oppUnidadesMarcadas(){
+  return [...document.querySelectorAll('#opp-marca-pills .nl-pill.active')].map(p=>p.dataset.val);
+}
+// La dueña primero: manda para la venta, el duplicado y las estadísticas.
+function _oppUnidades(){
+  const sel=_oppUnidadesMarcadas();
+  return (_oppDuena&&sel.includes(_oppDuena)) ? [_oppDuena,...sel.filter(m=>m!==_oppDuena)] : sel;
+}
+function _oppMarcarDuena(){
+  const unidades=_oppUnidades();
+  document.querySelectorAll('#opp-marca-pills .nl-pill').forEach(p=>{
+    const duena=unidades.length>1&&p.dataset.val===unidades[0];
+    p.textContent=p.dataset.val+(duena?' ·':'');
+    p.style.fontWeight=duena?'700':'';
+  });
+  const aviso=document.getElementById('opp-multiun-aviso');
+  aviso.style.display=unidades.length>1?'':'none';
+  if(unidades.length>1)
+    aviso.textContent=`Venta cruzada: ${unidades.join(' + ')}. Para cerrarla hay que subir un respaldo de cada unidad. `
+      +`La venta queda registrada a ${unidades[0]}.`;
 }
 
 function closeOppModal(){document.getElementById('opp-overlay').classList.remove('open');_oppEditing=null;}
@@ -7682,7 +7773,8 @@ async function saveOpp(){
   const nombre=document.getElementById('opp-nombre').value.trim();
   const empresaName=document.getElementById('opp-empresa').value.trim();
   const empresaId=document.getElementById('opp-account-id').value||null;
-  const marca=document.querySelector('#opp-marca-pills .nl-pill.active')?.dataset.val;
+  const unidades=_oppUnidades();
+  const marca=unidades[0];
   const etapa=document.querySelector('#opp-etapa-pills .nl-pill.active')?.dataset.val;
   const valor=Number(document.getElementById('opp-valor').value);
   const monthly=Number(document.getElementById('opp-monthly').value);
@@ -7700,7 +7792,7 @@ async function saveOpp(){
     contacto_nombre:document.getElementById('opp-contacto-nombre').value.trim()||null,
     contacto_telefono:document.getElementById('opp-contacto-telefono').value.trim()||null,
     contacto_email:document.getElementById('opp-contacto-email').value.trim()||null,
-    valor, marca_interes:marca, etapa,
+    valor, marca_interes:marca, marcas_interes:unidades, etapa,
     fecha_cierre_esperada:document.getElementById('opp-fecha-cierre').value||null,
     num_sucursales:parseInt(document.getElementById('opp-sucursales').value)||null,
     sitio:document.getElementById('opp-sitio').value.trim()||null,
@@ -8107,6 +8199,10 @@ const _NL_ESTADOS = ["Aguascalientes","Baja California","Baja California Sur","C
 const _NL_ICP_THRESHOLDS = {A:75,B:50,C:25};
 let _nlMe = null;
 let _nlEditingLead = null;  // Si está seteado, el modal está en modo edición
+// FEAT-2026-11-02: al editar, la dueña es la que YA tenía el lead, no la
+// primera en pantalla. Antes agregar Aromatex a un lead de Pestex lo volvía
+// de Aromatex sin avisar, y con eso cambiaban comisión y meta.
+let _nlDuena = null;
 
 async function _nlLoadMe(){
   if(_nlMe)return _nlMe;
@@ -8121,7 +8217,8 @@ let _nlMeNombre = 'vos';
 // venta. Se marca visualmente para que quien captura lo sepa.
 function nlMarcarUnidadDuena(){
   const pills=[...document.querySelectorAll('#nl-unidad-pills .nl-pill')];
-  const activas=pills.filter(p=>p.classList.contains('active'));
+  const activas=nlUnidadesSeleccionadas()
+    .map(m=>pills.find(p=>p.dataset.val===m));
   pills.forEach(p=>{
     p.textContent = p.dataset.val;
     p.style.fontWeight='';
@@ -8142,8 +8239,11 @@ function nlMarcarUnidadDuena(){
 
 // Las unidades seleccionadas, en el orden en que aparecen. La primera manda.
 function nlUnidadesSeleccionadas(){
-  return [...document.querySelectorAll('#nl-unidad-pills .nl-pill.active')]
+  const sel=[...document.querySelectorAll('#nl-unidad-pills .nl-pill.active')]
     .map(p=>p.dataset.val);
+  if(_nlDuena && sel.includes(_nlDuena))
+    return [_nlDuena, ...sel.filter(m=>m!==_nlDuena)];
+  return sel;
 }
 
 // Refleja en el pie del modal a quién le va a quedar el lead, para que no
@@ -8183,8 +8283,21 @@ async function openLeadModal(leadToEdit){
     _NL_ESTADOS.forEach(s=>{estSel.innerHTML+=`<option value="${s}">${s}</option>`;});
   }
   // Unidades pills (filtradas por marcas del usuario)
-  const allMarcas=['Aromatex','Pestex','Weldex','Nexo','Café Origen'];
-  const userMarcas=me.is_admin?allMarcas:(me.marcas&&me.marcas.length?me.marcas:allMarcas);
+  // Nexo ya no se ofrece; un lead que ya la tiene la conserva (ver abajo).
+  const allMarcas=['Aromatex','Pestex','Weldex','Café Origen'];
+  let userMarcas=me.is_admin?allMarcas:(me.marcas&&me.marcas.length?me.marcas:allMarcas);
+  // Al editar, las unidades que ya trae el lead siempre se muestran, aunque
+  // no sean de quien edita: si no, al guardar se quitarían sin querer.
+  const _nlOriginales = _nlEditingLead
+    ? ((_nlEditingLead.marcas_interes&&_nlEditingLead.marcas_interes.length)
+        ? _nlEditingLead.marcas_interes
+        : (_nlEditingLead.marca_interes?[_nlEditingLead.marca_interes]:[]))
+    : [];
+  _nlDuena = _nlEditingLead ? (_nlOriginales[0]||null) : null;
+  if(_nlEditingLead && _nlEditingLead.marca_interes && _nlOriginales.includes(_nlEditingLead.marca_interes))
+    _nlDuena = _nlEditingLead.marca_interes;
+  userMarcas = [...allMarcas.filter(m=>userMarcas.includes(m)||_nlOriginales.includes(m)),
+                ..._nlOriginales.filter(m=>!allMarcas.includes(m))];
   const pillsEl=document.getElementById('nl-unidad-pills');
   pillsEl.innerHTML='';
   // FEAT-2026-08-25: se pueden elegir VARIAS unidades. La primera que se
@@ -8193,6 +8306,12 @@ async function openLeadModal(leadToEdit){
   userMarcas.forEach((m,i)=>{
     const p=document.createElement('div');p.className='nl-pill'+(i===0?' active':'');p.dataset.val=m;p.textContent=m;
     p.onclick=()=>{
+      // Quitar una unidad que el lead ya tenía es cosa de gerente: el backend
+      // lo rechaza (quitar Pestex sería saltarse su respaldo).
+      if(p.classList.contains('active') && _nlOriginales.includes(m) && !me.puede_quitar_unidades){
+        _nlToast('Solo un gerente puede quitar una unidad de negocio',true);
+        return;
+      }
       p.classList.toggle('active');
       // Nunca dejar cero unidades seleccionadas.
       if(!pillsEl.querySelector('.nl-pill.active')) p.classList.add('active');

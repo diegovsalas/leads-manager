@@ -233,11 +233,57 @@ def _apply_role_un_scope(query):
         "Nexo": ("nexo",),
         "Café Origen": ("café origen", "cafe origen", "cafeorigen", "cafe_origen"),
     }.get(canon, ())
+    # FEAT-2026-11-02: una oportunidad multi UN se ve en la vista de cada
+    # una de sus unidades, igual que los leads.
     return query.filter(or_(
         Oportunidad.marca_interes.is_(None),
         Oportunidad.marca_interes == "",
         func.lower(Oportunidad.marca_interes).in_(aliases),
+        Oportunidad.marcas_interes.any(canon),
     ))
+
+
+def _filtro_marca(q, marca):
+    """?marca= del listado y del kanban: dueña o cualquiera en juego."""
+    from un_filter import normalizar_un
+    canon = normalizar_un(marca) or marca
+    return q.filter(or_(Oportunidad.marca_interes == marca,
+                        Oportunidad.marcas_interes.any(canon)))
+
+
+def _unidades_op(op):
+    """Dueña + todas las unidades en juego (con repetidos; CE los quita)."""
+    return [op.marca_interes] + list(op.marcas_interes or [])
+
+
+def _fuera_del_lead(op):
+    """Error si la oportunidad trae una unidad que su lead no tiene, o None.
+
+    FEAT-2026-11-02: otra unidad al mismo cliente es otra venta, y va en un
+    lead propio. Colgarla del lead de la primera las mezcla: cuando se cierra
+    la última oportunidad abierta de un lead, el lead entero pasa a Cerrado
+    Ganado (_propagate_close_to_lead), así que ganar Pestex daba por ganado
+    el Aromatex que seguía estancado. La venta cruzada ya no necesita el
+    mismo lead: se reconoce por cliente (comisiones.lead_es_multi_un).
+    """
+    if not op.lead_id:
+        return None
+    lead = db.session.get(Lead, op.lead_id)
+    if not lead:
+        return None
+    from un_filter import normalizar_marcas
+    del_lead = normalizar_marcas([lead.marca_interes] + list(lead.marcas_interes or []))
+    if not del_lead:
+        return None  # lead sin clasificar: la oportunidad le da la unidad
+    fuera = [u for u in normalizar_marcas(_unidades_op(op)) if u not in del_lead]
+    if not fuera:
+        return None
+    cliente = lead.empresa_nombre or lead.nombre or "este cliente"
+    return (f"{' y '.join(fuera)} no está en el lead de {cliente} "
+            f"({', '.join(del_lead)}). Si es otra venta al mismo cliente, crea un "
+            "lead nuevo para esa unidad y elige la misma empresa: cada venta lleva "
+            "su propia etapa, cierre y respaldo, y la venta cruzada se reconoce "
+            "por cliente.")
 
 
 def _calc_commission(sale_type: str, commission_type: str | None,
@@ -391,7 +437,7 @@ def list_oportunidades():
     if etapa:
         q = q.filter(Oportunidad.etapa == etapa)
     if marca:
-        q = q.filter(Oportunidad.marca_interes == marca)
+        q = _filtro_marca(q, marca)
     if propietario:
         q = q.filter(Oportunidad.propietario_id == propietario)
     q = _apply_owner_scope(q)
@@ -463,7 +509,7 @@ def kanban():
     propietario = request.args.get("propietario")
     q = Oportunidad.query
     if marca:
-        q = q.filter(Oportunidad.marca_interes == marca)
+        q = _filtro_marca(q, marca)
     if propietario:
         q = q.filter(Oportunidad.propietario_id == propietario)
     q = _apply_role_un_scope(q)
@@ -544,6 +590,8 @@ def create_oportunidad():
             account_id = new_acc.id
 
     marca_interes = data.get("marca_interes")
+    from un_filter import cambio_de_marcas
+    marcas_interes = cambio_de_marcas(marca_interes, [], data.get("marcas_interes") or [])[0]
     sitio_str = (data.get("sitio") or "").strip() or None
     if not _truthy(data.get("allow_duplicate")):
         dup = _find_duplicate_open_opportunity(
@@ -600,6 +648,7 @@ def create_oportunidad():
         etapa=etapa,
         propietario_id=_valid_user_id(data.get("propietario_id") or _current_user_id()),
         marca_interes=marca_interes,
+        marcas_interes=marcas_interes,
         estado_cliente=data.get("estado_cliente"),
         num_sucursales=data.get("num_sucursales"),
         sitio=sitio_str,
@@ -621,12 +670,16 @@ def create_oportunidad():
         if err:
             db.session.rollback()
             return jsonify({"error": err}), 400
-        err = _nace_cerrada_sin_respaldo(op.marca_interes)
+        err = _nace_cerrada_sin_respaldo(_unidades_op(op))
         if err:
             db.session.rollback()
             return jsonify({"error": err, "requiere_evidencia": True,
                             "tipos": CE.TIPOS, "max_tipos": CE.MAX_TIPOS}), 422
     db.session.add(op)
+    err = _fuera_del_lead(op)
+    if err:
+        db.session.rollback()
+        return jsonify({"error": err}), 400
     if op.etapa == EtapaOportunidad.CIERRE_GANADO:
         _sync_sale_from_oportunidad(op)
     db.session.commit()
@@ -642,6 +695,8 @@ def update_oportunidad(opp_id):
     if not op:
         return jsonify({"error": "Oportunidad no encontrada"}), 404
     data = request.get_json() or {}
+    cerrada = op.etapa in (EtapaOportunidad.CIERRE_GANADO, EtapaOportunidad.CIERRE_PERDIDO)
+    marcas_antes = list(op.marcas_interes or [])
 
     for fld in ("nombre", "empresa", "contacto_nombre", "contacto_telefono",
                 "contacto_email", "moneda", "marca_interes", "estado_cliente",
@@ -649,6 +704,35 @@ def update_oportunidad(opp_id):
                 "propietario_id", "account_id", "contact_id"):
         if fld in data:
             setattr(op, fld, data[fld])
+
+    # FEAT-2026-11-02: unidades en juego. Mismas reglas que en leads: no se
+    # cambian con la oportunidad cerrada y solo un gerente quita unidades.
+    # La dueña siempre queda dentro, también cuando cambia en este request.
+    cambio_unidades = None
+    if "marcas_interes" in data:
+        from blueprints.auth import is_commercial_read_role
+        from un_filter import bloqueo_cambio_de_marcas, cambio_de_marcas
+        nuevas, agregadas, quitadas = cambio_de_marcas(
+            op.marca_interes, marcas_antes, data["marcas_interes"] or [])
+        if agregadas or quitadas:
+            bloqueo = bloqueo_cambio_de_marcas(
+                cerrado=cerrada, quitadas=quitadas,
+                puede_quitar=is_commercial_read_role())
+            if bloqueo:
+                db.session.rollback()
+                return jsonify({"error": bloqueo[0]}), bloqueo[1]
+            cambio_unidades = (marcas_antes, nuevas)
+        op.marcas_interes = nuevas
+    elif "marca_interes" in data:
+        # Solo cambió la dueña: entra a la lista y la anterior sigue en juego.
+        from un_filter import cambio_de_marcas
+        nuevas, agregadas, _ = cambio_de_marcas(
+            op.marca_interes, marcas_antes, marcas_antes + [op.marca_interes])
+        if agregadas and cerrada and marcas_antes:
+            db.session.rollback()
+            return jsonify({"error": "Las unidades de un trato cerrado ya no se "
+                                     "cambian: la comisión se calculó con ellas."}), 409
+        op.marcas_interes = nuevas
 
     if "valor" in data:
         op.valor = _to_decimal(data["valor"]) or Decimal("0")
@@ -705,10 +789,19 @@ def update_oportunidad(opp_id):
             db.session.rollback()
             return jsonify({"error": err, "requiere_evidencia": True,
                             "tipos": CE.TIPOS, "max_tipos": CE.MAX_TIPOS}), 422
+    err = _fuera_del_lead(op)
+    if err:
+        db.session.rollback()
+        return jsonify({"error": err}), 400
     _propagate_close_to_lead(op)
     _sync_sale_from_oportunidad(op)
 
     db.session.commit()
+    if cambio_unidades:
+        from actividad import log_actividad
+        antes, nuevas = cambio_unidades
+        log_actividad("editar", "oportunidad", op.id,
+                      f"{op.nombre}: unidades {', '.join(antes) or '—'} → {', '.join(nuevas)}")
     return jsonify(op.to_dict())
 
 
@@ -721,7 +814,9 @@ def _nace_cerrada_sin_respaldo(marca):
     """
     if not CE.requiere_evidencia(marca):
         return None
-    return ("Una venta de Pestex no puede crearse ya cerrada: créala en otra "
+    tipo = ("Una venta cruzada" if len(CE.unidades_en_juego(marca)) > 1
+            else "Una venta de Pestex")
+    return (f"{tipo} no puede crearse ya cerrada: créala en otra "
             "etapa y ciérrala adjuntando el respaldo (orden de compra, "
             "contrato, correo, WhatsApp o cita en Operandium / iGeo).")
 
@@ -734,7 +829,7 @@ def _falta_evidencia(op):
     todavía no hay factura. El respaldo la sustituye como prueba en ese
     momento — no la reemplaza después.
     """
-    ok, err = CE.validar_para_cierre("oportunidad", op.id, op.marca_interes)
+    ok, err = CE.validar_para_cierre("oportunidad", op.id, _unidades_op(op))
     return None if ok else err
 
 
@@ -819,13 +914,18 @@ def evidencia_cierre(opp_id):
     if request.method == "GET":
         return jsonify({
             "evidencias": [e.to_dict() for e in CE.evidencias_de("oportunidad", op.id)],
-            "requerida": CE.requiere_evidencia(op.marca_interes),
+            "requerida": CE.requiere_evidencia(_unidades_op(op)),
+            "unidades": CE.unidades_que_exigen(_unidades_op(op)),
             "tipos": CE.TIPOS, "max_tipos": CE.MAX_TIPOS,
         })
 
+    unidad, err = CE.unidad_para_guardar(request.form.get("unidad"), _unidades_op(op))
+    if err:
+        return jsonify({"error": err}), 400
     tipos = request.form.getlist("tipo")
     creadas, err = CE.guardar("oportunidad", op.id, tipos, request.files,
-                              subido_por=_valid_user_id(_current_user_id()))
+                              subido_por=_valid_user_id(_current_user_id()),
+                              unidad=unidad)
     if err:
         db.session.rollback()
         return jsonify({"error": err}), 400
@@ -859,6 +959,9 @@ def from_lead(lead_id):
     account_id = data.get("account_id") or lead.account_id
     contact_id = data.get("contact_id") or lead.contact_id
     marca_interes = data.get("marca_interes") or lead.marca_interes
+    from un_filter import cambio_de_marcas
+    marcas_interes = cambio_de_marcas(
+        marca_interes, [], data.get("marcas_interes") or list(lead.marcas_interes or []))[0]
 
     if not _truthy(data.get("allow_duplicate")):
         dup = _find_duplicate_open_opportunity(
@@ -902,6 +1005,7 @@ def from_lead(lead_id):
             or _current_user_id()
         ),
         marca_interes=marca_interes,
+        marcas_interes=marcas_interes,
         estado_cliente=data.get("estado_cliente") or lead.estado_cliente,
         num_sucursales=data.get("num_sucursales") or lead.num_sucursales,
         sitio=(data.get("sitio") or "").strip() or None,
@@ -917,12 +1021,16 @@ def from_lead(lead_id):
         if err:
             db.session.rollback()
             return jsonify({"error": err}), 400
-        err = _nace_cerrada_sin_respaldo(op.marca_interes)
+        err = _nace_cerrada_sin_respaldo(_unidades_op(op))
         if err:
             db.session.rollback()
             return jsonify({"error": err, "requiere_evidencia": True,
                             "tipos": CE.TIPOS, "max_tipos": CE.MAX_TIPOS}), 422
     db.session.add(op)
+    err = _fuera_del_lead(op)
+    if err:
+        db.session.rollback()
+        return jsonify({"error": err}), 400
     if op.etapa == EtapaOportunidad.CIERRE_GANADO:
         _sync_sale_from_oportunidad(op)
     # Marca lead como convertido subiéndolo de etapa si todavía no llegó
